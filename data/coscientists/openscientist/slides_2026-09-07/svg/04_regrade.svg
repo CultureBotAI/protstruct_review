@@ -2,50 +2,56 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" font-family="Helvetica, Arial, sans-serif">
   <rect width="100%" height="100%" fill="#ffffff"/>
   <rect x="0" y="0" width="1920" height="6" fill="#1f4e8c"/>
-  <text x="80" y="86" font-size="44" font-weight="700" fill="#1a1a2e">Graded against the rule T03 declares</text>
-  <text x="80" y="128" font-size="22" font-weight="400" fill="#5a6071">rubric rule 1: R-free within ± 0.02 of the deposited value · the gap row is the agent's own criterion, not a registry band</text>
+  <text x="80" y="86" font-size="44" font-weight="700" fill="#1a1a2e">The R-free claim has no governing criterion</text>
+  <text x="80" y="128" font-size="22" font-weight="400" fill="#5a6071">1SAR was deposited in 1990 and its REMARK 3 records FREE R VALUE : NULL — rule 1 has no reference to compare against</text>
   <line x1="80" y1="1020" x2="1840" y2="1020" stroke="#e3e6ee" stroke-width="1"/>
   <text x="80" y="1050" font-size="16" fill="#5a6071">1SAR refinement review · openscientist artefact cdba2c07 · re-run 2026-09-07</text>
   <text x="1840" y="1050" font-size="16" fill="#5a6071" text-anchor="end">protstruct_review · update deck 2026-09-07</text>
 
-  <rect x="80" y="195" width="1760" height="86" fill="#1f4e8c"/>
-  <text x="94" y="244.66666666666666" font-size="20" font-weight="700" fill="#ffffff" text-anchor="start">Claim</text>
-  <text x="454" y="244.66666666666666" font-size="20" font-weight="700" fill="#ffffff" text-anchor="start">What May actually graded</text>
-  <text x="974" y="244.66666666666666" font-size="20" font-weight="700" fill="#ffffff" text-anchor="start">2026-09-07 grading</text>
-  <text x="1670.0" y="244.66666666666666" font-size="20" font-weight="700" fill="#ffffff" text-anchor="middle">Verdict</text>
-  <rect x="80" y="281" width="1760" height="86" fill="#ffffff"/>
-  <text x="94" y="329.6666666666667" font-size="17" fill="#1a1a2e" text-anchor="start">R-free value, 0.199 vs 0.2116</text>
-  <text x="454" y="329.6666666666667" font-size="17" fill="#5a6071" text-anchor="start">all four May paths sat above 0.199</text>
-  <text x="974" y="329.6666666666667" font-size="17" fill="#1a1a2e" text-anchor="start">rule 1 band ± 0.02; measured |Δ| 0.0126</text>
-  <rect x="1500" y="281" width="340" height="86" fill="#fbeecb"/>
-  <text x="1670.0" y="329.6666666666667" font-size="17" fill="#b07c00" text-anchor="middle">criterion passes, headline inaccurate</text>
-  <rect x="80" y="367" width="1760" height="86" fill="#f7f8fb"/>
-  <text x="94" y="415.6666666666667" font-size="17" fill="#1a1a2e" text-anchor="start">R-work/R-free gap &lt; 0.05</text>
-  <text x="454" y="415.6666666666667" font-size="17" fill="#5a6071" text-anchor="start">0.0552 / 0.0526 / 0.0504 / 0.0435 (“3 of 4 fail”)</text>
-  <text x="974" y="415.6666666666667" font-size="17" fill="#1a1a2e" text-anchor="start">0.0552 PHENIX, 0.0515 gemmi</text>
-  <rect x="1500" y="367" width="340" height="86" fill="#f5d6d4"/>
-  <text x="1670.0" y="415.6666666666667" font-size="17" fill="#a8201a" text-anchor="middle">still fails</text>
-  <rect x="80" y="453" width="1760" height="86" fill="#ffffff"/>
-  <text x="94" y="501.6666666666667" font-size="17" fill="#1a1a2e" text-anchor="start">Round 6 better than final</text>
-  <text x="454" y="501.6666666666667" font-size="17" fill="#5a6071" text-anchor="start">Δ 0.0048 by oracle</text>
-  <text x="974" y="501.6666666666667" font-size="17" fill="#1a1a2e" text-anchor="start">Δ 0.0048, both models on the same instrument</text>
-  <rect x="1500" y="453" width="340" height="86" fill="#dff0e1"/>
-  <text x="1670.0" y="501.6666666666667" font-size="17" fill="#1f7a3f" text-anchor="middle">reproduces exactly</text>
-  <rect x="80" y="195" width="1760" height="344" fill="none" stroke="#e3e6ee" stroke-width="1"/>
-  <line x1="440" y1="195" x2="440" y2="539" stroke="#e3e6ee" stroke-width="1"/>
-  <line x1="960" y1="195" x2="960" y2="539" stroke="#e3e6ee" stroke-width="1"/>
-  <line x1="1500" y1="195" x2="1500" y2="539" stroke="#e3e6ee" stroke-width="1"/>
+  <rect x="80" y="195" width="1760" height="72" fill="#1f4e8c"/>
+  <text x="94" y="237.66666666666666" font-size="20" font-weight="700" fill="#ffffff" text-anchor="start">Claim</text>
+  <text x="454" y="237.66666666666666" font-size="20" font-weight="700" fill="#ffffff" text-anchor="start">What May actually graded</text>
+  <text x="974" y="237.66666666666666" font-size="20" font-weight="700" fill="#ffffff" text-anchor="start">2026-09-07 grading</text>
+  <text x="1670.0" y="237.66666666666666" font-size="20" font-weight="700" fill="#ffffff" text-anchor="middle">Verdict</text>
+  <rect x="80" y="267" width="1760" height="72" fill="#ffffff"/>
+  <text x="94" y="308.6666666666667" font-size="17" fill="#1a1a2e" text-anchor="start">R-free value, 0.199 vs 0.2116</text>
+  <text x="454" y="308.6666666666667" font-size="17" fill="#5a6071" text-anchor="start">all four May paths sat above 0.199</text>
+  <text x="974" y="308.6666666666667" font-size="17" fill="#1a1a2e" text-anchor="start">rule 1 inapplicable — no deposited R-free</text>
+  <rect x="1500" y="267" width="340" height="72" fill="#fbeecb"/>
+  <text x="1670.0" y="308.6666666666667" font-size="17" fill="#b07c00" text-anchor="middle">no criterion</text>
+  <rect x="80" y="339" width="1760" height="72" fill="#f7f8fb"/>
+  <text x="94" y="380.6666666666667" font-size="17" fill="#1a1a2e" text-anchor="start">R-work/R-free gap &lt; 0.05</text>
+  <text x="454" y="380.6666666666667" font-size="17" fill="#5a6071" text-anchor="start">0.0552 / 0.0526 / 0.0504 / 0.0435 (“3 of 4 fail”)</text>
+  <text x="974" y="380.6666666666667" font-size="17" fill="#1a1a2e" text-anchor="start">0.0552 PHENIX, 0.0515 gemmi</text>
+  <rect x="1500" y="339" width="340" height="72" fill="#f5d6d4"/>
+  <text x="1670.0" y="380.6666666666667" font-size="17" fill="#a8201a" text-anchor="middle">still fails</text>
+  <rect x="80" y="411" width="1760" height="72" fill="#ffffff"/>
+  <text x="94" y="452.6666666666667" font-size="17" fill="#1a1a2e" text-anchor="start">R offset, rule 2 (R-WORK)</text>
+  <text x="454" y="452.6666666666667" font-size="17" fill="#5a6071" text-anchor="start">not graded as such</text>
+  <text x="974" y="452.6666666666667" font-size="17" fill="#1a1a2e" text-anchor="start">gemmi 0.1622 vs PHENIX 0.1564 = +0.0058</text>
+  <rect x="1500" y="411" width="340" height="72" fill="#dff0e1"/>
+  <text x="1670.0" y="452.6666666666667" font-size="17" fill="#1f7a3f" text-anchor="middle">passes</text>
+  <rect x="80" y="483" width="1760" height="72" fill="#f7f8fb"/>
+  <text x="94" y="524.6666666666666" font-size="17" fill="#1a1a2e" text-anchor="start">Round 6 better than final</text>
+  <text x="454" y="524.6666666666666" font-size="17" fill="#5a6071" text-anchor="start">Δ 0.0048 by oracle</text>
+  <text x="974" y="524.6666666666666" font-size="17" fill="#1a1a2e" text-anchor="start">Δ 0.0048, same instrument</text>
+  <rect x="1500" y="483" width="340" height="72" fill="#dff0e1"/>
+  <text x="1670.0" y="524.6666666666666" font-size="17" fill="#1f7a3f" text-anchor="middle">reproduces exactly</text>
+  <rect x="80" y="195" width="1760" height="360" fill="none" stroke="#e3e6ee" stroke-width="1"/>
+  <line x1="440" y1="195" x2="440" y2="555" stroke="#e3e6ee" stroke-width="1"/>
+  <line x1="960" y1="195" x2="960" y2="555" stroke="#e3e6ee" stroke-width="1"/>
+  <line x1="1500" y1="195" x2="1500" y2="555" stroke="#e3e6ee" stroke-width="1"/>
 
-  <text x="80" y="580" font-size="26" font-weight="700" fill="#1a1a2e">What the independent code path did — and did not — settle</text>
-  <text x="80" y="626" font-size="21" font-weight="400" fill="#1a1a2e">Re-run with mask radii matched to cctbx, gemmi 0.7.5 gives R-free 0.2136 against PHENIX's 0.2116 — Δ +0.0020, inside</text>
-  <text x="80" y="657" font-size="21" font-weight="400" fill="#1a1a2e">the ± 0.02 band. That settles the gemmi leg only. May's spread was 0.2116–0.2209 and its upper bound was Servalcat,</text>
-  <text x="80" y="688" font-size="21" font-weight="400" fill="#1a1a2e">which was not re-run and is not retracted; REFMAC5 likewise stands. The full bracket remains 0.2114–0.2209, with two</text>
-  <text x="80" y="719" font-size="21" font-weight="400" fill="#1a1a2e">legs carried from May.</text>
+  <text x="80" y="600" font-size="26" font-weight="700" fill="#1a1a2e">What the independent code path did — and did not — settle</text>
+  <text x="80" y="644" font-size="21" font-weight="400" fill="#1a1a2e">Re-run with mask radii matched to cctbx, gemmi 0.7.5 gives R-free 0.2136 against PHENIX's 0.2116 — Δ +0.0020, inside</text>
+  <text x="80" y="675" font-size="21" font-weight="400" fill="#1a1a2e">the ± 0.02 band. That settles the gemmi leg only. May's spread was 0.2116–0.2209 and its upper bound was Servalcat,</text>
+  <text x="80" y="706" font-size="21" font-weight="400" fill="#1a1a2e">which was not re-run and is not retracted; REFMAC5 likewise stands. Across every source the widest range recorded is</text>
+  <text x="80" y="737" font-size="21" font-weight="400" fill="#1a1a2e">0.2114–0.2209 — but that lower bound is the model's own PDB header, not a code path.</text>
 
   <rect x="80" y="800" width="1760" height="140" rx="10" ry="10" fill="#fbeecb"/>
 
   <text x="110" y="846" font-size="21" font-weight="400" fill="#1a1a2e">Two cautions: the shift from May's gemmi number is confounded three ways (mask radii, version, and</text>
-  <text x="110" y="877" font-size="21" font-weight="400" fill="#1a1a2e">#316's work-only scale fit), not one. And +0.0020 sits BELOW the 0.005–0.015 offset the assumptions</text>
-  <text x="110" y="908" font-size="21" font-weight="400" fill="#1a1a2e">predict — rubric rule 2 names a smaller-than-expected gap as the red-flag direction.</text>
+  <text x="110" y="877" font-size="21" font-weight="400" fill="#1a1a2e">#316's work-only scale fit), not one. And the 0.005–0.015 expectation is about R-WORK, not R-free:</text>
+  <text x="110" y="908" font-size="21" font-weight="400" fill="#1a1a2e">measured correctly that offset is +0.0058 and in band. No benchmarked R-free offset band exists.</text>
 
 </svg>

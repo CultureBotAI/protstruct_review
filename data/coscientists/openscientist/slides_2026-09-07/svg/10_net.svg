@@ -12,9 +12,9 @@
 
   <text x="112" y="240" font-size="28" font-weight="700" fill="#1f7a3f">Holds (re-measured)</text>
   <text x="112" y="292" font-size="20" fill="#1a1a2e">✓ Oracle R-free reproduces May to four decimals</text>
-  <text x="112" y="332" font-size="20" fill="#1a1a2e">✓ R-free criterion passes under rule 1's ± 0.02</text>
+  <text x="112" y="332" font-size="20" fill="#1a1a2e">✓ Rule 2's R-work offset passes at +0.0058</text>
   <text x="112" y="372" font-size="20" fill="#1a1a2e">✓ Both H builders agree on every confident flip</text>
-  <text x="112" y="412" font-size="20" fill="#1a1a2e">✓ Deposited T15 and T16 legs reproduce calibrations</text>
+  <text x="112" y="412" font-size="20" fill="#1a1a2e">✓ Deposited T15 leg reproduces its calibration exactly</text>
   <text x="112" y="452" font-size="20" fill="#1a1a2e">✓ Round-6-vs-final delta reproduces exactly</text>
   <rect x="980" y="190" width="860" height="320" rx="10" ry="10" fill="#f5d6d4"/>
 

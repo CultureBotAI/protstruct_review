@@ -298,7 +298,7 @@ def slide_02_why():
     out.append(paragraph(
         110, 889,
         "Cost of that choice: this run issues a new dated .yaml where May updated the canonical "
-        "one in place, so the current sheet is 271 lines against May's 1270. That is a new "
+        "one in place, so the current sheet is a fraction of May's 1270 lines. That is a new "
         "convention adopted here, not an existing one followed.",
         width=104, size=20, color=MUTED, leading=30))
     return "\n".join(out) + "\n"
@@ -371,57 +371,63 @@ def slide_03_headline():
 # 04 — Re-graded against the driver's own rule
 # ------------------------------------------------------------------
 def slide_04_regrade():
-    out = [header("Graded against the rule T03 declares",
-                  "rubric rule 1: R-free within ± 0.02 of the deposited value · the gap row is the agent's own criterion, not a registry band")]
+    out = [header("The R-free claim has no governing criterion",
+                  "1SAR was deposited in 1990 and its REMARK 3 records FREE R VALUE : NULL — rule 1 has no reference to compare against")]
 
     rows = [
         ["R-free value, 0.199 vs 0.2116",
          "all four May paths sat above 0.199",
-         "rule 1 band ± 0.02; measured |Δ| 0.0126",
-         "criterion passes,\nheadline inaccurate"],
+         "rule 1 inapplicable — no deposited R-free",
+         "no criterion"],
         ["R-work/R-free gap < 0.05",
          "0.0552 / 0.0526 / 0.0504 / 0.0435 (“3 of 4 fail”)",
          "0.0552 PHENIX, 0.0515 gemmi",
          "still fails"],
+        ["R offset, rule 2 (R-WORK)",
+         "not graded as such",
+         "gemmi 0.1622 vs PHENIX 0.1564 = +0.0058",
+         "passes"],
         ["Round 6 better than final",
          "Δ 0.0048 by oracle",
-         "Δ 0.0048, both models on the same instrument",
+         "Δ 0.0048, same instrument",
          "reproduces exactly"],
     ]
     # SVG text has no wrapping; flatten the embedded newlines.
     rows = [[c.replace("\n", " ") for c in r] for r in rows]
     fills = [[None, None, None, WARN_LIGHT],
              [None, None, None, BAD_LIGHT],
+             [None, None, None, GOOD_LIGHT],
              [None, None, None, GOOD_LIGHT]]
     colors = [[INK, MUTED, INK, WARN],
               [INK, MUTED, INK, BAD],
+              [INK, MUTED, INK, GOOD],
               [INK, MUTED, INK, GOOD]]
     out.append(table(
         80, 195, [360, 520, 540, 340],
         ["Claim", "What May actually graded", "2026-09-07 grading", "Verdict"],
-        rows, row_height=86, font_size=17,
+        rows, row_height=72, font_size=17,
         cell_fills=fills, cell_text_colors=colors,
         align=["left", "left", "left", "center"]))
 
     out.append(
-        f'  <text x="80" y="580" font-size="26" font-weight="700" fill="{INK}">'
+        f'  <text x="80" y="600" font-size="26" font-weight="700" fill="{INK}">'
         f'What the independent code path did — and did not — settle</text>')
     out.append(paragraph(
-        80, 626,
+        80, 644,
         "Re-run with mask radii matched to cctbx, gemmi 0.7.5 gives R-free 0.2136 against PHENIX's "
         "0.2116 — Δ +0.0020, inside the ± 0.02 band. That settles the gemmi leg only. May's spread "
         "was 0.2116–0.2209 and its upper bound was Servalcat, which was not re-run and is not "
-        "retracted; REFMAC5 likewise stands. The full bracket remains 0.2114–0.2209, with two legs "
-        "carried from May.",
+        "retracted; REFMAC5 likewise stands. Across every source the widest range recorded is "
+        "0.2114–0.2209 — but that lower bound is the model's own PDB header, not a code path.",
         width=116, size=21, leading=31))
 
     out.append(panel(80, 800, 1760, 140, WARN_LIGHT))
     out.append(paragraph(
         110, 846,
         "Two cautions: the shift from May's gemmi number is confounded three ways (mask radii, "
-        "version, and #316's work-only scale fit), not one. And +0.0020 sits BELOW the 0.005–0.015 "
-        "offset the assumptions predict — rubric rule 2 names a smaller-than-expected gap as the "
-        "red-flag direction.",
+        "version, and #316's work-only scale fit), not one. And the 0.005–0.015 expectation is "
+        "about R-WORK, not R-free: measured correctly that offset is +0.0058 and in band. No "
+        "benchmarked R-free offset band exists.",
         width=104, size=21, color=INK, leading=31))
     return "\n".join(out) + "\n"
 
@@ -627,7 +633,7 @@ def slide_08_trust():
         110, 640,
         "The new sheet passes because it does not grade T06 — the row that was open on every "
         "prior 1SAR sheet — since this run did not re-measure T06. Nothing that was open was "
-        "closed. The sheet is 271 lines where May's was 1270, and no longer carries geometry, "
+        "closed. The sheet is a fraction of May's 1270 lines, and no longer carries geometry, "
         "data quality, ions, waters or pairwise comparisons.",
         width=104, size=21, color=INK, leading=31))
 
@@ -691,9 +697,9 @@ def slide_10_net():
         f'Holds (re-measured)</text>')
     holds = [
         "Oracle R-free reproduces May to four decimals",
-        "R-free criterion passes under rule 1's ± 0.02",
+        "Rule 2's R-work offset passes at +0.0058",
         "Both H builders agree on every confident flip",
-        "Deposited T15 and T16 legs reproduce calibrations",
+        "Deposited T15 leg reproduces its calibration exactly",
         "Round-6-vs-final delta reproduces exactly",
     ]
     for i, t in enumerate(holds):

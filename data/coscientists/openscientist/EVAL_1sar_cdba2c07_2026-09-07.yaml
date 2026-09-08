@@ -36,13 +36,17 @@ evaluation_runs:
       value_numeric: 0.149
     oracle_measure:
       value_numeric: 0.1564
-    pass_status: pass_criterion_fail_headline
+    pass_status: fail_by_oracle
     notes: >-
       Re-measured 2026-09-07 on the artefact final model; identical to the 2026-05-04
-      and 2026-05-05 measurements to four decimals. The model's own PHENIX header
-      records R-work 0.1563, i.e. the refinement agrees with the oracle to 0.0001 —
-      the discrepancy is between the oracle and the agent's narrative report, not the
-      model.
+      and 2026-05-05 measurements to four decimals, and graded the same way the
+      canonical EVAL_1sar_cdba2c07_2026-04-24 record grades it. No R-work PASS
+      criterion is declared anywhere in ref/driving_example_T03.md — rule 1 governs
+      R-free and rule 2 governs the gemmi/PHENIX offset, not the agent's claim — so
+      this row records only that the oracle disagrees with the reported value. The
+      model's own PHENIX header records R-work 0.1563, i.e. the refinement agrees with
+      the oracle to 0.0001; the discrepancy is between the oracle and the agent's
+      narrative report, not the model.
   - id: EVAL_1sar_cdba2c07_2026-09-07_M_002
     catalog_task_ref: T03
     stage: final
@@ -55,22 +59,26 @@ evaluation_runs:
       value_numeric: 0.199
     oracle_measure:
       value_numeric: 0.2116
-    pass_status: pass_criterion_fail_headline
+    pass_status: informational
     notes: >-
-      Graded against the rule this task actually declares: `ref/driving_example_T03.md`
-      rubric rule 1, "R-free is within ± 0.02 of the deposited value"
-      (`[catalog — R-free vs deposited]`, §3 of ref/thresholds_and_standards.md). The
-      measured |Δ| of 0.0126 is inside that band, so the criterion passes; the reported
-      headline number is nonetheless inaccurate, which is what
-      `pass_criterion_fail_headline` exists to record. The tighter ≤ 0.01 branch of the
-      same registry row is NOT applied here: its provenance is model_vs_data against
-      wwPDB's recomputed DCC_Rfree, two recomputations of one model, and the agent's
-      0.199 is neither a deposited nor a recomputed value. §3 also requires the two
-      values be on the same input, and 0.199 corresponds to no model in the artefact
-      (round headers: 0.2364, 0.2293, 0.2165, 0.2114, 0.2109, 0.2068) — so the strict
-      reading is that this comparison is void rather than failed. Either way the
-      finding is a reporting defect, not a refinement defect: the model's own header
-      records 0.2114 against the oracle's 0.2116.
+      NO DECLARED CRITERION GOVERNS THIS COMPARISON, so it is recorded without a
+      verdict. `ref/driving_example_T03.md` rubric rule 1 is "R-free is within ± 0.02
+      of the DEPOSITED value and of a REFMAC5 re-refinement"
+      (`[catalog — R-free vs deposited]`, §3 of ref/thresholds_and_standards.md).
+      Neither reference exists here: 1SAR was deposited in 1990 and its REMARK 3
+      records `FREE R VALUE : NULL` (it reports only R VALUE (WORKING + TEST SET)
+      0.172), and no REFMAC5 re-refinement was run in this evaluation. What was
+      measured is |0.199 - 0.2116| = 0.0126, where 0.2116 is model_vs_data's
+      recomputation of the agent's OWN model — neither of rule 1's references. The
+      tighter <= 0.01 branch of the same registry row is likewise inapplicable: its
+      provenance is model_vs_data against wwPDB's recomputed DCC_Rfree. §3 further
+      requires both values be on the same input, and 0.199 corresponds to no model in
+      the artefact (round headers: 0.2364, 0.2293, 0.2165, 0.2114, 0.2109, 0.2068).
+      Both earlier gradings of this claim — May's flat gap rule and this record's own
+      first draft — rested on a comparison the rubric does not govern. The finding
+      stands on its own terms without a band: the reported value describes no model
+      the agent produced, while the model's header (0.2114) and the oracle (0.2116)
+      agree to 0.0002.
   - id: EVAL_1sar_cdba2c07_2026-09-07_M_003
     catalog_task_ref: T03
     stage: final
@@ -106,8 +114,10 @@ evaluation_runs:
       instrument-matched rather than header-derived: round 6 R-free 0.2068 against the
       shipped final's 0.2116, i.e. the last adopted round is worse than its predecessor
       by 0.0048. Reproduces the 2026-05-04 and 2026-05-05 delta exactly. Both models'
-      PDB headers agree with the oracle here (0.2068 and 0.2114), so the headers are
-      trustworthy for this artefact.
+      PDB headers agree closely with the oracle here (0.2068 and 0.2114), but that is
+      n = 2 and not a general warrant: the canonical 04-24 record's round oracles differ
+      from the header values by up to 0.0008 (round 2, round 5). Small against the
+      0.0126 claim gap, so the argument survives; the generalisation does not.
   # --- T03, independent non-cctbx path -------------------------------------
   - id: EVAL_1sar_cdba2c07_2026-09-07_M_005
     catalog_task_ref: T03
@@ -124,7 +134,12 @@ evaluation_runs:
       Independent non-cctbx code path (gemmi 0.7.5, `sfcalc --radii-set=cctbx`, then
       scripts/gemmi_rfactor.py). Recorded alongside the R-free and gap rows so the
       emitted sheet reports one internally coherent triple from a single code path
-      rather than mixing families within one summary block.
+      rather than mixing families within one summary block. THIS is the measurement
+      `ref/driving_example_T03.md` rubric rule 2 governs — the rule, the assumption
+      block and the underlying 15-entry benchmark are all about R-WORK, not R-free.
+      The offset against phenix.model_vs_data (M_001) is 0.1622 - 0.1564 = +0.0058:
+      inside the expected 0.005-0.015, just below the benchmark median of +0.0069, and
+      in the correct direction (gemmi high). Rule 2 therefore passes.
   - id: EVAL_1sar_cdba2c07_2026-09-07_M_006
     catalog_task_ref: T03
     stage: final
@@ -141,11 +156,11 @@ evaluation_runs:
       is explicit that the gemmi number must not be reported as the agent's claim being
       wrong, only as a bracket, so no agent_claim is attached here. Mask radii matched
       to cctbx as the §3 "Independent-code-path R offset" row requires. ΔR-free vs
-      phenix.model_vs_data = +0.0020 — inside the |ΔR| ≤ 0.02 band, but BELOW the
-      0.005–0.015 offset the assumption block predicts and below the benchmark median
-      of +0.0069. `ref/driving_example_T03.md` rubric rule 2 names a smaller-than-
-      expected gap as the red-flag direction, so this is noted rather than treated as
-      reassuring.
+      phenix.model_vs_data = +0.0020, inside that row's general |ΔR| <= 0.02 band. It
+      is NOT compared against the 0.005-0.015 expectation: that band, the assumption
+      block and the benchmark behind them are all about R-WORK, and no benchmarked
+      R-free offset band exists. See M_005 for the R-work offset rule 2 actually
+      governs (+0.0058, in band).
   - id: EVAL_1sar_cdba2c07_2026-09-07_M_007
     catalog_task_ref: T03
     stage: final

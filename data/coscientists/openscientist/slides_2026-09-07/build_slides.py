@@ -373,7 +373,7 @@ def slide_03_headline():
 # ------------------------------------------------------------------
 def slide_04_regrade():
     out = [header("The R-factor claims, graded",
-                  "On the criterion the 1SAR series declares — and one rubric rule that cannot be applied to a 1990 entry")]
+                  "Each on the criterion that governs it — and one rubric rule that cannot be applied to a 1990 entry")]
 
     rows = [
         ["R-free value, 0.199 vs 0.2116",
@@ -746,8 +746,8 @@ def slide_10_net():
     out.append(panel(80, 750, 1760, 190, ACCENT_LIGHT))
     out.append(paragraph(
         112, 800,
-        "The one R-factor rule that is satisfiable on this structure — rule 2's independent-code-"
-        "path R-work offset — passes at +0.0058, as does the matched-radii R-free offset. What "
+        "The T03 rubric's one applicable R-factor rule — rule 2's independent-code-path R-work "
+        "offset — passes at +0.0058, as does the matched-radii R-free offset. What "
         "fails is the write-up: both reported R-factors miss the model's own header, the R-free "
         "value describes no model in the artefact, and the report is written about a different "
         "protein than the one it refined.",

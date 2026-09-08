@@ -3,7 +3,7 @@
   <rect width="100%" height="100%" fill="#ffffff"/>
   <rect x="0" y="0" width="1920" height="6" fill="#1f4e8c"/>
   <text x="80" y="86" font-size="44" font-weight="700" fill="#1a1a2e">The R-factor claims, graded</text>
-  <text x="80" y="128" font-size="22" font-weight="400" fill="#5a6071">On the criterion the 1SAR series declares — and one rubric rule that cannot be applied to a 1990 entry</text>
+  <text x="80" y="128" font-size="22" font-weight="400" fill="#5a6071">Each on the criterion that governs it — and one rubric rule that cannot be applied to a 1990 entry</text>
   <line x1="80" y1="1020" x2="1840" y2="1020" stroke="#e3e6ee" stroke-width="1"/>
   <text x="80" y="1050" font-size="16" fill="#5a6071">1SAR refinement review · openscientist artefact cdba2c07 · re-run 2026-09-07</text>
   <text x="1840" y="1050" font-size="16" fill="#5a6071" text-anchor="end">protstruct_review · update deck 2026-09-07</text>

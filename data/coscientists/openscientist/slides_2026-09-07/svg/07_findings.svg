@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" font-family="Helvetica, Arial, sans-serif">
+  <rect width="100%" height="100%" fill="#ffffff"/>
+  <rect x="0" y="0" width="1920" height="6" fill="#1f4e8c"/>
+  <text x="80" y="86" font-size="44" font-weight="700" fill="#1a1a2e">Two findings the May run did not have</text>
+  <text x="80" y="128" font-size="22" font-weight="400" fill="#5a6071">One about the model, one about the harness</text>
+  <line x1="80" y1="1020" x2="1840" y2="1020" stroke="#e3e6ee" stroke-width="1"/>
+  <text x="80" y="1050" font-size="16" fill="#5a6071">1SAR refinement review · openscientist artefact cdba2c07 · re-run 2026-09-07</text>
+  <text x="1840" y="1050" font-size="16" fill="#5a6071" text-anchor="end">protstruct_review · update deck 2026-09-07</text>
+
+  <rect x="80" y="200" width="860" height="400" rx="10" ry="10" fill="#f5d6d4"/>
+
+  <text x="112" y="252" font-size="28" font-weight="700" fill="#a8201a">1 · SO4 A 97 is written as ATOM</text>
+  <text x="112" y="300" font-size="21" font-weight="400" fill="#1a1a2e">The deposition writes the sulfate as HETATM; the agent's final</text>
+  <text x="112" y="331" font-size="21" font-weight="400" fill="#1a1a2e">model writes it as ATOM. Not cosmetic: a parser that treats</text>
+  <text x="112" y="362" font-size="21" font-weight="400" fill="#1a1a2e">ATOM as polymer counts chain A as 97 residues instead of 96.</text>
+  <text x="112" y="393" font-size="21" font-weight="400" fill="#1a1a2e">That happened during this run, with gemmi, before the cause</text>
+  <text x="112" y="424" font-size="21" font-weight="400" fill="#1a1a2e">was identified.</text>
+
+  <text x="112" y="470" font-size="21" font-weight="400" fill="#1a1a2e">Related and also new: the agent placed CA A 98 and NA B 98 —</text>
+  <text x="112" y="501" font-size="21" font-weight="400" fill="#1a1a2e">both correctly HETATM, and both absent from the deposition,</text>
+  <text x="112" y="532" font-size="21" font-weight="400" fill="#1a1a2e">which contains only the sulfate. May assessed their identity;</text>
+  <text x="112" y="563" font-size="21" font-weight="400" fill="#1a1a2e">it did not record that neither is in the reference at all.</text>
+
+  <rect x="980" y="200" width="860" height="400" rx="10" ry="10" fill="#fbeecb"/>
+
+  <text x="1012" y="252" font-size="28" font-weight="700" fill="#b07c00">2 · T02 has no headless path</text>
+  <text x="1012" y="300" font-size="21" font-weight="400" fill="#1a1a2e">T02's catalog PHENIX tool, phenix.structure_comparison, is</text>
+  <text x="1012" y="331" font-size="21" font-weight="400" fill="#1a1a2e">GUI-only in PHENIX 2.0. Its source carries the comment</text>
+  <text x="1012" y="362" font-size="21" font-weight="400" fill="#1a1a2e">“launches Stucture Comparision GUI by itself, still requires</text>
+  <text x="1012" y="393" font-size="21" font-weight="400" fill="#1a1a2e">project”. Run headlessly it exits 1 with no output — and</text>
+  <text x="1012" y="424" font-size="21" font-weight="400" fill="#1a1a2e">raises a project dialog on the user's desktop.</text>
+
+  <text x="1012" y="470" font-size="21" font-weight="400" fill="#1a1a2e">ProSMART, the CCP4 oracle the catalog names for T02, is not</text>
+  <text x="1012" y="501" font-size="21" font-weight="400" fill="#1a1a2e">installed here. So T02 is not currently satisfiable on this</text>
+  <text x="1012" y="532" font-size="21" font-weight="400" fill="#1a1a2e">machine by any route the catalog lists.</text>
+
+  <rect x="80" y="640" width="1760" height="300" rx="10" ry="10" fill="#f7f8fb"/>
+
+  <text x="112" y="692" font-size="26" font-weight="700" fill="#1a1a2e">What the gate caught, unprompted</text>
+  <text x="112" y="740" font-size="21" font-weight="400" fill="#1a1a2e">The hermetic gate rejected this run's first record because four oracle_tool_ref values did not resolve</text>
+  <text x="112" y="771" font-size="21" font-weight="400" fill="#1a1a2e">against ref/catalog.yaml — including a combined “reduce vs mmtbx.reduce2” label. The refs were corrected to</text>
+  <text x="112" y="802" font-size="21" font-weight="400" fill="#1a1a2e">registered ids. The underlying gap is real and now filed: mmtbx.reduce2 is a dependency of</text>
+  <text x="112" y="833" font-size="21" font-weight="400" fill="#1a1a2e">bench_t14_flip_sets.py but is not a registered tool, so no T14 record can name the builder that produced its</text>
+  <text x="112" y="864" font-size="21" font-weight="400" fill="#1a1a2e">second opinion.</text>
+
+</svg>

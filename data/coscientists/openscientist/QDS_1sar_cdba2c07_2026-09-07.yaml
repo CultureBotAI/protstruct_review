@@ -1,0 +1,271 @@
+quality_data_sheets:
+- id: QDS_1sar_cdba2c07_2026-09-07
+  structure_ref: 1sar
+  derived_from_evaluation_run_refs:
+  - EVAL_1sar_cdba2c07_2026-09-07
+  issued_at: '2026-09-08T03:34:32+00:00'
+  identity_block:
+    id: QDS_1sar_cdba2c07_2026-09-07_identity
+    pdb_id: 1sar
+  refinement_summary:
+    id: QDS_1sar_cdba2c07_2026-09-07_refinement
+    r_work:
+      value_numeric: 0.1564
+    r_free:
+      value_numeric: 0.2136
+  classification_summary:
+    id: QDS_1sar_cdba2c07_2026-09-07_classification
+    secondary_structure_agreement:
+      value_numeric: 0.8802
+  interface_quality_summary:
+    id: QDS_1sar_cdba2c07_2026-09-07_interface_quality
+    interface_buried_surface_area:
+      value_numeric: 437.8
+      unit: Å²
+    interface_dockq_score:
+      value_numeric: 0.9445
+    capri_interface_quality_class:
+      value_text: High
+    interface_qualities:
+    - id: EVAL_1sar_cdba2c07_2026-09-07_IFACE_AB
+      structure_ref: 1sar
+      interface_label: 1sar_final A/B
+      chain_id_1: A
+      chain_id_2: B
+      buried_surface_area:
+        value_numeric: 437.8
+        unit: Å²
+      dockq_score:
+        value_numeric: 0.9445
+      capri_quality_class:
+        value_text: High
+  cross_tool_coverage:
+    id: QDS_1sar_cdba2c07_2026-09-07_coverage
+    task_coverage:
+    - id: QDS_1sar_cdba2c07_2026-09-07_coverage_T03
+      catalog_task_ref: T03
+      cctbx_oracles:
+      - phenix.model_vs_data
+      non_cctbx_oracles:
+      - gemmi sfcalc
+      gap_status: closed
+    - id: QDS_1sar_cdba2c07_2026-09-07_coverage_T14
+      catalog_task_ref: T14
+      cctbx_oracles: []
+      non_cctbx_oracles:
+      - reduce (standalone, Richardson)
+      gap_status: non-cctbx only
+    - id: QDS_1sar_cdba2c07_2026-09-07_coverage_T15
+      catalog_task_ref: T15
+      cctbx_oracles: []
+      non_cctbx_oracles:
+      - DSSP + biotite P-SEA
+      gap_status: non-cctbx only
+    - id: QDS_1sar_cdba2c07_2026-09-07_coverage_T16
+      catalog_task_ref: T16
+      cctbx_oracles: []
+      non_cctbx_oracles:
+      - DockQ
+      - biotite SASA
+      gap_status: non-cctbx only
+  tool_recommendations_applied:
+  - id: REC_T03_r_work_top_considered
+    metric_definition_ref: T03_r-work
+    tool_ref: phenix.model_vs_data
+    role: top_considered
+    rank: 1
+    justification: Catalog-defined T06 oracle; re-derives R-factors from PDB+MTZ with
+      its own scaling, rather than reading them from a refinement log.
+    evidence_refs:
+    - Brünger1992
+    - EvansMurshudov2013
+    as_of_date: '2026-04-25'
+  - id: REC_T03_r_work_top_performing
+    metric_definition_ref: T03_r-work
+    tool_ref: gemmi sfcalc
+    role: top_performing
+    rank: 1
+    justification: Non-cctbx independent oracle; corroborated phenix.model_vs_data
+      on the 1SAR eval (0.164 vs 0.156, both above the agent-reported 0.149) and is
+      what hardened the "agent's R-free is too low" finding.
+    evidence_refs:
+    - EVAL_1sar_cdba2c07_2026-04-24
+    as_of_date: '2026-04-25'
+  - id: REC_T03_r_work_alternative_servalcat
+    metric_definition_ref: T03_r-work
+    tool_ref: Servalcat
+    role: alternative
+    rank: 2
+    justification: Murshudov-group implementation; per-shell R via `servalcat sigmaa`.
+      Independent code base; preferred when REFMAC5 is unavailable.
+    evidence_refs:
+    - Yamashita2021
+    as_of_date: '2026-04-25'
+  - id: REC_T03_r_free_top_considered
+    metric_definition_ref: T03_r-free
+    tool_ref: phenix.model_vs_data
+    role: top_considered
+    rank: 1
+    justification: Same as R-work — re-derives from data; never read from refinement
+      log alone.
+    evidence_refs:
+    - Brünger1992
+    as_of_date: '2026-04-25'
+  - id: REC_T03_r_free_top_performing
+    metric_definition_ref: T03_r-free
+    tool_ref: gemmi sfcalc
+    role: top_performing
+    rank: 1
+    justification: Non-cctbx confirmation of R-free finding on 1SAR eval.
+    evidence_refs:
+    - EVAL_1sar_cdba2c07_2026-04-24
+    as_of_date: '2026-04-25'
+  - id: REC_T03_r_work_top_performing_refmac
+    metric_definition_ref: T03_r-work
+    tool_ref: REFMAC5
+    role: alternative
+    rank: 3
+    justification: Once installed, REFMAC5 is the canonical second-opinion refiner
+      (PDB-REDO methodology, Joosten 2012). Re-refine the model with REFMAC and report
+      whether R-work / R-free converge within ~0.01-0.02 of the agent's PHENIX numbers.
+      Currently rank 3 (gemmi sfcalc + Servalcat are easier installs); promote to
+      rank 1 once REFMAC re-refinement is the default path.
+    evidence_refs:
+    - Joosten2012
+    as_of_date: '2026-04-30'
+  - id: REC_T15_secondary_structure_agreement_top_considered
+    metric_definition_ref: T15_secondary_structure_agreement
+    tool_ref: DSSP
+    role: top_considered
+    rank: 1
+    justification: DSSP is the reference implementation for secondary-structure assignment.
+      The gradeable T15 metric is three-state agreement between two independent assigners,
+      so DSSP is paired with STRIDE rather than used alone.
+    as_of_date: '2026-07-20'
+  - id: REC_T15_secondary_structure_agreement_alternative
+    metric_definition_ref: T15_secondary_structure_agreement
+    tool_ref: STRIDE
+    role: alternative
+    rank: 2
+    justification: STRIDE is the independent second assigner in the agreement pair.
+      It uses hydrogen-bond energy plus dihedral criteria, so it fails differently
+      from DSSP — which is what makes the agreement informative rather than tautological.
+    as_of_date: '2026-07-20'
+  - id: REC_T16_interface_dockq_score_top_considered
+    metric_definition_ref: T16_interface_dockq_score
+    tool_ref: DockQ
+    role: top_considered
+    rank: 1
+    justification: DockQ is the community-standard continuous interface-quality score
+      and the basis of the CAPRI quality classes; CAPRI class is recorded alongside
+      it as the ordinal label.
+    as_of_date: '2026-07-20'
+  - id: REC_T16_interface_dockq_score_top_performing
+    metric_definition_ref: T16_interface_dockq_score
+    tool_ref: DockQ
+    role: top_performing
+    rank: 1
+    justification: 'Installed and runnable now (scripts/t16_interface_quality.py,
+      DockQ 2.1.3): scores a model complex against the deposited reference and derives
+      the CAPRI class. Identity calibration on 1sar A/B -> 1.000.'
+    as_of_date: '2026-07-22'
+  - id: REC_T16_interface_buried_surface_area_top_considered
+    metric_definition_ref: T16_interface_buried_surface_area
+    tool_ref: PISA/PDBePISA
+    role: top_considered
+    rank: 1
+    justification: PDBePISA is the reference service for interface area and biological-assembly
+      inference, and is the source the deposited assembly is judged against.
+    as_of_date: '2026-07-20'
+  - id: REC_T16_interface_buried_surface_area_top_performing
+    metric_definition_ref: T16_interface_buried_surface_area
+    tool_ref: biotite SASA
+    role: top_performing
+    rank: 1
+    justification: 'Installed and runnable now (scripts/t16_interface_quality.py):
+      Shrake-Rupley SASA via biotite gives the buried area from the model alone —
+      ΣSASA(chains) − SASA(complex) — an installable stand-in for the PISA web service.
+      1sar A/B → 437.2 Å².'
+    as_of_date: '2026-07-22'
+  - id: REC_T15_secondary_structure_agreement_top_performing
+    metric_definition_ref: T15_secondary_structure_agreement
+    tool_ref: biotite P-SEA
+    role: top_performing
+    rank: 1
+    justification: 'Installed and runnable now (scripts/t15_ss_agreement.py): DSSP
+      vs biotite P-SEA three-state agreement. biotite''s Cα-geometry P-SEA is a different
+      algorithm family from DSSP''s H-bond energetics, so the agreement is informative
+      rather than tautological. Stands in for STRIDE, which is not currently installable
+      via Homebrew.'
+  - id: REC_T03_δr-free_vs_input_top_considered
+    metric_definition_ref: T03_δr-free_vs_input
+    tool_ref: REFMAC5 (CCP4)
+    role: top_considered
+    rank: 1
+    justification: Independent ML refiner; post-MR R-free and reciprocal-space refinement
+      statistics.
+    as_of_date: '2026-07-21'
+  - id: REC_T14_h_added_top_considered
+    metric_definition_ref: T14_h_added
+    tool_ref: reduce (standalone, Richardson)
+    role: top_considered
+    rank: 1
+    justification: Richardson-lab standalone reduce; independent H-placement / protonation
+      / flip oracle.
+    as_of_date: '2026-07-21'
+  - id: REC_T14_asn_gln_his_flips_proposed_top_considered
+    metric_definition_ref: T14_asn_gln_his_flips_proposed
+    tool_ref: reduce (standalone, Richardson)
+    role: top_considered
+    rank: 1
+    justification: Richardson-lab standalone reduce; independent H-placement / protonation
+      / flip oracle.
+    as_of_date: '2026-07-21'
+  - id: REC_T16_capri_interface_quality_class_top_considered
+    metric_definition_ref: T16_capri_interface_quality_class
+    tool_ref: DockQ
+    role: top_considered
+    rank: 1
+    justification: Community-standard continuous interface-quality score.
+    as_of_date: '2026-07-21'
+  assumptions_report:
+  - id: ASSUM_phenix_mvd_treats_model_as_fixed
+    kind: explicit
+    scope: tool
+    title: Model is fixed; not a refinement
+    description: '`phenix.model_vs_data` re-computes R-factors with its own bulk-
+      solvent fit but does not move atoms. The R-factors it reports are for the input
+      model exactly as deposited.'
+    consequences: A model that converged in PHENIX with one scaling will look slightly
+      different here. Treat the model_vs_data value as the catalog T06 oracle of record.
+    mitigation: None needed; this is the intended behaviour.
+    status: verified
+    tool_ref: phenix.model_vs_data
+  - id: ASSUM_gemmi_sfcalc_simpler_bulk_solvent
+    kind: explicit
+    scope: tool
+    title: Flat-bulk solvent, no anisotropic scaling
+    description: '`scripts/gemmi_rfactor.py` uses a flat-bulk solvent + bin-wise isotropic
+      rescaling, with the scales fit on WORK reflections only and applied unchanged
+      to the free set (#316 — the pre-#316 all- reflection fit leaked the test set
+      into R-free; measured effect on real pairs was <= 1e-5, so the bracket below
+      is unchanged). PHENIX uses anisotropic scaling on top of a Babinet-style bulk-solvent
+      fit.'
+    consequences: Expect 0.005–0.015 higher R-work from gemmi than from PHENIX on
+      the same data — that is the price of an independent code path. Do NOT report
+      the gemmi number as the agent's claim being wrong; report the bracket between
+      the two.
+    mitigation: Cite both numbers in the QDS notes. Use the larger Δ as the conservative
+      bound.
+    status: mitigated
+    tool_ref: gemmi sfcalc
+  - id: ASSUM_gemmi_sfcalc_linear_resolution_shells
+    kind: implicit
+    scope: tool
+    title: Linearly-binned resolution shells
+    description: The custom R-calc bins reflections by 1/d² in equal-count bins; PHENIX
+      uses adaptive shells.
+    consequences: Per-shell R numbers are not directly comparable across the two tools.
+    mitigation: Use overall R-work / R-free for cross-tool comparison, not per-shell.
+    status: mitigated
+    tool_ref: gemmi sfcalc

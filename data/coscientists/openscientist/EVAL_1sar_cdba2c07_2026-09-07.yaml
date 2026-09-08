@@ -1,0 +1,217 @@
+evaluation_runs:
+- id: EVAL_1sar_cdba2c07_2026-09-07
+  eval_filename_stem: EVAL_1sar_cdba2c07_2026-09-07
+  structure_ref: 1sar
+  artifact_ref: cdba2c07-daff-4f60-ae96-12452b3a5fbb
+  run_date: '2026-09-07'
+  catalog_tasks_applied:
+  - T03
+  - T14
+  - T15
+  - T16
+  interface_qualities:
+  - id: EVAL_1sar_cdba2c07_2026-09-07_IFACE_AB
+    structure_ref: 1sar
+    interface_label: 1sar_final A/B
+    chain_id_1: A
+    chain_id_2: B
+    buried_surface_area:
+      value_numeric: 437.8
+      unit: Å²
+    dockq_score:
+      value_numeric: 0.9445
+    capri_quality_class:
+      value_text: High
+  measurements:
+  - id: EVAL_1sar_cdba2c07_2026-09-07_M_001
+    catalog_task_ref: T03
+    stage: final
+    scope: dataset
+    scope_selector: 1sar_final
+    metric_definition_ref: T03_r-work
+    oracle_tool_ref: phenix.model_vs_data
+    oracle_family: cctbx
+    agent_claim:
+      value_numeric: 0.149
+    oracle_measure:
+      value_numeric: 0.1564
+    pass_status: fail_by_oracle
+    notes: >-
+      Re-measured 2026-09-07 on the artefact final model; identical to the 2026-05-04
+      and 2026-05-05 measurements to four decimals. The model's own PHENIX header
+      records R-work 0.1563, i.e. the refinement agrees with the oracle to 0.0001 —
+      the gap is between the oracle and the agent's narrative report, not the model.
+  - id: EVAL_1sar_cdba2c07_2026-09-07_M_002
+    catalog_task_ref: T03
+    stage: final
+    scope: dataset
+    scope_selector: 1sar_final
+    metric_definition_ref: T03_r-free
+    oracle_tool_ref: phenix.model_vs_data
+    oracle_family: cctbx
+    agent_claim:
+      value_numeric: 0.199
+    oracle_measure:
+      value_numeric: 0.2116
+    pass_status: fail_by_oracle
+    notes: >-
+      |Δ| = 0.0126 against the oracle recomputation. Graded 2026-09-07 against the
+      calibrated band in ref/thresholds_and_standards.md §4 ("R-free vs deposited"):
+      |Δ| ≤ 0.01 against a recomputed reference, which is the derivation
+      model_vs_data performs. The May review graded the same numbers with the
+      pre-benchmark flat "< 0.05 R-work/R-free gap" rule; the verdict is unchanged
+      but the instrument is now a measured tolerance rather than a template.
+      The agent's own final-model header records FREE R VALUE 0.2114, and no round
+      model in the artefact has R-free 0.199 (rounds measured: 0.2364, 0.2293,
+      0.2165, 0.2114, 0.2109, 0.2068) — the reported 0.199 is not a stale value
+      carried from an earlier round, it corresponds to no model the agent produced.
+  - id: EVAL_1sar_cdba2c07_2026-09-07_M_003
+    catalog_task_ref: T03
+    stage: final
+    scope: dataset
+    scope_selector: 1sar_final
+    metric_definition_ref: T03_r-free
+    oracle_tool_ref: gemmi sfcalc
+    oracle_family: non_cctbx
+    agent_claim:
+      value_numeric: 0.199
+    oracle_measure:
+      value_numeric: 0.2136
+    pass_status: fail_by_oracle
+    notes: >-
+      Independent non-cctbx code path, gemmi 0.7.5, mask radii matched to cctbx
+      (`gemmi sfcalc --radii-set=cctbx`) as ref/thresholds_and_standards.md §4
+      "Independent-code-path R offset" requires. ΔR-free vs phenix.model_vs_data =
+      +0.0020, inside the benchmarked |ΔR| ≤ 0.02 band and one-sided in the
+      direction the benchmark predicts (gemmi read high in 15/15 entries, median
+      +0.0069). The 2026-05-05 run measured gemmi R-free 0.217 under gemmi 0.7.4
+      with the default vdw mask; the 0.0034 difference from today's matched-radii
+      value is consistent with the registry's recorded default-vdw penalty (median
+      +0.0043). The apparent four-oracle spread in May was largely mask convention,
+      not code-path disagreement.
+  - id: EVAL_1sar_cdba2c07_2026-09-07_M_004
+    catalog_task_ref: T03
+    stage: final
+    scope: dataset
+    scope_selector: 1sar_round6_vs_final
+    metric_definition_ref: T03_δr-free_vs_input
+    oracle_tool_ref: phenix.model_vs_data
+    oracle_family: cctbx
+    oracle_measure:
+      value_numeric: 0.0046
+    pass_status: fail_by_oracle
+    notes: >-
+      Round 6 (R-free 0.2068) is better than the model shipped as final (0.2114) by
+      0.0046. Reproduces the 2026-05-04 and 2026-05-05 finding from the artefact
+      headers; the last adopted round is not the best round.
+  - id: EVAL_1sar_cdba2c07_2026-09-07_M_005
+    catalog_task_ref: T14
+    stage: final
+    scope: complex
+    scope_selector: 1sar_final
+    metric_definition_ref: T14_h_added
+    oracle_tool_ref: reduce (standalone, Richardson)
+    oracle_family: non_cctbx
+    oracle_measure:
+      value_numeric: 1386
+    pass_status: informational
+    notes: >-
+      First T14 measurement on this structure. H atoms added by Richardson `reduce`
+      (-quiet -build). phenix.reduce yields the identical count (1386) because the
+      two dispatchers are the same binary — recorded as a redistribution check, not
+      an independent second opinion.
+  - id: EVAL_1sar_cdba2c07_2026-09-07_M_006
+    catalog_task_ref: T14
+    stage: final
+    scope: complex
+    scope_selector: 1sar_final
+    metric_definition_ref: T14_asn_gln_his_flips_proposed
+    oracle_tool_ref: reduce (standalone, Richardson)
+    oracle_family: non_cctbx
+    oracle_measure:
+      value_numeric: 0
+    pass_status: pass
+    notes: >-
+      Confident flip-set conflicts between the two genuinely independent H builders:
+      0 over the 14 flippable Asn/Gln/His residues both scored (reduce called 14,
+      reduce2 18 with add_flip_movers=True; agreement 1.000 on the shared set).
+      Scored with scripts/bench_t14_flip_sets.py's own build/parse/conflict
+      functions, so the "confident" definition matches the benchmark: a disagreement
+      counts only where reduce committed (category F or K), not where it wrote X or
+      C. Satisfies the "same Asn/Gln/His flip set" clause of the H-placement
+      tolerance.
+  - id: EVAL_1sar_cdba2c07_2026-09-07_M_007
+    catalog_task_ref: T15
+    stage: final
+    scope: complex
+    scope_selector: 1sar_final
+    metric_definition_ref: T15_secondary_structure_agreement
+    oracle_tool_ref: DSSP + biotite P-SEA
+    oracle_family: non_cctbx
+    oracle_measure:
+      value_numeric: 0.8802
+    pass_status: informational
+    notes: >-
+      First T15 measurement on this structure. Three-state (H/E/C) agreement between
+      two independent non-cctbx assigners, DSSP (H-bond energetics) and biotite
+      P-SEA (Cα geometry): 169/192 concordant, 0 residues scored by only one.
+  - id: EVAL_1sar_cdba2c07_2026-09-07_M_008
+    catalog_task_ref: T15
+    stage: final
+    scope: complex
+    scope_selector: 1sar_deposited
+    metric_definition_ref: T15_secondary_structure_agreement
+    oracle_tool_ref: DSSP + biotite P-SEA
+    oracle_family: non_cctbx
+    oracle_measure:
+      value_numeric: 0.8646
+    pass_status: informational
+    notes: >-
+      The same metric on the deposited reference, as the baseline the agent model's
+      0.8802 has to be read against: inter-assigner agreement is a property of the
+      fold and the two algorithms, not a quality score, so it is only interpretable
+      as a difference. The agent model sits 0.0156 above the deposition, i.e. at the
+      deposited baseline rather than below it.
+  - id: EVAL_1sar_cdba2c07_2026-09-07_M_009
+    catalog_task_ref: T16
+    stage: final
+    scope: interface
+    scope_selector: 1sar_final:A/B
+    metric_definition_ref: T16_interface_buried_surface_area
+    oracle_tool_ref: biotite SASA
+    oracle_family: non_cctbx
+    oracle_measure:
+      value_numeric: 437.8
+      unit: Å²
+    pass_status: informational
+    notes: >-
+      First T16 measurement on this structure; T16 applies because 1SAR's asymmetric
+      unit carries two protein chains (A and B). Total area buried on complex
+      formation, Shrake-Rupley (ΣSASA(chains) − SASA(complex)).
+  - id: EVAL_1sar_cdba2c07_2026-09-07_M_010
+    catalog_task_ref: T16
+    stage: final
+    scope: interface
+    scope_selector: AB:AB
+    metric_definition_ref: T16_interface_dockq_score
+    oracle_tool_ref: DockQ
+    oracle_family: non_cctbx
+    oracle_measure:
+      value_numeric: 0.9445
+    pass_status: pass
+    notes: >-
+      DockQ of the agent's final A/B pairing against the deposited assembly, mapping
+      AB:AB. The deposited complex is the trust model's tiebreaker for T16: there is
+      no PHENIX interface scorer, so this task is oracle-only by construction.
+  - id: EVAL_1sar_cdba2c07_2026-09-07_M_011
+    catalog_task_ref: T16
+    stage: final
+    scope: interface
+    scope_selector: AB:AB
+    metric_definition_ref: T16_capri_interface_quality_class
+    oracle_tool_ref: DockQ
+    oracle_family: non_cctbx
+    oracle_measure:
+      value_text: High
+    pass_status: informational
+    notes: CAPRI class derived from the DockQ score (Basu & Wallner 2016 bands).

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" font-family="Helvetica, Arial, sans-serif">
+  <rect width="100%" height="100%" fill="#ffffff"/>
+  <rect x="0" y="0" width="1920" height="6" fill="#1f4e8c"/>
+  <text x="80" y="86" font-size="44" font-weight="700" fill="#1a1a2e">Why re-run at all</text>
+  <text x="80" y="128" font-size="22" font-weight="400" fill="#5a6071">The model never changed — the instruments did</text>
+  <line x1="80" y1="1020" x2="1840" y2="1020" stroke="#e3e6ee" stroke-width="1"/>
+  <text x="80" y="1050" font-size="16" fill="#5a6071">1SAR refinement review · openscientist artefact cdba2c07 · re-run 2026-09-07</text>
+  <text x="1840" y="1050" font-size="16" fill="#5a6071" text-anchor="end">protstruct_review · update deck 2026-09-07</text>
+
+  <text x="80" y="210" font-size="23" font-weight="400" fill="#1a1a2e">The May review was issued before the tolerance-benchmark series. It graded its load-bearing claim with a flat,</text>
+  <text x="80" y="244" font-size="23" font-weight="400" fill="#1a1a2e">pre-benchmark rule and read a spread across four oracles as tool disagreement. Both of those are now measured</text>
+  <text x="80" y="278" font-size="23" font-weight="400" fill="#1a1a2e">quantities.</text>
+
+  <rect x="80" y="350" width="1760" height="54" fill="#1f4e8c"/>
+  <text x="94" y="383.6666666666667" font-size="20" font-weight="700" fill="#ffffff" text-anchor="start">When</text>
+  <text x="294" y="383.6666666666667" font-size="20" font-weight="700" fill="#ffffff" text-anchor="start">What changed in the harness</text>
+  <text x="994" y="383.6666666666667" font-size="20" font-weight="700" fill="#ffffff" text-anchor="start">Effect on how 1SAR is graded</text>
+  <rect x="80" y="404" width="1760" height="54" fill="#ffffff"/>
+  <text x="94" y="437.6666666666667" font-size="20" fill="#1a1a2e" text-anchor="start">May 2026</text>
+  <text x="294" y="437.6666666666667" font-size="20" fill="#1a1a2e" text-anchor="start">48-round tolerance series not yet run</text>
+  <text x="994" y="437.6666666666667" font-size="20" fill="#1a1a2e" text-anchor="start">flat “&lt; 0.05 R-work/R-free gap” template</text>
+  <rect x="80" y="458" width="1760" height="54" fill="#f7f8fb"/>
+  <text x="94" y="491.6666666666667" font-size="20" fill="#1a1a2e" text-anchor="start">Since</text>
+  <text x="294" y="491.6666666666667" font-size="20" fill="#1a1a2e" text-anchor="start">Registry §3/§4/§6 bands measured and governed</text>
+  <text x="994" y="491.6666666666667" font-size="20" fill="#1a1a2e" text-anchor="start">calibrated |Δ| bands with named preconditions</text>
+  <rect x="80" y="512" width="1760" height="54" fill="#ffffff"/>
+  <text x="94" y="545.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="start">Since</text>
+  <text x="294" y="545.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="start">gemmi routed through toolchain.py, pinned 0.7.5</text>
+  <text x="994" y="545.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="start">mask-radii convention made explicit</text>
+  <rect x="80" y="566" width="1760" height="54" fill="#f7f8fb"/>
+  <text x="94" y="599.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="start">Since</text>
+  <text x="294" y="599.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="start">Trust invariant enforceable (cutover 2026-08-13)</text>
+  <text x="994" y="599.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="start">cctbx-only tasks must be waived or closed</text>
+  <rect x="80" y="620" width="1760" height="54" fill="#ffffff"/>
+  <text x="94" y="653.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="start">Today</text>
+  <text x="294" y="653.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="start">Same artefact, five oracle code paths</text>
+  <text x="994" y="653.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="start">re-graded, plus three never-run tasks</text>
+  <rect x="80" y="350" width="1760" height="324" fill="none" stroke="#e3e6ee" stroke-width="1"/>
+  <line x1="280" y1="350" x2="280" y2="674" stroke="#e3e6ee" stroke-width="1"/>
+  <line x1="980" y1="350" x2="980" y2="674" stroke="#e3e6ee" stroke-width="1"/>
+
+  <rect x="80" y="700" width="1760" height="200" rx="10" ry="10" fill="#fbeecb"/>
+
+  <text x="110" y="750" font-size="22" font-weight="400" fill="#1a1a2e">No-clobber was structural, not careful: outputs are date-keyed, the artefact zip was extracted</text>
+  <text x="110" y="784" font-size="22" font-weight="400" fill="#1a1a2e">read-only into a scratch directory, and all 102 pre-existing files were checksummed before and after</text>
+  <text x="110" y="818" font-size="22" font-weight="400" fill="#1a1a2e">the run. Every one is byte-identical. April and May records stand exactly as issued.</text>
+
+</svg>

@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" font-family="Helvetica, Arial, sans-serif">
+  <rect width="100%" height="100%" fill="#ffffff"/>
+  <rect x="0" y="0" width="1920" height="6" fill="#1f4e8c"/>
+  <text x="80" y="86" font-size="44" font-weight="700" fill="#1a1a2e">Re-graded under the current registry</text>
+  <text x="80" y="128" font-size="22" font-weight="400" fill="#5a6071">One verdict flips — because the May gap was mask convention, not code</text>
+  <line x1="80" y1="1020" x2="1840" y2="1020" stroke="#e3e6ee" stroke-width="1"/>
+  <text x="80" y="1050" font-size="16" fill="#5a6071">1SAR refinement review · openscientist artefact cdba2c07 · re-run 2026-09-07</text>
+  <text x="1840" y="1050" font-size="16" fill="#5a6071" text-anchor="end">protstruct_review · update deck 2026-09-07</text>
+
+  <rect x="80" y="200" width="1760" height="88" fill="#1f4e8c"/>
+  <text x="94" y="250.66666666666666" font-size="20" font-weight="700" fill="#ffffff" text-anchor="start">Claim</text>
+  <text x="424" y="250.66666666666666" font-size="20" font-weight="700" fill="#ffffff" text-anchor="start">May grading</text>
+  <text x="884" y="250.66666666666666" font-size="20" font-weight="700" fill="#ffffff" text-anchor="start">2026-09-07 grading</text>
+  <text x="1705.0" y="250.66666666666666" font-size="20" font-weight="700" fill="#ffffff" text-anchor="middle">Verdict</text>
+  <rect x="80" y="288" width="1760" height="88" fill="#ffffff"/>
+  <text x="94" y="338.0" font-size="18" fill="#1a1a2e" text-anchor="start">R-free 0.199 vs oracle</text>
+  <text x="424" y="338.0" font-size="18" fill="#5a6071" text-anchor="start">flat “&lt; 0.05 gap”; 3 of 4 paths fail</text>
+  <text x="884" y="338.0" font-size="18" fill="#1a1a2e" text-anchor="start">§4 recomputed-reference band |Δ| ≤ 0.01; measured 0.0126</text>
+  <rect x="1570" y="288" width="270" height="88" fill="#f5d6d4"/>
+  <text x="1705.0" y="338.0" font-size="18" fill="#a8201a" text-anchor="middle">still fails</text>
+  <rect x="80" y="376" width="1760" height="88" fill="#f7f8fb"/>
+  <text x="94" y="426.0" font-size="18" fill="#1a1a2e" text-anchor="start">gemmi vs PHENIX R-free</text>
+  <text x="424" y="426.0" font-size="18" fill="#5a6071" text-anchor="start">0.217 vs 0.2116 (Δ 0.0054), read as disagreement</text>
+  <text x="884" y="426.0" font-size="18" fill="#1a1a2e" text-anchor="start">§4 independent-code-path band |ΔR| ≤ 0.02, matched radii; measured +0.0020</text>
+  <rect x="1570" y="376" width="270" height="88" fill="#dff0e1"/>
+  <text x="1705.0" y="426.0" font-size="18" fill="#1f7a3f" text-anchor="middle">now passes</text>
+  <rect x="80" y="464" width="1760" height="88" fill="#ffffff"/>
+  <text x="94" y="514.0" font-size="18" fill="#1a1a2e" text-anchor="start">Round 6 better than final</text>
+  <text x="424" y="514.0" font-size="18" fill="#5a6071" text-anchor="start">Δ 0.0048 by oracle</text>
+  <text x="884" y="514.0" font-size="18" fill="#1a1a2e" text-anchor="start">Δ 0.0046 from artefact headers</text>
+  <rect x="1570" y="464" width="270" height="88" fill="#fbeecb"/>
+  <text x="1705.0" y="514.0" font-size="18" fill="#b07c00" text-anchor="middle">reproduces</text>
+  <rect x="80" y="200" width="1760" height="352" fill="none" stroke="#e3e6ee" stroke-width="1"/>
+  <line x1="410" y1="200" x2="410" y2="552" stroke="#e3e6ee" stroke-width="1"/>
+  <line x1="870" y1="200" x2="870" y2="552" stroke="#e3e6ee" stroke-width="1"/>
+  <line x1="1570" y1="200" x2="1570" y2="552" stroke="#e3e6ee" stroke-width="1"/>
+
+  <text x="80" y="620" font-size="28" font-weight="700" fill="#1a1a2e">The dissolved disagreement</text>
+  <text x="80" y="668" font-size="22" font-weight="400" fill="#1a1a2e">May measured gemmi under its default vdw mask on gemmi 0.7.4 and got 0.217. Re-run with radii matched to cctbx as the</text>
+  <text x="80" y="701" font-size="22" font-weight="400" fill="#1a1a2e">registry now requires, gemmi gives 0.2136 — a 0.0034 shift. The registry records the default-vdw penalty as median</text>
+  <text x="80" y="734" font-size="22" font-weight="400" fill="#1a1a2e">+0.0043, measured over 15 entries. The May number was not wrong; it was taken under the convention the benchmark later</text>
+  <text x="80" y="767" font-size="22" font-weight="400" fill="#1a1a2e">showed to be the larger of the two effects.</text>
+
+  <rect x="80" y="850" width="410" height="110" rx="10" ry="10" fill="#f7f8fb" stroke="#1f4e8c" stroke-width="2"/>
+
+  <text x="102" y="892" font-size="19" fill="#1a1a2e">PHENIX model_vs_data</text>
+  <text x="102" y="932" font-size="28" font-weight="700" fill="#1f4e8c">0.2116</text>
+  <rect x="520" y="850" width="410" height="110" rx="10" ry="10" fill="#f7f8fb" stroke="#1f7a3f" stroke-width="2"/>
+
+  <text x="542" y="892" font-size="19" fill="#1a1a2e">gemmi, matched radii</text>
+  <text x="542" y="932" font-size="28" font-weight="700" fill="#1f7a3f">0.2136</text>
+  <rect x="960" y="850" width="410" height="110" rx="10" ry="10" fill="#f7f8fb" stroke="#b07c00" stroke-width="2"/>
+
+  <text x="982" y="892" font-size="19" fill="#1a1a2e">gemmi, default vdw (May)</text>
+  <text x="982" y="932" font-size="28" font-weight="700" fill="#b07c00">0.217</text>
+  <rect x="1400" y="850" width="410" height="110" rx="10" ry="10" fill="#f7f8fb" stroke="#a8201a" stroke-width="2"/>
+
+  <text x="1422" y="892" font-size="19" fill="#1a1a2e">agent report</text>
+  <text x="1422" y="932" font-size="28" font-weight="700" fill="#a8201a">0.199</text>
+</svg>

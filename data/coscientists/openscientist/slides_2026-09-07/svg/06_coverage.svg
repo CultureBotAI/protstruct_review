@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" font-family="Helvetica, Arial, sans-serif">
+  <rect width="100%" height="100%" fill="#ffffff"/>
+  <rect x="0" y="0" width="1920" height="6" fill="#1f4e8c"/>
+  <text x="80" y="86" font-size="44" font-weight="700" fill="#1a1a2e">Coverage on the example structure</text>
+  <text x="80" y="128" font-size="22" font-weight="400" fill="#5a6071">Where the harness has actually been pointed at 1SAR</text>
+  <line x1="80" y1="1020" x2="1840" y2="1020" stroke="#e3e6ee" stroke-width="1"/>
+  <text x="80" y="1050" font-size="16" fill="#5a6071">1SAR refinement review · openscientist artefact cdba2c07 · re-run 2026-09-07</text>
+  <text x="1840" y="1050" font-size="16" fill="#5a6071" text-anchor="end">protstruct_review · update deck 2026-09-07</text>
+
+  <rect x="80" y="190" width="1760" height="278" rx="10" ry="10" fill="#dff0e1"/>
+
+  <text x="110" y="228" font-size="26" font-weight="700" fill="#1f7a3f">Covered in May</text>
+  <circle cx="122" cy="253" r="5" fill="#1f7a3f"/>
+  <text x="146" y="260" font-size="21" fill="#1a1a2e">T01 superposition</text>
+  <circle cx="122" cy="285" r="5" fill="#1f7a3f"/>
+  <text x="146" y="292" font-size="21" fill="#1a1a2e">T03 X-ray refinement</text>
+  <circle cx="122" cy="317" r="5" fill="#1f7a3f"/>
+  <text x="146" y="324" font-size="21" fill="#1a1a2e">T05 geometry</text>
+  <circle cx="122" cy="349" r="5" fill="#1f7a3f"/>
+  <text x="146" y="356" font-size="21" fill="#1a1a2e">T06 model-vs-data</text>
+  <circle cx="122" cy="381" r="5" fill="#1f7a3f"/>
+  <text x="146" y="388" font-size="21" fill="#1a1a2e">T07 map/model</text>
+  <circle cx="122" cy="413" r="5" fill="#1f7a3f"/>
+  <text x="146" y="420" font-size="21" fill="#1a1a2e">T10 ligand/site</text>
+  <circle cx="122" cy="445" r="5" fill="#1f7a3f"/>
+  <text x="146" y="452" font-size="21" fill="#1a1a2e">T13 data quality</text>
+  <rect x="80" y="486" width="1760" height="150" rx="10" ry="10" fill="#dce6f4"/>
+
+  <text x="110" y="524" font-size="26" font-weight="700" fill="#1f4e8c">Covered today</text>
+  <circle cx="122" cy="549" r="5" fill="#1f4e8c"/>
+  <text x="146" y="556" font-size="21" fill="#1a1a2e">T14 hydrogen placement</text>
+  <circle cx="122" cy="581" r="5" fill="#1f4e8c"/>
+  <text x="146" y="588" font-size="21" fill="#1a1a2e">T15 structural classification</text>
+  <circle cx="122" cy="613" r="5" fill="#1f4e8c"/>
+  <text x="146" y="620" font-size="21" fill="#1a1a2e">T16 interface quality</text>
+  <rect x="80" y="654" width="1760" height="118" rx="10" ry="10" fill="#f7f8fb"/>
+
+  <text x="110" y="692" font-size="26" font-weight="700" fill="#5a6071">Not applicable</text>
+  <circle cx="122" cy="717" r="5" fill="#5a6071"/>
+  <text x="146" y="724" font-size="21" fill="#1a1a2e">T09 molecular replacement — the model was already placed</text>
+  <circle cx="122" cy="749" r="5" fill="#5a6071"/>
+  <text x="146" y="756" font-size="21" fill="#1a1a2e">T11 loop fitting — no chain gaps (A 1–96, B 1–96)</text>
+  <rect x="80" y="790" width="1760" height="86" rx="10" ry="10" fill="#f5d6d4"/>
+
+  <text x="110" y="828" font-size="26" font-weight="700" fill="#a8201a">Still uncovered</text>
+  <circle cx="122" cy="853" r="5" fill="#a8201a"/>
+  <text x="146" y="860" font-size="21" fill="#1a1a2e">T02 per-residue comparison — blocked, see next slide</text>
+  <text x="80" y="924" font-size="22" font-weight="700" fill="#1f4e8c">13 of 17 catalog tasks are now settled on this structure: 10 measured, 2 ruled not applicable with a stated reason, 1</text>
+  <text x="80" y="956" font-size="22" font-weight="700" fill="#1f4e8c">blocked by tooling.</text>
+
+</svg>

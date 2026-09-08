@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" font-family="Helvetica, Arial, sans-serif">
+  <rect width="100%" height="100%" fill="#ffffff"/>
+  <rect x="0" y="0" width="1920" height="6" fill="#1f4e8c"/>
+  <text x="80" y="86" font-size="44" font-weight="700" fill="#1a1a2e">Net assessment</text>
+  <text x="80" y="128" font-size="22" font-weight="400" fill="#5a6071">What holds, what fails, what is still open</text>
+  <line x1="80" y1="1020" x2="1840" y2="1020" stroke="#e3e6ee" stroke-width="1"/>
+  <text x="80" y="1050" font-size="16" fill="#5a6071">1SAR refinement review · openscientist artefact cdba2c07 · re-run 2026-09-07</text>
+  <text x="1840" y="1050" font-size="16" fill="#5a6071" text-anchor="end">protstruct_review · update deck 2026-09-07</text>
+
+  <rect x="80" y="200" width="860" height="330" rx="10" ry="10" fill="#dff0e1"/>
+
+  <text x="112" y="252" font-size="28" font-weight="700" fill="#1f7a3f">Holds</text>
+  <text x="112" y="300" font-size="20" fill="#1a1a2e">✓ The refinement is a real, large improvement</text>
+  <text x="112" y="338" font-size="20" fill="#1a1a2e">✓ Geometry, waters, disulfides, ion identity defensible</text>
+  <text x="112" y="376" font-size="20" fill="#1a1a2e">✓ A/B interface reproduces the deposition (CAPRI High)</text>
+  <text x="112" y="414" font-size="20" fill="#1a1a2e">✓ Both H builders agree on every confident flip</text>
+  <text x="112" y="452" font-size="20" fill="#1a1a2e">✓ SS agreement at the deposited baseline</text>
+  <text x="112" y="490" font-size="20" fill="#1a1a2e">✓ Oracle R-free reproduces May to four decimals</text>
+  <rect x="980" y="200" width="860" height="330" rx="10" ry="10" fill="#f5d6d4"/>
+
+  <text x="1012" y="252" font-size="28" font-weight="700" fill="#a8201a">Fails</text>
+  <text x="1012" y="300" font-size="20" fill="#1a1a2e">✗ Reported R-free 0.199 matches no model produced</text>
+  <text x="1012" y="338" font-size="20" fill="#1a1a2e">✗ …and no round: best was 0.2068 (round 6)</text>
+  <text x="1012" y="376" font-size="20" fill="#1a1a2e">✗ The shipped final is not the best round</text>
+  <text x="1012" y="414" font-size="20" fill="#1a1a2e">✗ SO4 written as ATOM, not HETATM</text>
+  <rect x="80" y="570" width="1760" height="150" rx="10" ry="10" fill="#fbeecb"/>
+
+  <text x="112" y="618" font-size="26" font-weight="700" fill="#b07c00">Open</text>
+  <text x="112" y="660" font-size="21" font-weight="400" fill="#1a1a2e">T02 blocked on tooling · mmtbx.reduce2 unregistered in the catalog · the T05 rmsz legs still carry their</text>
+  <text x="112" y="690" font-size="21" font-weight="400" fill="#1a1a2e">disclosed gemmi 0.7.4 measurement and have not been re-run under 0.7.5.</text>
+
+  <rect x="80" y="760" width="1760" height="180" rx="10" ry="10" fill="#dce6f4"/>
+
+  <text x="112" y="812" font-size="23" font-weight="700" fill="#1f4e8c">The one failing claim is unchanged in verdict and clearer in cause. Five code paths now bracket</text>
+  <text x="112" y="845" font-size="23" font-weight="700" fill="#1f4e8c">R-free at 0.2114–0.2136 once mask conventions are matched. The gap is not between oracles, and not</text>
+  <text x="112" y="878" font-size="23" font-weight="700" fill="#1f4e8c">between the oracle and the model — it is between the model and the report written about it.</text>
+
+</svg>

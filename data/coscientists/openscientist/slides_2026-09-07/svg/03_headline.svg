@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" font-family="Helvetica, Arial, sans-serif">
+  <rect width="100%" height="100%" fill="#ffffff"/>
+  <rect x="0" y="0" width="1920" height="6" fill="#1f4e8c"/>
+  <text x="80" y="86" font-size="44" font-weight="700" fill="#1a1a2e">The R-free finding, sharpened</text>
+  <text x="80" y="128" font-size="22" font-weight="400" fill="#5a6071">Same verdict. Much better attribution.</text>
+  <line x1="80" y1="1020" x2="1840" y2="1020" stroke="#e3e6ee" stroke-width="1"/>
+  <text x="80" y="1050" font-size="16" fill="#5a6071">1SAR refinement review · openscientist artefact cdba2c07 · re-run 2026-09-07</text>
+  <text x="1840" y="1050" font-size="16" fill="#5a6071" text-anchor="end">protstruct_review · update deck 2026-09-07</text>
+
+  <rect x="80" y="200" width="550" height="300" rx="10" ry="10" fill="#f5d6d4"/>
+
+  <text x="110" y="252" font-size="26" font-weight="700" fill="#a8201a">May said</text>
+  <text x="110" y="300" font-size="20" font-weight="400" fill="#1a1a2e">“R-free is reproducibly ~0.21, not 0.199.”</text>
+  <text x="110" y="330" font-size="20" font-weight="400" fill="#1a1a2e">Four code paths, 0.2114–0.2209. Three of</text>
+  <text x="110" y="360" font-size="20" font-weight="400" fill="#1a1a2e">four fail the &lt; 0.05 gap criterion.</text>
+
+  <rect x="670" y="200" width="550" height="300" rx="10" ry="10" fill="#dce6f4"/>
+
+  <text x="700" y="252" font-size="26" font-weight="700" fill="#1f4e8c">Now measured</text>
+  <text x="700" y="300" font-size="20" font-weight="400" fill="#1a1a2e">The agent's own model header records FREE</text>
+  <text x="700" y="330" font-size="20" font-weight="400" fill="#1a1a2e">R VALUE 0.2114. The oracle recomputes</text>
+  <text x="700" y="360" font-size="20" font-weight="400" fill="#1a1a2e">0.2116 — agreement to 0.0002.</text>
+
+  <rect x="1260" y="200" width="550" height="300" rx="10" ry="10" fill="#dff0e1"/>
+
+  <text x="1290" y="252" font-size="26" font-weight="700" fill="#1f7a3f">So the defect is</text>
+  <text x="1290" y="300" font-size="20" font-weight="400" fill="#1a1a2e">in the write-up, not the refinement. The</text>
+  <text x="1290" y="330" font-size="20" font-weight="400" fill="#1a1a2e">report says 0.199 in eight places; the</text>
+  <text x="1290" y="360" font-size="20" font-weight="400" fill="#1a1a2e">model it describes does not.</text>
+
+  <text x="80" y="580" font-size="28" font-weight="700" fill="#1a1a2e">Where does 0.199 come from? No round the agent ran.</text>
+  <rect x="80" y="620" width="540" height="46" fill="#1f4e8c"/>
+  <text x="94" y="649.6666666666666" font-size="20" font-weight="700" fill="#ffffff" text-anchor="start">Model in the artefact</text>
+  <text x="606" y="649.6666666666666" font-size="20" font-weight="700" fill="#ffffff" text-anchor="end">R-free</text>
+  <rect x="80" y="666" width="540" height="46" fill="#ffffff"/>
+  <text x="94" y="695.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="start">1sar_refined</text>
+  <text x="606" y="695.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="end">0.2364</text>
+  <rect x="80" y="712" width="540" height="46" fill="#f7f8fb"/>
+  <text x="94" y="741.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="start">round 2</text>
+  <text x="606" y="741.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="end">0.2293</text>
+  <rect x="80" y="758" width="540" height="46" fill="#ffffff"/>
+  <text x="94" y="787.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="start">round 3</text>
+  <text x="606" y="787.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="end">0.2165</text>
+  <rect x="80" y="804" width="540" height="46" fill="#f7f8fb"/>
+  <rect x="80" y="804" width="340" height="46" fill="#dce6f4"/>
+  <text x="94" y="833.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="start">final (shipped)</text>
+  <rect x="420" y="804" width="200" height="46" fill="#dce6f4"/>
+  <text x="606" y="833.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="end">0.2114</text>
+  <rect x="80" y="850" width="540" height="46" fill="#ffffff"/>
+  <text x="94" y="879.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="start">round 5</text>
+  <text x="606" y="879.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="end">0.2109</text>
+  <rect x="80" y="896" width="540" height="46" fill="#f7f8fb"/>
+  <rect x="80" y="896" width="340" height="46" fill="#dff0e1"/>
+  <text x="94" y="925.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="start">round 6</text>
+  <rect x="420" y="896" width="200" height="46" fill="#dff0e1"/>
+  <text x="606" y="925.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="end">0.2068</text>
+  <rect x="80" y="942" width="540" height="46" fill="#ffffff"/>
+  <rect x="80" y="942" width="340" height="46" fill="#f5d6d4"/>
+  <text x="94" y="971.6666666666666" font-size="20" fill="#a8201a" text-anchor="start">report claim</text>
+  <rect x="420" y="942" width="200" height="46" fill="#f5d6d4"/>
+  <text x="606" y="971.6666666666666" font-size="20" fill="#a8201a" text-anchor="end">0.199</text>
+  <rect x="80" y="620" width="540" height="368" fill="none" stroke="#e3e6ee" stroke-width="1"/>
+  <line x1="420" y1="620" x2="420" y2="988" stroke="#e3e6ee" stroke-width="1"/>
+
+  <rect x="700" y="620" width="1140" height="322" rx="10" ry="10" fill="#f7f8fb"/>
+
+  <text x="730" y="672" font-size="22" font-weight="400" fill="#1a1a2e">Every round model carries its R-free in its own PDB header. Measured</text>
+  <text x="730" y="704" font-size="22" font-weight="400" fill="#1a1a2e">across all six, the range is 0.2068–0.2364. The reported 0.199 is</text>
+  <text x="730" y="736" font-size="22" font-weight="400" fill="#1a1a2e">not a stale value carried from an earlier round — it is below the</text>
+  <text x="730" y="768" font-size="22" font-weight="400" fill="#1a1a2e">best round the agent ever produced, by 0.008.</text>
+
+  <text x="730" y="830" font-size="22" font-weight="400" fill="#a8201a">This matters for how the failure is described. “Understated by</text>
+  <text x="730" y="862" font-size="22" font-weight="400" fill="#a8201a">~0.012” implies a measurement disagreement. “Corresponds to no model</text>
+  <text x="730" y="894" font-size="22" font-weight="400" fill="#a8201a">produced” is a reporting-integrity problem, and a different thing to</text>
+  <text x="730" y="926" font-size="22" font-weight="400" fill="#a8201a">fix.</text>
+
+</svg>

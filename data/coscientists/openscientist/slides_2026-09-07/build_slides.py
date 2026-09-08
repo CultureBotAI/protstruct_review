@@ -227,21 +227,21 @@ def slide_01_title():
 
     bullets = [
         "Same artefact, re-measured: every prior record left byte-identical",
-        "Headline claim re-graded against calibrated bands, not templates",
-        "Three catalog tasks covered for the first time: T14, T15, T16",
-        "First 1SAR sheet to meet the trust invariant without grandfathering",
+        "R-free re-graded against the rule the T03 driver actually declares",
+        "T14, T15 and T16 exercised on this artefact for the first time",
+        "Partial re-run — T01/T05/T06/T10/T13 carried from May, not re-measured",
     ]
     for i, b in enumerate(bullets):
         ry = 540 + i * 52
         out.append(f'  <circle cx="132" cy="{ry-7}" r="6" fill="{ACCENT}"/>')
         out.append(f'  <text x="158" y="{ry}" font-size="24" fill="{INK}">{escape(b)}</text>')
 
-    out.append(panel(120, 800, 1680, 130, ACCENT_LIGHT))
+    out.append(panel(120, 790, 1680, 145, ACCENT_LIGHT))
     out.append(paragraph(
-        150, 848,
-        "The refinement was sound. The report was not — and the number it reported "
-        "belongs to no model the agent produced.",
-        width=95, size=26, color=ACCENT, weight="700", leading=34))
+        150, 840,
+        "The refinement was sound. The report was not — it is written about a different "
+        "protein, and its headline R-free belongs to no model the agent produced.",
+        width=88, size=26, color=ACCENT, weight="700", leading=36))
 
     out.append(
         f'  <text x="120" y="{H-70}" font-size="20" fill="{MUTED}">'
@@ -252,44 +252,55 @@ def slide_01_title():
 
 
 # ------------------------------------------------------------------
-# 02 — What this re-run was for
+# 02 — Scope of this re-run
 # ------------------------------------------------------------------
 def slide_02_why():
-    out = [header("Why re-run at all",
-                  "The model never changed — the instruments did")]
+    out = [header("What this re-run covers",
+                  "A partial re-measurement — read the scope before the headline")]
 
     out.append(paragraph(
-        80, 210,
-        "The May review was issued before the tolerance-benchmark series. It graded its "
-        "load-bearing claim with a flat, pre-benchmark rule and read a spread across four "
-        "oracles as tool disagreement. Both of those are now measured quantities.",
-        width=118, size=23, color=INK, leading=34))
+        80, 205,
+        "The May review predates the tolerance-benchmark series. It graded its headline with a "
+        "flat rule rather than the band the T03 driver declares. This run re-measures the "
+        "R-factor claims and exercises three never-run tasks — it does not re-run everything.",
+        width=118, size=22, color=INK, leading=32))
 
     rows = [
-        ["May 2026", "48-round tolerance series not yet run",
-         "flat “< 0.05 R-work/R-free gap” template"],
-        ["Since", "Registry §3/§4/§6 bands measured and governed",
-         "calibrated |Δ| bands with named preconditions"],
-        ["Since", "gemmi routed through toolchain.py, pinned 0.7.5",
-         "mask-radii convention made explicit"],
-        ["Since", "Trust invariant enforceable (cutover 2026-08-13)",
-         "cctbx-only tasks must be waived or closed"],
-        ["Today", "Same artefact, five oracle code paths",
-         "re-graded, plus three never-run tasks"],
+        ["Re-measured here", "T03 (two code paths), T14, T15, T16",
+         "graded against the current registry and driver rubric"],
+        ["Carried from May", "T01, T05, T06, T10, T13",
+         "geometry, waters, disulfides, ligands, ions, data quality"],
     ]
+    fills = [[GOOD_LIGHT, None, None], [WARN_LIGHT, None, None]]
+    colors = [[GOOD, INK, MUTED], [WARN, INK, MUTED]]
     out.append(table(
-        80, 350, [200, 700, 860],
-        ["When", "What changed in the harness", "Effect on how 1SAR is graded"],
-        rows, row_height=54, font_size=20))
+        80, 320, [330, 620, 810],
+        ["Scope", "Tasks", "What that means"],
+        rows, row_height=64, font_size=20,
+        cell_fills=fills, cell_text_colors=colors))
 
-    out.append(panel(80, 700, 1760, 200, WARN_LIGHT))
     out.append(paragraph(
-        110, 750,
+        80, 555,
+        "Every conclusion about geometry, water placement, disulfides and ion identity in this "
+        "deck is May's, not re-measured today. QDS_1sar_cdba2c07_2026-05-05.yaml remains the "
+        "sheet of record for anything outside T03, T14, T15 and T16.",
+        width=112, size=22, color=WARN, weight="700", leading=32))
+
+    out.append(panel(80, 655, 1760, 170, ACCENT_LIGHT))
+    out.append(paragraph(
+        110, 703,
         "No-clobber was structural, not careful: outputs are date-keyed, the artefact zip was "
         "extracted read-only into a scratch directory, and all 102 pre-existing files were "
-        "checksummed before and after the run. Every one is byte-identical. April and May "
-        "records stand exactly as issued.",
-        width=100, size=22, color=INK, leading=34))
+        "checksummed before and after. Every one is byte-identical.",
+        width=100, size=22, color=INK, leading=32))
+
+    out.append(panel(80, 845, 1760, 120, ROW_ALT))
+    out.append(paragraph(
+        110, 889,
+        "Cost of that choice: this run issues a new dated .yaml where May updated the canonical "
+        "one in place, so the current sheet is 271 lines against May's 1270. That is a new "
+        "convention adopted here, not an existing one followed.",
+        width=104, size=20, color=MUTED, leading=30))
     return "\n".join(out) + "\n"
 
 
@@ -297,31 +308,30 @@ def slide_02_why():
 # 03 — The headline, sharpened
 # ------------------------------------------------------------------
 def slide_03_headline():
-    out = [header("The R-free finding, sharpened",
-                  "Same verdict. Much better attribution.")]
+    out = [header("The R-free number, sharpened",
+                  "The refinement agrees with the oracle; the report does not")]
 
-    # Three-column story
     cols = [
         ("May said", BAD, BAD_LIGHT,
          "“R-free is reproducibly ~0.21, not 0.199.” Four code paths, "
-         "0.2114–0.2209. Three of four fail the < 0.05 gap criterion."),
+         "0.2116–0.2209, read as convergent corroboration."),
         ("Now measured", ACCENT, ACCENT_LIGHT,
          "The agent's own model header records FREE R VALUE 0.2114. The oracle "
          "recomputes 0.2116 — agreement to 0.0002."),
         ("So the defect is", GOOD, GOOD_LIGHT,
-         "in the write-up, not the refinement. The report says 0.199 in eight "
+         "in the write-up, not the refinement. The report says 0.199 in seven "
          "places; the model it describes does not."),
     ]
     for i, (title, color, fill, body) in enumerate(cols):
         cx = 80 + i * 590
-        out.append(panel(cx, 200, 550, 300, fill))
+        out.append(panel(cx, 195, 550, 290, fill))
         out.append(
-            f'  <text x="{cx+30}" y="252" font-size="26" font-weight="700" '
+            f'  <text x="{cx+30}" y="245" font-size="26" font-weight="700" '
             f'fill="{color}">{escape(title)}</text>')
-        out.append(paragraph(cx + 30, 300, body, width=42, size=20, leading=30))
+        out.append(paragraph(cx + 30, 292, body, width=42, size=20, leading=30))
 
     out.append(
-        f'  <text x="80" y="580" font-size="28" font-weight="700" fill="{INK}">'
+        f'  <text x="80" y="565" font-size="28" font-weight="700" fill="{INK}">'
         f'Where does 0.199 come from? No round the agent ran.</text>')
 
     rounds = [
@@ -336,145 +346,143 @@ def slide_03_headline():
     fills[6] = [BAD_LIGHT, BAD_LIGHT]
     colors[6] = [BAD, BAD]
     out.append(table(
-        80, 620, [340, 200],
+        80, 605, [340, 200],
         ["Model in the artefact", "R-free"],
-        rounds, row_height=46, font_size=20,
+        rounds, row_height=44, font_size=20,
         cell_fills=fills, cell_text_colors=colors,
         align=["left", "right"]))
 
-    out.append(panel(700, 620, 1140, 322, ROW_ALT))
+    out.append(panel(700, 605, 1140, 308, ROW_ALT))
     out.append(paragraph(
-        730, 672,
-        "Every round model carries its R-free in its own PDB header. Measured across all "
-        "six, the range is 0.2068–0.2364. The reported 0.199 is not a stale value carried "
-        "from an earlier round — it is below the best round the agent ever produced, by "
-        "0.008.",
-        width=68, size=22, leading=32))
+        730, 655,
+        "Every round model carries its R-free in its own PDB header, and where the oracle was "
+        "re-run it agrees with the header. The range is 0.2068–0.2364. The reported 0.199 is "
+        "below the best round the agent ever produced, by 0.008.",
+        width=68, size=21, leading=30))
     out.append(paragraph(
-        730, 830,
-        "This matters for how the failure is described. “Understated by ~0.012” implies a "
-        "measurement disagreement. “Corresponds to no model produced” is a reporting-integrity "
-        "problem, and a different thing to fix.",
-        width=68, size=22, color=BAD, leading=32))
+        730, 790,
+        "“Understated by ~0.012” implies a measurement disagreement. “Corresponds to no model "
+        "produced” is a reporting-integrity problem, and a different thing to fix.",
+        width=68, size=21, color=BAD, leading=30))
     return "\n".join(out) + "\n"
 
 
 # ------------------------------------------------------------------
-# 04 — Re-graded under calibrated bands
+# 04 — Re-graded against the driver's own rule
 # ------------------------------------------------------------------
 def slide_04_regrade():
-    out = [header("Re-graded under the current registry",
-                  "One verdict flips — because the May gap was mask convention, not code")]
+    out = [header("Graded against the rule T03 declares",
+                  "rubric rule 1: R-free within ± 0.02 of the deposited value · the gap row is the agent's own criterion, not a registry band")]
 
     rows = [
-        ["R-free 0.199 vs oracle",
-         "flat “< 0.05 gap”; 3 of 4 paths fail",
-         "§4 recomputed-reference band |Δ| ≤ 0.01; measured 0.0126",
+        ["R-free value, 0.199 vs 0.2116",
+         "all four May paths sat above 0.199",
+         "rule 1 band ± 0.02; measured |Δ| 0.0126",
+         "criterion passes,\nheadline inaccurate"],
+        ["R-work/R-free gap < 0.05",
+         "0.0552 / 0.0526 / 0.0504 / 0.0435 (“3 of 4 fail”)",
+         "0.0552 PHENIX, 0.0515 gemmi",
          "still fails"],
-        ["gemmi vs PHENIX R-free",
-         "0.217 vs 0.2116 (Δ 0.0054), read as disagreement",
-         "§4 independent-code-path band |ΔR| ≤ 0.02, matched radii; measured +0.0020",
-         "now passes"],
         ["Round 6 better than final",
          "Δ 0.0048 by oracle",
-         "Δ 0.0046 from artefact headers",
-         "reproduces"],
+         "Δ 0.0048, both models on the same instrument",
+         "reproduces exactly"],
     ]
-    fills = [[None, None, None, BAD_LIGHT],
-             [None, None, None, GOOD_LIGHT],
-             [None, None, None, WARN_LIGHT]]
-    colors = [[INK, MUTED, INK, BAD],
-              [INK, MUTED, INK, GOOD],
-              [INK, MUTED, INK, WARN]]
+    # SVG text has no wrapping; flatten the embedded newlines.
+    rows = [[c.replace("\n", " ") for c in r] for r in rows]
+    fills = [[None, None, None, WARN_LIGHT],
+             [None, None, None, BAD_LIGHT],
+             [None, None, None, GOOD_LIGHT]]
+    colors = [[INK, MUTED, INK, WARN],
+              [INK, MUTED, INK, BAD],
+              [INK, MUTED, INK, GOOD]]
     out.append(table(
-        80, 200, [330, 460, 700, 270],
-        ["Claim", "May grading", "2026-09-07 grading", "Verdict"],
-        rows, row_height=88, font_size=18,
+        80, 195, [360, 520, 540, 340],
+        ["Claim", "What May actually graded", "2026-09-07 grading", "Verdict"],
+        rows, row_height=86, font_size=17,
         cell_fills=fills, cell_text_colors=colors,
         align=["left", "left", "left", "center"]))
 
     out.append(
-        f'  <text x="80" y="620" font-size="28" font-weight="700" fill="{INK}">'
-        f'The dissolved disagreement</text>')
+        f'  <text x="80" y="580" font-size="26" font-weight="700" fill="{INK}">'
+        f'What the independent code path did — and did not — settle</text>')
     out.append(paragraph(
-        80, 668,
-        "May measured gemmi under its default vdw mask on gemmi 0.7.4 and got 0.217. Re-run "
-        "with radii matched to cctbx as the registry now requires, gemmi gives 0.2136 — a "
-        "0.0034 shift. The registry records the default-vdw penalty as median +0.0043, "
-        "measured over 15 entries. The May number was not wrong; it was taken under the "
-        "convention the benchmark later showed to be the larger of the two effects.",
-        width=118, size=22, leading=33))
+        80, 626,
+        "Re-run with mask radii matched to cctbx, gemmi 0.7.5 gives R-free 0.2136 against PHENIX's "
+        "0.2116 — Δ +0.0020, inside the ± 0.02 band. That settles the gemmi leg only. May's spread "
+        "was 0.2116–0.2209 and its upper bound was Servalcat, which was not re-run and is not "
+        "retracted; REFMAC5 likewise stands. The full bracket remains 0.2114–0.2209, with two legs "
+        "carried from May.",
+        width=116, size=21, leading=31))
 
-    vals = [("PHENIX model_vs_data", "0.2116", ACCENT),
-            ("gemmi, matched radii", "0.2136", GOOD),
-            ("gemmi, default vdw (May)", "0.217", WARN),
-            ("agent report", "0.199", BAD)]
-    for i, (name, val, color) in enumerate(vals):
-        cx = 80 + i * 440
-        out.append(panel(cx, 850, 410, 110, ROW_ALT, stroke=color))
-        out.append(
-            f'  <text x="{cx+22}" y="892" font-size="19" fill="{INK}">{escape(name)}</text>')
-        out.append(
-            f'  <text x="{cx+22}" y="932" font-size="28" font-weight="700" '
-            f'fill="{color}">{escape(val)}</text>')
+    out.append(panel(80, 800, 1760, 140, WARN_LIGHT))
+    out.append(paragraph(
+        110, 846,
+        "Two cautions: the shift from May's gemmi number is confounded three ways (mask radii, "
+        "version, and #316's work-only scale fit), not one. And +0.0020 sits BELOW the 0.005–0.015 "
+        "offset the assumptions predict — rubric rule 2 names a smaller-than-expected gap as the "
+        "red-flag direction.",
+        width=104, size=21, color=INK, leading=31))
     return "\n".join(out) + "\n"
 
 
 # ------------------------------------------------------------------
-# 05 — New task coverage
+# 05 — Newly exercised tasks
 # ------------------------------------------------------------------
 def slide_05_new_tasks():
-    out = [header("Three tasks covered for the first time",
+    out = [header("Three tasks exercised on this artefact",
                   "T14 hydrogen placement · T15 structural classification · T16 interface quality")]
 
     rows = [
-        ["T14", "confident Asn/Gln/His flip-set conflicts", "0 of 14 shared", "pass"],
-        ["T14", "H atoms added (Richardson reduce)", "1386", "informational"],
-        ["T15", "three-state SS agreement — agent model", "0.8802", "informational"],
-        ["T15", "same metric — deposited reference", "0.8646", "baseline"],
-        ["T16", "DockQ vs deposited assembly", "0.9445", "pass"],
-        ["T16", "CAPRI interface quality class", "High", "pass"],
+        ["T14", "flippable Asn/Gln/His scored — reduce / reduce2", "14 / 18", "0 conflicts"],
+        ["T14", "H atoms added (Richardson reduce)", "1386", "band void"],
+        ["T15", "three-state SS agreement — agent model", "0.8802", "uninterpretable"],
+        ["T15", "same metric — deposited reference", "0.8646", "reproduces calibration"],
+        ["T16", "DockQ vs deposited, AB:AB", "0.9445", "low information"],
+        ["T16", "CAPRI interface quality class", "High", "low information"],
         ["T16", "buried surface area, chains A/B", "437.8 Å²", "informational"],
     ]
     fills = [[ACCENT_LIGHT, None, None, GOOD_LIGHT],
-             [ACCENT_LIGHT, None, None, None],
-             [ACCENT_LIGHT, None, None, None],
-             [ACCENT_LIGHT, None, None, None],
+             [ACCENT_LIGHT, None, None, ROW_ALT],
+             [ACCENT_LIGHT, None, None, WARN_LIGHT],
              [ACCENT_LIGHT, None, None, GOOD_LIGHT],
-             [ACCENT_LIGHT, None, None, GOOD_LIGHT],
-             [ACCENT_LIGHT, None, None, None]]
+             [ACCENT_LIGHT, None, None, ROW_ALT],
+             [ACCENT_LIGHT, None, None, ROW_ALT],
+             [ACCENT_LIGHT, None, None, ROW_ALT]]
     colors = [[ACCENT, INK, INK, GOOD],
               [ACCENT, INK, INK, MUTED],
+              [ACCENT, INK, INK, WARN],
+              [ACCENT, INK, INK, GOOD],
               [ACCENT, INK, INK, MUTED],
               [ACCENT, INK, INK, MUTED],
-              [ACCENT, INK, INK, GOOD],
-              [ACCENT, INK, INK, GOOD],
               [ACCENT, INK, INK, MUTED]]
     out.append(table(
-        80, 200, [110, 720, 300, 280],
-        ["Task", "Metric", "Value", "Status"],
-        rows, row_height=52, font_size=20,
+        80, 190, [110, 700, 300, 340],
+        ["Task", "Metric", "Value", "Reading"],
+        rows, row_height=50, font_size=19,
         cell_fills=fills, cell_text_colors=colors,
         align=["center", "left", "right", "center"]))
 
     notes = [
-        (GOOD, "T16 applies because 1SAR's asymmetric unit carries two protein chains. The agent's "
-               "A/B pairing reproduces the deposited assembly at CAPRI High — there is no PHENIX "
-               "interface scorer, so this task is oracle-only by construction."),
-        (ACCENT, "T14 compares two genuinely independent H builders (Richardson reduce vs "
-                 "mmtbx.reduce2, add_flip_movers=True). They agree on every confident call. "
-                 "phenix.reduce is the same binary as reduce, so its identical count is a "
-                 "redistribution check, not a second opinion."),
-        (WARN, "T15's agreement number is a property of the fold and the two algorithms, not a "
-               "quality score. It is only meaningful as a difference — which is why the deposited "
-               "reference was measured too. The agent model sits 0.0156 above it."),
+        (WARN, "T15 is NOT a pass. The registry gates on secondary-structure CONTENT (DSSP H+E "
+               "≥ 0.20), not on agreement, because agreement is degenerate at the bad end — noise "
+               "raises it. The driver does not compute content, so the governed gate could not be "
+               "applied. 0.8802 is above every one of the 16 benchmark entries (0.679–0.850), and "
+               "1SAR is β-containing where the benchmark expects 0.68–0.72. A flag, not comfort."),
+        (WARN, "T16 exercises the path; it does not certify an assembly. structural_criteria.yaml "
+               "already classifies this contact as 1SAR's crystallographic dimer — a demonstration, "
+               "not a biological assembly. With a 0.41 Å start-to-final Cα RMSD a high DockQ is "
+               "near-guaranteed. Only the AB:AB mapping was scored; the swap is unmeasured."),
+        (GOOD, "T14 compares two genuinely independent builders (Richardson reduce, non-cctbx; "
+               "mmtbx.reduce2, cctbx). Zero confident conflicts over the 14 shared residues. The "
+               "H-count band is void here because the model carries SO4, CA and NA."),
     ]
-    y = 680
+    y = 630
     for color, text in notes:
-        lines = wrap(text, 108)
-        out.append(f'  <rect x="80" y="{y-24}" width="5" height="{len(lines)*30+10}" fill="{color}"/>')
-        out.append(paragraph(105, y, text, width=108, size=20, leading=30))
-        y += len(lines) * 30 + 34
+        lines = wrap(text, 112)
+        out.append(f'  <rect x="80" y="{y-22}" width="5" height="{len(lines)*28+8}" fill="{color}"/>')
+        out.append(paragraph(105, y, text, width=112, size=19, leading=28))
+        y += len(lines) * 28 + 26
     return "\n".join(out) + "\n"
 
 
@@ -483,98 +491,101 @@ def slide_05_new_tasks():
 # ------------------------------------------------------------------
 def slide_06_coverage():
     out = [header("Coverage on the example structure",
-                  "Where the harness has actually been pointed at 1SAR")]
+                  "9 tasks measured · 16 of 17 settled · 1 uncovered")]
 
     groups = [
-        ("Covered in May", GOOD, GOOD_LIGHT,
-         ["T01 superposition", "T03 X-ray refinement", "T05 geometry",
-          "T06 model-vs-data", "T07 map/model", "T10 ligand/site", "T13 data quality"]),
-        ("Covered today", ACCENT, ACCENT_LIGHT,
-         ["T14 hydrogen placement", "T15 structural classification",
+        ("Measured — May, carried into this deck", WARN, WARN_LIGHT,
+         ["T01 superposition", "T05 geometry", "T06 model-vs-data",
+          "T10 ligand/site", "T13 data quality"]),
+        ("Measured — this run", ACCENT, ACCENT_LIGHT,
+         ["T03 X-ray refinement (re-measured, two code paths)",
+          "T14 hydrogen placement", "T15 structural classification",
           "T16 interface quality"]),
         ("Not applicable", MUTED, ROW_ALT,
-         ["T09 molecular replacement — the model was already placed",
+         ["T04, T08, T12 · T07 predicted-model processing · T17 NMR ensembles "
+          "— none apply to an X-ray refinement artefact",
+          "T09 molecular replacement — the model was already placed",
           "T11 loop fitting — no chain gaps (A 1–96, B 1–96)"]),
-        ("Still uncovered", BAD, BAD_LIGHT,
-         ["T02 per-residue comparison — blocked, see next slide"]),
+        ("Uncovered", BAD, BAD_LIGHT,
+         ["T02 per-residue comparison — no driver written; see next slide"]),
     ]
     y = 190
     for title, color, fill, items in groups:
         h = 54 + len(items) * 32
         out.append(panel(80, y, 1760, h, fill))
         out.append(
-            f'  <text x="110" y="{y+38}" font-size="26" font-weight="700" '
+            f'  <text x="110" y="{y+38}" font-size="25" font-weight="700" '
             f'fill="{color}">{escape(title)}</text>')
         for i, item in enumerate(items):
             iy = y + 70 + i * 32
             out.append(f'  <circle cx="122" cy="{iy-7}" r="5" fill="{color}"/>')
             out.append(
-                f'  <text x="146" y="{iy}" font-size="21" fill="{INK}">{escape(item)}</text>')
+                f'  <text x="146" y="{iy}" font-size="20" fill="{INK}">{escape(item)}</text>')
         y += h + 18
 
     out.append(paragraph(
-        80, y + 30,
-        "13 of 17 catalog tasks are now settled on this structure: 10 measured, 2 ruled "
-        "not applicable with a stated reason, 1 blocked by tooling.",
-        width=118, size=22, color=ACCENT, weight="700", leading=32))
+        80, y + 34,
+        "An earlier draft of this deck listed T07 as covered in May. It never has been — the "
+        "canonical eval carries zero T07 rows, and T07 is predicted-model processing.",
+        width=118, size=21, color=MUTED, leading=30))
     return "\n".join(out) + "\n"
 
 
 # ------------------------------------------------------------------
-# 07 — Two new findings
+# 07 — Findings
 # ------------------------------------------------------------------
 def slide_07_findings():
-    out = [header("Two findings the May run did not have",
-                  "One about the model, one about the harness")]
+    out = [header("Three findings the May run did not have",
+                  "The first one is bigger than the R-free number")]
 
-    out.append(panel(80, 200, 860, 400, BAD_LIGHT))
+    out.append(panel(80, 185, 1760, 300, BAD_LIGHT))
     out.append(
-        f'  <text x="112" y="252" font-size="28" font-weight="700" fill="{BAD}">'
-        f'1 · SO4 A 97 is written as ATOM</text>')
+        f'  <text x="112" y="235" font-size="30" font-weight="700" fill="{BAD}">'
+        f'1 · The report is about the wrong protein</text>')
     out.append(paragraph(
-        112, 300,
-        "The deposition writes the sulfate as HETATM; the agent's final model writes it as "
-        "ATOM. Not cosmetic: a parser that treats ATOM as polymer counts chain A as 97 "
-        "residues instead of 96. That happened during this run, with gemmi, before the cause "
-        "was identified.",
-        width=62, size=21, leading=31))
+        112, 285,
+        "The artefact's final report calls 1SAR staphylococcal nuclease (SNase) — in its title, "
+        "summary and discussion, 27 times. 1SAR is ribonuclease Sa from Streptomyces "
+        "aureofaciens; the deposited TITLE says so. RNase Sa is 96 residues, SNase is 149.",
+        width=108, size=21, leading=30))
     out.append(paragraph(
-        112, 470,
-        "Related and also new: the agent placed CA A 98 and NA B 98 — both correctly HETATM, "
-        "and both absent from the deposition, which contains only the sulfate. May assessed "
-        "their identity; it did not record that neither is in the reference at all.",
-        width=62, size=21, color=INK, leading=31))
+        112, 385,
+        "Not a naming slip: the entire Ca²⁺ justification rests on it — “the known SNase "
+        "metal-binding pocket near Asp33”, and citations to two genuine SNase papers offered as "
+        "the reference for this structure's coordination. So “the ion decisions remain "
+        "defensible” cannot be asserted, and this deck does not assert it.",
+        width=108, size=21, color=BAD, leading=30))
 
-    out.append(panel(980, 200, 860, 400, WARN_LIGHT))
+    out.append(panel(80, 515, 860, 300, WARN_LIGHT))
     out.append(
-        f'  <text x="1012" y="252" font-size="28" font-weight="700" fill="{WARN}">'
-        f'2 · T02 has no headless path</text>')
+        f'  <text x="112" y="563" font-size="26" font-weight="700" fill="{WARN}">'
+        f'2 · SO4 A 97 is written as ATOM</text>')
     out.append(paragraph(
-        1012, 300,
-        "T02's catalog PHENIX tool, phenix.structure_comparison, is GUI-only in PHENIX 2.0. "
-        "Its source carries the comment “launches Stucture Comparision GUI by itself, still "
-        "requires project”. Run headlessly it exits 1 with no output — and raises a project "
-        "dialog on the user's desktop.",
-        width=62, size=21, leading=31))
-    out.append(paragraph(
-        1012, 470,
-        "ProSMART, the CCP4 oracle the catalog names for T02, is not installed here. So T02 "
-        "is not currently satisfiable on this machine by any route the catalog lists.",
-        width=62, size=21, leading=31))
+        112, 610,
+        "The deposition writes the sulfate as HETATM; the agent's model writes it as ATOM. A "
+        "parser treating ATOM as polymer counts chain A as 97 residues instead of 96 — which "
+        "happened with gemmi during this run. The agent also placed CA A 98 and NA B 98, both "
+        "absent from the deposition.",
+        width=62, size=20, leading=29))
 
-    out.append(panel(80, 640, 1760, 300, ROW_ALT))
+    out.append(panel(980, 515, 860, 300, ROW_ALT))
     out.append(
-        f'  <text x="112" y="692" font-size="26" font-weight="700" fill="{INK}">'
-        f'What the gate caught, unprompted</text>')
+        f'  <text x="1012" y="563" font-size="26" font-weight="700" fill="{ACCENT}">'
+        f'3 · T02 has no headless PHENIX tool</text>')
     out.append(paragraph(
-        112, 740,
-        "The hermetic gate rejected this run's first record because four oracle_tool_ref values "
-        "did not resolve against ref/catalog.yaml — including a combined “reduce vs "
-        "mmtbx.reduce2” label. The refs were corrected to registered ids. The underlying gap is "
-        "real and now filed: mmtbx.reduce2 is a dependency of bench_t14_flip_sets.py but is not "
-        "a registered tool, so no T14 record can name the builder that produced its second "
-        "opinion.",
-        width=108, size=21, leading=31))
+        1012, 610,
+        "phenix.structure_comparison is GUI-only in PHENIX 2.0 — run headlessly it exits 1 with "
+        "no output and raises a project dialog. But T02 is blocked on that tool ONLY: ProSMART "
+        "ships with the documented CCP4 install and May ran it on this structure, and gemmi is "
+        "listed as a T02 oracle too. The gap is a missing driver, not missing tooling.",
+        width=62, size=20, leading=29))
+
+    out.append(panel(80, 845, 1760, 95, ROW_ALT))
+    out.append(paragraph(
+        110, 890,
+        "An earlier draft of this deck claimed ProSMART was not installed. That was wrong — the "
+        "check was run without sourcing the CCP4 environment. Corrected above.",
+        width=108, size=20, color=MUTED, leading=30))
     return "\n".join(out) + "\n"
 
 
@@ -582,44 +593,51 @@ def slide_07_findings():
 # 08 — Trust invariant
 # ------------------------------------------------------------------
 def slide_08_trust():
-    out = [header("Trust invariant: closed on merit",
-                  "The first 1SAR sheet that needs no grandfathering")]
+    out = [header("Trust invariant: passes, by omission",
+                  "Worth stating plainly rather than claiming a win")]
 
     out.append(paragraph(
-        80, 210,
-        "The trust model forbids grading PHENIX solely with PHENIX. Since the 2026-08-13 "
-        "cutover that is enforced: a sheet carrying a cctbx-only task must either waive it "
-        "explicitly or close it with an independent oracle. Sheets issued before the cutover "
-        "are grandfathered and listed by name — history is history.",
-        width=118, size=23, leading=34))
+        80, 200,
+        "The trust model forbids grading PHENIX solely with PHENIX. Since the 2026-08-13 cutover "
+        "a sheet carrying a cctbx-only task must waive it explicitly or close it with an "
+        "independent oracle. Sheets issued before the cutover are grandfathered and listed by name.",
+        width=118, size=22, leading=32))
 
     rows = [
-        ["QDS_1sar…2026-04-24", "T06", "open — cctbx only", "grandfathered"],
-        ["QDS_1sar…2026-04-26", "T06, T13", "open — cctbx only", "grandfathered"],
-        ["QDS_1sar…2026-04-30", "T06, T13", "open — cctbx only", "grandfathered"],
-        ["QDS_1sar…2026-05-01", "T06, T13", "open — cctbx only", "grandfathered"],
-        ["QDS_1sar…2026-05-04", "T06", "open — cctbx only", "grandfathered"],
-        ["QDS_1sar…2026-05-05", "T06", "open — cctbx only", "grandfathered"],
-        ["QDS_1sar…2026-09-07", "T03", "closed", "satisfied"],
-        ["QDS_1sar…2026-09-07", "T14, T15, T16", "non-cctbx only", "satisfied"],
+        ["QDS_1sar…04-24 through 05-05", "T06 (and T13 on three sheets)",
+         "open — cctbx only", "grandfathered"],
+        ["QDS_1sar…2026-09-07", "T03, T14", "closed", "satisfied"],
+        ["QDS_1sar…2026-09-07", "T15, T16", "non-cctbx only", "satisfied"],
     ]
-    fills = [[None, None, WARN_LIGHT, WARN_LIGHT] for _ in range(6)] + \
-            [[None, None, GOOD_LIGHT, GOOD_LIGHT] for _ in range(2)]
-    colors = [[INK, INK, WARN, WARN] for _ in range(6)] + \
-             [[INK, INK, GOOD, GOOD] for _ in range(2)]
+    fills = [[None, None, WARN_LIGHT, WARN_LIGHT],
+             [None, None, GOOD_LIGHT, GOOD_LIGHT],
+             [None, None, GOOD_LIGHT, GOOD_LIGHT]]
+    colors = [[INK, INK, WARN, WARN],
+              [INK, INK, GOOD, GOOD],
+              [INK, INK, GOOD, GOOD]]
     out.append(table(
-        80, 370, [460, 340, 480, 380],
+        80, 340, [500, 460, 420, 380],
         ["Sheet", "Tasks", "Gap status", "Invariant"],
-        rows, row_height=48, font_size=20,
+        rows, row_height=56, font_size=20,
         cell_fills=fills, cell_text_colors=colors,
         align=["left", "left", "left", "center"]))
 
-    out.append(panel(80, 830, 1760, 110, GOOD_LIGHT))
+    out.append(panel(80, 590, 1760, 190, WARN_LIGHT))
     out.append(paragraph(
-        110, 878,
-        "Today's sheet carries no open cctbx-only row and needs no waiver: T03 has both a "
-        "cctbx and a non-cctbx R path; T14, T15 and T16 are non-cctbx throughout.",
-        width=104, size=22, color=GOOD, weight="700", leading=32))
+        110, 640,
+        "The new sheet passes because it does not grade T06 — the row that was open on every "
+        "prior 1SAR sheet — since this run did not re-measure T06. Nothing that was open was "
+        "closed. The sheet is 271 lines where May's was 1270, and no longer carries geometry, "
+        "data quality, ions, waters or pairwise comparisons.",
+        width=104, size=21, color=INK, leading=31))
+
+    out.append(panel(80, 810, 1760, 130, GOOD_LIGHT))
+    out.append(paragraph(
+        110, 858,
+        "What did genuinely improve: mmtbx.reduce2 is now a registered tool. It was a dependency "
+        "of the T14 benchmark but had never been in the catalog, so until now no T14 record could "
+        "name the builder that produced its second opinion.",
+        width=104, size=21, color=GOOD, leading=31))
     return "\n".join(out) + "\n"
 
 
@@ -632,31 +650,31 @@ def slide_09_harness():
 
     items = [
         ("48-round tolerance series", ACCENT,
-         "Every [template] threshold that mattered here replaced by a measured band with "
-         "stated preconditions — including the R offset that dissolved the May gemmi gap."),
+         "Every [template] threshold that mattered here replaced by a measured band with stated "
+         "preconditions — including the R offset that scoped the gemmi comparison."),
         ("Negative-control track", GOOD,
-         "0 of 22 false verdicts on the control set; agents 21/21; the 2VXN case attributed "
-         "and stood down rather than quietly dropped."),
+         "0 of 22 false verdicts on the control set. Separately, 21 of 21 agent cases judged — a "
+         "different denominator, since 6XVM was never judged."),
         ("Gate consolidation", ACCENT,
          "Negative-control headlines, governed thresholds and round-count claims are now data "
          "checked by the gate, not prose the gate hopes someone re-read."),
         ("Toolchain routing", MUTED,
-         "gemmi pinned at 0.7.5 and routed through toolchain.py — which is how this run knew "
-         "the May legs had run under 0.7.4, and could say so."),
+         "gemmi pinned at 0.7.5 and routed through toolchain.py, so a run can state which binary "
+         "produced a number instead of inferring it."),
         ("Transfer, CI, licensing", MUTED,
-         "Repository public under CultureBotAI with CI green; BSD-3-Clause code, CC-BY-4.0 "
-         "docs and records."),
+         "Repository public under CultureBotAI with CI green — achieved by the transfer, which "
+         "escaped a personal-account Actions billing lock. BSD-3-Clause code, CC-BY-4.0 docs."),
     ]
-    y = 210
+    y = 205
     for title, color, body in items:
         lines = wrap(body, 104)
-        h = 44 + len(lines) * 29
+        h = 42 + len(lines) * 28
         out.append(f'  <rect x="80" y="{y}" width="6" height="{h}" fill="{color}"/>')
         out.append(
-            f'  <text x="110" y="{y+30}" font-size="25" font-weight="700" '
+            f'  <text x="110" y="{y+28}" font-size="24" font-weight="700" '
             f'fill="{color}">{escape(title)}</text>')
-        out.append(paragraph(110, y + 66, body, width=104, size=20, leading=29))
-        y += h + 30
+        out.append(paragraph(110, y + 62, body, width=104, size=20, leading=28))
+        y += h + 28
     return "\n".join(out) + "\n"
 
 
@@ -667,52 +685,56 @@ def slide_10_net():
     out = [header("Net assessment",
                   "What holds, what fails, what is still open")]
 
-    out.append(panel(80, 200, 860, 330, GOOD_LIGHT))
+    out.append(panel(80, 190, 860, 320, GOOD_LIGHT))
     out.append(
-        f'  <text x="112" y="252" font-size="28" font-weight="700" fill="{GOOD}">Holds</text>')
+        f'  <text x="112" y="240" font-size="28" font-weight="700" fill="{GOOD}">'
+        f'Holds (re-measured)</text>')
     holds = [
-        "The refinement is a real, large improvement",
-        "Geometry, waters, disulfides, ion identity defensible",
-        "A/B interface reproduces the deposition (CAPRI High)",
-        "Both H builders agree on every confident flip",
-        "SS agreement at the deposited baseline",
         "Oracle R-free reproduces May to four decimals",
+        "R-free criterion passes under rule 1's ± 0.02",
+        "Both H builders agree on every confident flip",
+        "Deposited T15 and T16 legs reproduce calibrations",
+        "Round-6-vs-final delta reproduces exactly",
     ]
     for i, t in enumerate(holds):
         out.append(
-            f'  <text x="112" y="{300 + i*38}" font-size="20" fill="{INK}">'
+            f'  <text x="112" y="{292 + i*40}" font-size="20" fill="{INK}">'
             f'✓ {escape(t)}</text>')
 
-    out.append(panel(980, 200, 860, 330, BAD_LIGHT))
+    out.append(panel(980, 190, 860, 320, BAD_LIGHT))
     out.append(
-        f'  <text x="1012" y="252" font-size="28" font-weight="700" fill="{BAD}">Fails</text>')
+        f'  <text x="1012" y="240" font-size="28" font-weight="700" fill="{BAD}">Fails</text>')
     fails = [
+        "The report describes the wrong protein",
+        "…so the stated basis for the Ca²⁺ call is void",
         "Reported R-free 0.199 matches no model produced",
-        "…and no round: best was 0.2068 (round 6)",
         "The shipped final is not the best round",
         "SO4 written as ATOM, not HETATM",
     ]
     for i, t in enumerate(fails):
         out.append(
-            f'  <text x="1012" y="{300 + i*38}" font-size="20" fill="{INK}">'
+            f'  <text x="1012" y="{292 + i*40}" font-size="20" fill="{INK}">'
             f'✗ {escape(t)}</text>')
 
-    out.append(panel(80, 570, 1760, 150, WARN_LIGHT))
+    out.append(panel(80, 540, 1760, 180, WARN_LIGHT))
     out.append(
-        f'  <text x="112" y="618" font-size="26" font-weight="700" fill="{WARN}">Open</text>')
+        f'  <text x="112" y="588" font-size="26" font-weight="700" fill="{WARN}">'
+        f'Open</text>')
     out.append(paragraph(
-        112, 660,
-        "T02 blocked on tooling · mmtbx.reduce2 unregistered in the catalog · the T05 rmsz legs "
-        "still carry their disclosed gemmi 0.7.4 measurement and have not been re-run under 0.7.5.",
+        112, 630,
+        "T02 has no driver · T15 needs a secondary-structure content figure before its number "
+        "means anything · the T16 swapped chain mapping is unmeasured · REFMAC5 and Servalcat "
+        "R-free legs were not re-run · geometry, waters, ions and data quality are carried from "
+        "May, not re-measured.",
         width=104, size=21, leading=30))
 
-    out.append(panel(80, 760, 1760, 180, ACCENT_LIGHT))
+    out.append(panel(80, 750, 1760, 190, ACCENT_LIGHT))
     out.append(paragraph(
-        112, 812,
-        "The one failing claim is unchanged in verdict and clearer in cause. Five code paths now "
-        "bracket R-free at 0.2114–0.2136 once mask conventions are matched. The gap is not "
-        "between oracles, and not between the oracle and the model — it is between the model and "
-        "the report written about it.",
+        112, 800,
+        "The R-free criterion actually passes under the rule this task declares. What does not "
+        "pass is the write-up: a headline number that describes no model in the artefact, and a "
+        "report written about a different protein than the one it refined — with the metal-site "
+        "reasoning inherited from that mistake.",
         width=100, size=23, color=ACCENT, weight="700", leading=33))
     return "\n".join(out) + "\n"
 

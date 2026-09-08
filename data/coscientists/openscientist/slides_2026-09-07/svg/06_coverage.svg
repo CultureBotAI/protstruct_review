@@ -3,50 +3,50 @@
   <rect width="100%" height="100%" fill="#ffffff"/>
   <rect x="0" y="0" width="1920" height="6" fill="#1f4e8c"/>
   <text x="80" y="86" font-size="44" font-weight="700" fill="#1a1a2e">Coverage on the example structure</text>
-  <text x="80" y="128" font-size="22" font-weight="400" fill="#5a6071">Where the harness has actually been pointed at 1SAR</text>
+  <text x="80" y="128" font-size="22" font-weight="400" fill="#5a6071">9 tasks measured · 16 of 17 settled · 1 uncovered</text>
   <line x1="80" y1="1020" x2="1840" y2="1020" stroke="#e3e6ee" stroke-width="1"/>
   <text x="80" y="1050" font-size="16" fill="#5a6071">1SAR refinement review · openscientist artefact cdba2c07 · re-run 2026-09-07</text>
   <text x="1840" y="1050" font-size="16" fill="#5a6071" text-anchor="end">protstruct_review · update deck 2026-09-07</text>
 
-  <rect x="80" y="190" width="1760" height="278" rx="10" ry="10" fill="#dff0e1"/>
+  <rect x="80" y="190" width="1760" height="214" rx="10" ry="10" fill="#fbeecb"/>
 
-  <text x="110" y="228" font-size="26" font-weight="700" fill="#1f7a3f">Covered in May</text>
-  <circle cx="122" cy="253" r="5" fill="#1f7a3f"/>
-  <text x="146" y="260" font-size="21" fill="#1a1a2e">T01 superposition</text>
-  <circle cx="122" cy="285" r="5" fill="#1f7a3f"/>
-  <text x="146" y="292" font-size="21" fill="#1a1a2e">T03 X-ray refinement</text>
-  <circle cx="122" cy="317" r="5" fill="#1f7a3f"/>
-  <text x="146" y="324" font-size="21" fill="#1a1a2e">T05 geometry</text>
-  <circle cx="122" cy="349" r="5" fill="#1f7a3f"/>
-  <text x="146" y="356" font-size="21" fill="#1a1a2e">T06 model-vs-data</text>
-  <circle cx="122" cy="381" r="5" fill="#1f7a3f"/>
-  <text x="146" y="388" font-size="21" fill="#1a1a2e">T07 map/model</text>
-  <circle cx="122" cy="413" r="5" fill="#1f7a3f"/>
-  <text x="146" y="420" font-size="21" fill="#1a1a2e">T10 ligand/site</text>
-  <circle cx="122" cy="445" r="5" fill="#1f7a3f"/>
-  <text x="146" y="452" font-size="21" fill="#1a1a2e">T13 data quality</text>
-  <rect x="80" y="486" width="1760" height="150" rx="10" ry="10" fill="#dce6f4"/>
+  <text x="110" y="228" font-size="25" font-weight="700" fill="#b07c00">Measured — May, carried into this deck</text>
+  <circle cx="122" cy="253" r="5" fill="#b07c00"/>
+  <text x="146" y="260" font-size="20" fill="#1a1a2e">T01 superposition</text>
+  <circle cx="122" cy="285" r="5" fill="#b07c00"/>
+  <text x="146" y="292" font-size="20" fill="#1a1a2e">T05 geometry</text>
+  <circle cx="122" cy="317" r="5" fill="#b07c00"/>
+  <text x="146" y="324" font-size="20" fill="#1a1a2e">T06 model-vs-data</text>
+  <circle cx="122" cy="349" r="5" fill="#b07c00"/>
+  <text x="146" y="356" font-size="20" fill="#1a1a2e">T10 ligand/site</text>
+  <circle cx="122" cy="381" r="5" fill="#b07c00"/>
+  <text x="146" y="388" font-size="20" fill="#1a1a2e">T13 data quality</text>
+  <rect x="80" y="422" width="1760" height="182" rx="10" ry="10" fill="#dce6f4"/>
 
-  <text x="110" y="524" font-size="26" font-weight="700" fill="#1f4e8c">Covered today</text>
+  <text x="110" y="460" font-size="25" font-weight="700" fill="#1f4e8c">Measured — this run</text>
+  <circle cx="122" cy="485" r="5" fill="#1f4e8c"/>
+  <text x="146" y="492" font-size="20" fill="#1a1a2e">T03 X-ray refinement (re-measured, two code paths)</text>
+  <circle cx="122" cy="517" r="5" fill="#1f4e8c"/>
+  <text x="146" y="524" font-size="20" fill="#1a1a2e">T14 hydrogen placement</text>
   <circle cx="122" cy="549" r="5" fill="#1f4e8c"/>
-  <text x="146" y="556" font-size="21" fill="#1a1a2e">T14 hydrogen placement</text>
+  <text x="146" y="556" font-size="20" fill="#1a1a2e">T15 structural classification</text>
   <circle cx="122" cy="581" r="5" fill="#1f4e8c"/>
-  <text x="146" y="588" font-size="21" fill="#1a1a2e">T15 structural classification</text>
-  <circle cx="122" cy="613" r="5" fill="#1f4e8c"/>
-  <text x="146" y="620" font-size="21" fill="#1a1a2e">T16 interface quality</text>
-  <rect x="80" y="654" width="1760" height="118" rx="10" ry="10" fill="#f7f8fb"/>
+  <text x="146" y="588" font-size="20" fill="#1a1a2e">T16 interface quality</text>
+  <rect x="80" y="622" width="1760" height="150" rx="10" ry="10" fill="#f7f8fb"/>
 
-  <text x="110" y="692" font-size="26" font-weight="700" fill="#5a6071">Not applicable</text>
+  <text x="110" y="660" font-size="25" font-weight="700" fill="#5a6071">Not applicable</text>
+  <circle cx="122" cy="685" r="5" fill="#5a6071"/>
+  <text x="146" y="692" font-size="20" fill="#1a1a2e">T04, T08, T12 · T07 predicted-model processing · T17 NMR ensembles — none apply to an X-ray refinement artefact</text>
   <circle cx="122" cy="717" r="5" fill="#5a6071"/>
-  <text x="146" y="724" font-size="21" fill="#1a1a2e">T09 molecular replacement — the model was already placed</text>
+  <text x="146" y="724" font-size="20" fill="#1a1a2e">T09 molecular replacement — the model was already placed</text>
   <circle cx="122" cy="749" r="5" fill="#5a6071"/>
-  <text x="146" y="756" font-size="21" fill="#1a1a2e">T11 loop fitting — no chain gaps (A 1–96, B 1–96)</text>
+  <text x="146" y="756" font-size="20" fill="#1a1a2e">T11 loop fitting — no chain gaps (A 1–96, B 1–96)</text>
   <rect x="80" y="790" width="1760" height="86" rx="10" ry="10" fill="#f5d6d4"/>
 
-  <text x="110" y="828" font-size="26" font-weight="700" fill="#a8201a">Still uncovered</text>
+  <text x="110" y="828" font-size="25" font-weight="700" fill="#a8201a">Uncovered</text>
   <circle cx="122" cy="853" r="5" fill="#a8201a"/>
-  <text x="146" y="860" font-size="21" fill="#1a1a2e">T02 per-residue comparison — blocked, see next slide</text>
-  <text x="80" y="924" font-size="22" font-weight="700" fill="#1f4e8c">13 of 17 catalog tasks are now settled on this structure: 10 measured, 2 ruled not applicable with a stated reason, 1</text>
-  <text x="80" y="956" font-size="22" font-weight="700" fill="#1f4e8c">blocked by tooling.</text>
+  <text x="146" y="860" font-size="20" fill="#1a1a2e">T02 per-residue comparison — no driver written; see next slide</text>
+  <text x="80" y="928" font-size="21" font-weight="400" fill="#5a6071">An earlier draft of this deck listed T07 as covered in May. It never has been — the canonical eval carries zero T07</text>
+  <text x="80" y="958" font-size="21" font-weight="400" fill="#5a6071">rows, and T07 is predicted-model processing.</text>
 
 </svg>

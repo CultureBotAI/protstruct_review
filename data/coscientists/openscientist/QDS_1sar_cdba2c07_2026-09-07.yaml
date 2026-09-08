@@ -3,16 +3,18 @@ quality_data_sheets:
   structure_ref: 1sar
   derived_from_evaluation_run_refs:
   - EVAL_1sar_cdba2c07_2026-09-07
-  issued_at: '2026-09-08T03:34:32+00:00'
+  issued_at: '2026-09-08T04:03:58+00:00'
   identity_block:
     id: QDS_1sar_cdba2c07_2026-09-07_identity
     pdb_id: 1sar
   refinement_summary:
     id: QDS_1sar_cdba2c07_2026-09-07_refinement
     r_work:
-      value_numeric: 0.1564
+      value_numeric: 0.1622
     r_free:
       value_numeric: 0.2136
+    r_free_gap:
+      value_numeric: 0.0515
   classification_summary:
     id: QDS_1sar_cdba2c07_2026-09-07_classification
     secondary_structure_agreement:
@@ -29,7 +31,7 @@ quality_data_sheets:
     interface_qualities:
     - id: EVAL_1sar_cdba2c07_2026-09-07_IFACE_AB
       structure_ref: 1sar
-      interface_label: 1sar_final A/B
+      interface_label: 1sar_final A/B (crystallographic dimer)
       chain_id_1: A
       chain_id_2: B
       buried_surface_area:
@@ -51,10 +53,11 @@ quality_data_sheets:
       gap_status: closed
     - id: QDS_1sar_cdba2c07_2026-09-07_coverage_T14
       catalog_task_ref: T14
-      cctbx_oracles: []
+      cctbx_oracles:
+      - mmtbx.reduce2
       non_cctbx_oracles:
       - reduce (standalone, Richardson)
-      gap_status: non-cctbx only
+      gap_status: closed
     - id: QDS_1sar_cdba2c07_2026-09-07_coverage_T15
       catalog_task_ref: T15
       cctbx_oracles: []
@@ -119,6 +122,14 @@ quality_data_sheets:
     justification: Non-cctbx confirmation of R-free finding on 1SAR eval.
     evidence_refs:
     - EVAL_1sar_cdba2c07_2026-04-24
+    as_of_date: '2026-04-25'
+  - id: REC_T03_gap_top_considered
+    metric_definition_ref: T03_r-free_r-work_gap
+    tool_ref: phenix.model_vs_data
+    role: top_considered
+    rank: 1
+    justification: The gap is computed from the same R-work / R-free pair, so the
+      strongest tool for those is also the strongest for the gap.
     as_of_date: '2026-04-25'
   - id: REC_T03_r_work_top_performing_refmac
     metric_definition_ref: T03_r-work
@@ -197,14 +208,6 @@ quality_data_sheets:
       algorithm family from DSSP''s H-bond energetics, so the agreement is informative
       rather than tautological. Stands in for STRIDE, which is not currently installable
       via Homebrew.'
-  - id: REC_T03_δr-free_vs_input_top_considered
-    metric_definition_ref: T03_δr-free_vs_input
-    tool_ref: REFMAC5 (CCP4)
-    role: top_considered
-    rank: 1
-    justification: Independent ML refiner; post-MR R-free and reciprocal-space refinement
-      statistics.
-    as_of_date: '2026-07-21'
   - id: REC_T14_h_added_top_considered
     metric_definition_ref: T14_h_added
     tool_ref: reduce (standalone, Richardson)

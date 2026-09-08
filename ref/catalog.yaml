@@ -912,6 +912,10 @@ tools:
   family: non_cctbx
   catalog_tasks_served:
   - T14
+- id: mmtbx.reduce2
+  family: cctbx
+  catalog_tasks_served:
+  - T14
 - id: propka3
   family: non_cctbx
   catalog_tasks_served:

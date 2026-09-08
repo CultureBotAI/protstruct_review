@@ -2,80 +2,86 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" font-family="Helvetica, Arial, sans-serif">
   <rect width="100%" height="100%" fill="#ffffff"/>
   <rect x="0" y="0" width="1920" height="6" fill="#1f4e8c"/>
-  <text x="80" y="86" font-size="44" font-weight="700" fill="#1a1a2e">Three tasks covered for the first time</text>
+  <text x="80" y="86" font-size="44" font-weight="700" fill="#1a1a2e">Three tasks exercised on this artefact</text>
   <text x="80" y="128" font-size="22" font-weight="400" fill="#5a6071">T14 hydrogen placement · T15 structural classification · T16 interface quality</text>
   <line x1="80" y1="1020" x2="1840" y2="1020" stroke="#e3e6ee" stroke-width="1"/>
   <text x="80" y="1050" font-size="16" fill="#5a6071">1SAR refinement review · openscientist artefact cdba2c07 · re-run 2026-09-07</text>
   <text x="1840" y="1050" font-size="16" fill="#5a6071" text-anchor="end">protstruct_review · update deck 2026-09-07</text>
 
-  <rect x="80" y="200" width="1410" height="52" fill="#1f4e8c"/>
-  <text x="135.0" y="232.66666666666666" font-size="20" font-weight="700" fill="#ffffff" text-anchor="middle">Task</text>
-  <text x="204" y="232.66666666666666" font-size="20" font-weight="700" fill="#ffffff" text-anchor="start">Metric</text>
-  <text x="1196" y="232.66666666666666" font-size="20" font-weight="700" fill="#ffffff" text-anchor="end">Value</text>
-  <text x="1350.0" y="232.66666666666666" font-size="20" font-weight="700" fill="#ffffff" text-anchor="middle">Status</text>
-  <rect x="80" y="252" width="1410" height="52" fill="#ffffff"/>
-  <rect x="80" y="252" width="110" height="52" fill="#dce6f4"/>
-  <text x="135.0" y="284.6666666666667" font-size="20" fill="#1f4e8c" text-anchor="middle">T14</text>
-  <text x="204" y="284.6666666666667" font-size="20" fill="#1a1a2e" text-anchor="start">confident Asn/Gln/His flip-set conflicts</text>
-  <text x="1196" y="284.6666666666667" font-size="20" fill="#1a1a2e" text-anchor="end">0 of 14 shared</text>
-  <rect x="1210" y="252" width="280" height="52" fill="#dff0e1"/>
-  <text x="1350.0" y="284.6666666666667" font-size="20" fill="#1f7a3f" text-anchor="middle">pass</text>
-  <rect x="80" y="304" width="1410" height="52" fill="#f7f8fb"/>
-  <rect x="80" y="304" width="110" height="52" fill="#dce6f4"/>
-  <text x="135.0" y="336.6666666666667" font-size="20" fill="#1f4e8c" text-anchor="middle">T14</text>
-  <text x="204" y="336.6666666666667" font-size="20" fill="#1a1a2e" text-anchor="start">H atoms added (Richardson reduce)</text>
-  <text x="1196" y="336.6666666666667" font-size="20" fill="#1a1a2e" text-anchor="end">1386</text>
-  <text x="1350.0" y="336.6666666666667" font-size="20" fill="#5a6071" text-anchor="middle">informational</text>
-  <rect x="80" y="356" width="1410" height="52" fill="#ffffff"/>
-  <rect x="80" y="356" width="110" height="52" fill="#dce6f4"/>
-  <text x="135.0" y="388.6666666666667" font-size="20" fill="#1f4e8c" text-anchor="middle">T15</text>
-  <text x="204" y="388.6666666666667" font-size="20" fill="#1a1a2e" text-anchor="start">three-state SS agreement — agent model</text>
-  <text x="1196" y="388.6666666666667" font-size="20" fill="#1a1a2e" text-anchor="end">0.8802</text>
-  <text x="1350.0" y="388.6666666666667" font-size="20" fill="#5a6071" text-anchor="middle">informational</text>
-  <rect x="80" y="408" width="1410" height="52" fill="#f7f8fb"/>
-  <rect x="80" y="408" width="110" height="52" fill="#dce6f4"/>
-  <text x="135.0" y="440.6666666666667" font-size="20" fill="#1f4e8c" text-anchor="middle">T15</text>
-  <text x="204" y="440.6666666666667" font-size="20" fill="#1a1a2e" text-anchor="start">same metric — deposited reference</text>
-  <text x="1196" y="440.6666666666667" font-size="20" fill="#1a1a2e" text-anchor="end">0.8646</text>
-  <text x="1350.0" y="440.6666666666667" font-size="20" fill="#5a6071" text-anchor="middle">baseline</text>
-  <rect x="80" y="460" width="1410" height="52" fill="#ffffff"/>
-  <rect x="80" y="460" width="110" height="52" fill="#dce6f4"/>
-  <text x="135.0" y="492.6666666666667" font-size="20" fill="#1f4e8c" text-anchor="middle">T16</text>
-  <text x="204" y="492.6666666666667" font-size="20" fill="#1a1a2e" text-anchor="start">DockQ vs deposited assembly</text>
-  <text x="1196" y="492.6666666666667" font-size="20" fill="#1a1a2e" text-anchor="end">0.9445</text>
-  <rect x="1210" y="460" width="280" height="52" fill="#dff0e1"/>
-  <text x="1350.0" y="492.6666666666667" font-size="20" fill="#1f7a3f" text-anchor="middle">pass</text>
-  <rect x="80" y="512" width="1410" height="52" fill="#f7f8fb"/>
-  <rect x="80" y="512" width="110" height="52" fill="#dce6f4"/>
-  <text x="135.0" y="544.6666666666666" font-size="20" fill="#1f4e8c" text-anchor="middle">T16</text>
-  <text x="204" y="544.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="start">CAPRI interface quality class</text>
-  <text x="1196" y="544.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="end">High</text>
-  <rect x="1210" y="512" width="280" height="52" fill="#dff0e1"/>
-  <text x="1350.0" y="544.6666666666666" font-size="20" fill="#1f7a3f" text-anchor="middle">pass</text>
-  <rect x="80" y="564" width="1410" height="52" fill="#ffffff"/>
-  <rect x="80" y="564" width="110" height="52" fill="#dce6f4"/>
-  <text x="135.0" y="596.6666666666666" font-size="20" fill="#1f4e8c" text-anchor="middle">T16</text>
-  <text x="204" y="596.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="start">buried surface area, chains A/B</text>
-  <text x="1196" y="596.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="end">437.8 Å²</text>
-  <text x="1350.0" y="596.6666666666666" font-size="20" fill="#5a6071" text-anchor="middle">informational</text>
-  <rect x="80" y="200" width="1410" height="416" fill="none" stroke="#e3e6ee" stroke-width="1"/>
-  <line x1="190" y1="200" x2="190" y2="616" stroke="#e3e6ee" stroke-width="1"/>
-  <line x1="910" y1="200" x2="910" y2="616" stroke="#e3e6ee" stroke-width="1"/>
-  <line x1="1210" y1="200" x2="1210" y2="616" stroke="#e3e6ee" stroke-width="1"/>
+  <rect x="80" y="190" width="1450" height="50" fill="#1f4e8c"/>
+  <text x="135.0" y="221.66666666666666" font-size="20" font-weight="700" fill="#ffffff" text-anchor="middle">Task</text>
+  <text x="204" y="221.66666666666666" font-size="20" font-weight="700" fill="#ffffff" text-anchor="start">Metric</text>
+  <text x="1176" y="221.66666666666666" font-size="20" font-weight="700" fill="#ffffff" text-anchor="end">Value</text>
+  <text x="1360.0" y="221.66666666666666" font-size="20" font-weight="700" fill="#ffffff" text-anchor="middle">Reading</text>
+  <rect x="80" y="240" width="1450" height="50" fill="#ffffff"/>
+  <rect x="80" y="240" width="110" height="50" fill="#dce6f4"/>
+  <text x="135.0" y="271.3333333333333" font-size="19" fill="#1f4e8c" text-anchor="middle">T14</text>
+  <text x="204" y="271.3333333333333" font-size="19" fill="#1a1a2e" text-anchor="start">flippable Asn/Gln/His scored — reduce / reduce2</text>
+  <text x="1176" y="271.3333333333333" font-size="19" fill="#1a1a2e" text-anchor="end">14 / 18</text>
+  <rect x="1190" y="240" width="340" height="50" fill="#dff0e1"/>
+  <text x="1360.0" y="271.3333333333333" font-size="19" fill="#1f7a3f" text-anchor="middle">0 conflicts</text>
+  <rect x="80" y="290" width="1450" height="50" fill="#f7f8fb"/>
+  <rect x="80" y="290" width="110" height="50" fill="#dce6f4"/>
+  <text x="135.0" y="321.3333333333333" font-size="19" fill="#1f4e8c" text-anchor="middle">T14</text>
+  <text x="204" y="321.3333333333333" font-size="19" fill="#1a1a2e" text-anchor="start">H atoms added (Richardson reduce)</text>
+  <text x="1176" y="321.3333333333333" font-size="19" fill="#1a1a2e" text-anchor="end">1386</text>
+  <rect x="1190" y="290" width="340" height="50" fill="#f7f8fb"/>
+  <text x="1360.0" y="321.3333333333333" font-size="19" fill="#5a6071" text-anchor="middle">band void</text>
+  <rect x="80" y="340" width="1450" height="50" fill="#ffffff"/>
+  <rect x="80" y="340" width="110" height="50" fill="#dce6f4"/>
+  <text x="135.0" y="371.3333333333333" font-size="19" fill="#1f4e8c" text-anchor="middle">T15</text>
+  <text x="204" y="371.3333333333333" font-size="19" fill="#1a1a2e" text-anchor="start">three-state SS agreement — agent model</text>
+  <text x="1176" y="371.3333333333333" font-size="19" fill="#1a1a2e" text-anchor="end">0.8802</text>
+  <rect x="1190" y="340" width="340" height="50" fill="#fbeecb"/>
+  <text x="1360.0" y="371.3333333333333" font-size="19" fill="#b07c00" text-anchor="middle">uninterpretable</text>
+  <rect x="80" y="390" width="1450" height="50" fill="#f7f8fb"/>
+  <rect x="80" y="390" width="110" height="50" fill="#dce6f4"/>
+  <text x="135.0" y="421.3333333333333" font-size="19" fill="#1f4e8c" text-anchor="middle">T15</text>
+  <text x="204" y="421.3333333333333" font-size="19" fill="#1a1a2e" text-anchor="start">same metric — deposited reference</text>
+  <text x="1176" y="421.3333333333333" font-size="19" fill="#1a1a2e" text-anchor="end">0.8646</text>
+  <rect x="1190" y="390" width="340" height="50" fill="#dff0e1"/>
+  <text x="1360.0" y="421.3333333333333" font-size="19" fill="#1f7a3f" text-anchor="middle">reproduces calibration</text>
+  <rect x="80" y="440" width="1450" height="50" fill="#ffffff"/>
+  <rect x="80" y="440" width="110" height="50" fill="#dce6f4"/>
+  <text x="135.0" y="471.3333333333333" font-size="19" fill="#1f4e8c" text-anchor="middle">T16</text>
+  <text x="204" y="471.3333333333333" font-size="19" fill="#1a1a2e" text-anchor="start">DockQ vs deposited, AB:AB</text>
+  <text x="1176" y="471.3333333333333" font-size="19" fill="#1a1a2e" text-anchor="end">0.9445</text>
+  <rect x="1190" y="440" width="340" height="50" fill="#f7f8fb"/>
+  <text x="1360.0" y="471.3333333333333" font-size="19" fill="#5a6071" text-anchor="middle">low information</text>
+  <rect x="80" y="490" width="1450" height="50" fill="#f7f8fb"/>
+  <rect x="80" y="490" width="110" height="50" fill="#dce6f4"/>
+  <text x="135.0" y="521.3333333333334" font-size="19" fill="#1f4e8c" text-anchor="middle">T16</text>
+  <text x="204" y="521.3333333333334" font-size="19" fill="#1a1a2e" text-anchor="start">CAPRI interface quality class</text>
+  <text x="1176" y="521.3333333333334" font-size="19" fill="#1a1a2e" text-anchor="end">High</text>
+  <rect x="1190" y="490" width="340" height="50" fill="#f7f8fb"/>
+  <text x="1360.0" y="521.3333333333334" font-size="19" fill="#5a6071" text-anchor="middle">low information</text>
+  <rect x="80" y="540" width="1450" height="50" fill="#ffffff"/>
+  <rect x="80" y="540" width="110" height="50" fill="#dce6f4"/>
+  <text x="135.0" y="571.3333333333334" font-size="19" fill="#1f4e8c" text-anchor="middle">T16</text>
+  <text x="204" y="571.3333333333334" font-size="19" fill="#1a1a2e" text-anchor="start">buried surface area, chains A/B</text>
+  <text x="1176" y="571.3333333333334" font-size="19" fill="#1a1a2e" text-anchor="end">437.8 Å²</text>
+  <rect x="1190" y="540" width="340" height="50" fill="#f7f8fb"/>
+  <text x="1360.0" y="571.3333333333334" font-size="19" fill="#5a6071" text-anchor="middle">informational</text>
+  <rect x="80" y="190" width="1450" height="400" fill="none" stroke="#e3e6ee" stroke-width="1"/>
+  <line x1="190" y1="190" x2="190" y2="590" stroke="#e3e6ee" stroke-width="1"/>
+  <line x1="890" y1="190" x2="890" y2="590" stroke="#e3e6ee" stroke-width="1"/>
+  <line x1="1190" y1="190" x2="1190" y2="590" stroke="#e3e6ee" stroke-width="1"/>
 
-  <rect x="80" y="656" width="5" height="100" fill="#1f7a3f"/>
-  <text x="105" y="680" font-size="20" font-weight="400" fill="#1a1a2e">T16 applies because 1SAR's asymmetric unit carries two protein chains. The agent's A/B pairing reproduces</text>
-  <text x="105" y="710" font-size="20" font-weight="400" fill="#1a1a2e">the deposited assembly at CAPRI High — there is no PHENIX interface scorer, so this task is oracle-only by</text>
-  <text x="105" y="740" font-size="20" font-weight="400" fill="#1a1a2e">construction.</text>
+  <rect x="80" y="608" width="5" height="120" fill="#b07c00"/>
+  <text x="105" y="630" font-size="19" font-weight="400" fill="#1a1a2e">T15 is NOT a pass. The registry gates on secondary-structure CONTENT (DSSP H+E ≥ 0.20), not on agreement,</text>
+  <text x="105" y="658" font-size="19" font-weight="400" fill="#1a1a2e">because agreement is degenerate at the bad end — noise raises it. The driver does not compute content, so the</text>
+  <text x="105" y="686" font-size="19" font-weight="400" fill="#1a1a2e">governed gate could not be applied. 0.8802 is above every one of the 16 benchmark entries (0.679–0.850), and</text>
+  <text x="105" y="714" font-size="19" font-weight="400" fill="#1a1a2e">1SAR is β-containing where the benchmark expects 0.68–0.72. A flag, not comfort.</text>
 
-  <rect x="80" y="780" width="5" height="100" fill="#1f4e8c"/>
-  <text x="105" y="804" font-size="20" font-weight="400" fill="#1a1a2e">T14 compares two genuinely independent H builders (Richardson reduce vs mmtbx.reduce2,</text>
-  <text x="105" y="834" font-size="20" font-weight="400" fill="#1a1a2e">add_flip_movers=True). They agree on every confident call. phenix.reduce is the same binary as reduce, so</text>
-  <text x="105" y="864" font-size="20" font-weight="400" fill="#1a1a2e">its identical count is a redistribution check, not a second opinion.</text>
+  <rect x="80" y="746" width="5" height="120" fill="#b07c00"/>
+  <text x="105" y="768" font-size="19" font-weight="400" fill="#1a1a2e">T16 exercises the path; it does not certify an assembly. structural_criteria.yaml already classifies this</text>
+  <text x="105" y="796" font-size="19" font-weight="400" fill="#1a1a2e">contact as 1SAR's crystallographic dimer — a demonstration, not a biological assembly. With a 0.41 Å</text>
+  <text x="105" y="824" font-size="19" font-weight="400" fill="#1a1a2e">start-to-final Cα RMSD a high DockQ is near-guaranteed. Only the AB:AB mapping was scored; the swap is</text>
+  <text x="105" y="852" font-size="19" font-weight="400" fill="#1a1a2e">unmeasured.</text>
 
-  <rect x="80" y="904" width="5" height="100" fill="#b07c00"/>
-  <text x="105" y="928" font-size="20" font-weight="400" fill="#1a1a2e">T15's agreement number is a property of the fold and the two algorithms, not a quality score. It is only</text>
-  <text x="105" y="958" font-size="20" font-weight="400" fill="#1a1a2e">meaningful as a difference — which is why the deposited reference was measured too. The agent model sits</text>
-  <text x="105" y="988" font-size="20" font-weight="400" fill="#1a1a2e">0.0156 above it.</text>
+  <rect x="80" y="884" width="5" height="92" fill="#1f7a3f"/>
+  <text x="105" y="906" font-size="19" font-weight="400" fill="#1a1a2e">T14 compares two genuinely independent builders (Richardson reduce, non-cctbx; mmtbx.reduce2, cctbx). Zero</text>
+  <text x="105" y="934" font-size="19" font-weight="400" fill="#1a1a2e">confident conflicts over the 14 shared residues. The H-count band is void here because the model carries SO4, CA</text>
+  <text x="105" y="962" font-size="19" font-weight="400" fill="#1a1a2e">and NA.</text>
 
 </svg>

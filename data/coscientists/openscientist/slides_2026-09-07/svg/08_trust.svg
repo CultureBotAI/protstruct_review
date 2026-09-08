@@ -2,85 +2,57 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" font-family="Helvetica, Arial, sans-serif">
   <rect width="100%" height="100%" fill="#ffffff"/>
   <rect x="0" y="0" width="1920" height="6" fill="#1f4e8c"/>
-  <text x="80" y="86" font-size="44" font-weight="700" fill="#1a1a2e">Trust invariant: closed on merit</text>
-  <text x="80" y="128" font-size="22" font-weight="400" fill="#5a6071">The first 1SAR sheet that needs no grandfathering</text>
+  <text x="80" y="86" font-size="44" font-weight="700" fill="#1a1a2e">Trust invariant: passes, by omission</text>
+  <text x="80" y="128" font-size="22" font-weight="400" fill="#5a6071">Worth stating plainly rather than claiming a win</text>
   <line x1="80" y1="1020" x2="1840" y2="1020" stroke="#e3e6ee" stroke-width="1"/>
   <text x="80" y="1050" font-size="16" fill="#5a6071">1SAR refinement review · openscientist artefact cdba2c07 · re-run 2026-09-07</text>
   <text x="1840" y="1050" font-size="16" fill="#5a6071" text-anchor="end">protstruct_review · update deck 2026-09-07</text>
 
-  <text x="80" y="210" font-size="23" font-weight="400" fill="#1a1a2e">The trust model forbids grading PHENIX solely with PHENIX. Since the 2026-08-13 cutover that is enforced: a sheet</text>
-  <text x="80" y="244" font-size="23" font-weight="400" fill="#1a1a2e">carrying a cctbx-only task must either waive it explicitly or close it with an independent oracle. Sheets issued</text>
-  <text x="80" y="278" font-size="23" font-weight="400" fill="#1a1a2e">before the cutover are grandfathered and listed by name — history is history.</text>
+  <text x="80" y="200" font-size="22" font-weight="400" fill="#1a1a2e">The trust model forbids grading PHENIX solely with PHENIX. Since the 2026-08-13 cutover a sheet carrying a cctbx-only</text>
+  <text x="80" y="232" font-size="22" font-weight="400" fill="#1a1a2e">task must waive it explicitly or close it with an independent oracle. Sheets issued before the cutover are</text>
+  <text x="80" y="264" font-size="22" font-weight="400" fill="#1a1a2e">grandfathered and listed by name.</text>
 
-  <rect x="80" y="370" width="1660" height="48" fill="#1f4e8c"/>
-  <text x="94" y="400.6666666666667" font-size="20" font-weight="700" fill="#ffffff" text-anchor="start">Sheet</text>
-  <text x="554" y="400.6666666666667" font-size="20" font-weight="700" fill="#ffffff" text-anchor="start">Tasks</text>
-  <text x="894" y="400.6666666666667" font-size="20" font-weight="700" fill="#ffffff" text-anchor="start">Gap status</text>
-  <text x="1550.0" y="400.6666666666667" font-size="20" font-weight="700" fill="#ffffff" text-anchor="middle">Invariant</text>
-  <rect x="80" y="418" width="1660" height="48" fill="#ffffff"/>
-  <text x="94" y="448.6666666666667" font-size="20" fill="#1a1a2e" text-anchor="start">QDS_1sar…2026-04-24</text>
-  <text x="554" y="448.6666666666667" font-size="20" fill="#1a1a2e" text-anchor="start">T06</text>
-  <rect x="880" y="418" width="480" height="48" fill="#fbeecb"/>
-  <text x="894" y="448.6666666666667" font-size="20" fill="#b07c00" text-anchor="start">open — cctbx only</text>
-  <rect x="1360" y="418" width="380" height="48" fill="#fbeecb"/>
-  <text x="1550.0" y="448.6666666666667" font-size="20" fill="#b07c00" text-anchor="middle">grandfathered</text>
-  <rect x="80" y="466" width="1660" height="48" fill="#f7f8fb"/>
-  <text x="94" y="496.6666666666667" font-size="20" fill="#1a1a2e" text-anchor="start">QDS_1sar…2026-04-26</text>
-  <text x="554" y="496.6666666666667" font-size="20" fill="#1a1a2e" text-anchor="start">T06, T13</text>
-  <rect x="880" y="466" width="480" height="48" fill="#fbeecb"/>
-  <text x="894" y="496.6666666666667" font-size="20" fill="#b07c00" text-anchor="start">open — cctbx only</text>
-  <rect x="1360" y="466" width="380" height="48" fill="#fbeecb"/>
-  <text x="1550.0" y="496.6666666666667" font-size="20" fill="#b07c00" text-anchor="middle">grandfathered</text>
-  <rect x="80" y="514" width="1660" height="48" fill="#ffffff"/>
-  <text x="94" y="544.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="start">QDS_1sar…2026-04-30</text>
-  <text x="554" y="544.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="start">T06, T13</text>
-  <rect x="880" y="514" width="480" height="48" fill="#fbeecb"/>
-  <text x="894" y="544.6666666666666" font-size="20" fill="#b07c00" text-anchor="start">open — cctbx only</text>
-  <rect x="1360" y="514" width="380" height="48" fill="#fbeecb"/>
-  <text x="1550.0" y="544.6666666666666" font-size="20" fill="#b07c00" text-anchor="middle">grandfathered</text>
-  <rect x="80" y="562" width="1660" height="48" fill="#f7f8fb"/>
-  <text x="94" y="592.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="start">QDS_1sar…2026-05-01</text>
-  <text x="554" y="592.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="start">T06, T13</text>
-  <rect x="880" y="562" width="480" height="48" fill="#fbeecb"/>
-  <text x="894" y="592.6666666666666" font-size="20" fill="#b07c00" text-anchor="start">open — cctbx only</text>
-  <rect x="1360" y="562" width="380" height="48" fill="#fbeecb"/>
-  <text x="1550.0" y="592.6666666666666" font-size="20" fill="#b07c00" text-anchor="middle">grandfathered</text>
-  <rect x="80" y="610" width="1660" height="48" fill="#ffffff"/>
-  <text x="94" y="640.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="start">QDS_1sar…2026-05-04</text>
-  <text x="554" y="640.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="start">T06</text>
-  <rect x="880" y="610" width="480" height="48" fill="#fbeecb"/>
-  <text x="894" y="640.6666666666666" font-size="20" fill="#b07c00" text-anchor="start">open — cctbx only</text>
-  <rect x="1360" y="610" width="380" height="48" fill="#fbeecb"/>
-  <text x="1550.0" y="640.6666666666666" font-size="20" fill="#b07c00" text-anchor="middle">grandfathered</text>
-  <rect x="80" y="658" width="1660" height="48" fill="#f7f8fb"/>
-  <text x="94" y="688.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="start">QDS_1sar…2026-05-05</text>
-  <text x="554" y="688.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="start">T06</text>
-  <rect x="880" y="658" width="480" height="48" fill="#fbeecb"/>
-  <text x="894" y="688.6666666666666" font-size="20" fill="#b07c00" text-anchor="start">open — cctbx only</text>
-  <rect x="1360" y="658" width="380" height="48" fill="#fbeecb"/>
-  <text x="1550.0" y="688.6666666666666" font-size="20" fill="#b07c00" text-anchor="middle">grandfathered</text>
-  <rect x="80" y="706" width="1660" height="48" fill="#ffffff"/>
-  <text x="94" y="736.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="start">QDS_1sar…2026-09-07</text>
-  <text x="554" y="736.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="start">T03</text>
-  <rect x="880" y="706" width="480" height="48" fill="#dff0e1"/>
-  <text x="894" y="736.6666666666666" font-size="20" fill="#1f7a3f" text-anchor="start">closed</text>
-  <rect x="1360" y="706" width="380" height="48" fill="#dff0e1"/>
-  <text x="1550.0" y="736.6666666666666" font-size="20" fill="#1f7a3f" text-anchor="middle">satisfied</text>
-  <rect x="80" y="754" width="1660" height="48" fill="#f7f8fb"/>
-  <text x="94" y="784.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="start">QDS_1sar…2026-09-07</text>
-  <text x="554" y="784.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="start">T14, T15, T16</text>
-  <rect x="880" y="754" width="480" height="48" fill="#dff0e1"/>
-  <text x="894" y="784.6666666666666" font-size="20" fill="#1f7a3f" text-anchor="start">non-cctbx only</text>
-  <rect x="1360" y="754" width="380" height="48" fill="#dff0e1"/>
-  <text x="1550.0" y="784.6666666666666" font-size="20" fill="#1f7a3f" text-anchor="middle">satisfied</text>
-  <rect x="80" y="370" width="1660" height="432" fill="none" stroke="#e3e6ee" stroke-width="1"/>
-  <line x1="540" y1="370" x2="540" y2="802" stroke="#e3e6ee" stroke-width="1"/>
-  <line x1="880" y1="370" x2="880" y2="802" stroke="#e3e6ee" stroke-width="1"/>
-  <line x1="1360" y1="370" x2="1360" y2="802" stroke="#e3e6ee" stroke-width="1"/>
+  <rect x="80" y="340" width="1760" height="56" fill="#1f4e8c"/>
+  <text x="94" y="374.6666666666667" font-size="20" font-weight="700" fill="#ffffff" text-anchor="start">Sheet</text>
+  <text x="594" y="374.6666666666667" font-size="20" font-weight="700" fill="#ffffff" text-anchor="start">Tasks</text>
+  <text x="1054" y="374.6666666666667" font-size="20" font-weight="700" fill="#ffffff" text-anchor="start">Gap status</text>
+  <text x="1650.0" y="374.6666666666667" font-size="20" font-weight="700" fill="#ffffff" text-anchor="middle">Invariant</text>
+  <rect x="80" y="396" width="1760" height="56" fill="#ffffff"/>
+  <text x="94" y="430.6666666666667" font-size="20" fill="#1a1a2e" text-anchor="start">QDS_1sar…04-24 through 05-05</text>
+  <text x="594" y="430.6666666666667" font-size="20" fill="#1a1a2e" text-anchor="start">T06 (and T13 on three sheets)</text>
+  <rect x="1040" y="396" width="420" height="56" fill="#fbeecb"/>
+  <text x="1054" y="430.6666666666667" font-size="20" fill="#b07c00" text-anchor="start">open — cctbx only</text>
+  <rect x="1460" y="396" width="380" height="56" fill="#fbeecb"/>
+  <text x="1650.0" y="430.6666666666667" font-size="20" fill="#b07c00" text-anchor="middle">grandfathered</text>
+  <rect x="80" y="452" width="1760" height="56" fill="#f7f8fb"/>
+  <text x="94" y="486.6666666666667" font-size="20" fill="#1a1a2e" text-anchor="start">QDS_1sar…2026-09-07</text>
+  <text x="594" y="486.6666666666667" font-size="20" fill="#1a1a2e" text-anchor="start">T03, T14</text>
+  <rect x="1040" y="452" width="420" height="56" fill="#dff0e1"/>
+  <text x="1054" y="486.6666666666667" font-size="20" fill="#1f7a3f" text-anchor="start">closed</text>
+  <rect x="1460" y="452" width="380" height="56" fill="#dff0e1"/>
+  <text x="1650.0" y="486.6666666666667" font-size="20" fill="#1f7a3f" text-anchor="middle">satisfied</text>
+  <rect x="80" y="508" width="1760" height="56" fill="#ffffff"/>
+  <text x="94" y="542.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="start">QDS_1sar…2026-09-07</text>
+  <text x="594" y="542.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="start">T15, T16</text>
+  <rect x="1040" y="508" width="420" height="56" fill="#dff0e1"/>
+  <text x="1054" y="542.6666666666666" font-size="20" fill="#1f7a3f" text-anchor="start">non-cctbx only</text>
+  <rect x="1460" y="508" width="380" height="56" fill="#dff0e1"/>
+  <text x="1650.0" y="542.6666666666666" font-size="20" fill="#1f7a3f" text-anchor="middle">satisfied</text>
+  <rect x="80" y="340" width="1760" height="224" fill="none" stroke="#e3e6ee" stroke-width="1"/>
+  <line x1="580" y1="340" x2="580" y2="564" stroke="#e3e6ee" stroke-width="1"/>
+  <line x1="1040" y1="340" x2="1040" y2="564" stroke="#e3e6ee" stroke-width="1"/>
+  <line x1="1460" y1="340" x2="1460" y2="564" stroke="#e3e6ee" stroke-width="1"/>
 
-  <rect x="80" y="830" width="1760" height="110" rx="10" ry="10" fill="#dff0e1"/>
+  <rect x="80" y="590" width="1760" height="190" rx="10" ry="10" fill="#fbeecb"/>
 
-  <text x="110" y="878" font-size="22" font-weight="700" fill="#1f7a3f">Today's sheet carries no open cctbx-only row and needs no waiver: T03 has both a cctbx and a non-cctbx R</text>
-  <text x="110" y="910" font-size="22" font-weight="700" fill="#1f7a3f">path; T14, T15 and T16 are non-cctbx throughout.</text>
+  <text x="110" y="640" font-size="21" font-weight="400" fill="#1a1a2e">The new sheet passes because it does not grade T06 — the row that was open on every prior 1SAR sheet —</text>
+  <text x="110" y="671" font-size="21" font-weight="400" fill="#1a1a2e">since this run did not re-measure T06. Nothing that was open was closed. The sheet is 271 lines where</text>
+  <text x="110" y="702" font-size="21" font-weight="400" fill="#1a1a2e">May's was 1270, and no longer carries geometry, data quality, ions, waters or pairwise comparisons.</text>
+
+  <rect x="80" y="810" width="1760" height="130" rx="10" ry="10" fill="#dff0e1"/>
+
+  <text x="110" y="858" font-size="21" font-weight="400" fill="#1f7a3f">What did genuinely improve: mmtbx.reduce2 is now a registered tool. It was a dependency of the T14</text>
+  <text x="110" y="889" font-size="21" font-weight="400" fill="#1f7a3f">benchmark but had never been in the catalog, so until now no T14 record could name the builder that</text>
+  <text x="110" y="920" font-size="21" font-weight="400" fill="#1f7a3f">produced its second opinion.</text>
 
 </svg>

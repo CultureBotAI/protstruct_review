@@ -8,15 +8,15 @@
   <circle cx="132" cy="533" r="6" fill="#1f4e8c"/>
   <text x="158" y="540" font-size="24" fill="#1a1a2e">Same artefact, re-measured: every prior record left byte-identical</text>
   <circle cx="132" cy="585" r="6" fill="#1f4e8c"/>
-  <text x="158" y="592" font-size="24" fill="#1a1a2e">Headline claim re-graded against calibrated bands, not templates</text>
+  <text x="158" y="592" font-size="24" fill="#1a1a2e">R-free re-graded against the rule the T03 driver actually declares</text>
   <circle cx="132" cy="637" r="6" fill="#1f4e8c"/>
-  <text x="158" y="644" font-size="24" fill="#1a1a2e">Three catalog tasks covered for the first time: T14, T15, T16</text>
+  <text x="158" y="644" font-size="24" fill="#1a1a2e">T14, T15 and T16 exercised on this artefact for the first time</text>
   <circle cx="132" cy="689" r="6" fill="#1f4e8c"/>
-  <text x="158" y="696" font-size="24" fill="#1a1a2e">First 1SAR sheet to meet the trust invariant without grandfathering</text>
-  <rect x="120" y="800" width="1680" height="130" rx="10" ry="10" fill="#dce6f4"/>
+  <text x="158" y="696" font-size="24" fill="#1a1a2e">Partial re-run — T01/T05/T06/T10/T13 carried from May, not re-measured</text>
+  <rect x="120" y="790" width="1680" height="145" rx="10" ry="10" fill="#dce6f4"/>
 
-  <text x="150" y="848" font-size="26" font-weight="700" fill="#1f4e8c">The refinement was sound. The report was not — and the number it reported belongs to no model</text>
-  <text x="150" y="882" font-size="26" font-weight="700" fill="#1f4e8c">the agent produced.</text>
+  <text x="150" y="840" font-size="26" font-weight="700" fill="#1f4e8c">The refinement was sound. The report was not — it is written about a different protein,</text>
+  <text x="150" y="876" font-size="26" font-weight="700" fill="#1f4e8c">and its headline R-free belongs to no model the agent produced.</text>
 
   <text x="120" y="1010" font-size="20" fill="#5a6071">openscientist artefact cdba2c07-daff-4f60-ae96-12452b3a5fbb · protstruct_review · 2026-09-07</text>
 </svg>

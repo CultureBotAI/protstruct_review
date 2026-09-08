@@ -227,7 +227,7 @@ def slide_01_title():
 
     bullets = [
         "Same artefact, re-measured: every prior record left byte-identical",
-        "R-free re-graded against the rule the T03 driver actually declares",
+        "R-free has no governing criterion here — the 1990 deposition records no R-free",
         "T14, T15 and T16 exercised on this artefact for the first time",
         "Partial re-run — T01/T05/T06/T10/T13 carried from May, not re-measured",
     ]
@@ -260,9 +260,10 @@ def slide_02_why():
 
     out.append(paragraph(
         80, 205,
-        "The May review predates the tolerance-benchmark series. It graded its headline with a "
-        "flat rule rather than the band the T03 driver declares. This run re-measures the "
-        "R-factor claims and exercises three never-run tasks — it does not re-run everything.",
+        "The May review predates the tolerance-benchmark series and graded its headline with a "
+        "flat rule. This run re-measures the R-factor claims against the rules T03 declares — and "
+        "finds the R-free rule cannot be applied to this structure at all — then exercises three "
+        "never-run tasks. It does not re-run everything.",
         width=118, size=22, color=INK, leading=32))
 
     rows = [
@@ -298,7 +299,7 @@ def slide_02_why():
     out.append(paragraph(
         110, 889,
         "Cost of that choice: this run issues a new dated .yaml where May updated the canonical "
-        "one in place, so the current sheet is a fraction of May's 1270 lines. That is a new "
+        "one in place, so the current sheet is 274 lines against May's 1270. That is a new "
         "convention adopted here, not an existing one followed.",
         width=104, size=20, color=MUTED, leading=30))
     return "\n".join(out) + "\n"
@@ -508,8 +509,8 @@ def slide_06_coverage():
           "T14 hydrogen placement", "T15 structural classification",
           "T16 interface quality"]),
         ("Not applicable", MUTED, ROW_ALT,
-         ["T04, T08, T12 · T07 predicted-model processing · T17 NMR ensembles "
-          "— none apply to an X-ray refinement artefact",
+         ["T04 real-space refinement · T07 predicted-model processing · T08 docking into a map · "
+          "T12 cryo-EM map quality · T17 NMR ensembles — none apply to an X-ray artefact",
           "T09 molecular replacement — the model was already placed",
           "T11 loop fitting — no chain gaps (A 1–96, B 1–96)"]),
         ("Uncovered", BAD, BAD_LIGHT,
@@ -633,7 +634,7 @@ def slide_08_trust():
         110, 640,
         "The new sheet passes because it does not grade T06 — the row that was open on every "
         "prior 1SAR sheet — since this run did not re-measure T06. Nothing that was open was "
-        "closed. The sheet is a fraction of May's 1270 lines, and no longer carries geometry, "
+        "closed. The sheet is 274 lines where May's was 1270, and no longer carries geometry, "
         "data quality, ions, waters or pairwise comparisons.",
         width=104, size=21, color=INK, leading=31))
 
@@ -737,10 +738,10 @@ def slide_10_net():
     out.append(panel(80, 750, 1760, 190, ACCENT_LIGHT))
     out.append(paragraph(
         112, 800,
-        "The R-free criterion actually passes under the rule this task declares. What does not "
-        "pass is the write-up: a headline number that describes no model in the artefact, and a "
-        "report written about a different protein than the one it refined — with the metal-site "
-        "reasoning inherited from that mistake.",
+        "The one R-factor rule that is satisfiable on this structure — rule 2's independent-code-"
+        "path R-work offset — passes at +0.0058. The R-free claim has no governing criterion at "
+        "all. What does not pass is the write-up: a headline number that describes no model in "
+        "the artefact, and a report written about a different protein than the one it refined.",
         width=100, size=23, color=ACCENT, weight="700", leading=33))
     return "\n".join(out) + "\n"
 

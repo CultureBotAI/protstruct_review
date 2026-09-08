@@ -46,8 +46,8 @@
   <rect x="80" y="590" width="1760" height="190" rx="10" ry="10" fill="#fbeecb"/>
 
   <text x="110" y="640" font-size="21" font-weight="400" fill="#1a1a2e">The new sheet passes because it does not grade T06 — the row that was open on every prior 1SAR sheet —</text>
-  <text x="110" y="671" font-size="21" font-weight="400" fill="#1a1a2e">since this run did not re-measure T06. Nothing that was open was closed. The sheet is a fraction of</text>
-  <text x="110" y="702" font-size="21" font-weight="400" fill="#1a1a2e">May's 1270 lines, and no longer carries geometry, data quality, ions, waters or pairwise comparisons.</text>
+  <text x="110" y="671" font-size="21" font-weight="400" fill="#1a1a2e">since this run did not re-measure T06. Nothing that was open was closed. The sheet is 274 lines where</text>
+  <text x="110" y="702" font-size="21" font-weight="400" fill="#1a1a2e">May's was 1270, and no longer carries geometry, data quality, ions, waters or pairwise comparisons.</text>
 
   <rect x="80" y="810" width="1760" height="130" rx="10" ry="10" fill="#dff0e1"/>
 

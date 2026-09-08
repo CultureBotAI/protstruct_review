@@ -36,14 +36,17 @@ evaluation_runs:
       value_numeric: 0.149
     oracle_measure:
       value_numeric: 0.1564
-    pass_status: fail_by_oracle
+    pass_status: informational
     notes: >-
       Re-measured 2026-09-07 on the artefact final model; identical to the 2026-05-04
-      and 2026-05-05 measurements to four decimals, and graded the same way the
-      canonical EVAL_1sar_cdba2c07_2026-04-24 record grades it. No R-work PASS
-      criterion is declared anywhere in ref/driving_example_T03.md — rule 1 governs
-      R-free and rule 2 governs the gemmi/PHENIX offset, not the agent's claim — so
-      this row records only that the oracle disagrees with the reported value. The
+      and 2026-05-05 measurements to four decimals. Recorded WITHOUT a verdict: no
+      R-work pass criterion is declared anywhere in ref/driving_example_T03.md — rule 1
+      governs R-free and rule 2 governs the gemmi/PHENIX offset, not the agent's claim
+      — and the schema reserves `fail_by_oracle` for "oracle disagrees with agent claim
+      AND criterion fails". The canonical EVAL_1sar_cdba2c07_2026-04-24 record grades
+      this same measurement `fail_by_oracle`; that divergence is deliberate and filed,
+      not an oversight, because the same reasoning applies to M_002 and the two rows
+      must not be graded on opposite conclusions from one premise. The
       model's own PHENIX header records R-work 0.1563, i.e. the refinement agrees with
       the oracle to 0.0001; the discrepancy is between the oracle and the agent's
       narrative report, not the model.
@@ -129,7 +132,7 @@ evaluation_runs:
     oracle_family: non_cctbx
     oracle_measure:
       value_numeric: 0.1622
-    pass_status: informational
+    pass_status: pass
     notes: >-
       Independent non-cctbx code path (gemmi 0.7.5, `sfcalc --radii-set=cctbx`, then
       scripts/gemmi_rfactor.py). Recorded alongside the R-free and gap rows so the
@@ -174,7 +177,11 @@ evaluation_runs:
     pass_status: informational
     notes: >-
       The same gap criterion as M_003 on the independent code path: 0.0515, also above
-      the agent's < 0.05 target.
+      the agent's < 0.05 target. This value is scripts/gemmi_rfactor.py's own output,
+      which rounds R-work, R-free and the gap independently from unrounded internals,
+      so it does not equal the difference of the published four-decimal values
+      (0.2136 - 0.1622 = 0.0514). No verdict turns on the distinction — both exceed
+      0.05 — but the triple does not add up at the precision it is published to.
   # --- T14 -----------------------------------------------------------------
   - id: EVAL_1sar_cdba2c07_2026-09-07_M_008
     catalog_task_ref: T14

@@ -33,9 +33,9 @@
 
   <rect x="80" y="750" width="1760" height="190" rx="10" ry="10" fill="#dce6f4"/>
 
-  <text x="112" y="800" font-size="23" font-weight="700" fill="#1f4e8c">The R-free criterion actually passes under the rule this task declares. What does not pass is the</text>
-  <text x="112" y="833" font-size="23" font-weight="700" fill="#1f4e8c">write-up: a headline number that describes no model in the artefact, and a report written about a</text>
-  <text x="112" y="866" font-size="23" font-weight="700" fill="#1f4e8c">different protein than the one it refined — with the metal-site reasoning inherited from that</text>
-  <text x="112" y="899" font-size="23" font-weight="700" fill="#1f4e8c">mistake.</text>
+  <text x="112" y="800" font-size="23" font-weight="700" fill="#1f4e8c">The one R-factor rule that is satisfiable on this structure — rule 2's independent-code-path R-work</text>
+  <text x="112" y="833" font-size="23" font-weight="700" fill="#1f4e8c">offset — passes at +0.0058. The R-free claim has no governing criterion at all. What does not pass</text>
+  <text x="112" y="866" font-size="23" font-weight="700" fill="#1f4e8c">is the write-up: a headline number that describes no model in the artefact, and a report written</text>
+  <text x="112" y="899" font-size="23" font-weight="700" fill="#1f4e8c">about a different protein than the one it refined.</text>
 
 </svg>

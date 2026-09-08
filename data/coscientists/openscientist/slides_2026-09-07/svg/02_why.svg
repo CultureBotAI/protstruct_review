@@ -8,9 +8,9 @@
   <text x="80" y="1050" font-size="16" fill="#5a6071">1SAR refinement review · openscientist artefact cdba2c07 · re-run 2026-09-07</text>
   <text x="1840" y="1050" font-size="16" fill="#5a6071" text-anchor="end">protstruct_review · update deck 2026-09-07</text>
 
-  <text x="80" y="205" font-size="22" font-weight="400" fill="#1a1a2e">The May review predates the tolerance-benchmark series. It graded its headline with a flat rule rather than the band</text>
-  <text x="80" y="237" font-size="22" font-weight="400" fill="#1a1a2e">the T03 driver declares. This run re-measures the R-factor claims and exercises three never-run tasks — it does not</text>
-  <text x="80" y="269" font-size="22" font-weight="400" fill="#1a1a2e">re-run everything.</text>
+  <text x="80" y="205" font-size="22" font-weight="400" fill="#1a1a2e">The May review predates the tolerance-benchmark series and graded its headline with a flat rule. This run re-measures</text>
+  <text x="80" y="237" font-size="22" font-weight="400" fill="#1a1a2e">the R-factor claims against the rules T03 declares — and finds the R-free rule cannot be applied to this structure at</text>
+  <text x="80" y="269" font-size="22" font-weight="400" fill="#1a1a2e">all — then exercises three never-run tasks. It does not re-run everything.</text>
 
   <rect x="80" y="320" width="1760" height="64" fill="#1f4e8c"/>
   <text x="94" y="358.6666666666667" font-size="20" font-weight="700" fill="#ffffff" text-anchor="start">Scope</text>
@@ -43,7 +43,7 @@
   <rect x="80" y="845" width="1760" height="120" rx="10" ry="10" fill="#f7f8fb"/>
 
   <text x="110" y="889" font-size="20" font-weight="400" fill="#5a6071">Cost of that choice: this run issues a new dated .yaml where May updated the canonical one in place, so</text>
-  <text x="110" y="919" font-size="20" font-weight="400" fill="#5a6071">the current sheet is a fraction of May's 1270 lines. That is a new convention adopted here, not an</text>
+  <text x="110" y="919" font-size="20" font-weight="400" fill="#5a6071">the current sheet is 274 lines against May's 1270. That is a new convention adopted here, not an</text>
   <text x="110" y="949" font-size="20" font-weight="400" fill="#5a6071">existing one followed.</text>
 
 </svg>

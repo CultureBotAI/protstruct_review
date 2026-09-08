@@ -36,7 +36,7 @@
 
   <text x="110" y="660" font-size="25" font-weight="700" fill="#5a6071">Not applicable</text>
   <circle cx="122" cy="685" r="5" fill="#5a6071"/>
-  <text x="146" y="692" font-size="20" fill="#1a1a2e">T04, T08, T12 · T07 predicted-model processing · T17 NMR ensembles — none apply to an X-ray refinement artefact</text>
+  <text x="146" y="692" font-size="20" fill="#1a1a2e">T04 real-space refinement · T07 predicted-model processing · T08 docking into a map · T12 cryo-EM map quality · T17 NMR ensembles — none apply to an X-ray artefact</text>
   <circle cx="122" cy="717" r="5" fill="#5a6071"/>
   <text x="146" y="724" font-size="20" fill="#1a1a2e">T09 molecular replacement — the model was already placed</text>
   <circle cx="122" cy="749" r="5" fill="#5a6071"/>

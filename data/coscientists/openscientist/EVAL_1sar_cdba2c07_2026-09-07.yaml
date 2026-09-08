@@ -36,20 +36,21 @@ evaluation_runs:
       value_numeric: 0.149
     oracle_measure:
       value_numeric: 0.1564
-    pass_status: informational
+    pass_criterion: match within 0.005
+    delta:
+      value_numeric: 0.0074
+    pass_status: fail_by_oracle
     notes: >-
       Re-measured 2026-09-07 on the artefact final model; identical to the 2026-05-04
-      and 2026-05-05 measurements to four decimals. Recorded WITHOUT a verdict: no
-      R-work pass criterion is declared anywhere in ref/driving_example_T03.md — rule 1
-      governs R-free and rule 2 governs the gemmi/PHENIX offset, not the agent's claim
-      — and the schema reserves `fail_by_oracle` for "oracle disagrees with agent claim
-      AND criterion fails". The canonical EVAL_1sar_cdba2c07_2026-04-24 record grades
-      this same measurement `fail_by_oracle`; that divergence is deliberate and filed,
-      not an oversight, because the same reasoning applies to M_002 and the two rows
-      must not be graded on opposite conclusions from one premise. The
-      model's own PHENIX header records R-work 0.1563, i.e. the refinement agrees with
-      the oracle to 0.0001; the discrepancy is between the oracle and the agent's
-      narrative report, not the model.
+      and 2026-05-05 measurements to four decimals. Graded against the reporting-
+      accuracy criterion the 1SAR series itself declares — the canonical
+      EVAL_1sar_cdba2c07_2026-04-24 record carries `pass_criterion: match within 0.005`
+      on this same measurement (its M_006) and fails it at Δ 0.0074. This record reaches
+      the same verdict on the same criterion, so the series stays comparable. The agent
+      reported R-work 0.149 while its OWN model header records 0.1563 and the oracle
+      recomputes 0.1564: the refinement agrees with the oracle to 0.0001, and the
+      discrepancy is entirely between the oracle and the narrative report. This is the
+      same class of defect as the R-free misreport in M_002, and roughly half its size.
   - id: EVAL_1sar_cdba2c07_2026-09-07_M_002
     catalog_task_ref: T03
     stage: final
@@ -62,10 +63,17 @@ evaluation_runs:
       value_numeric: 0.199
     oracle_measure:
       value_numeric: 0.2116
-    pass_status: informational
+    pass_criterion: match within 0.005
+    delta:
+      value_numeric: 0.0126
+    pass_status: fail_by_oracle
     notes: >-
-      NO DECLARED CRITERION GOVERNS THIS COMPARISON, so it is recorded without a
-      verdict. `ref/driving_example_T03.md` rubric rule 1 is "R-free is within ± 0.02
+      Graded against the reporting-accuracy criterion the 1SAR series declares
+      (`match within 0.005`, as the canonical EVAL_1sar_cdba2c07_2026-04-24 M_008
+      carries on this same claim): Δ 0.0126 fails it, the same verdict April reached.
+      SEPARATELY, and this is a finding about the rubric rather than the artefact, the
+      T03 driver's own deposition-tracking rule CANNOT BE EVALUATED on this structure.
+      `ref/driving_example_T03.md` rubric rule 1 is "R-free is within ± 0.02
       of the DEPOSITED value and of a REFMAC5 re-refinement"
       (`[catalog — R-free vs deposited]`, §3 of ref/thresholds_and_standards.md).
       Neither reference exists here: 1SAR was deposited in 1990 and its REMARK 3
@@ -77,9 +85,9 @@ evaluation_runs:
       provenance is model_vs_data against wwPDB's recomputed DCC_Rfree. §3 further
       requires both values be on the same input, and 0.199 corresponds to no model in
       the artefact (round headers: 0.2364, 0.2293, 0.2165, 0.2114, 0.2109, 0.2068).
-      Both earlier gradings of this claim — May's flat gap rule and this record's own
-      first draft — rested on a comparison the rubric does not govern. The finding
-      stands on its own terms without a band: the reported value describes no model
+      So the claim IS graded — on reporting accuracy, which it fails — while the
+      rubric's deposition-tracking rule is simply inapplicable to a 1990 entry. The
+      finding stands on its own terms either way: the reported value describes no model
       the agent produced, while the model's header (0.2114) and the oracle (0.2116)
       agree to 0.0002.
   - id: EVAL_1sar_cdba2c07_2026-09-07_M_003
@@ -94,6 +102,9 @@ evaluation_runs:
       value_numeric: 0.050
     oracle_measure:
       value_numeric: 0.0552
+    pass_criterion: gap < 0.05
+    delta:
+      value_numeric: 0.0052
     pass_status: fail_by_oracle
     notes: >-
       Carried forward from the 2026-05-05 record so the re-run does not silently drop
@@ -132,6 +143,9 @@ evaluation_runs:
     oracle_family: non_cctbx
     oracle_measure:
       value_numeric: 0.1622
+    pass_criterion: gemmi − PHENIX R-work offset within 0.005–0.015 (T03 rubric rule 2)
+    delta:
+      value_numeric: 0.0058
     pass_status: pass
     notes: >-
       Independent non-cctbx code path (gemmi 0.7.5, `sfcalc --radii-set=cctbx`, then
@@ -153,7 +167,10 @@ evaluation_runs:
     oracle_family: non_cctbx
     oracle_measure:
       value_numeric: 0.2136
-    pass_status: informational
+    pass_criterion: '|ΔR| ≤ 0.02 vs phenix.model_vs_data, matched mask radii (§3)'
+    delta:
+      value_numeric: 0.0020
+    pass_status: pass
     notes: >-
       Corroborative, not a second independent failure verdict: ref/tool_assumptions.yaml
       is explicit that the gemmi number must not be reported as the agent's claim being
@@ -172,9 +189,14 @@ evaluation_runs:
     metric_definition_ref: T03_r-free_r-work_gap
     oracle_tool_ref: gemmi sfcalc
     oracle_family: non_cctbx
+    agent_claim:
+      value_numeric: 0.050
     oracle_measure:
       value_numeric: 0.0515
-    pass_status: informational
+    pass_criterion: gap < 0.05
+    delta:
+      value_numeric: 0.0015
+    pass_status: fail_by_oracle
     notes: >-
       The same gap criterion as M_003 on the independent code path: 0.0515, also above
       the agent's < 0.05 target. This value is scripts/gemmi_rfactor.py's own output,

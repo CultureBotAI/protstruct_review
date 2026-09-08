@@ -22,8 +22,9 @@
   <text x="1012" y="292" font-size="20" fill="#1a1a2e">✗ The report describes the wrong protein</text>
   <text x="1012" y="332" font-size="20" fill="#1a1a2e">✗ …so the stated basis for the Ca²⁺ call is void</text>
   <text x="1012" y="372" font-size="20" fill="#1a1a2e">✗ Reported R-free 0.199 matches no model produced</text>
-  <text x="1012" y="412" font-size="20" fill="#1a1a2e">✗ The shipped final is not the best round</text>
-  <text x="1012" y="452" font-size="20" fill="#1a1a2e">✗ SO4 written as ATOM, not HETATM</text>
+  <text x="1012" y="412" font-size="20" fill="#1a1a2e">✗ …and R-work 0.149 misreports its own header too</text>
+  <text x="1012" y="452" font-size="20" fill="#1a1a2e">✗ The shipped final is not the best round</text>
+  <text x="1012" y="492" font-size="20" fill="#1a1a2e">✗ SO4 written as ATOM, not HETATM</text>
   <rect x="80" y="540" width="1760" height="180" rx="10" ry="10" fill="#fbeecb"/>
 
   <text x="112" y="588" font-size="26" font-weight="700" fill="#b07c00">Open</text>
@@ -34,8 +35,8 @@
   <rect x="80" y="750" width="1760" height="190" rx="10" ry="10" fill="#dce6f4"/>
 
   <text x="112" y="800" font-size="23" font-weight="700" fill="#1f4e8c">The one R-factor rule that is satisfiable on this structure — rule 2's independent-code-path R-work</text>
-  <text x="112" y="833" font-size="23" font-weight="700" fill="#1f4e8c">offset — passes at +0.0058. The R-free claim has no governing criterion at all. What does not pass</text>
-  <text x="112" y="866" font-size="23" font-weight="700" fill="#1f4e8c">is the write-up: a headline number that describes no model in the artefact, and a report written</text>
-  <text x="112" y="899" font-size="23" font-weight="700" fill="#1f4e8c">about a different protein than the one it refined.</text>
+  <text x="112" y="833" font-size="23" font-weight="700" fill="#1f4e8c">offset — passes at +0.0058, as does the matched-radii R-free offset. What fails is the write-up:</text>
+  <text x="112" y="866" font-size="23" font-weight="700" fill="#1f4e8c">both reported R-factors miss the model's own header, the R-free value describes no model in the</text>
+  <text x="112" y="899" font-size="23" font-weight="700" fill="#1f4e8c">artefact, and the report is written about a different protein than the one it refined.</text>
 
 </svg>

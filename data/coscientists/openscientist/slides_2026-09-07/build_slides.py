@@ -227,7 +227,7 @@ def slide_01_title():
 
     bullets = [
         "Same artefact, re-measured: every prior record left byte-identical",
-        "R-free has no governing criterion here — the 1990 deposition records no R-free",
+        "Both R-factor claims misreport the model; the deposition-tracking rule is inapplicable",
         "T14, T15 and T16 exercised on this artefact for the first time",
         "Partial re-run — T01/T05/T06/T10/T13 carried from May, not re-measured",
     ]
@@ -372,14 +372,18 @@ def slide_03_headline():
 # 04 — Re-graded against the driver's own rule
 # ------------------------------------------------------------------
 def slide_04_regrade():
-    out = [header("The R-free claim has no governing criterion",
-                  "1SAR was deposited in 1990 and its REMARK 3 records FREE R VALUE : NULL — rule 1 has no reference to compare against")]
+    out = [header("The R-factor claims, graded",
+                  "On the criterion the 1SAR series declares — and one rubric rule that cannot be applied to a 1990 entry")]
 
     rows = [
         ["R-free value, 0.199 vs 0.2116",
          "all four May paths sat above 0.199",
-         "rule 1 inapplicable — no deposited R-free",
-         "no criterion"],
+         "match within 0.005 (series criterion): Δ 0.0126",
+         "fails"],
+        ["R-work value, 0.149 vs 0.1564",
+         "graded fail_by_oracle",
+         "same criterion: Δ 0.0074",
+         "fails"],
         ["R-work/R-free gap < 0.05",
          "0.0552 / 0.0526 / 0.0504 / 0.0435 (“3 of 4 fail”)",
          "0.0552 PHENIX, 0.0515 gemmi",
@@ -395,31 +399,34 @@ def slide_04_regrade():
     ]
     # SVG text has no wrapping; flatten the embedded newlines.
     rows = [[c.replace("\n", " ") for c in r] for r in rows]
-    fills = [[None, None, None, WARN_LIGHT],
+    fills = [[None, None, None, BAD_LIGHT],
+             [None, None, None, BAD_LIGHT],
              [None, None, None, BAD_LIGHT],
              [None, None, None, GOOD_LIGHT],
              [None, None, None, GOOD_LIGHT]]
-    colors = [[INK, MUTED, INK, WARN],
+    colors = [[INK, MUTED, INK, BAD],
+              [INK, MUTED, INK, BAD],
               [INK, MUTED, INK, BAD],
               [INK, MUTED, INK, GOOD],
               [INK, MUTED, INK, GOOD]]
     out.append(table(
         80, 195, [360, 520, 540, 340],
         ["Claim", "What May actually graded", "2026-09-07 grading", "Verdict"],
-        rows, row_height=72, font_size=17,
+        rows, row_height=62, font_size=17,
         cell_fills=fills, cell_text_colors=colors,
         align=["left", "left", "left", "center"]))
 
     out.append(
         f'  <text x="80" y="600" font-size="26" font-weight="700" fill="{INK}">'
-        f'What the independent code path did — and did not — settle</text>')
+        f'The rule that cannot be applied — and what the independent path settled</text>')
     out.append(paragraph(
         80, 644,
-        "Re-run with mask radii matched to cctbx, gemmi 0.7.5 gives R-free 0.2136 against PHENIX's "
-        "0.2116 — Δ +0.0020, inside the ± 0.02 band. That settles the gemmi leg only. May's spread "
-        "was 0.2116–0.2209 and its upper bound was Servalcat, which was not re-run and is not "
-        "retracted; REFMAC5 likewise stands. Across every source the widest range recorded is "
-        "0.2114–0.2209 — but that lower bound is the model's own PDB header, not a code path.",
+        "T03 rule 1 is “R-free within ± 0.02 of the DEPOSITED value and of a REFMAC5 re-refinement”. "
+        "1SAR was deposited in 1990 and records FREE R VALUE : NULL, and no REFMAC5 re-refinement was "
+        "run — so rule 1 has no reference and cannot be evaluated. The claims are graded above on the "
+        "series' own reporting-accuracy criterion instead. Separately, gemmi with matched radii gives "
+        "R-free 0.2136 vs PHENIX 0.2116 — settling the gemmi leg only; Servalcat (0.2209) and REFMAC5 "
+        "were not re-run and are not retracted.",
         width=116, size=21, leading=31))
 
     out.append(panel(80, 800, 1760, 140, WARN_LIGHT))
@@ -552,7 +559,7 @@ def slide_07_findings():
     out.append(paragraph(
         112, 285,
         "The artefact's final report calls 1SAR staphylococcal nuclease (SNase) — in its title, "
-        "summary and discussion, 27 times. 1SAR is ribonuclease Sa from Streptomyces "
+        "summary and discussion and throughout — 28 times. 1SAR is ribonuclease Sa from Streptomyces "
         "aureofaciens; the deposited TITLE says so. RNase Sa is 96 residues, SNase is 149.",
         width=108, size=21, leading=30))
     out.append(paragraph(
@@ -715,6 +722,7 @@ def slide_10_net():
         "The report describes the wrong protein",
         "…so the stated basis for the Ca²⁺ call is void",
         "Reported R-free 0.199 matches no model produced",
+        "…and R-work 0.149 misreports its own header too",
         "The shipped final is not the best round",
         "SO4 written as ATOM, not HETATM",
     ]
@@ -739,9 +747,10 @@ def slide_10_net():
     out.append(paragraph(
         112, 800,
         "The one R-factor rule that is satisfiable on this structure — rule 2's independent-code-"
-        "path R-work offset — passes at +0.0058. The R-free claim has no governing criterion at "
-        "all. What does not pass is the write-up: a headline number that describes no model in "
-        "the artefact, and a report written about a different protein than the one it refined.",
+        "path R-work offset — passes at +0.0058, as does the matched-radii R-free offset. What "
+        "fails is the write-up: both reported R-factors miss the model's own header, the R-free "
+        "value describes no model in the artefact, and the report is written about a different "
+        "protein than the one it refined.",
         width=100, size=23, color=ACCENT, weight="700", leading=33))
     return "\n".join(out) + "\n"
 

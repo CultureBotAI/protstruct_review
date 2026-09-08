@@ -12,8 +12,8 @@
 
   <text x="112" y="235" font-size="30" font-weight="700" fill="#a8201a">1 · The report is about the wrong protein</text>
   <text x="112" y="285" font-size="21" font-weight="400" fill="#1a1a2e">The artefact's final report calls 1SAR staphylococcal nuclease (SNase) — in its title, summary and</text>
-  <text x="112" y="315" font-size="21" font-weight="400" fill="#1a1a2e">discussion, 27 times. 1SAR is ribonuclease Sa from Streptomyces aureofaciens; the deposited TITLE says so.</text>
-  <text x="112" y="345" font-size="21" font-weight="400" fill="#1a1a2e">RNase Sa is 96 residues, SNase is 149.</text>
+  <text x="112" y="315" font-size="21" font-weight="400" fill="#1a1a2e">discussion and throughout — 28 times. 1SAR is ribonuclease Sa from Streptomyces aureofaciens; the deposited</text>
+  <text x="112" y="345" font-size="21" font-weight="400" fill="#1a1a2e">TITLE says so. RNase Sa is 96 residues, SNase is 149.</text>
 
   <text x="112" y="385" font-size="21" font-weight="400" fill="#a8201a">Not a naming slip: the entire Ca²⁺ justification rests on it — “the known SNase metal-binding pocket near</text>
   <text x="112" y="415" font-size="21" font-weight="400" fill="#a8201a">Asp33”, and citations to two genuine SNase papers offered as the reference for this structure's</text>

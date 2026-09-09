@@ -2,48 +2,73 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" font-family="Helvetica, Arial, sans-serif">
   <rect width="100%" height="100%" fill="#ffffff"/>
   <rect x="0" y="0" width="1920" height="6" fill="#1f4e8c"/>
-  <text x="80" y="86" font-size="44" font-weight="700" fill="#1a1a2e">What this re-run covers</text>
-  <text x="80" y="128" font-size="22" font-weight="400" fill="#5a6071">A partial re-measurement — read the scope before the headline</text>
+  <text x="80" y="86" font-size="44" font-weight="700" fill="#1a1a2e">What the archive actually contains</text>
+  <text x="80" y="128" font-size="22" font-weight="400" fill="#5a6071">Every row below is from the artefact's own provenance</text>
   <line x1="80" y1="1020" x2="1840" y2="1020" stroke="#e3e6ee" stroke-width="1"/>
-  <text x="80" y="1050" font-size="16" fill="#5a6071">1SAR refinement review · openscientist artefact cdba2c07 · re-run 2026-09-07</text>
-  <text x="1840" y="1050" font-size="16" fill="#5a6071" text-anchor="end">protstruct_review · update deck 2026-09-07</text>
+  <text x="80" y="1050" font-size="16" fill="#5a6071">1SAR artefact audit · openscientist artefact cdba2c07 · 2026-09-07</text>
+  <text x="1840" y="1050" font-size="16" fill="#5a6071" text-anchor="end">protstruct_review · artefact audit 2026-09-07</text>
 
-  <text x="80" y="205" font-size="22" font-weight="400" fill="#1a1a2e">The May review predates the tolerance-benchmark series and graded its headline with a flat rule. This run re-measures</text>
-  <text x="80" y="237" font-size="22" font-weight="400" fill="#1a1a2e">the R-factor claims against the rules T03 declares — and finds the R-free rule cannot be applied to this structure at</text>
-  <text x="80" y="269" font-size="22" font-weight="400" fill="#1a1a2e">all — then exercises three never-run tasks. It does not re-run everything.</text>
+  <rect x="80" y="190" width="1660" height="58" fill="#1f4e8c"/>
+  <text x="94" y="225.66666666666666" font-size="20" font-weight="700" fill="#ffffff" text-anchor="start">Model</text>
+  <text x="726" y="225.66666666666666" font-size="20" font-weight="700" fill="#ffffff" text-anchor="end">R-work</text>
+  <text x="926" y="225.66666666666666" font-size="20" font-weight="700" fill="#ffffff" text-anchor="end">R-free</text>
+  <text x="954" y="225.66666666666666" font-size="20" font-weight="700" fill="#ffffff" text-anchor="start">In the archive?</text>
+  <text x="1434" y="225.66666666666666" font-size="20" font-weight="700" fill="#ffffff" text-anchor="start">Provenance</text>
+  <rect x="80" y="248" width="1660" height="58" fill="#ffffff"/>
+  <rect x="80" y="248" width="460" height="58" fill="#fbeecb"/>
+  <text x="94" y="283.3333333333333" font-size="19" fill="#b07c00" text-anchor="start">packaged 1sar_final.pdb</text>
+  <text x="726" y="283.3333333333333" font-size="19" fill="#1a1a2e" text-anchor="end">0.1563</text>
+  <text x="926" y="283.3333333333333" font-size="19" fill="#1a1a2e" text-anchor="end">0.2114</text>
+  <rect x="940" y="248" width="480" height="58" fill="#fbeecb"/>
+  <text x="954" y="283.3333333333333" font-size="19" fill="#b07c00" text-anchor="start">yes — labelled final</text>
+  <rect x="1420" y="248" width="320" height="58" fill="#fbeecb"/>
+  <text x="1434" y="283.3333333333333" font-size="19" fill="#5a6071" text-anchor="start">round-4 output</text>
+  <rect x="80" y="306" width="1660" height="58" fill="#f7f8fb"/>
+  <text x="94" y="341.3333333333333" font-size="19" fill="#1a1a2e" text-anchor="start">round 5</text>
+  <text x="726" y="341.3333333333333" font-size="19" fill="#1a1a2e" text-anchor="end">0.1555</text>
+  <text x="926" y="341.3333333333333" font-size="19" fill="#1a1a2e" text-anchor="end">0.2109</text>
+  <text x="954" y="341.3333333333333" font-size="19" fill="#5a6071" text-anchor="start">yes</text>
+  <text x="1434" y="341.3333333333333" font-size="19" fill="#5a6071" text-anchor="start"></text>
+  <rect x="80" y="364" width="1660" height="58" fill="#ffffff"/>
+  <text x="94" y="399.3333333333333" font-size="19" fill="#1a1a2e" text-anchor="start">round 6</text>
+  <text x="726" y="399.3333333333333" font-size="19" fill="#1a1a2e" text-anchor="end">0.1539</text>
+  <text x="926" y="399.3333333333333" font-size="19" fill="#1a1a2e" text-anchor="end">0.2068</text>
+  <text x="954" y="399.3333333333333" font-size="19" fill="#5a6071" text-anchor="start">yes</text>
+  <text x="1434" y="399.3333333333333" font-size="19" fill="#5a6071" text-anchor="start"></text>
+  <rect x="80" y="422" width="1660" height="58" fill="#f7f8fb"/>
+  <rect x="80" y="422" width="460" height="58" fill="#f5d6d4"/>
+  <text x="94" y="457.3333333333333" font-size="19" fill="#a8201a" text-anchor="start">round 7 — the reported final</text>
+  <rect x="540" y="422" width="200" height="58" fill="#f5d6d4"/>
+  <text x="726" y="457.3333333333333" font-size="19" fill="#a8201a" text-anchor="end">0.1488</text>
+  <rect x="740" y="422" width="200" height="58" fill="#f5d6d4"/>
+  <text x="926" y="457.3333333333333" font-size="19" fill="#a8201a" text-anchor="end">0.1989</text>
+  <rect x="940" y="422" width="480" height="58" fill="#f5d6d4"/>
+  <text x="954" y="457.3333333333333" font-size="19" fill="#a8201a" text-anchor="start">NO — coordinates absent</text>
+  <rect x="1420" y="422" width="320" height="58" fill="#f5d6d4"/>
+  <text x="1434" y="457.3333333333333" font-size="19" fill="#a8201a" text-anchor="start">transcripts only</text>
+  <rect x="80" y="190" width="1660" height="290" fill="none" stroke="#e3e6ee" stroke-width="1"/>
+  <line x1="540" y1="190" x2="540" y2="480" stroke="#e3e6ee" stroke-width="1"/>
+  <line x1="740" y1="190" x2="740" y2="480" stroke="#e3e6ee" stroke-width="1"/>
+  <line x1="940" y1="190" x2="940" y2="480" stroke="#e3e6ee" stroke-width="1"/>
+  <line x1="1420" y1="190" x2="1420" y2="480" stroke="#e3e6ee" stroke-width="1"/>
 
-  <rect x="80" y="320" width="1760" height="64" fill="#1f4e8c"/>
-  <text x="94" y="358.6666666666667" font-size="20" font-weight="700" fill="#ffffff" text-anchor="start">Scope</text>
-  <text x="424" y="358.6666666666667" font-size="20" font-weight="700" fill="#ffffff" text-anchor="start">Tasks</text>
-  <text x="1044" y="358.6666666666667" font-size="20" font-weight="700" fill="#ffffff" text-anchor="start">What that means</text>
-  <rect x="80" y="384" width="1760" height="64" fill="#ffffff"/>
-  <rect x="80" y="384" width="330" height="64" fill="#dff0e1"/>
-  <text x="94" y="422.6666666666667" font-size="20" fill="#1f7a3f" text-anchor="start">Re-measured here</text>
-  <text x="424" y="422.6666666666667" font-size="20" fill="#1a1a2e" text-anchor="start">T03 (two code paths), T14, T15, T16</text>
-  <text x="1044" y="422.6666666666667" font-size="20" fill="#5a6071" text-anchor="start">graded against the current registry and driver rubric</text>
-  <rect x="80" y="448" width="1760" height="64" fill="#f7f8fb"/>
-  <rect x="80" y="448" width="330" height="64" fill="#fbeecb"/>
-  <text x="94" y="486.6666666666667" font-size="20" fill="#b07c00" text-anchor="start">Carried from May</text>
-  <text x="424" y="486.6666666666667" font-size="20" fill="#1a1a2e" text-anchor="start">T01, T05, T06, T10, T13</text>
-  <text x="1044" y="486.6666666666667" font-size="20" fill="#5a6071" text-anchor="start">geometry, waters, disulfides, ligands, ions, data quality</text>
-  <rect x="80" y="320" width="1760" height="192" fill="none" stroke="#e3e6ee" stroke-width="1"/>
-  <line x1="410" y1="320" x2="410" y2="512" stroke="#e3e6ee" stroke-width="1"/>
-  <line x1="1030" y1="320" x2="1030" y2="512" stroke="#e3e6ee" stroke-width="1"/>
+  <text x="80" y="524" font-size="26" font-weight="700" fill="#1a1a2e">Evidence</text>
+  <circle cx="94" cy="563" r="4" fill="#1f4e8c"/>
+  <text x="114" y="570" font-size="19" fill="#1a1a2e">iter4_transcript.json records the copy that made the packaged file: cp 1sar_final_001.pdb → data/1sar_final.pdb</text>
+  <circle cx="94" cy="597" r="4" fill="#1f4e8c"/>
+  <text x="114" y="604" font-size="19" fill="#1a1a2e">Its header (0.1563 / 0.2114) matches data/1sar_round5_input.pdb — the packaged “final” is what round 5 was handed</text>
+  <circle cx="94" cy="631" r="4" fill="#1f4e8c"/>
+  <text x="114" y="638" font-size="19" fill="#1a1a2e">claude_iterations.log:510 records round 7 at R-work 0.1488, R-free 0.1989, 159 waters, 1 Ca²⁺, 1 Na⁺, 1 SO4</text>
+  <circle cx="94" cy="665" r="4" fill="#1f4e8c"/>
+  <text x="114" y="672" font-size="19" fill="#1a1a2e">claude_iterations.log:752 names /agent/job/1sar_round7_001.pdb as the final deliverable (1654 atoms)</text>
+  <circle cx="94" cy="699" r="4" fill="#1f4e8c"/>
+  <text x="114" y="706" font-size="19" fill="#1a1a2e">0.1989 / 0.1488 appear in four provenance transcripts; iter10 runs model_vs_data against the round-7 path</text>
+  <circle cx="94" cy="733" r="4" fill="#1f4e8c"/>
+  <text x="114" y="740" font-size="19" fill="#1a1a2e">An ignore-independent search of every archive member finds no round-7 PDB or MTZ</text>
+  <rect x="80" y="790" width="1760" height="140" rx="10" ry="10" fill="#dce6f4"/>
 
-  <text x="80" y="555" font-size="22" font-weight="700" fill="#b07c00">Every conclusion about geometry, water placement, disulfides and ion identity in this deck is May's, not</text>
-  <text x="80" y="587" font-size="22" font-weight="700" fill="#b07c00">re-measured today. QDS_1sar_cdba2c07_2026-05-05.yaml remains the sheet of record for anything outside T03, T14,</text>
-  <text x="80" y="619" font-size="22" font-weight="700" fill="#b07c00">T15 and T16.</text>
-
-  <rect x="80" y="655" width="1760" height="170" rx="10" ry="10" fill="#dce6f4"/>
-
-  <text x="110" y="703" font-size="22" font-weight="400" fill="#1a1a2e">No-clobber was structural, not careful: outputs are date-keyed, the artefact zip was extracted</text>
-  <text x="110" y="735" font-size="22" font-weight="400" fill="#1a1a2e">read-only into a scratch directory, and all 102 pre-existing files were checksummed before and</text>
-  <text x="110" y="767" font-size="22" font-weight="400" fill="#1a1a2e">after. Every one is byte-identical.</text>
-
-  <rect x="80" y="845" width="1760" height="120" rx="10" ry="10" fill="#f7f8fb"/>
-
-  <text x="110" y="889" font-size="20" font-weight="400" fill="#5a6071">Cost of that choice: this run issues a new dated .yaml where May updated the canonical one in place, so</text>
-  <text x="110" y="919" font-size="20" font-weight="400" fill="#5a6071">the current sheet is 274 lines against May's 1270. That is a new convention adopted here, not an</text>
-  <text x="110" y="949" font-size="20" font-weight="400" fill="#5a6071">existing one followed.</text>
+  <text x="110" y="840" font-size="22" font-weight="700" fill="#1f4e8c">So 0.199 is not fabricated — it rounds from the agent's own round 7. The deliverable was simply</text>
+  <text x="110" y="872" font-size="22" font-weight="700" fill="#1f4e8c">never written into the archive, and a three-round-stale file was shipped under the name the report</text>
+  <text x="110" y="904" font-size="22" font-weight="700" fill="#1f4e8c">cites.</text>
 
 </svg>

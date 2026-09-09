@@ -2,21 +2,21 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" font-family="Helvetica, Arial, sans-serif">
   <rect width="100%" height="100%" fill="#ffffff"/>
   <rect x="0" y="0" width="1920" height="6" fill="#1f4e8c"/>
-  <text x="120" y="330" font-size="72" font-weight="700" fill="#1a1a2e">1SAR refinement review</text>
-  <text x="120" y="410" font-size="46" font-weight="400" fill="#1f4e8c">Update: what changed since 2026-05-05</text>
-  <line x1="120" y1="470" x2="820" y2="470" stroke="#1f4e8c" stroke-width="3"/>
-  <circle cx="132" cy="533" r="6" fill="#1f4e8c"/>
-  <text x="158" y="540" font-size="24" fill="#1a1a2e">Same artefact, re-measured: every prior record left byte-identical</text>
-  <circle cx="132" cy="585" r="6" fill="#1f4e8c"/>
-  <text x="158" y="592" font-size="24" fill="#1a1a2e">Both R-factor claims misreport the model; the deposition-tracking rule is inapplicable</text>
-  <circle cx="132" cy="637" r="6" fill="#1f4e8c"/>
-  <text x="158" y="644" font-size="24" fill="#1a1a2e">T14, T15 and T16 exercised on this artefact for the first time</text>
-  <circle cx="132" cy="689" r="6" fill="#1f4e8c"/>
-  <text x="158" y="696" font-size="24" fill="#1a1a2e">Partial re-run — T01/T05/T06/T10/T13 carried from May, not re-measured</text>
-  <rect x="120" y="790" width="1680" height="145" rx="10" ry="10" fill="#dce6f4"/>
+  <text x="120" y="320" font-size="72" font-weight="700" fill="#1a1a2e">1SAR artefact audit</text>
+  <text x="120" y="400" font-size="44" font-weight="400" fill="#a8201a">The archive does not contain the model its report describes</text>
+  <line x1="120" y1="460" x2="1100" y2="460" stroke="#a8201a" stroke-width="3"/>
+  <circle cx="132" cy="523" r="6" fill="#1f4e8c"/>
+  <text x="158" y="530" font-size="24" fill="#1a1a2e">Seven rounds were run · round 7 was reported · round 4 was shipped as 1sar_final.pdb</text>
+  <circle cx="132" cy="575" r="6" fill="#1f4e8c"/>
+  <text x="158" y="582" font-size="24" fill="#1a1a2e">The round-7 coordinates are absent from the archive entirely</text>
+  <circle cx="132" cy="627" r="6" fill="#1f4e8c"/>
+  <text x="158" y="634" font-size="24" fill="#1a1a2e">So the reported R-free of 0.199 is real — it rounds from round 7's 0.1989</text>
+  <circle cx="132" cy="679" r="6" fill="#1f4e8c"/>
+  <text x="158" y="686" font-size="24" fill="#1a1a2e">Five earlier review passes compared the report against the wrong model</text>
+  <rect x="120" y="780" width="1680" height="150" rx="10" ry="10" fill="#f5d6d4"/>
 
-  <text x="150" y="840" font-size="26" font-weight="700" fill="#1f4e8c">The refinement was sound. The report was not — it is written about a different protein,</text>
-  <text x="150" y="876" font-size="26" font-weight="700" fill="#1f4e8c">and its headline R-free belongs to no model the agent produced.</text>
+  <text x="150" y="832" font-size="26" font-weight="700" fill="#a8201a">The defect is packaging, not reporting. An artefact that cannot substantiate its own</text>
+  <text x="150" y="868" font-size="26" font-weight="700" fill="#a8201a">report is indistinguishable, from the coordinates alone, from one that lies.</text>
 
   <text x="120" y="1010" font-size="20" fill="#5a6071">openscientist artefact cdba2c07-daff-4f60-ae96-12452b3a5fbb · protstruct_review · 2026-09-07</text>
 </svg>

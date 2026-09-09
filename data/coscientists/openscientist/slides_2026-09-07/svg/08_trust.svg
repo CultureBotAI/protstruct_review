@@ -2,57 +2,31 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" font-family="Helvetica, Arial, sans-serif">
   <rect width="100%" height="100%" fill="#ffffff"/>
   <rect x="0" y="0" width="1920" height="6" fill="#1f4e8c"/>
-  <text x="80" y="86" font-size="44" font-weight="700" fill="#1a1a2e">Trust invariant: passes, by omission</text>
-  <text x="80" y="128" font-size="22" font-weight="400" fill="#5a6071">Worth stating plainly rather than claiming a win</text>
+  <text x="80" y="86" font-size="44" font-weight="700" fill="#1a1a2e">Trust and reporting caveats</text>
+  <text x="80" y="128" font-size="22" font-weight="400" fill="#5a6071">What this record's own numbers can and cannot support</text>
   <line x1="80" y1="1020" x2="1840" y2="1020" stroke="#e3e6ee" stroke-width="1"/>
-  <text x="80" y="1050" font-size="16" fill="#5a6071">1SAR refinement review · openscientist artefact cdba2c07 · re-run 2026-09-07</text>
-  <text x="1840" y="1050" font-size="16" fill="#5a6071" text-anchor="end">protstruct_review · update deck 2026-09-07</text>
+  <text x="80" y="1050" font-size="16" fill="#5a6071">1SAR artefact audit · openscientist artefact cdba2c07 · 2026-09-07</text>
+  <text x="1840" y="1050" font-size="16" fill="#5a6071" text-anchor="end">protstruct_review · artefact audit 2026-09-07</text>
 
-  <text x="80" y="200" font-size="22" font-weight="400" fill="#1a1a2e">The trust model forbids grading PHENIX solely with PHENIX. Since the 2026-08-13 cutover a sheet carrying a cctbx-only</text>
-  <text x="80" y="232" font-size="22" font-weight="400" fill="#1a1a2e">task must waive it explicitly or close it with an independent oracle. Sheets issued before the cutover are</text>
-  <text x="80" y="264" font-size="22" font-weight="400" fill="#1a1a2e">grandfathered and listed by name.</text>
+  <rect x="80" y="200" width="6" height="129" fill="#a8201a"/>
+  <text x="110" y="228" font-size="24" font-weight="700" fill="#a8201a">The graded oracle is cctbx grading cctbx</text>
+  <text x="110" y="264" font-size="20" font-weight="400" fill="#1a1a2e">The T03 rows carrying verdicts use phenix.model_vs_data with oracle_family cctbx, against a PHENIX</text>
+  <text x="110" y="293" font-size="20" font-weight="400" fill="#1a1a2e">refinement. CLAUDE.md forbids this as a sole basis. gemmi is the only cross-family path here and is</text>
+  <text x="110" y="322" font-size="20" font-weight="400" fill="#1a1a2e">recorded as corroborative, so the cctbx verdicts are provisional.</text>
 
-  <rect x="80" y="340" width="1760" height="56" fill="#1f4e8c"/>
-  <text x="94" y="374.6666666666667" font-size="20" font-weight="700" fill="#ffffff" text-anchor="start">Sheet</text>
-  <text x="594" y="374.6666666666667" font-size="20" font-weight="700" fill="#ffffff" text-anchor="start">Tasks</text>
-  <text x="1054" y="374.6666666666667" font-size="20" font-weight="700" fill="#ffffff" text-anchor="start">Gap status</text>
-  <text x="1650.0" y="374.6666666666667" font-size="20" font-weight="700" fill="#ffffff" text-anchor="middle">Invariant</text>
-  <rect x="80" y="396" width="1760" height="56" fill="#ffffff"/>
-  <text x="94" y="430.6666666666667" font-size="20" fill="#1a1a2e" text-anchor="start">QDS_1sar…04-24 through 05-05</text>
-  <text x="594" y="430.6666666666667" font-size="20" fill="#1a1a2e" text-anchor="start">T06 (and T13 on three sheets)</text>
-  <rect x="1040" y="396" width="420" height="56" fill="#fbeecb"/>
-  <text x="1054" y="430.6666666666667" font-size="20" fill="#b07c00" text-anchor="start">open — cctbx only</text>
-  <rect x="1460" y="396" width="380" height="56" fill="#fbeecb"/>
-  <text x="1650.0" y="430.6666666666667" font-size="20" fill="#b07c00" text-anchor="middle">grandfathered</text>
-  <rect x="80" y="452" width="1760" height="56" fill="#f7f8fb"/>
-  <text x="94" y="486.6666666666667" font-size="20" fill="#1a1a2e" text-anchor="start">QDS_1sar…2026-09-07</text>
-  <text x="594" y="486.6666666666667" font-size="20" fill="#1a1a2e" text-anchor="start">T03, T14</text>
-  <rect x="1040" y="452" width="420" height="56" fill="#dff0e1"/>
-  <text x="1054" y="486.6666666666667" font-size="20" fill="#1f7a3f" text-anchor="start">closed</text>
-  <rect x="1460" y="452" width="380" height="56" fill="#dff0e1"/>
-  <text x="1650.0" y="486.6666666666667" font-size="20" fill="#1f7a3f" text-anchor="middle">satisfied</text>
-  <rect x="80" y="508" width="1760" height="56" fill="#ffffff"/>
-  <text x="94" y="542.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="start">QDS_1sar…2026-09-07</text>
-  <text x="594" y="542.6666666666666" font-size="20" fill="#1a1a2e" text-anchor="start">T15, T16</text>
-  <rect x="1040" y="508" width="420" height="56" fill="#dff0e1"/>
-  <text x="1054" y="542.6666666666666" font-size="20" fill="#1f7a3f" text-anchor="start">non-cctbx only</text>
-  <rect x="1460" y="508" width="380" height="56" fill="#dff0e1"/>
-  <text x="1650.0" y="542.6666666666666" font-size="20" fill="#1f7a3f" text-anchor="middle">satisfied</text>
-  <rect x="80" y="340" width="1760" height="224" fill="none" stroke="#e3e6ee" stroke-width="1"/>
-  <line x1="580" y1="340" x2="580" y2="564" stroke="#e3e6ee" stroke-width="1"/>
-  <line x1="1040" y1="340" x2="1040" y2="564" stroke="#e3e6ee" stroke-width="1"/>
-  <line x1="1460" y1="340" x2="1460" y2="564" stroke="#e3e6ee" stroke-width="1"/>
+  <rect x="80" y="355" width="6" height="100" fill="#b07c00"/>
+  <text x="110" y="383" font-size="24" font-weight="700" fill="#b07c00">Raw oracle output was not retained</text>
+  <text x="110" y="419" font-size="20" font-weight="400" fill="#1a1a2e">Only the typed measurement rows were committed, so 0.1564 / 0.2116 cannot be re-derived from this</text>
+  <text x="110" y="448" font-size="20" font-weight="400" fill="#1a1a2e">repository without a licensed PHENIX rerun.</text>
 
-  <rect x="80" y="590" width="1760" height="190" rx="10" ry="10" fill="#fbeecb"/>
+  <rect x="80" y="481" width="6" height="100" fill="#b07c00"/>
+  <text x="110" y="509" font-size="24" font-weight="700" fill="#b07c00">The QDS carries no verdicts</text>
+  <text x="110" y="545" font-size="20" font-weight="400" fill="#1a1a2e">qds_emit.py does not propagate pass_status, so no status in this record reaches the sheet, and its</text>
+  <text x="110" y="574" font-size="20" font-weight="400" fill="#1a1a2e">headline R-factors are the gemmi triple. Read verdicts from the eval, not the sheet.</text>
 
-  <text x="110" y="640" font-size="21" font-weight="400" fill="#1a1a2e">The new sheet passes because it does not grade T06 — the row that was open on every prior 1SAR sheet —</text>
-  <text x="110" y="671" font-size="21" font-weight="400" fill="#1a1a2e">since this run did not re-measure T06. Nothing that was open was closed. The sheet is 274 lines where</text>
-  <text x="110" y="702" font-size="21" font-weight="400" fill="#1a1a2e">May's was 1270, and no longer carries geometry, data quality, ions, waters or pairwise comparisons.</text>
-
-  <rect x="80" y="810" width="1760" height="130" rx="10" ry="10" fill="#dff0e1"/>
-
-  <text x="110" y="858" font-size="21" font-weight="400" fill="#1f7a3f">What did genuinely improve: mmtbx.reduce2 is now a registered tool. It was a dependency of the T14</text>
-  <text x="110" y="889" font-size="21" font-weight="400" fill="#1f7a3f">benchmark but had never been in the catalog, so until now no T14 record could name the builder that</text>
-  <text x="110" y="920" font-size="21" font-weight="400" fill="#1f7a3f">produced its second opinion.</text>
+  <rect x="80" y="607" width="6" height="100" fill="#5a6071"/>
+  <text x="110" y="635" font-size="24" font-weight="700" fill="#5a6071">The trust invariant passes by omission</text>
+  <text x="110" y="671" font-size="20" font-weight="400" fill="#1a1a2e">The sheet carries no open cctbx-only row because it does not grade T06 — the row open on every prior 1SAR</text>
+  <text x="110" y="700" font-size="20" font-weight="400" fill="#1a1a2e">sheet. Nothing that was open was closed.</text>
 
 </svg>

@@ -28,7 +28,7 @@ evaluation_runs:
     catalog_task_ref: T03
     stage: final
     scope: complex
-    scope_selector: 1sar_final
+    scope_selector: 1sar_final (packaged; round-4 output)
     metric_definition_ref: T03_r-work
     oracle_tool_ref: phenix.model_vs_data
     oracle_family: cctbx
@@ -36,26 +36,25 @@ evaluation_runs:
       value_numeric: 0.149
     oracle_measure:
       value_numeric: 0.1564
-    pass_criterion: match within 0.005
     delta:
       value_numeric: 0.0074
-    pass_status: fail_by_oracle
+    pass_status: informational
     notes: >-
-      Re-measured 2026-09-07 on the artefact final model; identical to the 2026-05-04
-      and 2026-05-05 measurements to four decimals. Graded against the reporting-
-      accuracy criterion the 1SAR series itself declares — the canonical
-      EVAL_1sar_cdba2c07_2026-04-24 record carries `pass_criterion: match within 0.005`
-      on this same measurement (its M_006) and fails it at Δ 0.0074. This record reaches
-      the same verdict on the same criterion, so the series stays comparable. The agent
-      reported R-work 0.149 while its OWN model header records 0.1563 and the oracle
-      recomputes 0.1564: the refinement agrees with the oracle to 0.0001, and the
-      discrepancy is entirely between the oracle and the narrative report. This is the
-      same class of defect as the R-free misreport in M_002, and roughly half its size.
+      MODEL MISMATCH — NOT a reporting-accuracy verdict. `oracle_measure` is
+      phenix.model_vs_data on the PACKAGED `data/1sar_final.pdb`, which the artefact's
+      own provenance shows is the ROUND-4 output (iter4_transcript copies
+      1sar_final_001.pdb into place; its header 0.1563 matches data/1sar_round5_input.pdb).
+      `agent_claim` 0.149 is the agent's ROUND-7 value (claude_iterations.log:510 records
+      round 7 at R-work 0.1488). The two therefore describe different models and the delta
+      of 0.0074 measures the packaging gap, not a misreport. No criterion is applied: the
+      series' `match within 0.005` reporting check requires both values be on the same
+      input, and they are not. Earlier drafts of this record graded this row
+      `fail_by_oracle` on that criterion; that verdict is withdrawn.
   - id: EVAL_1sar_cdba2c07_2026-09-07_M_002
     catalog_task_ref: T03
     stage: final
     scope: complex
-    scope_selector: 1sar_final
+    scope_selector: 1sar_final (packaged; round-4 output)
     metric_definition_ref: T03_r-free
     oracle_tool_ref: phenix.model_vs_data
     oracle_family: cctbx
@@ -63,38 +62,30 @@ evaluation_runs:
       value_numeric: 0.199
     oracle_measure:
       value_numeric: 0.2116
-    pass_criterion: match within 0.005
     delta:
       value_numeric: 0.0126
-    pass_status: fail_by_oracle
+    pass_status: informational
     notes: >-
-      Graded against the reporting-accuracy criterion the 1SAR series declares
-      (`match within 0.005`, as the canonical EVAL_1sar_cdba2c07_2026-04-24 M_008
-      carries on this same claim): Δ 0.0126 fails it, the same verdict April reached.
-      SEPARATELY, and this is a finding about the rubric rather than the artefact, the
-      T03 driver's own deposition-tracking rule CANNOT BE EVALUATED on this structure.
-      `ref/driving_example_T03.md` rubric rule 1 is "R-free is within ± 0.02
-      of the DEPOSITED value and of a REFMAC5 re-refinement"
-      (`[catalog — R-free vs deposited]`, §3 of ref/thresholds_and_standards.md).
-      Neither reference exists here: 1SAR was deposited in 1990 and its REMARK 3
-      records `FREE R VALUE : NULL` (it reports only R VALUE (WORKING + TEST SET)
-      0.172), and no REFMAC5 re-refinement was run in this evaluation. What was
-      measured is |0.199 - 0.2116| = 0.0126, where 0.2116 is model_vs_data's
-      recomputation of the agent's OWN model — neither of rule 1's references. The
-      tighter <= 0.01 branch of the same registry row is likewise inapplicable: its
-      provenance is model_vs_data against wwPDB's recomputed DCC_Rfree. §3 further
-      requires both values be on the same input, and 0.199 corresponds to no model in
-      the artefact (round headers: 0.2364, 0.2293, 0.2165, 0.2114, 0.2109, 0.2068).
-      So the claim IS graded — on reporting accuracy, which it fails — while the
-      rubric's deposition-tracking rule is simply inapplicable to a 1990 entry. The
-      finding stands on its own terms either way: the reported value describes no model
-      the agent produced, while the model's header (0.2114) and the oracle (0.2116)
-      agree to 0.0002.
+      MODEL MISMATCH — NOT a reporting-accuracy verdict, and the single most consequential
+      correction in this record. `oracle_measure` 0.2116 is phenix.model_vs_data on the
+      PACKAGED `data/1sar_final.pdb`, which is the ROUND-4 output. `agent_claim` 0.199 is
+      the agent's ROUND-7 value: claude_iterations.log:510 records round 7 at
+      "R-work=0.1488, R-free=0.1989", claude_iterations.log:752 names
+      /agent/job/1sar_round7_001.pdb as the final deliverable, and 0.1989 appears in four
+      provenance transcripts. The round-7 coordinates are absent from the archive entirely.
+      So 0.199 rounds from a model the agent really produced; it was never packaged. The
+      delta of 0.0126 measures the packaging gap. Every earlier draft of this record, and
+      the 2026-05-05 record, treated this as a reporting defect and one draft called the
+      value unattributable; ALL OF THOSE VERDICTS ARE WITHDRAWN. Separately and still true:
+      the T03 rubric's deposition-tracking rule cannot be evaluated on 1SAR at all, because
+      the 1990 deposition records `FREE R VALUE : NULL`. The real defect in the reported
+      round 7 is its gap: 0.1989 - 0.1488 = 0.0501, which fails the agent's own < 0.05
+      criterion and is reported as "0.050".
   - id: EVAL_1sar_cdba2c07_2026-09-07_M_003
     catalog_task_ref: T03
     stage: final
     scope: complex
-    scope_selector: 1sar_final
+    scope_selector: 1sar_final (packaged; round-4 output)
     metric_definition_ref: T03_r-free_r-work_gap
     oracle_tool_ref: phenix.model_vs_data
     oracle_family: cctbx
@@ -107,11 +98,14 @@ evaluation_runs:
       value_numeric: 0.0052
     pass_status: fail_by_oracle
     notes: >-
-      Carried forward from the 2026-05-05 record so the re-run does not silently drop
-      it. This is the agent's OWN success criterion (R-work/R-free gap < 0.05), not a
-      registry band; at oracle scaling the gap is 0.0552 and the criterion fails, as it
-      did in May. Distinct from the R-free value comparison in M_002 — the May record's
-      "3 of 4 code paths fail" belongs to this gap criterion, not to the R-free value.
+      The agent's OWN success criterion (R-work/R-free gap < 0.05), not a registry band.
+      On the PACKAGED round-4 model the oracle gap is 0.0552 and the criterion fails.
+      NOTE the criterion also fails on the agent's actual reported round 7, independently
+      of the packaging problem: 0.1989 - 0.1488 = 0.0501, which the report states as
+      "gap=0.050", rounding the failure away. So this is the one substantive defect in the
+      reported model that survives the model-mismatch correction. `agent_claim` 0.050 is
+      the report's rounded figure. The May record's "3 of 4 code paths fail" belongs to
+      this gap criterion, not to the R-free value comparison.
   - id: EVAL_1sar_cdba2c07_2026-09-07_M_004
     catalog_task_ref: T03
     stage: intermediate
@@ -137,7 +131,7 @@ evaluation_runs:
     catalog_task_ref: T03
     stage: final
     scope: complex
-    scope_selector: 1sar_final
+    scope_selector: 1sar_final (packaged; round-4 output)
     metric_definition_ref: T03_r-work
     oracle_tool_ref: gemmi sfcalc
     oracle_family: non_cctbx
@@ -161,7 +155,7 @@ evaluation_runs:
     catalog_task_ref: T03
     stage: final
     scope: complex
-    scope_selector: 1sar_final
+    scope_selector: 1sar_final (packaged; round-4 output)
     metric_definition_ref: T03_r-free
     oracle_tool_ref: gemmi sfcalc
     oracle_family: non_cctbx
@@ -190,7 +184,7 @@ evaluation_runs:
     catalog_task_ref: T03
     stage: final
     scope: complex
-    scope_selector: 1sar_final
+    scope_selector: 1sar_final (packaged; round-4 output)
     metric_definition_ref: T03_r-free_r-work_gap
     oracle_tool_ref: gemmi sfcalc
     oracle_family: non_cctbx
@@ -214,7 +208,7 @@ evaluation_runs:
     catalog_task_ref: T14
     stage: final
     scope: complex
-    scope_selector: 1sar_final
+    scope_selector: 1sar_final (packaged; round-4 output)
     metric_definition_ref: T14_h_added
     oracle_tool_ref: reduce (standalone, Richardson)
     oracle_family: non_cctbx
@@ -231,7 +225,7 @@ evaluation_runs:
     catalog_task_ref: T14
     stage: final
     scope: complex
-    scope_selector: 1sar_final
+    scope_selector: 1sar_final (packaged; round-4 output)
     metric_definition_ref: T14_asn_gln_his_flips_proposed
     oracle_tool_ref: reduce (standalone, Richardson)
     oracle_family: non_cctbx
@@ -252,7 +246,7 @@ evaluation_runs:
     catalog_task_ref: T14
     stage: final
     scope: complex
-    scope_selector: 1sar_final
+    scope_selector: 1sar_final (packaged; round-4 output)
     metric_definition_ref: T14_asn_gln_his_flips_proposed
     oracle_tool_ref: mmtbx.reduce2
     oracle_family: cctbx
@@ -272,7 +266,7 @@ evaluation_runs:
     catalog_task_ref: T15
     stage: final
     scope: complex
-    scope_selector: 1sar_final
+    scope_selector: 1sar_final (packaged; round-4 output)
     metric_definition_ref: T15_secondary_structure_agreement
     oracle_tool_ref: DSSP + biotite P-SEA
     oracle_family: non_cctbx
@@ -314,7 +308,7 @@ evaluation_runs:
     catalog_task_ref: T16
     stage: final
     scope: interface
-    scope_selector: 1sar_final:A/B
+    scope_selector: 1sar_final (packaged; round-4) :A/B
     metric_definition_ref: T16_interface_buried_surface_area
     oracle_tool_ref: biotite SASA
     oracle_family: non_cctbx

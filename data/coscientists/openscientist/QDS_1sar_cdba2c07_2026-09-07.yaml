@@ -3,7 +3,7 @@ quality_data_sheets:
   structure_ref: 1sar
   derived_from_evaluation_run_refs:
   - EVAL_1sar_cdba2c07_2026-09-07
-  issued_at: '2026-09-09T02:26:42+00:00'
+  issued_at: '2026-09-09T06:38:32+00:00'
   identity_block:
     id: QDS_1sar_cdba2c07_2026-09-07_identity
     pdb_id: 1sar
@@ -31,7 +31,8 @@ quality_data_sheets:
     interface_qualities:
     - id: EVAL_1sar_cdba2c07_2026-09-07_IFACE_AB
       structure_ref: 1sar
-      interface_label: 1sar_final A/B (crystallographic dimer)
+      interface_label: 1sar_final as packaged (round-4 output), A/B crystallographic
+        dimer
       chain_id_1: A
       chain_id_2: B
       buried_surface_area:

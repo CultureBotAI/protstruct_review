@@ -20,7 +20,7 @@
 
   <text x="1012" y="240" font-size="27" font-weight="700" fill="#a8201a">Not supported</text>
   <text x="1012" y="292" font-size="20" fill="#1a1a2e">✗ The archive does not contain the reported model</text>
-  <text x="1012" y="330" font-size="20" fill="#1a1a2e">✗ Round 7's gap is 0.0501 — fails its own &lt; 0.05</text>
+  <text x="1012" y="330" font-size="20" fill="#1a1a2e">✗ Round 7's gap is 0.0501 — fails the task's &lt; 0.05</text>
   <text x="1012" y="368" font-size="20" fill="#1a1a2e">✗ The protein identity — supplied by our prompt</text>
   <text x="1012" y="406" font-size="20" fill="#1a1a2e">✗ Ion assignments — both on deposited water sites</text>
   <text x="1012" y="444" font-size="20" fill="#1a1a2e">✗ “T03 settled” and “refinement sound”</text>

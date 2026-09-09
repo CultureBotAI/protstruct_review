@@ -21,11 +21,11 @@
   <rect x="80" y="455" width="860" height="250" rx="10" ry="10" fill="#fbeecb"/>
 
   <text x="112" y="503" font-size="25" font-weight="700" fill="#b07c00">2 · Both ions sit on deposited water sites</text>
-  <text x="112" y="548" font-size="19" font-weight="400" fill="#1a1a2e">HOH A164 is 0.095 Å from the Ca site; HOH B143 is 0.177 Å</text>
-  <text x="112" y="576" font-size="19" font-weight="400" fill="#1a1a2e">from the Na. The starting model has no waters, so these</text>
-  <text x="112" y="604" font-size="19" font-weight="400" fill="#1a1a2e">peaks may be restored or retyped deposited waters rather</text>
-  <text x="112" y="632" font-size="19" font-weight="400" fill="#1a1a2e">than new ions. The ion assignments are not established in</text>
-  <text x="112" y="660" font-size="19" font-weight="400" fill="#1a1a2e">either direction.</text>
+  <text x="112" y="548" font-size="19" font-weight="400" fill="#1a1a2e">On the packaged model, HOH A164 is 0.18 Å from CA A98 and</text>
+  <text x="112" y="576" font-size="19" font-weight="400" fill="#1a1a2e">HOH B143 is 0.31 Å from NA B98. The starting model has no</text>
+  <text x="112" y="604" font-size="19" font-weight="400" fill="#1a1a2e">waters, so these peaks may be restored or retyped deposited</text>
+  <text x="112" y="632" font-size="19" font-weight="400" fill="#1a1a2e">waters rather than new ions. The ion assignments are not</text>
+  <text x="112" y="660" font-size="19" font-weight="400" fill="#1a1a2e">established either way.</text>
 
   <rect x="980" y="455" width="860" height="250" rx="10" ry="10" fill="#f7f8fb"/>
 

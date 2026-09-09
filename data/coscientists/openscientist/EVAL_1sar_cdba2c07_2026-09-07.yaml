@@ -12,7 +12,7 @@ evaluation_runs:
   interface_qualities:
   - id: EVAL_1sar_cdba2c07_2026-09-07_IFACE_AB
     structure_ref: 1sar
-    interface_label: 1sar_final A/B (crystallographic dimer)
+    interface_label: 1sar_final as packaged (round-4 output), A/B crystallographic dimer
     chain_id_1: A
     chain_id_2: B
     buried_surface_area:
@@ -89,22 +89,19 @@ evaluation_runs:
     metric_definition_ref: T03_r-free_r-work_gap
     oracle_tool_ref: phenix.model_vs_data
     oracle_family: cctbx
-    agent_claim:
-      value_numeric: 0.050
     oracle_measure:
       value_numeric: 0.0552
-    pass_criterion: gap < 0.05
-    delta:
-      value_numeric: 0.0052
-    pass_status: fail_by_oracle
+    pass_status: informational
     notes: >-
-      The agent's OWN success criterion (R-work/R-free gap < 0.05), not a registry band.
-      On the PACKAGED round-4 model the oracle gap is 0.0552 and the criterion fails.
-      NOTE the criterion also fails on the agent's actual reported round 7, independently
-      of the packaging problem: 0.1989 - 0.1488 = 0.0501, which the report states as
-      "gap=0.050", rounding the failure away. So this is the one substantive defect in the
-      reported model that survives the model-mismatch correction. `agent_claim` 0.050 is
-      the report's rounded figure. The May record's "3 of 4 code paths fail" belongs to
+      The gap on the PACKAGED round-4 model. Recorded WITHOUT a criterion and without an
+      agent_claim, for the same reason M_001 and M_002 are: the agent's reported gap of
+      0.050 describes its round-7 model, and grading a round-7 claim against a round-4
+      measurement is the cross-model error this record withdrew. The task's success
+      criterion (gap < 0.05, `claude_iterations.log:17`) is not applied here because the
+      packaged model is not the model anyone claimed it of. The round-7 gap does fail that
+      criterion on the agent's own numbers — 0.1989 - 0.1488 = 0.0501, reported as
+      "gap=0.050" — but round 7 cannot be re-measured, so that finding is stated in the
+      record rather than graded here. The May record's "3 of 4 code paths fail" belongs to
       this gap criterion, not to the R-free value comparison.
   - id: EVAL_1sar_cdba2c07_2026-09-07_M_004
     catalog_task_ref: T03
@@ -118,10 +115,12 @@ evaluation_runs:
       value_numeric: 0.2068
     pass_status: informational
     notes: >-
-      Round 6 measured with the same oracle as the final model, so the comparison is
+      Round 6 measured with the same oracle as the packaged model, so the comparison is
       instrument-matched rather than header-derived: round 6 R-free 0.2068 against the
-      shipped final's 0.2116, i.e. the last adopted round is worse than its predecessor
-      by 0.0048. Reproduces the 2026-05-04 and 2026-05-05 delta exactly. Both models'
+      packaged file's 0.2116. Round 6 is TWO ROUNDS AFTER the packaged file, and measures
+      0.0048 better — one more way to see that the shipped artefact is not the end of the
+      run. Earlier drafts read this delta as "the last adopted round is worse than its
+      predecessor", which inverted the order. Both models'
       PDB headers agree closely with the oracle here (0.2068 and 0.2114), but that is
       n = 2 and not a general warrant: the canonical 04-24 record's round oracles differ
       from the header values by up to 0.0008 (round 2, round 5). Small against the
@@ -188,14 +187,9 @@ evaluation_runs:
     metric_definition_ref: T03_r-free_r-work_gap
     oracle_tool_ref: gemmi sfcalc
     oracle_family: non_cctbx
-    agent_claim:
-      value_numeric: 0.050
     oracle_measure:
       value_numeric: 0.0515
-    pass_criterion: gap < 0.05
-    delta:
-      value_numeric: 0.0015
-    pass_status: fail_by_oracle
+    pass_status: informational
     notes: >-
       The same gap criterion as M_003 on the independent code path: 0.0515, also above
       the agent's < 0.05 target. This value is scripts/gemmi_rfactor.py's own output,
@@ -320,7 +314,7 @@ evaluation_runs:
       First run of T16 on this ARTEFACT; the deposited reference was already measured
       as a committed calibration (442.1 Å² in ref/oracle_tools.md and
       ref/driving_example_T16.md; 437.2 Å² recorded elsewhere in the same series). The
-      value here is the agent's final model, so it is not expected to equal either.
+      value here is the PACKAGED round-4 model, so it is not expected to equal either.
       Total area buried on complex formation, Shrake-Rupley. IMPORTANT CAVEAT:
       ref/structural_criteria.yaml already classifies this contact as 1SAR's
       CRYSTALLOGRAPHIC dimer — a demonstration, not a biological assembly — on the

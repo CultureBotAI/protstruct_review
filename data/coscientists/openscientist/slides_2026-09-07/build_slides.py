@@ -318,8 +318,8 @@ def slide_03_headline():
          "The model those numbers describe was never packaged. Measuring the shipped "
          "file gives 0.2116 — 0.0125 worse — with no way to tell why."),
         ("A real defect", BAD, BAD_LIGHT,
-         "Round 7's actual gap is 0.1989 − 0.1488 = 0.0501, which fails the agent's own "
-         "< 0.05 criterion. The report states “gap=0.050”."),
+         "Round 7's gap is 0.1989 − 0.1488 = 0.0501, failing the < 0.05 criterion the task "
+         "prompt set. The report states “gap=0.050”."),
     ]
     for i, (title, color, fill, body) in enumerate(cols):
         cx = 80 + i * 590
@@ -424,9 +424,9 @@ def slide_05_new_tasks():
         f'2 · Both ions sit on deposited water sites</text>')
     out.append(paragraph(
         112, 548,
-        "HOH A164 is 0.095 Å from the Ca site; HOH B143 is 0.177 Å from the Na. The starting model "
-        "has no waters, so these peaks may be restored or retyped deposited waters rather than "
-        "new ions. The ion assignments are not established in either direction.",
+        "On the packaged model, HOH A164 is 0.18 Å from CA A98 and HOH B143 is 0.31 Å from NA B98. "
+        "The starting model has no waters, so these peaks may be restored or retyped deposited "
+        "waters rather than new ions. The ion assignments are not established either way.",
         width=60, size=19, leading=28))
 
     out.append(panel(980, 455, 860, 250, ROW_ALT))
@@ -557,13 +557,14 @@ def slide_08_trust():
                   "What this record's own numbers can and cannot support")]
 
     items = [
-        ("The graded oracle is cctbx grading cctbx", BAD,
-         "The T03 rows carrying verdicts use phenix.model_vs_data with oracle_family cctbx, against "
-         "a PHENIX refinement. CLAUDE.md forbids this as a sole basis. gemmi is the only cross-family "
-         "path here and is recorded as corroborative, so the cctbx verdicts are provisional."),
-        ("Raw oracle output was not retained", WARN,
-         "Only the typed measurement rows were committed, so 0.1564 / 0.2116 cannot be re-derived "
-         "from this repository without a licensed PHENIX rerun."),
+        ("No verdict rests on cctbx grading cctbx", GOOD,
+         "After the demotions, the only rows still carrying a verdict are the two gemmi offset rows "
+         "— both non-cctbx. The cctbx rows that compared a round-7 claim against the round-4 "
+         "packaged model are now informational."),
+        ("Neither the accusation nor the exoneration is oracled", WARN,
+         "Raw oracle output was not committed, so 0.1564 / 0.2116 need a licensed PHENIX rerun to "
+         "reproduce. And round 7's 0.1488 / 0.1989 are attested only by the agent's own cctbx log "
+         "— the coordinates are gone, so the number that clears the report can never be checked."),
         ("The QDS carries no verdicts", WARN,
          "qds_emit.py does not propagate pass_status, so no status in this record reaches the sheet, "
          "and its headline R-factors are the gemmi triple. Read verdicts from the eval, not the sheet."),
@@ -646,7 +647,7 @@ def slide_10_net():
         f'  <text x="1012" y="240" font-size="27" font-weight="700" fill="{BAD}">Not supported</text>')
     fails = [
         "The archive does not contain the reported model",
-        "Round 7's gap is 0.0501 — fails its own < 0.05",
+        "Round 7's gap is 0.0501 — fails the task's < 0.05",
         "The protein identity — supplied by our prompt",
         "Ion assignments — both on deposited water sites",
         "“T03 settled” and “refinement sound”",

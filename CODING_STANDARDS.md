@@ -79,9 +79,13 @@ Where this file and the handbook overlap, they must agree; if they drift, that i
     `pass_criterion`; `informational` means "reported without a declared criterion" and must not
     carry one; the disagreement statuses require the `agent_claim` they disagree with; and
     `fail_by_oracle_within_cctbx` requires `oracle_family: cctbx`. A criterion recorded only in
-    free-text `notes` is not a criterion. Committed records are checked by
-    `scripts/check_pass_status.py` (validate step 3c-bis), with pre-2026-09-07 history
-    grandfathered by name and any unclassified status treated as a hard failure.
+    free-text `notes` is not a criterion, and neither is a placeholder (`n/a`, `TBD`, or the
+    status name itself) — which on an `informational` row is reported rather than ignored,
+    because it is the status leaking into the criterion slot. Committed records are checked by
+    `scripts/check_pass_status.py` (validate step 3c-bis). The criterion and cctbx-family rules
+    are enforced on every record; the two that pre-existing history violates are enforced from
+    2026-09-07 with older rows grandfathered by name, and any status the guard does not
+    classify — or a schema it cannot read — is a hard failure.
 14. **Behaviour-preserving refactors must be proven so.** After touching the emitter, regenerate a
     committed QDS and diff it: only `issued_at` may differ.
 

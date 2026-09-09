@@ -77,16 +77,35 @@ def unclassified_statuses(root: Path) -> list[str]:
     """
     try:
         declared = schema_statuses(root)
-    except (yaml.YAMLError, OSError):
-        return []  # schema problems are the schema gate's business, not this one
+    except (yaml.YAMLError, OSError) as exc:
+        # An unreadable schema disables this defence, so it must be reported
+        # rather than swallowed — the same "an absence is not a pass" principle
+        # the empty-scan check enforces.
+        return [f"<schema unreadable: {type(exc).__name__}>"]
+    if not declared:
+        return ["<schema declares no PassStatus enum>"]
     known = CRITERION_BEARING | CLAIM_BEARING | UNGOVERNED
     return sorted(declared - known)
 
 
-def criterion_of(row: dict) -> str:
-    """The row's criterion, normalised; empty when it records no criterion."""
+def raw_criterion(row: dict) -> str:
+    """The `pass_criterion` field as written, whitespace-trimmed."""
     raw = row.get("pass_criterion")
-    text = "" if raw is None else str(raw).strip()
+    return "" if raw is None else str(raw).strip()
+
+
+def criterion_of(row: dict) -> str:
+    """The row's criterion for R1, with placeholders treated as absent.
+
+    Deliberately asymmetric with `raw_criterion`. R1 asks "did this verdict name
+    a criterion?", and `n/a` names none, so a placeholder must not satisfy it.
+    R2 asks the opposite question — "is a criterion present on a row that claims
+    to have none?" — and there a placeholder is the very thing being reported:
+    the status leaking into the criterion slot. Normalising for both would make
+    R2 unable to fire on `pass_criterion: informational`, which is the case its
+    own docstring cites.
+    """
+    text = raw_criterion(row)
     return "" if text.lower() in PLACEHOLDER_CRITERIA else text
 
 
@@ -123,7 +142,7 @@ def check_measurement(path: Path, run_date: str, row: dict,
             f"oracle_family 'cctbx', got {row.get('oracle_family')!r} (#567)")
 
     # R2 — informational means no declared criterion.
-    if status == "informational" and criterion:
+    if status == "informational" and raw_criterion(row):
         message = (f"{where}: pass_status 'informational' means "
                    f"'reported without a declared criterion', but pass_criterion is "
                    f"{str(criterion)!r} (#567)")
@@ -168,7 +187,11 @@ def main() -> int:
         if not isinstance(doc, dict):
             failures.append(f"{path.name}: top-level YAML is not a mapping")
             continue
-        for run in doc.get("evaluation_runs", []) or []:
+        runs = doc.get("evaluation_runs", []) or []
+        if not isinstance(runs, list):
+            failures.append(f"{path.name}: evaluation_runs is not a list")
+            continue
+        for run in runs:
             if not isinstance(run, dict):
                 failures.append(f"{path.name}: an evaluation_runs entry is not a mapping")
                 continue
@@ -197,8 +220,8 @@ def main() -> int:
         print(f"FAIL  {line}", file=sys.stderr)
 
     if failures:
-        print(f"pass_status semantics: {len(failures)} violation(s) across "
-              f"{checked} measurement(s)", file=sys.stderr)
+        print(f"pass_status semantics: {len(failures)} violation(s) over "
+              f"{checked} measurement(s) in {files} file(s)", file=sys.stderr)
         return 1
     print(f"pass_status semantics hold ({checked} measurements checked, "
           f"{len(grandfathered)} grandfathered row(s) listed above)")

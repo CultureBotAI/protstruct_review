@@ -37,8 +37,26 @@ def run_guard(root: Path) -> tuple[int, str]:
     return proc.returncode, proc.stdout + proc.stderr
 
 
+SCHEMA_REL = Path("schemas") / "protstruct_review.yaml"
+
+
+def write_schema(root: Path, statuses) -> None:
+    """Write a minimal schema declaring the given PassStatus values."""
+    (root / "schemas").mkdir(parents=True, exist_ok=True)
+    doc = {"enums": {"PassStatus": {
+        "permissible_values": {s: {"description": s} for s in statuses}}}}
+    (root / SCHEMA_REL).write_text(yaml.safe_dump(doc, sort_keys=False))
+
+
+REAL_STATUSES = ("pass", "fail_by_oracle", "pass_with_caveat",
+                 "pass_criterion_fail_headline", "fail_by_oracle_within_cctbx",
+                 "informational")
+
+
 def write_eval(root: Path, run_date: str, row: dict) -> None:
     (root / "data").mkdir(parents=True, exist_ok=True)
+    if not (root / SCHEMA_REL).exists():
+        write_schema(root, REAL_STATUSES)
     row = {"id": "EVAL_x_M_001", **row}
     doc = {"evaluation_runs": [{"id": "EVAL_x", "run_date": run_date,
                                 "measurements": [row]}]}
@@ -120,6 +138,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
         (root / "data").mkdir(parents=True)
+        write_schema(root, REAL_STATUSES)
         (root / "data" / "EVAL_x.yaml").write_text(yaml.safe_dump(
             {"evaluation_runs": [{"id": "EVAL_x", "measurements": [
                 {"id": "EVAL_x_M_001", "pass_status": "informational",
@@ -131,6 +150,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
         (root / "data").mkdir(parents=True)
+        write_schema(root, REAL_STATUSES)
         rc, out = run_guard(root)
     check("an empty scan fails", rc, 1)
     check("an empty scan says why", "empty scan" in out, True)
@@ -140,15 +160,69 @@ def main() -> int:
         ("top-level list", "- not: a mapping\n"),
         ("measurements as a mapping", "evaluation_runs:\n- id: E\n  measurements: {a: 1}\n"),
         ("non-mapping row", "evaluation_runs:\n- id: E\n  measurements:\n  - just-a-string\n"),
+        ("evaluation_runs as a scalar", "evaluation_runs: 5\n"),
+        ("evaluation_runs entry as a scalar", "evaluation_runs:\n- just-a-string\n"),
+        ("measurements as a scalar", "evaluation_runs:\n- id: E\n  measurements: 5\n"),
         ("unreadable YAML", "evaluation_runs: [\n"),
     ):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             (root / "data").mkdir(parents=True)
+            write_schema(root, REAL_STATUSES)
             (root / "data" / "EVAL_x.yaml").write_text(payload)
             rc, out = run_guard(root)
         check(f"malformed ({label}) fails", rc, 1)
         check(f"malformed ({label}) reports, not crashes", "Traceback" not in out, True)
+
+    # The schema-drift defence: a PassStatus the guard has no rule for must fail,
+    # and an unreadable or enum-less schema must not silently disable the check.
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        write_eval(root, POST, {"pass_status": "informational"})
+        write_schema(root, REAL_STATUSES + ("inconclusive",))
+        rc, out = run_guard(root)
+    check("schema drift: a 7th PassStatus fails", rc, 1)
+    check("schema drift: names the orphan", "inconclusive" in out, True)
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        write_eval(root, POST, {"pass_status": "informational"})
+        write_schema(root, REAL_STATUSES)
+        rc, _ = run_guard(root)
+    check("schema drift: a matching schema passes", rc, 0)
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        write_eval(root, POST, {"pass_status": "informational"})
+        (root / "schemas").mkdir(parents=True, exist_ok=True)
+        (root / SCHEMA_REL).write_text("enums: [\n")
+        rc, out = run_guard(root)
+    check("schema drift: an unreadable schema fails loudly", rc, 1)
+    check("schema drift: says the schema was unreadable", "schema unreadable" in out, True)
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        write_eval(root, POST, {"pass_status": "informational"})
+        write_schema(root, ())
+        rc, out = run_guard(root)
+    check("schema drift: a schema with no PassStatus fails", rc, 1)
+
+    # Every placeholder is exercised, so removing one from the set fails a test.
+    from importlib import util as _util
+    spec = _util.spec_from_file_location("_guard", REPO / "scripts" / "check_pass_status.py")
+    guard_mod = _util.module_from_spec(spec)
+    spec.loader.exec_module(guard_mod)
+    # Pinned, not read from the module: iterating the set under test would let a
+    # deleted entry pass by simply not being exercised.
+    expected_placeholders = {"n/a", "na", "-", "--", "tbd", "todo", "none",
+                             "see notes", "informational"}
+    check("the placeholder set is exactly as documented",
+          guard_mod.PLACEHOLDER_CRITERIA, frozenset(expected_placeholders))
+    for placeholder in sorted(expected_placeholders):
+        rc, _ = verdict(POST, {"pass_status": "pass", "pass_criterion": placeholder})
+        check(f"R1: placeholder {placeholder!r} is not a criterion", rc, 1)
+        rc, _ = verdict(POST, {"pass_status": "informational", "pass_criterion": placeholder})
+        check(f"R2: placeholder {placeholder!r} on informational is still reported", rc, 1)
 
     # The committed corpus must satisfy the guard as shipped.
     rc, out = run_guard(REPO)

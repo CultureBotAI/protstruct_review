@@ -145,6 +145,16 @@ if ! "${PYTHON}" "${REPO_ROOT}/scripts/check_qds_trust_invariant.py"; then
   fail "QDS trust invariant"
 fi
 
+# 3c-bis. pass_status semantics on committed evaluation records (#567): a status
+#     that asserts a verdict must name the criterion it was judged against, and a
+#     disagreement status must carry the claim it disagrees with. Without this a
+#     verdict could live entirely in free-text `notes` — which is how one row
+#     shipped marked `pass` with an empty criterion during the 1SAR review, and
+#     how two identical rows were graded on opposite conclusions.
+if ! "${PYTHON}" "${REPO_ROOT}/scripts/check_pass_status.py"; then
+  fail "pass_status semantics"
+fi
+
 # 3d. NEXT_TASKS NC-table dates match the git merge trail — the
 #     date/attribution class recurred in consecutive reconciliations
 #     (#372, #386), and the repo's rule is to build the guard on the

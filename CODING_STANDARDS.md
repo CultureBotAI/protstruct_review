@@ -73,6 +73,15 @@ Where this file and the handbook overlap, they must agree; if they drift, that i
     independent-only evidence. Committed QDS files are checked by
     `scripts/check_qds_trust_invariant.py` (validate step 3c) with pre-2026-08-13 history
     grandfathered by name.
+13c. **A verdict must name the criterion it was judged against (#567).** A `pass_status` that
+    asserts an outcome — `pass`, `fail_by_oracle`, `pass_with_caveat`,
+    `pass_criterion_fail_headline`, `fail_by_oracle_within_cctbx` — requires a non-empty
+    `pass_criterion`; `informational` means "reported without a declared criterion" and must not
+    carry one; the disagreement statuses require the `agent_claim` they disagree with; and
+    `fail_by_oracle_within_cctbx` requires `oracle_family: cctbx`. A criterion recorded only in
+    free-text `notes` is not a criterion. Committed records are checked by
+    `scripts/check_pass_status.py` (validate step 3c-bis), with pre-2026-09-07 history
+    grandfathered by name and any unclassified status treated as a hard failure.
 14. **Behaviour-preserving refactors must be proven so.** After touching the emitter, regenerate a
     committed QDS and diff it: only `issued_at` may differ.
 

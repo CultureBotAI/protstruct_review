@@ -51,6 +51,44 @@ CRITERION_BEARING = frozenset({
 # Statuses whose enum description refers to disagreeing with the agent's claim.
 CLAIM_BEARING = frozenset({"fail_by_oracle", "fail_by_oracle_within_cctbx"})
 
+# Statuses this guard deliberately applies no rule to.
+UNGOVERNED = frozenset({"informational"})
+
+# Criterion strings that record the absence of a criterion rather than one.
+# `pass_criterion: n/a` is not a criterion, and neither is the status name.
+PLACEHOLDER_CRITERIA = frozenset({
+    "n/a", "na", "-", "--", "tbd", "todo", "none", "see notes", "informational",
+})
+
+
+def schema_statuses(root: Path) -> set[str]:
+    """The PassStatus permissible values, read from the canonical schema."""
+    schema = root / "schemas" / "protstruct_review.yaml"
+    doc = yaml.safe_load(schema.read_text()) or {}
+    return set(doc.get("enums", {}).get("PassStatus", {}).get("permissible_values", {}))
+
+
+def unclassified_statuses(root: Path) -> list[str]:
+    """PassStatus values this guard has no rule for — a silent hole if ignored.
+
+    The rule sets above are hand-written, so a sixth enum value added later would
+    be checked by nothing and say so nowhere. Rather than trust that they stay in
+    step, derive the vocabulary from the schema and fail loudly when it grows.
+    """
+    try:
+        declared = schema_statuses(root)
+    except (yaml.YAMLError, OSError):
+        return []  # schema problems are the schema gate's business, not this one
+    known = CRITERION_BEARING | CLAIM_BEARING | UNGOVERNED
+    return sorted(declared - known)
+
+
+def criterion_of(row: dict) -> str:
+    """The row's criterion, normalised; empty when it records no criterion."""
+    raw = row.get("pass_criterion")
+    text = "" if raw is None else str(raw).strip()
+    return "" if text.lower() in PLACEHOLDER_CRITERIA else text
+
 
 def check_measurement(path: Path, run_date: str, row: dict,
                       failures: list[str], grandfathered: list[str]) -> None:
@@ -60,11 +98,20 @@ def check_measurement(path: Path, run_date: str, row: dict,
         return
     rid = row.get("id", "<no id>")
     where = f"{path.name}: {rid}"
-    criterion = row.get("pass_criterion")
+    criterion = criterion_of(row)
     enforced = not run_date or run_date >= CUTOVER
 
+    # R0 — a status no rule set knows about is checked by nothing. Fail rather
+    # than wave it through; a typo and a newly added enum value look identical
+    # here, and both want a human.
+    if status not in (CRITERION_BEARING | CLAIM_BEARING | UNGOVERNED):
+        failures.append(
+            f"{where}: pass_status {status!r} is not classified by this guard — it is "
+            f"checked by no rule (#567)")
+        return
+
     # R1 — a criterion-bearing status must name its criterion. Always enforced.
-    if status in CRITERION_BEARING and not (criterion and str(criterion).strip()):
+    if status in CRITERION_BEARING and not criterion:
         failures.append(
             f"{where}: pass_status {status!r} asserts a verdict against a criterion, "
             f"but pass_criterion is empty (#567)")
@@ -92,7 +139,9 @@ def check_measurement(path: Path, run_date: str, row: dict,
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__)
+    ap = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--root", default=str(Path(__file__).resolve().parent.parent))
     args = ap.parse_args()
     root = Path(args.root)
@@ -100,18 +149,47 @@ def main() -> int:
     failures: list[str] = []
     grandfathered: list[str] = []
     checked = 0
+    files = 0
+
+    # A PassStatus value with no rule attached is a hole that announces nothing.
+    for orphan in unclassified_statuses(root):
+        failures.append(
+            f"schemas/protstruct_review.yaml declares PassStatus {orphan!r}, which this "
+            f"guard has no rule for — classify it in CRITERION_BEARING / CLAIM_BEARING / "
+            f"UNGOVERNED before shipping it (#567)")
 
     for path in sorted((root / "data").rglob("EVAL_*.yaml")):
+        files += 1
         try:
             doc = yaml.safe_load(path.read_text()) or {}
         except (yaml.YAMLError, OSError) as exc:
             failures.append(f"{path.name}: unreadable ({type(exc).__name__})")
             continue
+        if not isinstance(doc, dict):
+            failures.append(f"{path.name}: top-level YAML is not a mapping")
+            continue
         for run in doc.get("evaluation_runs", []) or []:
+            if not isinstance(run, dict):
+                failures.append(f"{path.name}: an evaluation_runs entry is not a mapping")
+                continue
             run_date = str(run.get("run_date", ""))[:10]
-            for row in run.get("measurements", []) or []:
+            rows = run.get("measurements", []) or []
+            if not isinstance(rows, list):
+                failures.append(f"{path.name}: measurements is not a list")
+                continue
+            for row in rows:
+                if not isinstance(row, dict):
+                    failures.append(f"{path.name}: a measurements entry is not a mapping")
+                    continue
                 checked += 1
                 check_measurement(path, run_date, row, failures, grandfathered)
+
+    # Zero files scanned is indistinguishable from all files valid unless it is an
+    # error — the same hole validate.sh's record discovery was written to close.
+    if files == 0:
+        failures.append(
+            f"no EVAL_*.yaml records found under {root / 'data'} — refusing to report "
+            f"success on an empty scan (#567)")
 
     for line in grandfathered:
         print(f"  grandfathered: {line}")

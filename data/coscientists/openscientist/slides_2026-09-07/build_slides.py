@@ -308,7 +308,7 @@ def slide_02_why():
 # ------------------------------------------------------------------
 def slide_03_headline():
     out = [header("The report's numbers, re-examined",
-                  "One substantive defect survives the correction — and it is not the one we filed")]
+                  "The clearest surviving defect is not the one we filed")]
 
     cols = [
         ("Not a misreport", GOOD, GOOD_LIGHT,
@@ -316,7 +316,7 @@ def slide_03_headline():
          "agent's own measured values for the model it describes."),
         ("A packaging failure", WARN, WARN_LIGHT,
          "The model those numbers describe was never packaged. Measuring the shipped "
-         "file gives 0.2116 — 0.0125 worse — with no way to tell why."),
+         "file gives 0.2116 — 0.0127 worse — with no way to tell why."),
         ("A real defect", BAD, BAD_LIGHT,
          "Round 7's gap is 0.1989 − 0.1488 = 0.0501, failing the < 0.05 criterion the task "
          "prompt set. The report states “gap=0.050”."),
@@ -361,7 +361,7 @@ def slide_04_regrade():
         ["T03", "R-work / R-free, phenix.model_vs_data", "0.1564 / 0.2116", "matches packaged header"],
         ["T03", "R-work / R-free, gemmi matched radii", "0.1622 / 0.2136", "independent code path"],
         ["T03", "gemmi − PHENIX R-work offset (rule 2)", "+0.0058", "passes"],
-        ["T03", "R-work/R-free gap", "0.0552", "fails < 0.05"],
+        ["T03", "R-work/R-free gap", "0.0552", "no criterion applied"],
         ["T14", "flip sets — reduce / mmtbx.reduce2", "14 / 18", "0 confident conflicts"],
         ["T15", "SS agreement — packaged / deposited", "0.8802 / 0.8646", "uninterpretable"],
         ["T16", "DockQ vs deposited, AB:AB", "0.9445", "crystallographic dimer"],
@@ -369,7 +369,7 @@ def slide_04_regrade():
     fills = [[ACCENT_LIGHT, None, None, None] for _ in rows]
     colors = [[ACCENT, INK, INK, MUTED] for _ in rows]
     colors[2][3] = GOOD; fills[2][3] = GOOD_LIGHT
-    colors[3][3] = BAD;  fills[3][3] = BAD_LIGHT
+    colors[3][3] = MUTED; fills[3][3] = ROW_ALT
     colors[5][3] = WARN; fills[5][3] = WARN_LIGHT
     out.append(table(
         80, 190, [110, 700, 380, 460],
@@ -381,10 +381,11 @@ def slide_04_regrade():
     notes = [
         (BAD, "T03 is NOT settled. driving_example_T03 is conjunctive — “all must pass for green”. Only "
               "the R-value rules were run. Rule 1's deposition reference does not exist for 1SAR (the "
-              "1990 entry records FREE R VALUE : NULL); rule 3 and rule 4 were not evaluated."),
-        (WARN, "Trust-model caveat: the T03 rows carrying verdicts are phenix.model_vs_data with "
-               "oracle_family cctbx — cctbx grading a cctbx refinement, which CLAUDE.md forbids as a "
-               "sole basis. The gemmi legs are the only cross-family path. Treat them as provisional."),
+              "1990 entry records FREE R VALUE : NULL); rule 4 was not re-run; and rule 3 does not hold "
+              "as written — input NREF 7248 against 7262 in every output MTZ (see #584)."),
+        (WARN, "Neither the accusation nor the exoneration is oracled. Raw oracle output was not "
+               "committed, so 0.1564 / 0.2116 need a licensed PHENIX rerun to reproduce — and round 7's "
+               "numbers are attested only by the agent's own log, so they can never be re-measured."),
     ]
     y = 640
     for color, text in notes:

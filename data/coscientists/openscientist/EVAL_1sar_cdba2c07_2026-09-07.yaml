@@ -79,7 +79,7 @@ evaluation_runs:
       value unattributable; ALL OF THOSE VERDICTS ARE WITHDRAWN. Separately and still true:
       the T03 rubric's deposition-tracking rule cannot be evaluated on 1SAR at all, because
       the 1990 deposition records `FREE R VALUE : NULL`. The real defect in the reported
-      round 7 is its gap: 0.1989 - 0.1488 = 0.0501, which fails the agent's own < 0.05
+      round 7 is its gap: 0.1989 - 0.1488 = 0.0501, which fails the task prompt's < 0.05
       criterion and is reported as "0.050".
   - id: EVAL_1sar_cdba2c07_2026-09-07_M_003
     catalog_task_ref: T03
@@ -191,8 +191,9 @@ evaluation_runs:
       value_numeric: 0.0515
     pass_status: informational
     notes: >-
-      The same gap criterion as M_003 on the independent code path: 0.0515, also above
-      the agent's < 0.05 target. This value is scripts/gemmi_rfactor.py's own output,
+      The same measurement as M_003 on the independent code path: 0.0515. Recorded without a
+      criterion for the same reason M_003 is — the task's < 0.05 criterion (claude_iterations.log:17)
+      describes the model the agent reported, not the round-4 file that was packaged. This value is scripts/gemmi_rfactor.py's own output,
       which rounds R-work, R-free and the gap independently from unrounded internals,
       so it does not equal the difference of the published four-decimal values
       (0.2136 - 0.1622 = 0.0514). No verdict turns on the distinction — both exceed

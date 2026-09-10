@@ -37,8 +37,8 @@
   <text x="135.0" y="430.3333333333333" font-size="19" fill="#1f4e8c" text-anchor="middle">T03</text>
   <text x="204" y="430.3333333333333" font-size="19" fill="#1a1a2e" text-anchor="start">R-work/R-free gap</text>
   <text x="1256" y="430.3333333333333" font-size="19" fill="#1a1a2e" text-anchor="end">0.0552</text>
-  <rect x="1270" y="398" width="460" height="52" fill="#f5d6d4"/>
-  <text x="1500.0" y="430.3333333333333" font-size="19" fill="#a8201a" text-anchor="middle">fails &lt; 0.05</text>
+  <rect x="1270" y="398" width="460" height="52" fill="#f7f8fb"/>
+  <text x="1500.0" y="430.3333333333333" font-size="19" fill="#5a6071" text-anchor="middle">no criterion applied</text>
   <rect x="80" y="450" width="1650" height="52" fill="#ffffff"/>
   <rect x="80" y="450" width="110" height="52" fill="#dce6f4"/>
   <text x="135.0" y="482.3333333333333" font-size="19" fill="#1f4e8c" text-anchor="middle">T14</text>
@@ -63,14 +63,15 @@
   <line x1="890" y1="190" x2="890" y2="606" stroke="#e3e6ee" stroke-width="1"/>
   <line x1="1270" y1="190" x2="1270" y2="606" stroke="#e3e6ee" stroke-width="1"/>
 
-  <rect x="80" y="618" width="5" height="95" fill="#a8201a"/>
+  <rect x="80" y="618" width="5" height="124" fill="#a8201a"/>
   <text x="105" y="640" font-size="20" font-weight="400" fill="#1a1a2e">T03 is NOT settled. driving_example_T03 is conjunctive — “all must pass for green”. Only the R-value rules were</text>
-  <text x="105" y="669" font-size="20" font-weight="400" fill="#1a1a2e">run. Rule 1's deposition reference does not exist for 1SAR (the 1990 entry records FREE R VALUE : NULL); rule 3</text>
-  <text x="105" y="698" font-size="20" font-weight="400" fill="#1a1a2e">and rule 4 were not evaluated.</text>
+  <text x="105" y="669" font-size="20" font-weight="400" fill="#1a1a2e">run. Rule 1's deposition reference does not exist for 1SAR (the 1990 entry records FREE R VALUE : NULL); rule 4</text>
+  <text x="105" y="698" font-size="20" font-weight="400" fill="#1a1a2e">was not re-run; and rule 3 does not hold as written — input NREF 7248 against 7262 in every output MTZ (see</text>
+  <text x="105" y="727" font-size="20" font-weight="400" fill="#1a1a2e">#584).</text>
 
-  <rect x="80" y="735" width="5" height="95" fill="#b07c00"/>
-  <text x="105" y="757" font-size="20" font-weight="400" fill="#1a1a2e">Trust-model caveat: the T03 rows carrying verdicts are phenix.model_vs_data with oracle_family cctbx — cctbx</text>
-  <text x="105" y="786" font-size="20" font-weight="400" fill="#1a1a2e">grading a cctbx refinement, which CLAUDE.md forbids as a sole basis. The gemmi legs are the only cross-family</text>
-  <text x="105" y="815" font-size="20" font-weight="400" fill="#1a1a2e">path. Treat them as provisional.</text>
+  <rect x="80" y="764" width="5" height="95" fill="#b07c00"/>
+  <text x="105" y="786" font-size="20" font-weight="400" fill="#1a1a2e">Neither the accusation nor the exoneration is oracled. Raw oracle output was not committed, so 0.1564 / 0.2116</text>
+  <text x="105" y="815" font-size="20" font-weight="400" fill="#1a1a2e">need a licensed PHENIX rerun to reproduce — and round 7's numbers are attested only by the agent's own log, so</text>
+  <text x="105" y="844" font-size="20" font-weight="400" fill="#1a1a2e">they can never be re-measured.</text>
 
 </svg>

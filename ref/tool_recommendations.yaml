@@ -88,12 +88,22 @@ tool_recommendations:
     role: top_performing
     rank: 1
     justification: >-
-      Non-cctbx independent oracle; corroborated phenix.model_vs_data on
-      the 1SAR eval (0.164 vs 0.156, both above the agent-reported 0.149)
-      and is what hardened the "agent's R-free is too low" finding.
+      Non-cctbx independent code path that brackets phenix.model_vs_data
+      rather than adjudicating it: on the same model, MTZ and work set it
+      reads 0.005–0.015 higher in R-work (benchmarked on 15 entries,
+      ref/research/tolerance_benchmark_r_offset.md), one-sided, so a
+      PHENIX R-work below gemmi's is the red flag. On the packaged 1SAR
+      model it gives 0.1622 against PHENIX's 0.1564. It does not grade
+      an agent's claim — ref/tool_assumptions.yaml forbids reporting the
+      gemmi number as the claim being wrong — and an earlier version of
+      this entry that said it "hardened the agent's R-free is too low
+      finding" is withdrawn: that finding compared oracle measurements
+      of a round-4 model against a round-7 claim and was retracted in
+      EVAL_1sar_cdba2c07_2026-09-07.
     evidence_refs:
       - EVAL_1sar_cdba2c07_2026-04-24
-    as_of_date: '2026-04-25'
+      - EVAL_1sar_cdba2c07_2026-09-07
+    as_of_date: '2026-09-09'
 
   - id: REC_T03_r_work_alternative_servalcat
     metric_definition_ref: T03_r-work

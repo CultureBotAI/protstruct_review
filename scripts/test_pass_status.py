@@ -221,8 +221,13 @@ def main() -> int:
     for placeholder in sorted(expected_placeholders):
         rc, _ = verdict(POST, {"pass_status": "pass", "pass_criterion": placeholder})
         check(f"R1: placeholder {placeholder!r} is not a criterion", rc, 1)
-        rc, _ = verdict(POST, {"pass_status": "informational", "pass_criterion": placeholder})
+        rc, out = verdict(POST, {"pass_status": "informational", "pass_criterion": placeholder})
         check(f"R2: placeholder {placeholder!r} on informational is still reported", rc, 1)
+        # The message must name the field as written, not the normalised value —
+        # reporting "pass_criterion is ''" for a row that plainly has one sends the
+        # reader looking in the wrong place.
+        check(f"R2: {placeholder!r} is quoted back in the message",
+              repr(placeholder) in out, True)
 
     # The committed corpus must satisfy the guard as shipped.
     rc, out = run_guard(REPO)

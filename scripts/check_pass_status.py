@@ -145,7 +145,7 @@ def check_measurement(path: Path, run_date: str, row: dict,
     if status == "informational" and raw_criterion(row):
         message = (f"{where}: pass_status 'informational' means "
                    f"'reported without a declared criterion', but pass_criterion is "
-                   f"{str(criterion)!r} (#567)")
+                   f"{raw_criterion(row)!r} (#567)")
         (failures if enforced else grandfathered).append(
             message if enforced else f"{message} — run dated {run_date}, predates the rule")
 

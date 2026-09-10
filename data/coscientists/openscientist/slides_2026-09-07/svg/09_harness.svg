@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" font-family="Helvetica, Arial, sans-serif">
+  <rect width="100%" height="100%" fill="#ffffff"/>
+  <rect x="0" y="0" width="1920" height="6" fill="#1f4e8c"/>
+  <text x="80" y="86" font-size="44" font-weight="700" fill="#1a1a2e">The harness since May</text>
+  <text x="80" y="128" font-size="22" font-weight="400" fill="#5a6071">Real progress — and the check none of it performed</text>
+  <line x1="80" y1="1020" x2="1840" y2="1020" stroke="#e3e6ee" stroke-width="1"/>
+  <text x="80" y="1050" font-size="16" fill="#5a6071">1SAR artefact audit · openscientist artefact cdba2c07 · 2026-09-07</text>
+  <text x="1840" y="1050" font-size="16" fill="#5a6071" text-anchor="end">protstruct_review · artefact audit 2026-09-07</text>
+
+  <rect x="80" y="210" width="6" height="73" fill="#1f4e8c"/>
+  <text x="110" y="240" font-size="25" font-weight="700" fill="#1f4e8c">48-round tolerance series</text>
+  <text x="110" y="276" font-size="20" font-weight="400" fill="#1a1a2e">Every [template] threshold that mattered here replaced by a measured band with stated preconditions.</text>
+
+  <rect x="80" y="313" width="6" height="102" fill="#1f7a3f"/>
+  <text x="110" y="343" font-size="25" font-weight="700" fill="#1f7a3f">Negative-control track</text>
+  <text x="110" y="379" font-size="20" font-weight="400" fill="#1a1a2e">0 of 22 false verdicts on the control set. Separately, 21 of 21 agent cases judged — a different</text>
+  <text x="110" y="408" font-size="20" font-weight="400" fill="#1a1a2e">denominator, since 6XVM was never judged.</text>
+
+  <rect x="80" y="445" width="6" height="102" fill="#1f4e8c"/>
+  <text x="110" y="475" font-size="25" font-weight="700" fill="#1f4e8c">Gate consolidation</text>
+  <text x="110" y="511" font-size="20" font-weight="400" fill="#1a1a2e">Negative-control headlines, governed thresholds and round-count claims are checked as data by the gate</text>
+  <text x="110" y="540" font-size="20" font-weight="400" fill="#1a1a2e">rather than trusted as prose.</text>
+
+  <rect x="80" y="577" width="6" height="131" fill="#a8201a"/>
+  <text x="110" y="607" font-size="25" font-weight="700" fill="#a8201a">What none of it checked</text>
+  <text x="110" y="643" font-size="20" font-weight="400" fill="#1a1a2e">Whether the file under evaluation is the file the report describes. No guard ties an artefact's measured</text>
+  <text x="110" y="672" font-size="20" font-weight="400" fill="#1a1a2e">model to the model its provenance names as final — which is how a false accusation survived five</text>
+  <text x="110" y="701" font-size="20" font-weight="400" fill="#1a1a2e">adversarial review passes.</text>
+
+</svg>

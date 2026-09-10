@@ -381,6 +381,7 @@ catalog_tasks:
   phenix_tool_refs:
   - phenix.reduce
   - phenix.ready_set
+  - mmtbx.reduce2
   phenix_doc_paths:
   - reference/hydrogens.html
   - reference/ready_set.html
@@ -910,6 +911,10 @@ tools:
   - T14
 - id: reduce (standalone, Richardson)
   family: non_cctbx
+  catalog_tasks_served:
+  - T14
+- id: mmtbx.reduce2
+  family: cctbx
   catalog_tasks_served:
   - T14
 - id: propka3

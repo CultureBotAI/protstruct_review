@@ -1,0 +1,355 @@
+evaluation_runs:
+- id: EVAL_1sar_cdba2c07_2026-09-07
+  eval_filename_stem: EVAL_1sar_cdba2c07_2026-09-07
+  structure_ref: 1sar
+  artifact_ref: cdba2c07-daff-4f60-ae96-12452b3a5fbb
+  run_date: '2026-09-07'
+  catalog_tasks_applied:
+  - T03
+  - T14
+  - T15
+  - T16
+  interface_qualities:
+  - id: EVAL_1sar_cdba2c07_2026-09-07_IFACE_AB
+    structure_ref: 1sar
+    interface_label: 1sar_final as packaged (round-4 output), A/B crystallographic dimer
+    chain_id_1: A
+    chain_id_2: B
+    buried_surface_area:
+      value_numeric: 437.8
+      unit: Å²
+    dockq_score:
+      value_numeric: 0.9445
+    capri_quality_class:
+      value_text: High
+  measurements:
+  # --- T03, cctbx path -----------------------------------------------------
+  - id: EVAL_1sar_cdba2c07_2026-09-07_M_001
+    catalog_task_ref: T03
+    stage: final
+    scope: complex
+    scope_selector: 1sar_final (packaged; round-4 output)
+    metric_definition_ref: T03_r-work
+    oracle_tool_ref: phenix.model_vs_data
+    oracle_family: cctbx
+    agent_claim:
+      value_numeric: 0.149
+    oracle_measure:
+      value_numeric: 0.1564
+    delta:
+      value_numeric: 0.0074
+    pass_status: informational
+    notes: >-
+      MODEL MISMATCH — NOT a reporting-accuracy verdict. `oracle_measure` is
+      phenix.model_vs_data on the PACKAGED `data/1sar_final.pdb`, which the artefact's
+      own provenance shows is the ROUND-4 output (iter4_transcript copies
+      1sar_final_001.pdb into place; its header 0.1563 matches data/1sar_round5_input.pdb).
+      `agent_claim` 0.149 is the agent's ROUND-7 value (claude_iterations.log:510 records
+      round 7 at R-work 0.1488). The two therefore describe different models and the delta
+      of 0.0074 measures the packaging gap, not a misreport. No criterion is applied: the
+      series' `match within 0.005` reporting check requires both values be on the same
+      input, and they are not. Earlier drafts of this record graded this row
+      `fail_by_oracle` on that criterion; that verdict is withdrawn.
+  - id: EVAL_1sar_cdba2c07_2026-09-07_M_002
+    catalog_task_ref: T03
+    stage: final
+    scope: complex
+    scope_selector: 1sar_final (packaged; round-4 output)
+    metric_definition_ref: T03_r-free
+    oracle_tool_ref: phenix.model_vs_data
+    oracle_family: cctbx
+    agent_claim:
+      value_numeric: 0.199
+    oracle_measure:
+      value_numeric: 0.2116
+    delta:
+      value_numeric: 0.0126
+    pass_status: informational
+    notes: >-
+      MODEL MISMATCH — NOT a reporting-accuracy verdict, and the single most consequential
+      correction in this record. `oracle_measure` 0.2116 is phenix.model_vs_data on the
+      PACKAGED `data/1sar_final.pdb`, which is the ROUND-4 output. `agent_claim` 0.199 is
+      the agent's ROUND-7 value: claude_iterations.log:510 records round 7 at
+      "R-work=0.1488, R-free=0.1989", claude_iterations.log:752 names
+      /agent/job/1sar_round7_001.pdb as the final deliverable, and 0.1989 appears in four
+      provenance transcripts. The round-7 coordinates are absent from the archive entirely.
+      So 0.199 rounds from a model the agent really produced; it was never packaged. The
+      delta of 0.0126 measures the packaging gap. Every earlier draft of this record, and
+      the 2026-05-05 record, treated this as a reporting defect and one draft called the
+      value unattributable; ALL OF THOSE VERDICTS ARE WITHDRAWN. Separately and still true:
+      the T03 rubric's deposition-tracking rule cannot be evaluated on 1SAR at all, because
+      the 1990 deposition records `FREE R VALUE : NULL`. The real defect in the reported
+      round 7 is its gap: 0.1989 - 0.1488 = 0.0501, which fails the task prompt's < 0.05
+      criterion and is reported as "0.050".
+  - id: EVAL_1sar_cdba2c07_2026-09-07_M_003
+    catalog_task_ref: T03
+    stage: final
+    scope: complex
+    scope_selector: 1sar_final (packaged; round-4 output)
+    metric_definition_ref: T03_r-free_r-work_gap
+    oracle_tool_ref: phenix.model_vs_data
+    oracle_family: cctbx
+    oracle_measure:
+      value_numeric: 0.0552
+    pass_status: informational
+    notes: >-
+      The gap on the PACKAGED round-4 model. Recorded WITHOUT a criterion and without an
+      agent_claim, for the same reason M_001 and M_002 are: the agent's reported gap of
+      0.050 describes its round-7 model, and grading a round-7 claim against a round-4
+      measurement is the cross-model error this record withdrew. The task's success
+      criterion (gap < 0.05, `claude_iterations.log:17`) is not applied here because the
+      packaged model is not the model anyone claimed it of. The round-7 gap does fail that
+      criterion on the agent's own numbers — 0.1989 - 0.1488 = 0.0501, reported as
+      "gap=0.050" — but round 7 cannot be re-measured, so that finding is stated in the
+      record rather than graded here. The May record's "3 of 4 code paths fail" belongs to
+      this gap criterion, not to the R-free value comparison.
+  - id: EVAL_1sar_cdba2c07_2026-09-07_M_004
+    catalog_task_ref: T03
+    stage: intermediate
+    scope: complex
+    scope_selector: 1sar_round6
+    metric_definition_ref: T03_r-free
+    oracle_tool_ref: phenix.model_vs_data
+    oracle_family: cctbx
+    oracle_measure:
+      value_numeric: 0.2068
+    pass_status: informational
+    notes: >-
+      Round 6 measured with the same oracle as the packaged model, so the comparison is
+      instrument-matched rather than header-derived: round 6 R-free 0.2068 against the
+      packaged file's 0.2116. Round 6 is TWO ROUNDS AFTER the packaged file, and measures
+      0.0048 better — one more way to see that the shipped artefact is not the end of the
+      run. Earlier drafts read this delta as "the last adopted round is worse than its
+      predecessor", which inverted the order. Both models'
+      PDB headers agree closely with the oracle here (0.2068 and 0.2114), but that is
+      n = 2 and not a general warrant: the canonical 04-24 record's round oracles differ
+      from the header values by up to 0.0008 (round 2, round 5). Small against the
+      0.0126 claim gap, so the argument survives; the generalisation does not.
+  # --- T03, independent non-cctbx path -------------------------------------
+  - id: EVAL_1sar_cdba2c07_2026-09-07_M_005
+    catalog_task_ref: T03
+    stage: final
+    scope: complex
+    scope_selector: 1sar_final (packaged; round-4 output)
+    metric_definition_ref: T03_r-work
+    oracle_tool_ref: gemmi sfcalc
+    oracle_family: non_cctbx
+    oracle_measure:
+      value_numeric: 0.1622
+    pass_criterion: gemmi − phenix.model_vs_data (M_001) R-work offset within 0.005–0.015 (T03 rubric rule 2)
+    delta:
+      value_numeric: 0.0058
+    pass_status: pass
+    notes: >-
+      Independent non-cctbx code path (gemmi 0.7.5, `sfcalc --radii-set=cctbx`, then
+      scripts/gemmi_rfactor.py). Recorded alongside the R-free and gap rows so the
+      emitted sheet reports one internally coherent triple from a single code path
+      rather than mixing families within one summary block. THIS is the measurement
+      `ref/driving_example_T03.md` rubric rule 2 governs — the rule, the assumption
+      block and the underlying 15-entry benchmark are all about R-WORK, not R-free.
+      The offset against phenix.model_vs_data (M_001) is 0.1622 - 0.1564 = +0.0058:
+      inside the expected 0.005-0.015, just below the benchmark median of +0.0069, and
+      in the correct direction (gemmi high). Rule 2 therefore passes.
+  - id: EVAL_1sar_cdba2c07_2026-09-07_M_006
+    catalog_task_ref: T03
+    stage: final
+    scope: complex
+    scope_selector: 1sar_final (packaged; round-4 output)
+    metric_definition_ref: T03_r-free
+    oracle_tool_ref: gemmi sfcalc
+    oracle_family: non_cctbx
+    oracle_measure:
+      value_numeric: 0.2136
+    pass_criterion: '|ΔR| ≤ 0.02 vs phenix.model_vs_data (M_002), matched mask radii (§3)'
+    delta:
+      value_numeric: 0.0020
+    pass_status: pass
+    notes: >-
+      Corroborative, not a second independent failure verdict: ref/tool_assumptions.yaml
+      is explicit that the gemmi number must not be reported as the agent's claim being
+      wrong, only as a bracket, so no agent_claim is attached here. Mask radii matched
+      to cctbx as the §3 "Independent-code-path R offset" row requires. ΔR-free vs
+      phenix.model_vs_data = +0.0020, inside that row's general |ΔR| <= 0.02 band. It
+      is NOT compared against the 0.005-0.015 expectation: that band, the assumption
+      block and the benchmark behind them are all about R-WORK. See M_005 for the
+      R-work offset rule 2 actually governs (+0.0058, in band). DISCLOSURE: the
+      <= 0.02 envelope applied here is itself R-work-derived — ref/research/
+      tolerance_benchmark_r_offset.md measures R over the work set on 15 entries and
+      rounds its 0.016 envelope to 0.02, and §3's precondition names the same work set.
+      Extrapolating it to R-free is a judgement this record makes explicitly, not a
+      band the benchmark established for R-free; no R-free-specific offset band exists.
+      The verdict would be the same under any envelope wider than 0.002.
+  - id: EVAL_1sar_cdba2c07_2026-09-07_M_007
+    catalog_task_ref: T03
+    stage: final
+    scope: complex
+    scope_selector: 1sar_final (packaged; round-4 output)
+    metric_definition_ref: T03_r-free_r-work_gap
+    oracle_tool_ref: gemmi sfcalc
+    oracle_family: non_cctbx
+    oracle_measure:
+      value_numeric: 0.0515
+    pass_status: informational
+    notes: >-
+      The same measurement as M_003 on the independent code path: 0.0515. Recorded without a
+      criterion for the same reason M_003 is — the task's < 0.05 criterion (claude_iterations.log:17)
+      describes the model the agent reported, not the round-4 file that was packaged. This value is scripts/gemmi_rfactor.py's own output,
+      which rounds R-work, R-free and the gap independently from unrounded internals,
+      so it does not equal the difference of the published four-decimal values
+      (0.2136 - 0.1622 = 0.0514). No verdict turns on the distinction — both exceed
+      0.05 — but the triple does not add up at the precision it is published to.
+  # --- T14 -----------------------------------------------------------------
+  - id: EVAL_1sar_cdba2c07_2026-09-07_M_008
+    catalog_task_ref: T14
+    stage: final
+    scope: complex
+    scope_selector: 1sar_final (packaged; round-4 output)
+    metric_definition_ref: T14_h_added
+    oracle_tool_ref: reduce (standalone, Richardson)
+    oracle_family: non_cctbx
+    oracle_measure:
+      value_numeric: 1386
+    pass_status: informational
+    notes: >-
+      H atoms added by Richardson `reduce` (-quiet -build). phenix.reduce yields the
+      identical count because the two dispatchers are the same binary, so that is a
+      redistribution check rather than a second opinion. Recorded as informational
+      only: the registry's H-count agreement band is void when non-water hetero
+      components are present, and this model carries SO4, CA and NA.
+  - id: EVAL_1sar_cdba2c07_2026-09-07_M_009
+    catalog_task_ref: T14
+    stage: final
+    scope: complex
+    scope_selector: 1sar_final (packaged; round-4 output)
+    metric_definition_ref: T14_asn_gln_his_flips_proposed
+    oracle_tool_ref: reduce (standalone, Richardson)
+    oracle_family: non_cctbx
+    oracle_measure:
+      value_numeric: 14
+    pass_status: informational
+    notes: >-
+      Flippable Asn/Gln/His residues for which Richardson `reduce` recorded a decision.
+      Paired with M_010 (mmtbx.reduce2, 18) as two same-metric rows from the two
+      builders, rather than one row labelled with a family it does not have: the
+      comparison itself spans both families. Over the 14 residues both scored there are
+      ZERO confident conflicts (agreement 1.000), scored with
+      scripts/bench_t14_flip_sets.py's own conflict definition, in which a disagreement
+      counts only where reduce committed (category F or K). The registry retired exact
+      flip-set match as a requirement, and n = 14 is below the count at which that band
+      guards anything, so this is reported as a clean result and not as a threshold pass.
+  - id: EVAL_1sar_cdba2c07_2026-09-07_M_010
+    catalog_task_ref: T14
+    stage: final
+    scope: complex
+    scope_selector: 1sar_final (packaged; round-4 output)
+    metric_definition_ref: T14_asn_gln_his_flips_proposed
+    oracle_tool_ref: mmtbx.reduce2
+    oracle_family: cctbx
+    oracle_measure:
+      value_numeric: 18
+    pass_status: informational
+    notes: >-
+      The cctbx H builder's flip-mover set (`approach=add add_flip_movers=True`), the
+      genuinely independent second opinion of the pair. Larger than reduce's 14 because
+      reduce2 builds movers for residues reduce declined to score; the 14 shared
+      residues are the comparable set. See M_009 for the agreement result.
+  # --- T15 -----------------------------------------------------------------
+  # Order matters: the emitter's strongest-oracle pick ranks these two equally, so the
+  # row listed first lands in the QDS classification block. The agent model is listed
+  # first deliberately — the deposited row below is its baseline, not the subject.
+  - id: EVAL_1sar_cdba2c07_2026-09-07_M_011
+    catalog_task_ref: T15
+    stage: final
+    scope: complex
+    scope_selector: 1sar_final (packaged; round-4 output)
+    metric_definition_ref: T15_secondary_structure_agreement
+    oracle_tool_ref: DSSP + biotite P-SEA
+    oracle_family: non_cctbx
+    oracle_measure:
+      value_numeric: 0.8802
+    pass_status: informational
+    notes: >-
+      First run of T15 on this ARTEFACT (the deposited reference was already measured
+      as a committed calibration — see M_012). Three-state (H/E/C) agreement between
+      DSSP (H-bond energetics) and biotite P-SEA (Cα geometry): 169/192 concordant,
+      0 residues scored by only one. NOT read as a quality signal in either direction:
+      ref/thresholds_and_standards.md §3 requires gating on secondary-structure CONTENT
+      (DSSP H+E ≥ 0.20), not on agreement, because agreement is degenerate at the bad
+      end — noise raises it. scripts/t15_ss_agreement.py does not yet compute content,
+      so the governed gate could not be applied and this pair is uninterpretable as a
+      pass or a fail. Noted for follow-up: 0.8802 is above every one of the 16 entries
+      in the agreement benchmark (0.679–0.850), and 1SAR is β-containing where the
+      benchmark expects 0.68–0.72.
+  - id: EVAL_1sar_cdba2c07_2026-09-07_M_012
+    catalog_task_ref: T15
+    stage: final
+    scope: complex
+    scope_selector: 1sar_deposited
+    metric_definition_ref: T15_secondary_structure_agreement
+    oracle_tool_ref: DSSP + biotite P-SEA
+    oracle_family: non_cctbx
+    oracle_measure:
+      value_numeric: 0.8646
+    pass_status: informational
+    notes: >-
+      The deposited reference, measured as the baseline the agent model must be read
+      against. This REPRODUCES the committed calibration in ref/driving_example_T15.md,
+      ref/oracle_tools.md and ref/structural_criteria.yaml (0.8646) exactly — which is a
+      stronger statement about the pipeline than a first measurement would be. The
+      agent model sits 0.0156 above it; per M_011 that difference is not interpretable
+      as better or worse without the content figure.
+  # --- T16 -----------------------------------------------------------------
+  - id: EVAL_1sar_cdba2c07_2026-09-07_M_013
+    catalog_task_ref: T16
+    stage: final
+    scope: interface
+    scope_selector: 1sar_final (packaged; round-4) :A/B
+    metric_definition_ref: T16_interface_buried_surface_area
+    oracle_tool_ref: biotite SASA
+    oracle_family: non_cctbx
+    oracle_measure:
+      value_numeric: 437.8
+      unit: Å²
+    pass_status: informational
+    notes: >-
+      First run of T16 on this ARTEFACT; the deposited reference was already measured
+      as a committed calibration (442.1 Å² in ref/oracle_tools.md and
+      ref/driving_example_T16.md; 437.2 Å² recorded elsewhere in the same series). The
+      value here is the PACKAGED round-4 model, so it is not expected to equal either.
+      Total area buried on complex formation, Shrake-Rupley. IMPORTANT CAVEAT:
+      ref/structural_criteria.yaml already classifies this contact as 1SAR's
+      CRYSTALLOGRAPHIC dimer — a demonstration, not a biological assembly — on the
+      grounds that < ~200 Å² per side is a packing contact. This metric is therefore
+      exercising the T16 path, not certifying an assembly.
+  - id: EVAL_1sar_cdba2c07_2026-09-07_M_014
+    catalog_task_ref: T16
+    stage: final
+    scope: interface
+    scope_selector: AB:AB
+    metric_definition_ref: T16_interface_dockq_score
+    oracle_tool_ref: DockQ
+    oracle_family: non_cctbx
+    oracle_measure:
+      value_numeric: 0.9445
+    pass_status: informational
+    notes: >-
+      DockQ of the agent's A/B pairing against the deposited structure, mapping AB:AB.
+      Informational rather than a pass: the contact is the crystallographic dimer (see
+      M_013), and with a start-to-final Cα RMSD of 0.41 Å a high DockQ is close to
+      guaranteed, so the number carries little discriminating information. The registry
+      makes chain mapping a hard gate for homo-oligomers and 1SAR A/B is one; only the
+      AB:AB mapping was scored here, so the swapped mapping remains unmeasured.
+  - id: EVAL_1sar_cdba2c07_2026-09-07_M_015
+    catalog_task_ref: T16
+    stage: final
+    scope: interface
+    scope_selector: AB:AB
+    metric_definition_ref: T16_capri_interface_quality_class
+    oracle_tool_ref: DockQ
+    oracle_family: non_cctbx
+    oracle_measure:
+      value_text: High
+    pass_status: informational
+    notes: >-
+      CAPRI class derived from the DockQ score (Basu & Wallner 2016 bands). Carries the
+      same crystallographic-dimer caveat as M_013 and M_014.

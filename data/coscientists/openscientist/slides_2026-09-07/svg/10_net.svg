@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" font-family="Helvetica, Arial, sans-serif">
+  <rect width="100%" height="100%" fill="#ffffff"/>
+  <rect x="0" y="0" width="1920" height="6" fill="#1f4e8c"/>
+  <text x="80" y="86" font-size="44" font-weight="700" fill="#1a1a2e">Net assessment</text>
+  <text x="80" y="128" font-size="22" font-weight="400" fill="#5a6071">What the artefact supports, what it does not, what is still open</text>
+  <line x1="80" y1="1020" x2="1840" y2="1020" stroke="#e3e6ee" stroke-width="1"/>
+  <text x="80" y="1050" font-size="16" fill="#5a6071">1SAR artefact audit · openscientist artefact cdba2c07 · 2026-09-07</text>
+  <text x="1840" y="1050" font-size="16" fill="#5a6071" text-anchor="end">protstruct_review · artefact audit 2026-09-07</text>
+
+  <rect x="80" y="190" width="860" height="300" rx="10" ry="10" fill="#dff0e1"/>
+
+  <text x="112" y="240" font-size="27" font-weight="700" fill="#1f7a3f">Supported</text>
+  <text x="112" y="292" font-size="20" fill="#1a1a2e">✓ The reported R-factors match the agent's round 7</text>
+  <text x="112" y="330" font-size="20" fill="#1a1a2e">✓ The sulfate edit the report describes was correct</text>
+  <text x="112" y="368" font-size="20" fill="#1a1a2e">✓ Both H builders agree on every confident flip</text>
+  <text x="112" y="406" font-size="20" fill="#1a1a2e">✓ The deposited T15 leg reproduces its calibration</text>
+  <text x="112" y="444" font-size="20" fill="#1a1a2e">✓ gemmi−PHENIX R-work offset passes at +0.0058</text>
+  <rect x="980" y="190" width="860" height="300" rx="10" ry="10" fill="#f5d6d4"/>
+
+  <text x="1012" y="240" font-size="27" font-weight="700" fill="#a8201a">Not supported</text>
+  <text x="1012" y="292" font-size="20" fill="#1a1a2e">✗ The archive does not contain the reported model</text>
+  <text x="1012" y="330" font-size="20" fill="#1a1a2e">✗ Round 7's gap is 0.0501 — fails the task's &lt; 0.05</text>
+  <text x="1012" y="368" font-size="20" fill="#1a1a2e">✗ The protein identity — supplied by our prompt</text>
+  <text x="1012" y="406" font-size="20" fill="#1a1a2e">✗ Ion assignments — both on deposited water sites</text>
+  <text x="1012" y="444" font-size="20" fill="#1a1a2e">✗ “T03 settled” and “refinement sound”</text>
+  <rect x="80" y="520" width="1760" height="170" rx="10" ry="10" fill="#fbeecb"/>
+
+  <text x="112" y="568" font-size="25" font-weight="700" fill="#b07c00">Open</text>
+  <text x="112" y="610" font-size="20" font-weight="400" fill="#1a1a2e">Recover or re-run the round-7 model before any claim about the agent's final refinement · fix the</text>
+  <text x="112" y="639" font-size="20" font-weight="400" fill="#1a1a2e">upstream prompt · T02 has no driver · T15 needs a content figure · the T16 swapped mapping is unmeasured</text>
+  <text x="112" y="668" font-size="20" font-weight="400" fill="#1a1a2e">· geometry, waters and data quality are carried from May, not re-measured.</text>
+
+  <rect x="80" y="720" width="1760" height="210" rx="10" ry="10" fill="#dce6f4"/>
+
+  <text x="112" y="772" font-size="23" font-weight="700" fill="#1f4e8c">The agent's largest visible failure — a headline number that did not match its own shipped model —</text>
+  <text x="112" y="805" font-size="23" font-weight="700" fill="#1f4e8c">was an artefact-packaging failure. Its real failure was accepting a protein identity the benchmark</text>
+  <text x="112" y="838" font-size="23" font-weight="700" fill="#1f4e8c">handed it without checking the coordinates. This harness made the mirror-image error: it trusted a</text>
+  <text x="112" y="871" font-size="23" font-weight="700" fill="#1f4e8c">filename for five review rounds, and nearly published the accusation.</text>
+
+</svg>

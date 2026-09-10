@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" font-family="Helvetica, Arial, sans-serif">
+  <rect width="100%" height="100%" fill="#ffffff"/>
+  <rect x="0" y="0" width="1920" height="6" fill="#1f4e8c"/>
+  <text x="80" y="86" font-size="44" font-weight="700" fill="#1a1a2e">Trust and reporting caveats</text>
+  <text x="80" y="128" font-size="22" font-weight="400" fill="#5a6071">What this record's own numbers can and cannot support</text>
+  <line x1="80" y1="1020" x2="1840" y2="1020" stroke="#e3e6ee" stroke-width="1"/>
+  <text x="80" y="1050" font-size="16" fill="#5a6071">1SAR artefact audit · openscientist artefact cdba2c07 · 2026-09-07</text>
+  <text x="1840" y="1050" font-size="16" fill="#5a6071" text-anchor="end">protstruct_review · artefact audit 2026-09-07</text>
+
+  <rect x="80" y="200" width="6" height="129" fill="#1f7a3f"/>
+  <text x="110" y="228" font-size="24" font-weight="700" fill="#1f7a3f">No verdict rests on cctbx grading cctbx</text>
+  <text x="110" y="264" font-size="20" font-weight="400" fill="#1a1a2e">After the demotions, the only rows still carrying a verdict are the two gemmi offset rows — both</text>
+  <text x="110" y="293" font-size="20" font-weight="400" fill="#1a1a2e">non-cctbx. The cctbx rows that compared a round-7 claim against the round-4 packaged model are now</text>
+  <text x="110" y="322" font-size="20" font-weight="400" fill="#1a1a2e">informational.</text>
+
+  <rect x="80" y="355" width="6" height="129" fill="#b07c00"/>
+  <text x="110" y="383" font-size="24" font-weight="700" fill="#b07c00">Neither the accusation nor the exoneration is oracled</text>
+  <text x="110" y="419" font-size="20" font-weight="400" fill="#1a1a2e">Raw oracle output was not committed, so 0.1564 / 0.2116 need a licensed PHENIX rerun to reproduce. And</text>
+  <text x="110" y="448" font-size="20" font-weight="400" fill="#1a1a2e">round 7's 0.1488 / 0.1989 are attested only by the agent's own cctbx log — the coordinates are gone, so</text>
+  <text x="110" y="477" font-size="20" font-weight="400" fill="#1a1a2e">the number that clears the report can never be checked.</text>
+
+  <rect x="80" y="510" width="6" height="100" fill="#b07c00"/>
+  <text x="110" y="538" font-size="24" font-weight="700" fill="#b07c00">The QDS carries no verdicts</text>
+  <text x="110" y="574" font-size="20" font-weight="400" fill="#1a1a2e">qds_emit.py does not propagate pass_status, so no status in this record reaches the sheet, and its</text>
+  <text x="110" y="603" font-size="20" font-weight="400" fill="#1a1a2e">headline R-factors are the gemmi triple. Read verdicts from the eval, not the sheet.</text>
+
+  <rect x="80" y="636" width="6" height="100" fill="#5a6071"/>
+  <text x="110" y="664" font-size="24" font-weight="700" fill="#5a6071">The trust invariant passes by omission</text>
+  <text x="110" y="700" font-size="20" font-weight="400" fill="#1a1a2e">The sheet carries no open cctbx-only row because it does not grade T06 — the row open on every prior 1SAR</text>
+  <text x="110" y="729" font-size="20" font-weight="400" fill="#1a1a2e">sheet. Nothing that was open was closed.</text>
+
+</svg>

@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" font-family="Helvetica, Arial, sans-serif">
+  <rect width="100%" height="100%" fill="#ffffff"/>
+  <rect x="0" y="0" width="1920" height="6" fill="#1f4e8c"/>
+  <text x="80" y="86" font-size="44" font-weight="700" fill="#1a1a2e">Correction history</text>
+  <text x="80" y="128" font-size="22" font-weight="400" fill="#5a6071">What this record withdraws, and why</text>
+  <line x1="80" y1="1020" x2="1840" y2="1020" stroke="#e3e6ee" stroke-width="1"/>
+  <text x="80" y="1050" font-size="16" fill="#5a6071">1SAR artefact audit · openscientist artefact cdba2c07 · 2026-09-07</text>
+  <text x="1840" y="1050" font-size="16" fill="#5a6071" text-anchor="end">protstruct_review · artefact audit 2026-09-07</text>
+
+  <rect x="80" y="190" width="1760" height="64" fill="#1f4e8c"/>
+  <text x="94" y="228.66666666666666" font-size="20" font-weight="700" fill="#ffffff" text-anchor="start">Claim</text>
+  <text x="940.0" y="228.66666666666666" font-size="20" font-weight="700" fill="#ffffff" text-anchor="middle">Status</text>
+  <text x="1114" y="228.66666666666666" font-size="20" font-weight="700" fill="#ffffff" text-anchor="start">Why</text>
+  <rect x="80" y="254" width="1760" height="64" fill="#ffffff"/>
+  <text x="94" y="292.3333333333333" font-size="19" fill="#1a1a2e" text-anchor="start">“0.199 corresponds to no model the agent produced”</text>
+  <rect x="780" y="254" width="320" height="64" fill="#f5d6d4"/>
+  <text x="940.0" y="292.3333333333333" font-size="19" fill="#a8201a" text-anchor="middle">withdrawn — false</text>
+  <text x="1114" y="292.3333333333333" font-size="19" fill="#5a6071" text-anchor="start">Round 7 produced 0.1989; it was never packaged</text>
+  <rect x="80" y="318" width="1760" height="64" fill="#f7f8fb"/>
+  <text x="94" y="356.3333333333333" font-size="19" fill="#1a1a2e" text-anchor="start">“The report describes the wrong protein” (agent's error)</text>
+  <rect x="780" y="318" width="320" height="64" fill="#fbeecb"/>
+  <text x="940.0" y="356.3333333333333" font-size="19" fill="#b07c00" text-anchor="middle">reattributed</text>
+  <text x="1114" y="356.3333333333333" font-size="19" fill="#5a6071" text-anchor="start">The harness prompt supplied the identity</text>
+  <rect x="80" y="382" width="1760" height="64" fill="#ffffff"/>
+  <text x="94" y="420.3333333333333" font-size="19" fill="#1a1a2e" text-anchor="start">“The starting model has zero heteroatoms”</text>
+  <rect x="780" y="382" width="320" height="64" fill="#f5d6d4"/>
+  <text x="940.0" y="420.3333333333333" font-size="19" fill="#a8201a" text-anchor="middle">withdrawn — false</text>
+  <text x="1114" y="420.3333333333333" font-size="19" fill="#5a6071" text-anchor="start">It has two sulfates, written as ATOM</text>
+  <rect x="80" y="446" width="1760" height="64" fill="#f7f8fb"/>
+  <text x="94" y="484.3333333333333" font-size="19" fill="#1a1a2e" text-anchor="start">“Ion decisions remain defensible” (May)</text>
+  <rect x="780" y="446" width="320" height="64" fill="#f5d6d4"/>
+  <text x="940.0" y="484.3333333333333" font-size="19" fill="#a8201a" text-anchor="middle">withdrawn</text>
+  <text x="1114" y="484.3333333333333" font-size="19" fill="#5a6071" text-anchor="start">Both ions sit on deposited water sites</text>
+  <rect x="80" y="510" width="1760" height="64" fill="#ffffff"/>
+  <text x="94" y="548.3333333333334" font-size="19" fill="#1a1a2e" text-anchor="start">“T03 settled / refinement sound”</text>
+  <rect x="780" y="510" width="320" height="64" fill="#f5d6d4"/>
+  <text x="940.0" y="548.3333333333334" font-size="19" fill="#a8201a" text-anchor="middle">withdrawn</text>
+  <text x="1114" y="548.3333333333334" font-size="19" fill="#5a6071" text-anchor="start">Only the R-value rules of a conjunctive rubric were run</text>
+  <rect x="80" y="574" width="1760" height="64" fill="#f7f8fb"/>
+  <text x="94" y="612.3333333333334" font-size="19" fill="#1a1a2e" text-anchor="start">Five successive gradings of the R-free claim</text>
+  <rect x="780" y="574" width="320" height="64" fill="#fbeecb"/>
+  <text x="940.0" y="612.3333333333334" font-size="19" fill="#b07c00" text-anchor="middle">superseded</text>
+  <text x="1114" y="612.3333333333334" font-size="19" fill="#5a6071" text-anchor="start">All compared the report against the wrong model</text>
+  <rect x="80" y="190" width="1760" height="448" fill="none" stroke="#e3e6ee" stroke-width="1"/>
+  <line x1="780" y1="190" x2="780" y2="638" stroke="#e3e6ee" stroke-width="1"/>
+  <line x1="1100" y1="190" x2="1100" y2="638" stroke="#e3e6ee" stroke-width="1"/>
+
+  <rect x="80" y="660" width="1760" height="270" rx="10" ry="10" fill="#f7f8fb"/>
+
+  <text x="112" y="710" font-size="26" font-weight="700" fill="#1a1a2e">The shared blind spot</text>
+  <text x="112" y="756" font-size="21" font-weight="400" fill="#1a1a2e">Five review passes treated three things as ground truth that were not: the filename 1sar_final.pdb, the</text>
+  <text x="112" y="786" font-size="21" font-weight="400" fill="#1a1a2e">ATOM/HETATM record type as a proxy for chemical identity, and the harness prompt's statement of what protein</text>
+  <text x="112" y="816" font-size="21" font-weight="400" fill="#1a1a2e">this is. Each pass re-examined the same headline numbers more carefully than the last. None asked whether</text>
+  <text x="112" y="846" font-size="21" font-weight="400" fill="#1a1a2e">the object being measured was the object under discussion.</text>
+
+  <text x="112" y="880" font-size="21" font-weight="700" fill="#1f4e8c">The check that resolved it — following provenance through the archive — cost minutes.</text>
+
+</svg>

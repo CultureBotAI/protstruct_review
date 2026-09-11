@@ -88,12 +88,24 @@ tool_recommendations:
     role: top_performing
     rank: 1
     justification: >-
-      Non-cctbx independent oracle; corroborated phenix.model_vs_data on
-      the 1SAR eval (0.164 vs 0.156, both above the agent-reported 0.149)
-      and is what hardened the "agent's R-free is too low" finding.
+      Non-cctbx independent code path that brackets phenix.model_vs_data
+      rather than adjudicating it: on the same model, MTZ and work set it
+      reads higher in R-work in 15 of 15 benchmarked entries (median
+      +0.0069, max +0.0151; governed envelope |ΔR| ≤ 0.02,
+      ref/research/tolerance_benchmark_r_offset.md). The offset is
+      one-sided, so a gemmi R-work at or below PHENIX's is the red flag —
+      a negative Δ is off-distribution. On the packaged 1SAR
+      model it gives 0.1622 against PHENIX's 0.1564. It does not grade
+      an agent's claim — ref/tool_assumptions.yaml forbids reporting the
+      gemmi number as the claim being wrong — and an earlier version of
+      this entry that said it "hardened the agent's R-free is too low
+      finding" is withdrawn: that finding compared oracle measurements
+      of a round-4 model against a round-7 claim and was retracted in
+      EVAL_1sar_cdba2c07_2026-09-07.
     evidence_refs:
       - EVAL_1sar_cdba2c07_2026-04-24
-    as_of_date: '2026-04-25'
+      - EVAL_1sar_cdba2c07_2026-09-07
+    as_of_date: '2026-09-09'
 
   - id: REC_T03_r_work_alternative_servalcat
     metric_definition_ref: T03_r-work
@@ -122,10 +134,18 @@ tool_recommendations:
     tool_ref: gemmi sfcalc
     role: top_performing
     rank: 1
-    justification: Non-cctbx confirmation of R-free finding on 1SAR eval.
+    justification: >-
+      Non-cctbx bracket on R-free from an independent code path —
+      corroborative, not an independent verdict (EVAL_1sar_cdba2c07_2026-09-07
+      M_006). An earlier version of this entry called it "confirmation of
+      R-free finding on 1SAR eval"; that finding compared oracle measurements
+      of the packaged round-4 model against the agent's round-7 claim and is
+      withdrawn in the same record. No R-free-specific offset band is
+      benchmarked; the |ΔR| ≤ 0.02 envelope applied to it is R-work-derived.
     evidence_refs:
       - EVAL_1sar_cdba2c07_2026-04-24
-    as_of_date: '2026-04-25'
+      - EVAL_1sar_cdba2c07_2026-09-07
+    as_of_date: '2026-09-09'
 
   - id: REC_T03_gap_top_considered
     metric_definition_ref: T03_r-free_r-work_gap

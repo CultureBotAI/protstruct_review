@@ -1,0 +1,238 @@
+tools:
+- id: DSSP
+  version: 4.6.1
+  family: non_cctbx
+  catalog_tasks_served:
+  - T15
+- id: STRIDE
+  family: non_cctbx
+  catalog_tasks_served:
+  - T15
+- id: biotite P-SEA
+  version: 1.7.1
+  family: non_cctbx
+  catalog_tasks_served:
+  - T15
+- id: DSSP + biotite P-SEA
+  version: DSSP 4.6.1 + biotite 1.7.1
+  family: non_cctbx
+  catalog_tasks_served:
+  - T15
+tool_recommendations:
+- id: REC_T15_secondary_structure_agreement_top_considered
+  metric_definition_ref: T15_secondary_structure_agreement
+  tool_ref: DSSP
+  role: top_considered
+  rank: 1
+  justification: >-
+    DSSP is the reference implementation for secondary-structure assignment.
+    The gradeable T15 metric is three-state agreement between two independent
+    assigners, so DSSP is paired with STRIDE rather than used alone.
+  as_of_date: '2026-07-20'
+  effective_at: '2026-07-20T00:00:00+00:00'
+- id: REC_T15_secondary_structure_agreement_top_considered_2026_09_22
+  metric_definition_ref: T15_secondary_structure_agreement
+  tool_ref: DSSP
+  role: top_considered
+  rank: 1
+  justification: >-
+    DSSP is the reference implementation for secondary-structure assignment.
+    For the oracle-side T15 result, report its H+E content with three-state
+    agreement from an independent second assigner. Content ≥0.20 is only a
+    provisional, informational precondition on how much weight to give the
+    agreement; it is not a model-quality threshold. The historical 0.65 value is
+    provisional and non-gradeable until exact-denominator recalibration. The
+    separate agent-vs-DSSP clause is ≥0.85 when agent labels exist.
+  evidence_refs:
+  - ref/research/tolerance_benchmark_ss_agreement.md
+  as_of_date: '2026-09-22'
+  effective_at: '2026-09-22T09:00:00+00:00'
+  supersedes_recommendation_ref: REC_T15_secondary_structure_agreement_top_considered
+- id: REC_T15_secondary_structure_agreement_alternative
+  metric_definition_ref: T15_secondary_structure_agreement
+  tool_ref: STRIDE
+  role: alternative
+  rank: 2
+  justification: >-
+    STRIDE is the independent second assigner in the agreement pair. It uses
+    hydrogen-bond energy plus dihedral criteria, so it fails differently from
+    DSSP — which is what makes the agreement informative rather than
+    tautological.
+  as_of_date: '2026-07-20'
+  effective_at: '2026-07-20T00:00:00+00:00'
+- id: REC_T15_secondary_structure_agreement_alternative_2026_09_22
+  metric_definition_ref: T15_secondary_structure_agreement
+  tool_ref: STRIDE
+  role: alternative
+  rank: 2
+  justification: >-
+    STRIDE is the independent second assigner in the agreement pair. It uses
+    hydrogen-bond energy plus dihedral criteria, so it fails differently from
+    DSSP — which is what makes the agreement informative rather than
+    tautological. Report DSSP H+E content alongside it; content below the
+    provisional 0.20 precondition warns that coil/coil calls may dominate.
+  evidence_refs:
+  - ref/research/tolerance_benchmark_ss_agreement.md
+  as_of_date: '2026-09-22'
+  effective_at: '2026-09-22T09:00:00+00:00'
+  supersedes_recommendation_ref: REC_T15_secondary_structure_agreement_alternative
+- id: REC_T15_secondary_structure_content_top_considered
+  metric_definition_ref: T15_secondary_structure_content
+  tool_ref: DSSP
+  role: top_considered
+  rank: 1
+  justification: >-
+    DSSP H+E content is an informational diagnostic for the two-assigner
+    agreement metric. Its provisional ≥0.20 precondition indicates whether
+    coil/coil calls may dominate; it is not a model-quality threshold.
+    scripts/t15_ss_agreement.py emits it from the same normalized DSSP assignment
+    used in the agreement calculation.
+  evidence_refs:
+  - ref/research/tolerance_benchmark_ss_agreement.md
+  as_of_date: '2026-09-22'
+  effective_at: '2026-09-22T09:00:00+00:00'
+- id: REC_T15_secondary_structure_agreement_top_performing
+  metric_definition_ref: T15_secondary_structure_agreement
+  tool_ref: biotite P-SEA
+  role: top_performing
+  rank: 1
+  justification: >-
+    Installed and runnable now (scripts/t15_ss_agreement.py): DSSP vs biotite
+    P-SEA three-state agreement. biotite's Cα-geometry P-SEA is a different
+    algorithm family from DSSP's H-bond energetics, so the agreement is
+    informative rather than tautological. Stands in for STRIDE, which is not
+    currently installable via Homebrew.
+  as_of_date: '2026-07-21'
+  effective_at: '2026-07-21T00:00:00+00:00'
+- id: REC_T15_secondary_structure_agreement_top_performing_2026_09_22
+  metric_definition_ref: T15_secondary_structure_agreement
+  tool_ref: biotite P-SEA
+  role: top_performing
+  rank: 1
+  justification: >-
+    Installed and runnable now (scripts/t15_ss_agreement.py): DSSP vs biotite
+    P-SEA three-state agreement. biotite's Cα-geometry P-SEA is a different
+    algorithm family from DSSP's H-bond energetics, so the agreement is
+    informative rather than tautological. Report agreement and DSSP H+E content
+    informationally; content ≥0.20 is a provisional interpretability
+    precondition, not a quality verdict. The historical 0.65 value is provisional
+    and non-gradeable until exact-denominator recalibration. Stands in for STRIDE,
+    which is not currently installable via Homebrew. This is distinct from the
+    agent-vs-DSSP ≥0.85 clause, which is unevaluable without agent labels.
+  evidence_refs:
+  - ref/research/tolerance_benchmark_ss_agreement.md
+  as_of_date: '2026-09-22'
+  effective_at: '2026-09-22T09:00:00+00:00'
+  supersedes_recommendation_ref: REC_T15_secondary_structure_agreement_top_performing
+assumptions: []
+qds_replay_pins:
+- id: QDS_1sar_cdba2c07_2026-09-22_replay_pin
+  qds_ref: QDS_1sar_cdba2c07_2026-09-22
+  source_evaluation_run_refs:
+  - EVAL_1sar_cdba2c07_2026-09-21
+  - EVAL_1sar_cdba2c07_2026-09-22
+  qds_emission_context_ref: QDS_1sar_cdba2c07_2026-09-22_emission_context
+  emitter_contract_version: '3'
+  canonical_qds_sha256: 05cf267f0dec1bb60c66cf56a82dc3f8ee4c59fc92280165023f8dd41f3bc6b0
+  emitter_source_sha256: 482395d25551a79803b8addb506d0115161b9500058cfae6593a7419d632e2d4
+  source_tools_sha256: 839088cdbc4f7503b35379584f9ad55a3525dca66f647206901de8e815eb0338
+  source_tool_recommendations_sha256: 8253e6291c935075d90071c88a67c095123b916b900a851e6dd1e892586d6db9
+  source_tool_assumptions_sha256: 51eb6f9a72913166aa3e724e15e41d1223020d771c26949e1b5af38b2db0279f
+  source_qds_emission_context_sha256: 535cb86f956f4b4804e257c36668ec4b4ba106d85a421f245a0a1fdb0932fcef
+qds_emission_contexts:
+- id: QDS_1sar_cdba2c07_2026-09-22_emission_context
+  qds_ref: QDS_1sar_cdba2c07_2026-09-22
+  owner_evaluation_run_ref: EVAL_1sar_cdba2c07_2026-09-22
+  structure_ref: 1sar
+  subject_ref: artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb
+  source_evaluation_run_refs:
+  - EVAL_1sar_cdba2c07_2026-09-21
+  - EVAL_1sar_cdba2c07_2026-09-22
+  issued_at: '2026-09-22T22:42:26+00:00'
+  coverage_scope: partial
+  scope_notes: >-
+    Partial sheet limited to T15 content/agreement re-measured on 2026-09-22 and
+    T16 reused unchanged from the 2026-09-21 run, all on the exact packaged
+    round-4 model. No other task is carried forward or re-measured; consult
+    earlier dated records separately. T15 domain/fold classification was not
+    performed, and the agent-vs-DSSP rubric clause is unevaluable because no
+    agent secondary-structure labels were retained. This is not a cumulative
+    quality sheet.
+  identity_description: >-
+    Ribonuclease Sa packaged round-4 model; explicitly partial T15+T16 follow-up.
+  headline_verdict: >-
+    This partial T15+T16 follow-up uses the exact packaged round-4 1SAR model.
+    The 2026-09-22 T15 rerun measured DSSP H+E content 72/192 = 0.3750 and
+    DSSP/biotite P-SEA H/E/C agreement 169/192 = 0.8802; both are
+    informational. The content clears only the provisional ≥0.20
+    interpretability precondition, not a model-quality threshold; the 0.8802
+    oracle-pair result is not the separate agent-vs-DSSP ≥0.85 rubric clause,
+    and domain/fold classification was not performed. T16 is reused unchanged
+    from 2026-09-21, not rerun: AB:AB is 0.944527/High versus the AB:BA mapping
+    control at 0.006321/Incorrect. That contrast shows the mapping is
+    load-bearing, while A/B remains a crystallographic contact rather than a
+    certified biological assembly. No other task is included; the earlier
+    archive/report-version mismatch was not re-evaluated by this partial sheet.
+evaluation_runs:
+- id: EVAL_1sar_cdba2c07_2026-09-22
+  eval_filename_stem: EVAL_1sar_cdba2c07_2026-09-22
+  structure_ref: 1sar
+  artifact_ref: cdba2c07-daff-4f60-ae96-12452b3a5fbb
+  run_date: '2026-09-22'
+  catalog_tasks_applied:
+  - T15
+  measurements:
+  - id: EVAL_1sar_cdba2c07_2026-09-22_T15_SS_97824701cc681ebe_M_agreement
+    catalog_task_ref: T15
+    stage: final
+    scope: complex
+    metric_definition_ref: T15_secondary_structure_agreement
+    oracle_tool_ref: DSSP + biotite P-SEA
+    oracle_family: non_cctbx
+    bundle_ref: EVAL_1sar_cdba2c07_2026-09-22_T15_SS_97824701cc681ebe
+    evidence_refs:
+    - data/coscientists/openscientist/EVIDENCE_1sar_cdba2c07_2026-09-22_t15.json
+    oracle_measure:
+      value_numeric: 0.8802
+      unit: fraction
+    pass_status: informational
+    notes: >-
+      Three-state (H/E/C) agreement between independent non-cctbx assigners:
+      DSSP 4.6.1 (H-bond) on the gemmi 0.7.5-normalized copy and biotite P-SEA
+      1.7.1 (Cα geometry) on the original archived model bytes. The exact retained
+      evidence scores 169/192 residues concordantly; DSSP and biotite each score
+      192, with none dropped from the shared denominator. DSSP H+E content clears the provisional 0.20
+      interpretability precondition, so the oracle-pair agreement has useful
+      interpretive range. This remains informational: it is not a model-quality
+      verdict and is not the separate agent-vs-DSSP ≥0.85 clause, for which no
+      agent labels were retained.
+    subject_ref: artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb
+  - id: EVAL_1sar_cdba2c07_2026-09-22_T15_SS_97824701cc681ebe_M_content
+    catalog_task_ref: T15
+    stage: final
+    scope: complex
+    metric_definition_ref: T15_secondary_structure_content
+    oracle_tool_ref: DSSP
+    oracle_family: non_cctbx
+    bundle_ref: EVAL_1sar_cdba2c07_2026-09-22_T15_SS_97824701cc681ebe
+    evidence_refs:
+    - data/coscientists/openscientist/EVIDENCE_1sar_cdba2c07_2026-09-22_t15.json
+    oracle_measure:
+      value_numeric: 0.375
+      unit: fraction
+    pass_status: informational
+    notes: >-
+      DSSP H+E content over every DSSP-scored residue is (29 H + 43 E) / 192 =
+      0.3750, with 120 coil residues. The exact retained evidence binds the
+      archive/member/source bytes, normalized input, raw DSSP output, tool
+      versions, and per-residue assignments. The value clears the provisional
+      0.20 interpretability precondition for the paired agreement only; it is
+      not a model-quality threshold or verdict.
+    subject_ref: artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb
+  headline_verdict: >-
+    This partial run re-measures T15 only on the exact packaged round-4 model.
+    DSSP H+E content is 72/192 = 0.3750 and DSSP/biotite P-SEA three-state
+    agreement is 169/192 = 0.8802; both are informational. Content clears only
+    the provisional 0.20 interpretability precondition. No agent labels were
+    retained for the separate agent-vs-DSSP rubric clause, and domain/fold
+    classification was not performed. T16 and every other task were not run.

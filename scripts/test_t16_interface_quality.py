@@ -545,6 +545,7 @@ def test_bsa_selects_declared_interface() -> None:
             coverage_scope="partial",
             scope_notes="BSA-only wrapper integration fixture.",
             issued_at="2026-09-22T10:00:00+00:00",
+            emitter_contract_version="2",
         )
     _check(
         qds["interface_quality_summary"]["interface_buried_surface_area"]
@@ -1253,6 +1254,7 @@ def test_multimapping_fragment_is_qds_emittable() -> None:
             coverage_scope="partial",
             scope_notes="T16 wrapper integration fixture.",
             issued_at="2026-09-22T10:00:00+00:00",
+            emitter_contract_version="2",
         )
         summary = qds["interface_quality_summary"]
         _check(

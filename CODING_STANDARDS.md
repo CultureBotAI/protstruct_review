@@ -141,6 +141,29 @@ Where this file and the handbook overlap, they must agree; if they drift, that i
     gap must be selected as a coherent bundle from one evaluation run, subject, tool, and oracle
     family. Never choose those slots independently or synthesize a triple across Gemmi, REFMAC,
     Servalcat, or cctbx results. If no coherent bundle covers the available slots, emission fails.
+13f. **Contract-3 partial-sheet prose is source-owned and typed.** Every partial contract-3 QDS,
+    including a single-run sheet, has exactly one `QdsEmissionContext` in the canonical source
+    `EVAL_*.yaml`. The context names its owning EvaluationRun, target QDS, exact deterministic
+    source-run order, structure, subject, issue time, partial boundary, identity description, and
+    one current headline. The QDS and its replay pin reference that context; the replay pin also
+    hashes the complete deduplicated context snapshot. Cumulative sheets carry no context and keep
+    the retained run-headline semantics. Never select QDS prose by “latest run wins” or concatenate
+    a superseded partial-run headline into a new summary. Context timestamps must identify an exact
+    timezone-aware instant; quoted ISO strings and YAML-native datetimes normalize to canonical UTC.
+    Contract 3 sorts applied recommendation and assumption rows by id so live-registry and
+    multi-carrier replay routes produce identical canonical bytes.
+13g. **Retained emitter contracts are replay-only.** Every newly committed QDS uses the current
+    emitter contract. Older contract modules remain callable solely so an already-issued sheet can
+    be reconstructed; they are not alternate authoring modes. A historical old-contract sheet is
+    admitted only by an immutable allowlist entry binding repository path, QDS id, issue timestamp,
+    declared contract, and complete carrier SHA-256, and it still undergoes normal source-pin and
+    retained-contract replay checks. Copying, renaming, backdating, or editing it removes the
+    authorization. `EvaluationRun` and `QualityDataSheet` objects may appear only in canonical
+    `data/**/EVAL_*.yaml` and `data/**/QDS_*.yaml` carriers; embedding them in another schema-valid
+    `Container` (including a `ref/*.yaml` registry) is an integrity failure, not a discovery bypass.
+    The `.yaml` suffix is exact and lowercase. Repository-wide admission discovers case variants
+    only to reject them, forbids YAML symlink carriers, and compares lexical paths so an alias can
+    never inherit a target's historical authorization.
 14. **Behaviour-preserving refactors must be proven so.** After touching the emitter, regenerate a
     committed QDS and diff it: only `issued_at` may differ.
 

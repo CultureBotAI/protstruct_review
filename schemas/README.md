@@ -33,7 +33,7 @@ linkml-validate --schema schemas/protstruct_review.yaml \
     data/examples/eval/EVAL_1sar_cdba2c07_2026-04-24.yaml
 ```
 
-`linkml-validate` (LinkML 1.9.6) infers the target class from the YAML structure when the schema declares a `tree_root`. The `Container` class in this schema is the tree root and accepts any subset of `catalog_tasks`, `tools`, `metric_definitions`, `structures`, `experimental_data`, `agent_artifacts`, `evaluation_runs`, `quality_data_sheets`, `qds_replay_pins`, `tool_recommendations`, and `assumptions`.
+`linkml-validate` (LinkML 1.9.6) infers the target class from the YAML structure when the schema declares a `tree_root`. The `Container` class in this schema is the tree root and accepts any subset of `catalog_tasks`, `tools`, `metric_definitions`, `structures`, `experimental_data`, `agent_artifacts`, `evaluation_runs`, `quality_data_sheets`, `qds_emission_contexts`, `qds_replay_pins`, `tool_recommendations`, and `assumptions`.
 
 ## Quick-start: regenerate Pydantic models
 
@@ -55,6 +55,19 @@ The committed `protstruct_review/models.py` is the pinned API surface for downst
 - **Measurement values are typed.** `agent_claim`, `oracle_measure`, and `delta` use the `TypedMeasurementValue` class with exactly one of `{value_numeric, value_text, is_not_applicable=true}` populated. Source carriers cannot contain QDS lineage/verdict fields. The TSV→records loader at `scripts/tsv_to_records.py` is the canonical cell parser; do not hand-edit measurements. Referential integrity also enforces each MeasurementValue's metric↔task, tool↔task, and tool↔family coherence from source snapshots first and the live catalog only as fallback.
 - **References, not inlining.** Class-typed slots default to FK-style serialization (`structure_ref: 1sar`), not nested objects. Sub-summaries on `QualityDataSheet` (identity_block / geometry_summary / etc.) are explicitly `inlined: true` since they are not stand-alone entities.
 - **Identifiers are loose strings.** `EvaluationRun.id` and `QualityDataSheet.id` accept any string. The filename convention from `ref/eval_naming.md` lives on `eval_filename_stem`, not on the canonical id, so future suffixes (`_v2`, `_oracle-update`) don't require a schema bump.
+- **Partial contract-3 QDS prose is a source record.** Put exactly one
+  `QdsEmissionContext` in a canonical `EVAL_*.yaml`; name its owning run, target QDS,
+  exact source-run order, structure, subject, timezone-qualified timestamp, partial boundary, identity
+  description, and headline. The QDS and `QdsReplayPin` point back to it, and the pin
+  hashes the context snapshot. Quoted ISO strings and YAML-native datetimes represent the
+  same instant and emit as canonical UTC. Cumulative contract-3 sheets do not use a context.
+- **Old emitter contracts are replay-only.** New QDS carriers use the current contract. An
+  old-contract carrier is accepted only when its path, identity, timestamp, declared contract,
+  and complete bytes match the immutable historical authorization in the trust guard.
+  `EvaluationRun` and `QualityDataSheet` collections belong only in canonical
+  `data/**/EVAL_*.yaml` and `data/**/QDS_*.yaml` carriers, even though the generic schema
+  `Container` can parse them elsewhere. Case-variant suffixes and symlink aliases are rejected;
+  immutable authorization uses the lexical carrier path.
 
 ## Evolving the schema
 

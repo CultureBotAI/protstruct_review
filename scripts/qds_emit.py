@@ -44,6 +44,7 @@ from typing import Any
 import yaml
 
 import qds_emit_contract_v1
+import qds_emit_contract_v3
 
 try:
     from strict_yaml import strict_yaml_load
@@ -55,8 +56,8 @@ REPO = Path(__file__).resolve().parent.parent
 CATALOG_PATH = REPO / "ref" / "catalog.yaml"
 TOOL_RECS_PATH = REPO / "ref" / "tool_recommendations.yaml"
 TOOL_ASSUMPTIONS_PATH = REPO / "ref" / "tool_assumptions.yaml"
-QDS_EMITTER_CONTRACT_VERSION = "2"
-SUPPORTED_QDS_EMITTER_CONTRACT_VERSIONS = frozenset({"1", "2"})
+QDS_EMITTER_CONTRACT_VERSION = "3"
+SUPPORTED_QDS_EMITTER_CONTRACT_VERSIONS = frozenset({"1", "2", "3"})
 
 
 # ---------------------------------------------------------------------------
@@ -3573,6 +3574,37 @@ def emit_qds(
             structure_description,
             require_pinned_tool_snapshot,
         )
+    if emitter_contract_version == "3":
+        # Contract 3 retains contract 2's scientific projection and adds a
+        # source-owned sheet context. Keep duplicate-key rejection at the live
+        # boundary before the frozen adapter reads any source or registry.
+        for path in eval_paths:
+            _load_yaml_document(path, label=f"EvaluationRun source {path}")
+        if not require_pinned_tool_snapshot:
+            _load_yaml_document(CATALOG_PATH, label="contract-3 catalog")
+            for registry_path, registry_label in (
+                (TOOL_RECS_PATH, "contract-3 tool-recommendation registry"),
+                (TOOL_ASSUMPTIONS_PATH, "contract-3 tool-assumption registry"),
+            ):
+                if registry_path.exists():
+                    _load_yaml_document(registry_path, label=registry_label)
+        try:
+            return qds_emit_contract_v3._emit_qds_contract_3(
+                eval_paths,
+                qds_id,
+                structure_id,
+                structure_method,
+                subject_ref,
+                coverage_scope,
+                scope_notes,
+                resolution_a,
+                space_group,
+                issued_at,
+                structure_description,
+                require_pinned_tool_snapshot,
+            )
+        except qds_emit_contract_v3.QdsCompletenessError as exc:
+            raise QdsCompletenessError(str(exc)) from None
     supported = ", ".join(sorted(SUPPORTED_QDS_EMITTER_CONTRACT_VERSIONS))
     raise QdsCompletenessError(
         "unsupported QDS emitter contract version "

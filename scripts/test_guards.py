@@ -22,6 +22,7 @@ from __future__ import annotations
 import copy
 from contextlib import redirect_stderr
 from dataclasses import replace
+from datetime import datetime
 import importlib.util
 import io
 import sys
@@ -846,9 +847,182 @@ check(
     [],
 )
 check(
-    "referential routing registers both retained QDS contracts",
+    "referential routing registers all retained QDS contracts",
     set(integrity.QDS_ROUTED_SCALAR_SLOTS_BY_CONTRACT),
-    {"1", "2"},
+    {"1", "2", "3"},
+)
+_downgraded_qds_doc = {"quality_data_sheets": [{
+    "id": "QDS_new_contract_2",
+    "issued_at": "2026-09-22T12:00:00+00:00",
+    "emitter_contract_version": "2",
+    "coverage_scope": "partial",
+}]}
+_downgrade_floor_violations = integrity.check_qds_contract_floor(
+    _downgraded_qds_doc,
+    REPO / "data/provider/QDS_new_contract_2.yaml",
+)
+check(
+    "referential integrity independently rejects a new retained-contract QDS",
+    any("retained contracts are replay-only" in row
+        for row in _downgrade_floor_violations),
+    True,
+)
+_current_qds_doc = copy.deepcopy(_downgraded_qds_doc)
+_current_qds_doc["quality_data_sheets"][0]["emitter_contract_version"] = "3"
+check(
+    "referential contract floor permits the current emitter contract",
+    integrity.check_qds_contract_floor(
+        _current_qds_doc,
+        REPO / "data/provider/QDS_new_contract_3.yaml",
+    ),
+    [],
+)
+_retained_qds_path = (
+    REPO
+    / "data/coscientists/openscientist/QDS_1sar_cdba2c07_2026-09-21.yaml"
+)
+_retained_qds_doc = integrity.strict_yaml_load(_retained_qds_path.read_text())
+check(
+    "referential contract floor permits the exact retained historical QDS",
+    integrity.check_qds_contract_floor(_retained_qds_doc, _retained_qds_path),
+    [],
+)
+check(
+    "referential contract floor rejects a renamed copy of retained QDS data",
+    any(
+        "retained contracts are replay-only" in row
+        for row in integrity.check_qds_contract_floor(
+            _retained_qds_doc,
+            REPO / "data/provider/QDS_renamed_history.yaml",
+        )
+    ),
+    True,
+)
+_ref_carrier_path = REPO / "ref/tool_assumptions.yaml"
+_ref_smuggled_qds = integrity.strict_yaml_load(_ref_carrier_path.read_text())
+_ref_smuggled_qds["quality_data_sheets"] = copy.deepcopy(
+    _downgraded_qds_doc["quality_data_sheets"]
+)
+_ref_smuggle_violations = integrity.check_record(
+    _ref_carrier_path,
+    integrity.load_catalog_indices(),
+    _ref_smuggled_qds,
+)
+check(
+    "a ref Container cannot smuggle a QDS outside canonical carrier discovery",
+    any("quality_data_sheets may only be carried" in row
+        for row in _ref_smuggle_violations),
+    True,
+)
+check(
+    "the contract floor also examines a QDS smuggled into a ref Container",
+    any("retained contracts are replay-only" in row
+        for row in _ref_smuggle_violations),
+    True,
+)
+_ref_smuggled_eval = integrity.strict_yaml_load(_ref_carrier_path.read_text())
+_ref_smuggled_eval["evaluation_runs"] = [{"id": "EVAL_smuggled"}]
+check(
+    "a ref Container cannot smuggle an EvaluationRun outside canonical discovery",
+    any(
+        "evaluation_runs may only be carried" in row
+        for row in integrity.check_record_carrier_route(
+            _ref_smuggled_eval, _ref_carrier_path
+        )
+    ),
+    True,
+)
+with tempfile.TemporaryDirectory() as _carrier_tmp:
+    _carrier_root = Path(_carrier_tmp)
+    _off_route_path = _carrier_root / "misc/hidden_record.yaml"
+    _off_route_path.parent.mkdir(parents=True)
+    _off_route_path.write_text(
+        "quality_data_sheets:\n"
+        "- id: QDS_hidden\n"
+        "  issued_at: '2026-09-22T12:00:00+00:00'\n"
+        "  emitter_contract_version: '2'\n"
+        "  coverage_scope: partial\n"
+    )
+    _uppercase_qds_path = _carrier_root / "data/x/QDS_upper.YAML"
+    _uppercase_qds_path.parent.mkdir(parents=True)
+    _uppercase_qds_path.write_text(
+        "quality_data_sheets:\n"
+        "- id: QDS_upper\n"
+        "  issued_at: '2026-09-22T12:00:00+00:00'\n"
+        "  emitter_contract_version: '3'\n"
+        "  coverage_scope: cumulative\n"
+    )
+    _mixed_eval_path = _carrier_root / "data/x/EVAL_mixed.Yml"
+    _mixed_eval_path.write_text(
+        "evaluation_runs:\n"
+        "- id: EVAL_mixed\n"
+    )
+    _retained_copy = (
+        _carrier_root
+        / "data/coscientists/openscientist/"
+        "QDS_1sar_cdba2c07_2026-09-21.yaml"
+    )
+    _retained_copy.parent.mkdir(parents=True)
+    _retained_copy.write_bytes(_retained_qds_path.read_bytes())
+    _retained_alias = _carrier_root / "misc/QDS_alias.yaml"
+    _retained_alias.symlink_to(
+        Path(
+            "../data/coscientists/openscientist/"
+            "QDS_1sar_cdba2c07_2026-09-21.yaml"
+        )
+    )
+    _carrier_paths = integrity.repository_yaml_paths(_carrier_root)
+    _off_route_violations = integrity.check_repository_record_carriers(
+        _carrier_root
+    )
+check(
+    "repository-wide YAML discovery catches a QDS outside normal target paths",
+    any("quality_data_sheets may only be carried" in row
+        for row in _off_route_violations),
+    True,
+)
+check(
+    "uppercase data QDS suffix is discovered and rejected as noncanonical",
+    any(
+        "QDS_upper.YAML" in row and "quality_data_sheets may only be carried" in row
+        for row in _off_route_violations
+    ),
+    True,
+)
+check(
+    "mixed-case data Eval suffix is discovered and rejected as noncanonical",
+    any(
+        "EVAL_mixed.Yml" in row and "evaluation_runs may only be carried" in row
+        for row in _off_route_violations
+    ),
+    True,
+)
+check(
+    "repository YAML discovery preserves a symlink carrier's lexical path",
+    _retained_alias.absolute() in _carrier_paths,
+    True,
+)
+check(
+    "an alias cannot inherit the retained QDS target's canonical path authorization",
+    any(
+        "QDS_alias.yaml" in row and "YAML symlinks are not permitted" in row
+        for row in _off_route_violations
+    ),
+    True,
+)
+check(
+    "a retained-contract QDS symlink is checked under its alias path",
+    any(
+        "QDS_alias.yaml" in row and "retained contracts are replay-only" in row
+        for row in _off_route_violations
+    ),
+    True,
+)
+check(
+    "an off-route QDS is still subject to the current-contract floor",
+    any("retained contracts are replay-only" in row
+        for row in _off_route_violations),
+    True,
 )
 check(
     "contract 2 explicitly owns new T14 metrics as coverage-only",
@@ -1282,6 +1456,205 @@ _duplicate_pin_index = integrity.build_corpus_indices(
 check("duplicate replay-pin ids are diagnosed corpus-wide",
       any("duplicate QdsReplayPin id 'PIN_QDS_new'" in v
           for v in integrity.check_duplicate_ids(_duplicate_pin_index)), True)
+
+_context_old_doc = _copy.deepcopy(_old_doc)
+_context_old_doc["evaluation_runs"][0]["eval_filename_stem"] = "EVAL_old"
+_context_new_doc = _copy.deepcopy(_new_doc)
+_context_new_doc["evaluation_runs"][0]["eval_filename_stem"] = "EVAL_new"
+_context = {
+    "id": "QDS_context_emission_context",
+    "qds_ref": "QDS_context",
+    "owner_evaluation_run_ref": "EVAL_new",
+    "structure_ref": "1sar",
+    "subject_ref": "artifact:new#model.pdb",
+    "source_evaluation_run_refs": ["EVAL_old", "EVAL_new"],
+    "issued_at": "2026-09-22T12:30:00+00:00",
+    "coverage_scope": "partial",
+    "scope_notes": "Only the named T15 and T16 source runs.",
+    "identity_description": "Typed partial-sheet identity.",
+    "headline_verdict": "Typed partial-sheet headline.",
+}
+_context_new_doc["qds_emission_contexts"] = [_context]
+_context_new_doc["qds_replay_pins"] = [{
+    "id": "QDS_context_replay_pin",
+    "qds_ref": "QDS_context",
+    "source_evaluation_run_refs": ["EVAL_old", "EVAL_new"],
+    "qds_emission_context_ref": "QDS_context_emission_context",
+    "emitter_contract_version": "3",
+    "canonical_qds_sha256": "0" * 64,
+    "emitter_source_sha256": "1" * 64,
+    "source_tools_sha256": "2" * 64,
+    "source_tool_recommendations_sha256": "3" * 64,
+    "source_tool_assumptions_sha256": "4" * 64,
+    "source_qds_emission_context_sha256": "5" * 64,
+}]
+_context_qds_doc = {"quality_data_sheets": [{
+    "id": "QDS_context",
+    "emitter_contract_version": "3",
+    "emission_context_ref": "QDS_context_emission_context",
+    "structure_ref": "1sar",
+    "derived_from_evaluation_run_refs": ["EVAL_old", "EVAL_new"],
+    "issued_at": "2026-09-22T12:30:00+00:00",
+    "subject_ref": "artifact:new#model.pdb",
+    "coverage_scope": "partial",
+    "scope_notes": "Only the named T15 and T16 source runs.",
+    "identity_block": {"description": "Typed partial-sheet identity."},
+    "headline_verdict": "Typed partial-sheet headline.",
+}]}
+_context_records = [
+    (Path("data/provider/EVAL_old.yaml"), _context_old_doc),
+    (Path("data/provider/EVAL_new.yaml"), _context_new_doc),
+    (Path("data/provider/QDS_context.yaml"), _context_qds_doc),
+]
+_context_index = integrity.build_corpus_indices(_context_records)
+check(
+    "a typed contract-3 partial context and pin resolve bidirectionally",
+    integrity.check_corpus_refs(
+        _context_new_doc,
+        Path("data/provider/EVAL_new.yaml"),
+        _context_index,
+    ) + integrity.check_corpus_refs(
+        _context_qds_doc,
+        Path("data/provider/QDS_context.yaml"),
+        _context_index,
+    ),
+    [],
+)
+
+_native_datetime_context = _copy.deepcopy(_context_new_doc)
+_native_datetime_context["qds_emission_contexts"][0]["issued_at"] = (
+    datetime.fromisoformat("2026-09-22T12:30:00+00:00")
+)
+check(
+    "a YAML-native context datetime matches the equivalent QDS instant",
+    integrity.check_corpus_refs(
+        _native_datetime_context,
+        Path("data/provider/EVAL_new.yaml"),
+        _context_index,
+    ),
+    [],
+)
+
+_naive_datetime_context = _copy.deepcopy(_context_new_doc)
+_naive_datetime_context["qds_emission_contexts"][0]["issued_at"] = datetime(
+    2026, 9, 22, 12, 30
+)
+_violations = integrity.check_corpus_refs(
+    _naive_datetime_context,
+    Path("data/provider/EVAL_new.yaml"),
+    _context_index,
+)
+check(
+    "a timezone-ambiguous context datetime cannot match the target QDS",
+    any("issued_at differs from target QDS" in v for v in _violations),
+    True,
+)
+for _boundary_timestamp in (
+    "9999-12-31T23:59:59-23:59",
+    "0001-01-01T00:00:00+23:59",
+):
+    _boundary_datetime_context = _copy.deepcopy(_context_new_doc)
+    _boundary_datetime_context["qds_emission_contexts"][0]["issued_at"] = (
+        _boundary_timestamp
+    )
+    _violations = integrity.check_corpus_refs(
+        _boundary_datetime_context,
+        Path("data/provider/EVAL_new.yaml"),
+        _context_index,
+    )
+    check(
+        f"an out-of-range UTC context instant fails without a crash ({_boundary_timestamp})",
+        any("issued_at differs from target QDS" in v for v in _violations),
+        True,
+    )
+
+_bad_context_owner = _copy.deepcopy(_context_new_doc)
+_bad_context_owner["qds_emission_contexts"][0][
+    "owner_evaluation_run_ref"
+] = "EVAL_old"
+_violations = integrity.check_corpus_refs(
+    _bad_context_owner,
+    Path("data/provider/EVAL_new.yaml"),
+    _context_index,
+)
+check("a context owner must live in its canonical source document",
+      any("owner_evaluation_run_ref" in v and "same document" in v
+          for v in _violations), True)
+
+_bad_context_order = _copy.deepcopy(_context_new_doc)
+_bad_context_order["qds_emission_contexts"][0][
+    "source_evaluation_run_refs"
+] = ["EVAL_new", "EVAL_old"]
+_violations = integrity.check_corpus_refs(
+    _bad_context_order,
+    Path("data/provider/EVAL_new.yaml"),
+    _context_index,
+)
+check("a context must preserve the target QDS derivation order",
+      any("source_evaluation_run_refs differs" in v for v in _violations), True)
+
+_bad_context_scope = _copy.deepcopy(_context_new_doc)
+_bad_context_scope["qds_emission_contexts"][0]["coverage_scope"] = "cumulative"
+_violations = integrity.check_corpus_refs(
+    _bad_context_scope,
+    Path("data/provider/EVAL_new.yaml"),
+    _context_index,
+)
+check("a QDS emission context is partial-only",
+      any("coverage_scope must be 'partial'" in v for v in _violations), True)
+
+_bad_context_subject = _copy.deepcopy(_context_new_doc)
+_bad_context_subject["qds_emission_contexts"][0]["subject_ref"] = (
+    "artifact:wrong#model.pdb"
+)
+_violations = integrity.check_corpus_refs(
+    _bad_context_subject,
+    Path("data/provider/EVAL_new.yaml"),
+    _context_index,
+)
+check("a context subject must exactly match its target QDS",
+      any("subject_ref differs from target QDS" in v for v in _violations), True)
+
+_missing_context_qds = _copy.deepcopy(_context_qds_doc)
+_missing_context_qds["quality_data_sheets"][0].pop("emission_context_ref")
+_violations = integrity.check_corpus_refs(
+    _missing_context_qds,
+    Path("data/provider/QDS_context.yaml"),
+    _context_index,
+)
+check("a partial contract-3 QDS must name its emission context",
+      any("emission_context_ref is required" in v for v in _violations), True)
+
+_cumulative_context_qds = _copy.deepcopy(_context_qds_doc)
+_cumulative_context_qds["quality_data_sheets"][0]["coverage_scope"] = "cumulative"
+_violations = integrity.check_corpus_refs(
+    _cumulative_context_qds,
+    Path("data/provider/QDS_context.yaml"),
+    _context_index,
+)
+check("a cumulative QDS cannot carry a partial emission context",
+      any("only permitted on a partial" in v for v in _violations), True)
+
+_orphan_context = _copy.deepcopy(_context_new_doc)
+_orphan_context.pop("evaluation_runs")
+_violations = integrity.check_corpus_refs(
+    _orphan_context,
+    Path("data/provider/EVAL_new.yaml"),
+    _context_index,
+)
+check("a context cannot be carried without its owning EvaluationRun",
+      any("owner_evaluation_run_ref" in v and "same document" in v
+          for v in _violations), True)
+
+_duplicate_context_doc = _copy.deepcopy(_context_old_doc)
+_duplicate_context_doc["qds_emission_contexts"] = [_copy.deepcopy(_context)]
+_duplicate_context_index = integrity.build_corpus_indices(
+    _context_records
+    + [(Path("data/provider/EVAL_duplicate.yaml"), _duplicate_context_doc)]
+)
+check("multiple contexts for one QDS are diagnosed corpus-wide",
+      any("multiple QdsEmissionContexts target qds_ref 'QDS_context'" in v
+          for v in integrity.check_duplicate_ids(_duplicate_context_index)), True)
 
 
 # --- #548/#577/#666: typed measurement lineage is semantic, not just a string -----

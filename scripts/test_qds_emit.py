@@ -23,6 +23,7 @@ Wired into scripts/validate.sh.
 from __future__ import annotations
 
 import copy
+import datetime as dt
 import hashlib
 import sys
 import tempfile
@@ -37,6 +38,7 @@ sys.path.insert(0, str(REPO / "scripts"))
 import qds_emit  # noqa: E402
 import qds_emit_contract_v1  # noqa: E402
 import qds_emit_contract_v2  # noqa: E402
+import qds_emit_contract_v3  # noqa: E402
 
 
 EVAL_1SAR = REPO / "data/coscientists/openscientist/EVAL_1sar_cdba2c07_2026-04-24.yaml"
@@ -529,6 +531,7 @@ def test_derived_coverage_uses_only_validated_source_families() -> None:
             coverage_scope="partial",
             scope_notes="Synthetic T14 derived-coverage regression.",
             issued_at="2026-09-22T12:00:00+00:00",
+            emitter_contract_version="2",
         )
     conflict = next(
         row
@@ -750,9 +753,9 @@ def test_contract_v2_replays_full_september_eval_and_preserves_v1() -> None:
         "frozen contract-1 source changed while adding contract 2",
     )
     _check(
-        qds_emit.QDS_EMITTER_CONTRACT_VERSION == "2"
-        and qds_emit.SUPPORTED_QDS_EMITTER_CONTRACT_VERSIONS == {"1", "2"},
-        "live emitter does not default to v2 while retaining explicit v1 dispatch",
+        qds_emit.QDS_EMITTER_CONTRACT_VERSION == "3"
+        and qds_emit.SUPPORTED_QDS_EMITTER_CONTRACT_VERSIONS == {"1", "2", "3"},
+        "live emitter does not default to v3 while retaining v1/v2 dispatch",
     )
 
     subject = (
@@ -767,7 +770,11 @@ def test_contract_v2_replays_full_september_eval_and_preserves_v1() -> None:
         "scope_notes": "Full September audit contract-v2 regression.",
         "issued_at": "2026-09-22T00:00:00+00:00",
     }
-    live = qds_emit.emit_qds([EVAL_1SAR.parent / "EVAL_1sar_cdba2c07_2026-09-07.yaml"], **kwargs)
+    live = qds_emit.emit_qds(
+        [EVAL_1SAR.parent / "EVAL_1sar_cdba2c07_2026-09-07.yaml"],
+        emitter_contract_version="2",
+        **kwargs,
+    )
     frozen = qds_emit_contract_v2.emit_qds(
         [EVAL_1SAR.parent / "EVAL_1sar_cdba2c07_2026-09-07.yaml"], **kwargs
     )
@@ -823,6 +830,284 @@ def test_contract_v2_replays_full_september_eval_and_preserves_v1() -> None:
         "explicit v1 dispatch no longer replays through the frozen v1 implementation",
     )
     print("PASS  full September eval replays through v2 and v1 remains frozen")
+
+
+def test_contract_v3_uses_typed_partial_sheet_context() -> None:
+    """Contract 3 owns partial-sheet prose without recency heuristics."""
+    subject = "artifact:bundle#model.pdb"
+    qds_id = "QDS_context_partial"
+    context = {
+        "id": "QDS_context_partial_emission_context",
+        "qds_ref": qds_id,
+        "owner_evaluation_run_ref": "EVAL_context_new",
+        "structure_ref": "synth",
+        "subject_ref": subject,
+        "source_evaluation_run_refs": ["EVAL_context_old", "EVAL_context_new"],
+        "issued_at": "2026-09-22T12:30:00+00:00",
+        "coverage_scope": "partial",
+        "scope_notes": "Only the two explicitly named synthetic task runs.",
+        "identity_description": "Typed context identity, not stale run prose.",
+        "headline_verdict": "Current combined T15+T16 conclusion.",
+    }
+    structure = {
+        "id": "synth",
+        "id_kind": "local",
+        "method": "predicted_model",
+        "description": "Pinned source identity.",
+    }
+
+    def run(run_id: str, run_date: str, row_id: str, headline: str) -> dict:
+        return {
+            "id": run_id,
+            "structure_ref": "synth",
+            "run_date": run_date,
+            "catalog_tasks_applied": ["T15"],
+            "measurements": [],
+            "secondary_structure_assignments": [{
+                "id": row_id,
+                "structure_ref": "synth",
+                "subject_ref": subject,
+            }],
+            "headline_verdict": headline,
+        }
+
+    old_doc = {
+        "structures": [structure],
+        "evaluation_runs": [
+            run("EVAL_context_old", "2026-09-21", "SSA_old", "STALE old headline")
+        ],
+    }
+    new_doc = {
+        "structures": [structure],
+        "qds_emission_contexts": [context],
+        "evaluation_runs": [
+            run("EVAL_context_new", "2026-09-22", "SSA_new", "STALE new headline")
+        ],
+    }
+
+    def emit(paths: list[Path], **overrides: object) -> dict:
+        kwargs: dict[str, object] = {
+            "qds_id": qds_id,
+            "structure_id": "synth",
+            "subject_ref": subject,
+            "coverage_scope": "partial",
+            "scope_notes": context["scope_notes"],
+            "issued_at": context["issued_at"],
+        }
+        kwargs.update(overrides)
+        return qds_emit.emit_qds(paths, **kwargs)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        old_path = Path(tmpdir) / "EVAL_old.yaml"
+        new_path = Path(tmpdir) / "EVAL_new.yaml"
+        old_path.write_text(yaml.safe_dump(old_doc, sort_keys=False))
+        new_path.write_text(yaml.safe_dump(new_doc, sort_keys=False))
+
+        forward = emit([old_path, new_path])
+        reverse = emit([new_path, old_path])
+        _check(forward == reverse, "contract-3 output depends on input file order")
+        _check(
+            forward["derived_from_evaluation_run_refs"]
+            == ["EVAL_context_old", "EVAL_context_new"],
+            "contract-3 context does not bind deterministic admitted-run order",
+        )
+        _check(
+            forward.get("emitter_contract_version") == "3"
+            and forward.get("emission_context_ref") == context["id"],
+            "contract-3 output does not identify its source-owned context",
+        )
+        _check(
+            forward.get("headline_verdict") == context["headline_verdict"]
+            and "STALE" not in forward.get("headline_verdict", ""),
+            "contract-3 partial headline leaked stale run-level prose",
+        )
+        _check(
+            forward["identity_block"]["description"]
+            == context["identity_description"],
+            "contract-3 identity description did not come from its context",
+        )
+
+        native_datetime_doc = copy.deepcopy(new_doc)
+        native_datetime_doc["qds_emission_contexts"][0]["issued_at"] = (
+            dt.datetime.fromisoformat(context["issued_at"])
+        )
+        new_path.write_text(yaml.safe_dump(native_datetime_doc, sort_keys=False))
+        native_datetime = emit([old_path, new_path])
+        _check(
+            native_datetime == forward,
+            "schema-valid native and quoted context datetimes emit different QDS bytes",
+        )
+
+        naive_datetime_doc = copy.deepcopy(new_doc)
+        naive_datetime_doc["qds_emission_contexts"][0]["issued_at"] = (
+            dt.datetime(2026, 9, 22, 12, 30)
+        )
+        new_path.write_text(yaml.safe_dump(naive_datetime_doc, sort_keys=False))
+        assert_raises_completeness(
+            lambda: emit([old_path, new_path]),
+            ["issued_at", "explicit timezone offset"],
+            "a timezone-ambiguous contract-3 context timestamp",
+        )
+        for boundary_timestamp in (
+            "9999-12-31T23:59:59-23:59",
+            "0001-01-01T00:00:00+23:59",
+        ):
+            boundary_doc = copy.deepcopy(new_doc)
+            boundary_doc["qds_emission_contexts"][0]["issued_at"] = (
+                boundary_timestamp
+            )
+            new_path.write_text(yaml.safe_dump(boundary_doc, sort_keys=False))
+            assert_raises_completeness(
+                lambda: emit([old_path, new_path]),
+                ["issued_at", "representable as a UTC instant"],
+                f"an out-of-range UTC conversion for {boundary_timestamp}",
+            )
+        new_path.write_text(yaml.safe_dump(new_doc, sort_keys=False))
+
+        snapshot_tool = {
+            "id": "Snapshot Tool",
+            "version": "1.0",
+            "family": "non_cctbx",
+            "catalog_tasks_served": ["T03"],
+        }
+
+        def pinned_document(
+            source: dict, assumption_id: str, measurement_id: str, value: float
+        ) -> dict:
+            document = copy.deepcopy(source)
+            document["tools"] = [copy.deepcopy(snapshot_tool)]
+            document["tool_recommendations"] = []
+            document["assumptions"] = [{
+                "id": assumption_id,
+                "tool_ref": snapshot_tool["id"],
+                "as_of_date": "2026-09-22",
+                "effective_at": "2026-09-22T09:00:00+00:00",
+                "description": f"Pinned assumption {assumption_id}.",
+            }]
+            source_run = document["evaluation_runs"][0]
+            source_run["catalog_tasks_applied"] = ["T03"]
+            source_run["secondary_structure_assignments"] = []
+            source_run["measurements"] = [
+                _measurement(
+                    measurement_id,
+                    "T03_clashscore",
+                    value,
+                    tool=snapshot_tool["id"],
+                    subject=subject,
+                )
+            ]
+            return document
+
+        pinned_old = pinned_document(old_doc, "ASSUM_A", "M_old", 2.0)
+        pinned_new = pinned_document(new_doc, "ASSUM_B", "M_new", 1.0)
+        old_path.write_text(yaml.safe_dump(pinned_old, sort_keys=False))
+        new_path.write_text(yaml.safe_dump(pinned_new, sort_keys=False))
+        pinned_forward = emit(
+            [old_path, new_path], require_pinned_tool_snapshot=True
+        )
+        pinned_reverse = emit(
+            [new_path, old_path], require_pinned_tool_snapshot=True
+        )
+        _check(
+            pinned_forward == pinned_reverse
+            and [row["id"] for row in pinned_forward["assumptions_report"]]
+            == ["ASSUM_A", "ASSUM_B"],
+            "contract-3 assumption projection still depends on input file order",
+        )
+        old_path.write_text(yaml.safe_dump(old_doc, sort_keys=False))
+        new_path.write_text(yaml.safe_dump(new_doc, sort_keys=False))
+
+        cumulative = qds_emit.emit_qds(
+            [new_path, old_path],
+            qds_id="QDS_context_cumulative",
+            structure_id="synth",
+            subject_ref=subject,
+            coverage_scope="cumulative",
+            issued_at="2026-09-22T12:31:00+00:00",
+        )
+        _check(
+            cumulative.get("headline_verdict")
+            == "STALE old headline\n\nSTALE new headline"
+            and "emission_context_ref" not in cumulative,
+            "contract-3 cumulative emission no longer preserves contract-2 headlines",
+        )
+
+        assert_raises_completeness(
+            lambda: qds_emit.emit_qds(
+                [old_path, new_path],
+                qds_id="QDS_missing_context",
+                structure_id="synth",
+                subject_ref=subject,
+                coverage_scope="partial",
+                scope_notes="Bounded partial test.",
+                issued_at="2026-09-22T12:32:00+00:00",
+            ),
+            ["partial emission requires exactly one", "QdsEmissionContext"],
+            "a contract-3 partial sheet omitted its typed context",
+        )
+
+        bad_doc = copy.deepcopy(new_doc)
+        bad_doc["qds_emission_contexts"][0]["source_evaluation_run_refs"] = [
+            "EVAL_context_new", "EVAL_context_old"
+        ]
+        new_path.write_text(yaml.safe_dump(bad_doc, sort_keys=False))
+        assert_raises_completeness(
+            lambda: emit([old_path, new_path]),
+            ["differ", "deterministic derivation order"],
+            "a contract-3 context reordered its source refs",
+        )
+
+        bad_doc = copy.deepcopy(new_doc)
+        bad_doc["qds_emission_contexts"][0]["owner_evaluation_run_ref"] = (
+            "EVAL_context_old"
+        )
+        new_path.write_text(yaml.safe_dump(bad_doc, sort_keys=False))
+        assert_raises_completeness(
+            lambda: emit([old_path, new_path]),
+            ["owner", "not in the same source document"],
+            "a contract-3 context had an orphaned owner",
+        )
+
+        bad_doc = copy.deepcopy(new_doc)
+        bad_doc["qds_emission_contexts"][0]["coverage_scope"] = "cumulative"
+        new_path.write_text(yaml.safe_dump(bad_doc, sort_keys=False))
+        assert_raises_completeness(
+            lambda: emit([old_path, new_path], coverage_scope=None),
+            ["permitted only for partial", "cumulative"],
+            "a cumulative context replaced run-level headline semantics",
+        )
+
+        new_path.write_text(yaml.safe_dump(new_doc, sort_keys=False))
+        duplicate_doc = copy.deepcopy(old_doc)
+        duplicate_doc["qds_emission_contexts"] = [copy.deepcopy(context)]
+        old_path.write_text(yaml.safe_dump(duplicate_doc, sort_keys=False))
+        assert_raises_completeness(
+            lambda: emit([old_path, new_path]),
+            ["at most one", "found 2"],
+            "duplicate source contexts made ownership ambiguous",
+        )
+
+    _check(
+        hashlib.sha256(Path(qds_emit_contract_v2.__file__).read_bytes()).hexdigest()
+        == qds_emit_contract_v3.CONTRACT_V2_DEPENDENCY_SHA256,
+        "contract 3 no longer pins the exact retained contract-2 dependency",
+    )
+    presentation = {
+        "tool_recommendations_applied": [{"id": "REC_z"}, {"id": "REC_a"}],
+        "assumptions_report": [{"id": "ASSUM_z"}, {"id": "ASSUM_a"}],
+    }
+    qds_emit_contract_v3._canonicalize_presentation_lists(presentation)
+    _check(
+        [row["id"] for row in presentation["tool_recommendations_applied"]]
+        == ["REC_a", "REC_z"],
+        "contract-3 recommendation projection still depends on carrier order",
+    )
+    _check(
+        [row["id"] for row in presentation["assumptions_report"]]
+        == ["ASSUM_a", "ASSUM_z"],
+        "contract-3 assumption projection still depends on carrier order",
+    )
+    print("PASS  contract 3 uses one typed, order-stable partial-sheet context")
 
 
 def test_trust_invariant_waiver_mechanics() -> None:
@@ -2718,6 +3003,7 @@ def main() -> int:
     test_coverage_never_claims_an_absent_family()
     test_derived_coverage_uses_only_validated_source_families()
     test_contract_v2_replays_full_september_eval_and_preserves_v1()
+    test_contract_v3_uses_typed_partial_sheet_context()
     test_1sar_geometry_slots_all_present()
     test_synth_local_blocks_present()
     test_negative_site_scope_without_site_decl_fails()

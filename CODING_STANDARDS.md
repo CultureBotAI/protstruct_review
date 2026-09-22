@@ -74,11 +74,15 @@ Where this file and the handbook overlap, they must agree; if they drift, that i
     Non-cctbx-only coverage is deliberately NOT gated — the rule forbids self-grading, not
     independent-only evidence. Committed QDS files are checked by
     `scripts/check_qds_trust_invariant.py` (validate step 3c), which rebuilds coverage from the
-    named source EvaluationRuns using canonical `Tool.family` values. Historical exceptions are
-    frozen by exact repository path, QDS id, and issue timestamp in that guard; a date alone never
-    grants an exemption.
+    named source EvaluationRuns. Modern source documents pin the relevant `Structure`, `Tool`,
+    `tool_recommendations`, and `assumptions` snapshots plus a source-owned `qds_replay_pins`
+    boundary; the QDS pins an append-only emitter contract version. The guard replays the whole
+    sheet through that retained implementation, independently canonicalizes it, and verifies the
+    source/output SHA-256 pins without consulting today's live registries. Historical exceptions
+    are frozen by exact repository path, QDS id, issue timestamp, and full-file SHA-256; a date
+    alone never grants an exemption.
 13c. **A verdict must name the criterion it was judged against (#567).** A `pass_status` that
-    asserts an outcome — `pass`, `fail_by_oracle`, `pass_with_caveat`,
+    asserts an outcome — `pass`, `fail_criterion`, `fail_by_oracle`, `pass_with_caveat`,
     `pass_criterion_fail_headline`, `fail_by_oracle_within_cctbx` — requires a non-empty
     `pass_criterion`; `informational` means "reported without a declared criterion" and must not
     carry one; the disagreement statuses require the `agent_claim` they disagree with; and

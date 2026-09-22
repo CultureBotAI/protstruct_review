@@ -78,6 +78,7 @@ checksum-pinned in `data/pdb_mtz/fixture_provenance.yaml`, and the hermetic gate
 or checksum drift. Citation metadata lives in [`CITATION.cff`](CITATION.cff) (#402, closed).
 
 The hermetic gate runs in GitHub Actions on Linux and macOS (`.github/workflows/validate.yml`) on every
-pull request and push to `main`, executing the same `uv sync --locked && uv run --locked -- bash
-scripts/validate.sh` documented above. Both the green check and a local exit 0 are required before a
-merge. PHENIX/CCP4 and online benchmarks remain deliberate, manual workflows.
+pull request and push to `main`. CI uses the locked `benchmark` extra so retained Biotite evidence is
+numerically replayed, then runs `scripts/validate.sh`; it does not invoke DockQ, PHENIX, CCP4, or an
+online benchmark. Both the green check and a local exit 0 are required before a merge. PHENIX/CCP4
+and online benchmarks remain deliberate, manual workflows.

@@ -28,8 +28,8 @@ jobs:
           version: "0.6.13"
           enable-cache: true
 
-      - name: Sync locked development environment
-        run: uv sync --locked
+      - name: Sync locked development and benchmark environment
+        run: uv sync --locked --extra benchmark
 
       - name: Run hermetic gate
-        run: uv run --locked -- bash scripts/validate.sh
+        run: uv run --locked --extra benchmark -- bash scripts/validate.sh

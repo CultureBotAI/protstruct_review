@@ -41,8 +41,8 @@ for r in d['tool_recommendations']:
 | **OpenStructure (OST)** | 2.11.1 | conda env `cryst-oracles` (CLI `lddt`, Python `import ost`) | T01 (`lddt` — CASP15+ reference implementation, global + per-residue), T02 (per-residue Cα distance + structural comparison), T05 (Ramachandran φ/ψ extraction; outlier classification needs external Top8000 contour data), T07 (per-residue lDDT for predicted-vs-experimental) |
 | **CCP4 suite** (REFMAC5, ProSMART, aimless, ctruncate, pointless) | 9.0.015 | `/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/` (source `bin/ccp4.setup-sh` first) | T03 (REFMAC5 — independent refiner / R-factors), T05 (ProSMART — Procrustes per-residue geometry, non-cctbx Ramachandran-Z), T13 (ctruncate — Wilson B / twinning / anisotropy / tNCS / ice rings on merged data; aimless — canonical when unmerged intensities are available; pointless — space-group sanity) |
 | **DSSP** (`mkdssp`) | 4.6.1 | `/opt/homebrew/bin/mkdssp` (`brew install brewsci/bio/dssp`) | T15 (secondary-structure assignment; H-bond energetics half of the agreement metric) |
-| **biotite** | 1.7.1 | `pip install biotite` (base env) | T15 (P-SEA Cα-geometry secondary structure, `scripts/t15_ss_agreement.py`); T16 (Shrake-Rupley SASA buried surface area, `scripts/t16_interface_quality.py`); T17 (ensemble Cα-RMSF precision, `scripts/t17_nmr_ensemble.py`) |
-| **DockQ** | 2.1.3 | `pip install DockQ` (base env; pins numpy < 2) | T16 (interface DockQ score + CAPRI class via `scripts/t16_interface_quality.py`) |
+| **biotite** | 1.7.1 | locked `benchmark` extra (`uv sync --locked --extra benchmark`) | T15 (P-SEA Cα-geometry secondary structure, `scripts/t15_ss_agreement.py`); T16 (Shrake-Rupley SASA buried surface area, `scripts/t16_interface_quality.py`); T17 (ensemble Cα-RMSF precision, `scripts/t17_nmr_ensemble.py`) |
+| **DockQ** | 2.1.3 | locked `benchmark` extra (`uv sync --locked --extra benchmark`; pins numpy < 2) | T16 (interface DockQ score + CAPRI class via `scripts/t16_interface_quality.py`) |
 
 Together, `probe` + `reduce` constitute the standalone Richardson-lab MolProbity pipeline that the catalog calls "MolProbity standalone" — these are the same binaries the MolProbity web service runs.
 
@@ -119,7 +119,7 @@ the metric-specific gaps listed below remain explicit rather than being filled b
 substitute.
 
 **T15 is now runnable** for its paired oracle-side check
-(`T15_secondary_structure_content`, then `T15_secondary_structure_agreement`).
+(`T15_secondary_structure_content` alongside `T15_secondary_structure_agreement`).
 `scripts/t15_ss_agreement.py` runs two independent, non-cctbx secondary-structure assigners on a
 model and reports DSSP H+E content plus the three-state (H/E/C) agreement fraction:
 
@@ -128,9 +128,16 @@ model and reports DSSP H+E content plus the three-state (H/E/C) agreement fracti
   algorithm family, so agreement is informative rather than tautological. Stands in for STRIDE,
   which Homebrew no longer ships. Demonstrated: DSSP vs biotite on the verified archive download
   `data/pdb_mtz/1sar_deposited.pdb` → **166/192 = 0.8646** agreement, with DSSP H+E content
-  **75/192 = 0.3906**. Interpret the oracle-side result in order: content must be ≥ 0.20, then
-  agreement must be ≥ 0.65. The separate agent-vs-DSSP ≥ 0.85 clause is unevaluable unless an
-  agent supplies a per-residue assignment.
+  **75/192 = 0.3906**. Report both values informationally. Content ≥ 0.20 provisionally supports
+  interpreting the exact-denominator agreement; content below 0.20 warns that coil/coil calls may
+  dominate but does not fail model quality. The historical 0.65 expectation is provisional and
+  non-gradeable until recalibration. The separate agent-vs-DSSP ≥ 0.85 clause is unevaluable
+  unless an agent supplies a per-residue assignment.
+
+  The wrapper requires `--evidence-out` naming a new repository-local JSON file and never
+  overwrites it. That bundle retains exact normalized-input and raw-DSSP bytes, source and
+  normalized hashes, DSSP/P-SEA per-residue assignments, and measured versions; both emitted rows
+  cite it in `evidence_refs`.
 
 **T16 is fully runnable.** `scripts/t16_interface_quality.py` emits all three metrics:
 
@@ -141,9 +148,17 @@ model and reports DSSP H+E content plus the three-state (H/E/C) agreement fracti
 - `T16_interface_dockq_score` + `T16_capri_interface_quality_class` — when a `--native` reference is
   given, via **DockQ** (2.1.3), CAPRI class derived from the score (Basu & Wallner 2016 bands).
   Identity calibration on deposited `1sar` A/B → DockQ 1.000, class High. DockQ runs require
-  typed candidate and native subjects plus one repeated mapping/interface-id/raw-JSON triple per
-  mapping; every sequence-equivalent mapping control is explicit and every raw JSON output is
-  retained. The wrapper currently accepts PDB input only.
+  typed candidate and native subjects, an explicit selected native-interface pair via
+  `--native-chains A:B`, plus one repeated mapping/interface-id/raw-JSON triple per mapping;
+  every sequence-equivalent bijection within that declared native pair is explicit and every raw
+  JSON output is retained. Every invocation also requires a new repository-local
+  `--bsa-evidence` JSON destination; the wrapper records the model hash, measured Biotite version,
+  chains, 1.4 Å probe, 1000-point quadrature, raw SASAs, and derived BSA, and publishes that file
+  atomically with all DockQ evidence. A required `--headline-interface-id` selects one declared
+  mapping for the emitted scalar bundle without assigning scientific meaning to CLI order; all
+  mappings remain in structured `InterfaceQuality` rows. Native runs require `--structure-id` and
+  emit a pasteable EvaluationRun fragment with separate `measurements` and
+  `interface_qualities` lists. The wrapper currently accepts PDB input only.
 
 PISA/PDBePISA stays the `top_considered` oracle for buried surface area (the deposition-grade
 reference); its `interface_area` is per side and must be doubled before comparison with the
@@ -155,8 +170,9 @@ whereas the PISA API assembly surface may include ligand/hetero atoms; the envel
 difference and is not a matched-protein-only PISA claim:
 `ref/research/tolerance_benchmark_interface_bsa.md`.
 
-> **numpy pin:** DockQ requires `numpy < 2` and pip downgraded the base env to numpy 1.26.4. If a
-> future oracle needs numpy ≥ 2, isolate DockQ in its own venv/conda env rather than sharing base.
+> **numpy pin:** DockQ requires `numpy < 2`; the locked benchmark environment uses numpy 1.26.4. If a
+> future oracle needs numpy ≥ 2, isolate DockQ in its own venv/conda env rather than changing the
+> locked benchmark environment.
 
 **T17 is fully runnable.** Two scripts, two metrics:
 
@@ -169,8 +185,9 @@ difference and is not a matched-protein-only PISA claim:
   says so loudly. Demonstrated on `data/pdb_mtz/2n54_validation.xml.gz` → 1301 distance + 108
   dihedral restraints, violations by band.
 
-This closes the runnable side of issue #3: every gradeable T15/T16/T17 metric now has a real
-measurement path (only informational T16 BSA still prefers PISA over the biotite stand-in).
+This closes the runnable-oracle side of issue #3: T15's informational pair and the gradeable
+T16/T17 metrics have real measurement paths (only informational T16 BSA still prefers PISA over
+the biotite stand-in). T15 still lacks a calibrated gradeable oracle-pair criterion.
 
 ### Metrics with no independent oracle (deliberate gaps)
 

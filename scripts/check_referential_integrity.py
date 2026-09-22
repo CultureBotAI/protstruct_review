@@ -37,6 +37,8 @@ from urllib.parse import urlsplit
 
 import yaml
 
+import qds_emit_contract_v1
+
 
 REPO = Path(__file__).resolve().parent.parent
 CATALOG = REPO / "ref" / "catalog.yaml"
@@ -69,10 +71,86 @@ class RefTarget:
     owner_run_id: str | None = None
     run_date: Any = None
     superseded_assumption_refs: tuple[str, ...] = ()
+    source_collection: str | None = None
     node: dict[str, Any] | None = None
+    source_tool_families: tuple[tuple[str, str], ...] = ()
 
 
 CorpusIndices = dict[str, dict[str, list[RefTarget]]]
+
+
+# Structured rows copied verbatim by qds_emit. A current QDS carries an
+# explicit source-run/source-row pair on each one; the guard reconstructs the
+# emitted row from that source instead of trusting the committed copy.
+SOURCE_STRUCTURED_ROW_KEYS = (
+    "residue_outliers",
+    "density_peaks",
+    "flagged_regions",
+    "per_residue_values",
+    "secondary_structure_assignments",
+    "domain_assignments",
+    "interface_qualities",
+    "prediction_ensemble_qualities",
+    "nmr_ensemble_qualities",
+    "pairwise_comparisons",
+)
+
+QDS_COPIED_ROW_SOURCE_KEYS = {
+    "outliers": "residue_outliers",
+    "density_peaks": "density_peaks",
+    "flagged_regions": "flagged_regions",
+    "lddt_per_residue": "per_residue_values",
+    "displacement_per_residue_a": "per_residue_values",
+    "ramachandran_z_per_residue": "per_residue_values",
+    "rsrz_per_residue": "per_residue_values",
+    "rscc_per_residue": "per_residue_values",
+    "b_factor_z_per_residue": "per_residue_values",
+    "secondary_structure_per_residue": "per_residue_values",
+    "fsc_q_per_residue": "per_residue_values",
+    "secondary_structure_assignments": "secondary_structure_assignments",
+    "domain_assignments": "domain_assignments",
+    "interface_qualities": "interface_qualities",
+    "prediction_ensemble_qualities": "prediction_ensemble_qualities",
+    "nmr_ensemble_qualities": "nmr_ensemble_qualities",
+    "pairwise_comparisons": "pairwise_comparisons",
+}
+
+
+def _routed_scalar_slots(
+    routing_table: dict[str, Any],
+) -> frozenset[tuple[str, str]]:
+    """Return emitter-owned QDS summary slots for one frozen contract.
+
+    A committed scalar cannot decide whether it is governed merely by retaining
+    ``metric_definition_ref``: deleting that field together with both source refs
+    would otherwise make a forged value look like an unwrapped scalar.  The QDS
+    block/slot path is fixed by the emitter routing table and remains authoritative
+    even when every self-describing field on the value has been removed.
+    """
+    slots: set[tuple[str, str]] = set()
+    for destination in routing_table.values():
+        destinations = destination if isinstance(destination, list) else [destination]
+        slots.update(destinations)
+    return frozenset(slots)
+
+
+QDS_ROUTED_SCALAR_SLOTS_BY_CONTRACT = {
+    "1": _routed_scalar_slots(qds_emit_contract_v1.METRIC_TO_QDS_SLOT),
+}
+
+
+def _qds_contract_routing(
+    qds: dict[str, Any] | None,
+) -> tuple[frozenset[tuple[str, str]], frozenset[str]]:
+    """Return routing owned by the QDS's retained emitter contract.
+
+    Current-emitter routing is intentionally not a fallback: a future route must
+    not retroactively reinterpret a contract-1 structured payload as a scalar.
+    Missing/unsupported contracts are diagnosed by the QDS trust guard.
+    """
+    version = str((qds or {}).get("emitter_contract_version") or "")
+    slots = QDS_ROUTED_SCALAR_SLOTS_BY_CONTRACT.get(version, frozenset())
+    return slots, frozenset(block for block, _slot in slots)
 
 
 def load_catalog_indices() -> dict[str, set[str]]:
@@ -99,6 +177,7 @@ def target_paths() -> list[Path]:
     # Every provider, not just `coscientists`. Path.rglob intentionally includes
     # ignored files too; a dangling ref must not become invisible due to gitignore.
     targets += sorted((REPO / "data").rglob("*.yaml"))
+    targets += sorted((REPO / "data").rglob("*.yml"))
     return sorted({path for path in targets if path.exists()})
 
 
@@ -123,7 +202,10 @@ def build_corpus_indices(records: Sequence[tuple[Path, Any]]) -> CorpusIndices:
         "evaluation_run": {},
         "quality_data_sheet": {},
         "measurement": {},
+        "structured_row": {},
         "assumption": {},
+        "qds_replay_pin": {},
+        "qds_replay_pin_target": {},
     }
 
     def add_assumptions(node: Any, path: str, run: dict[str, Any], file: Path) -> None:
@@ -153,6 +235,23 @@ def build_corpus_indices(records: Sequence[tuple[Path, Any]]) -> CorpusIndices:
     for file, doc in records:
         if not isinstance(doc, dict):
             continue
+        source_tool_families = tuple(
+            sorted(
+                (str(tool["id"]), str(tool["family"]))
+                for tool in doc.get("tools", []) or []
+                if isinstance(tool, dict) and tool.get("id") and tool.get("family")
+            )
+        )
+        for i, pin in enumerate(doc.get("qds_replay_pins") or []):
+            if not isinstance(pin, dict):
+                continue
+            target = RefTarget(
+                file=file,
+                pointer=f"$.qds_replay_pins[{i}]",
+                node=pin,
+            )
+            _add_target(indices["qds_replay_pin"], pin.get("id"), target)
+            _add_target(indices["qds_replay_pin_target"], pin.get("qds_ref"), target)
         for i, qds in enumerate(doc.get("quality_data_sheets") or []):
             if not isinstance(qds, dict):
                 continue
@@ -184,6 +283,7 @@ def build_corpus_indices(records: Sequence[tuple[Path, Any]]) -> CorpusIndices:
                     run_date=run.get("run_date"),
                     superseded_assumption_refs=superseded,
                     node=run,
+                    source_tool_families=source_tool_families,
                 ),
             )
             for j, measurement in enumerate(run.get("measurements") or []):
@@ -198,8 +298,25 @@ def build_corpus_indices(records: Sequence[tuple[Path, Any]]) -> CorpusIndices:
                         owner_run_id=run.get("id"),
                         run_date=run.get("run_date"),
                         node=measurement,
+                        source_tool_families=source_tool_families,
                     ),
                 )
+            for collection in SOURCE_STRUCTURED_ROW_KEYS:
+                for j, row in enumerate(run.get(collection) or []):
+                    if not isinstance(row, dict):
+                        continue
+                    _add_target(
+                        indices["structured_row"],
+                        row.get("id"),
+                        RefTarget(
+                            file=file,
+                            pointer=f"{run_path}.{collection}[{j}]",
+                            owner_run_id=run.get("id"),
+                            run_date=run.get("run_date"),
+                            source_collection=collection,
+                            node=row,
+                        ),
+                    )
             add_assumptions(run, run_path, run, file)
     return indices
 
@@ -210,7 +327,9 @@ def check_duplicate_ids(indices: CorpusIndices) -> list[str]:
         "evaluation_run": "EvaluationRun",
         "quality_data_sheet": "QualityDataSheet",
         "measurement": "MeasurementValue",
+        "structured_row": "structured source row",
         "assumption": "Assumption",
+        "qds_replay_pin": "QdsReplayPin",
     }
     violations: list[str] = []
     for kind, label in labels.items():
@@ -223,6 +342,16 @@ def check_duplicate_ids(indices: CorpusIndices) -> list[str]:
             violations.append(
                 f"duplicate {label} id {object_id!r} at {locations}; references are ambiguous"
             )
+    for qds_ref, targets in sorted(indices["qds_replay_pin_target"].items()):
+        if len(targets) < 2:
+            continue
+        locations = ", ".join(
+            f"{_shown(target.file)}:{target.pointer}" for target in targets
+        )
+        violations.append(
+            f"multiple QdsReplayPins target qds_ref {qds_ref!r} at {locations}; "
+            "the replay boundary is ambiguous"
+        )
     return violations
 
 
@@ -238,6 +367,7 @@ def _resolve(
         "evaluation_run": "EvaluationRun",
         "quality_data_sheet": "QualityDataSheet",
         "measurement": "MeasurementValue",
+        "structured_row": "structured source row",
         "assumption": "Assumption",
     }
     targets = indices[kind].get(object_id, [])
@@ -273,6 +403,7 @@ WRAPPED_MEASUREMENT_FIELDS = {
     "subject_ref": "subject_ref",
     "reference_subject_ref": "reference_subject_ref",
     "evidence_refs": "evidence_refs",
+    "bundle_ref": "bundle_ref",
     "stage": "stage",
     "scope": "scope",
     "scope_selector": "scope_selector",
@@ -280,18 +411,67 @@ WRAPPED_MEASUREMENT_FIELDS = {
 }
 
 
+def _canonical_tool_families() -> dict[str, str]:
+    """Return the catalog-authoritative family for each named tool."""
+    catalog = yaml.safe_load(CATALOG.read_text()) or {}
+    return {
+        str(tool["id"]): str(tool["family"])
+        for tool in catalog.get("tools", []) or []
+        if isinstance(tool, dict) and tool.get("id") and tool.get("family")
+    }
+
+
 def _expected_wrapped_measurement(
-    measurement: dict[str, Any], owner_run_id: str
+    measurement: dict[str, Any],
+    owner_run_id: str,
+    source_tool_families: tuple[tuple[str, str], ...] = (),
 ) -> dict[str, Any]:
     """Reconstruct the TypedMeasurementValue that qds_emit must have copied."""
     expected = dict(measurement.get("oracle_measure") or {})
     source = dict(measurement)
+    authoritative_families = (
+        dict(source_tool_families)
+        if source_tool_families
+        else _canonical_tool_families()
+    )
+    canonical_family = authoritative_families.get(
+        str(source.get("oracle_tool_ref") or "")
+    )
+    if canonical_family:
+        # qds_emit canonicalizes/fills this field before wrapping it. Compare
+        # against the emitted form, not optional raw source metadata.
+        source["oracle_family"] = canonical_family
     source["_source_evaluation_run_ref"] = owner_run_id
     for output_key, source_key in WRAPPED_MEASUREMENT_FIELDS.items():
         value = source.get(source_key)
         if value not in (None, ""):
             expected[output_key] = value
     return expected
+
+
+def _expected_structured_row(row: dict[str, Any], owner_run_id: str) -> dict[str, Any]:
+    expected = dict(row)
+    expected["source_evaluation_run_ref"] = owner_run_id
+    expected["source_row_ref"] = row.get("id")
+    return expected
+
+
+def _looks_like_routed_scalar(node: dict[str, Any]) -> bool:
+    """Recognize wrapped measurements even outside a canonical summary slot."""
+    return bool(node.get("metric_definition_ref")) and any(
+        key in node for key in ("value_numeric", "value_text", "is_not_applicable")
+    )
+
+
+def _is_frozen_legacy_qds(rel: Path, qds: dict[str, Any]) -> bool:
+    """Use the same content-pinned legacy decision as the trust guard."""
+    try:
+        import check_qds_trust_invariant as trust_guard
+
+        path = rel if rel.is_absolute() else REPO / rel
+        return trust_guard._is_frozen_legacy(path, REPO, qds)
+    except (ImportError, OSError):
+        return False
 
 
 def _repository_relative(path: Path) -> Path | None:
@@ -306,12 +486,23 @@ def _repository_relative(path: Path) -> Path | None:
 
 def _check_qds_filename(doc: dict[str, Any], rel: Path) -> list[str]:
     """Keep record-shaped data YAML discoverable by every QDS gate."""
-    qds_rows = doc.get("quality_data_sheets") or []
     repo_rel = _repository_relative(rel)
-    if not qds_rows or repo_rel is None or not repo_rel.parts or repo_rel.parts[0] != "data":
+    if repo_rel is None or not repo_rel.parts or repo_rel.parts[0] != "data":
         return []
 
     violations: list[str] = []
+    if "evaluation_runs" in doc and repo_rel.suffix != ".yaml":
+        violations.append(
+            f"{rel}: a data YAML carrying evaluation_runs must use the .yaml suffix"
+        )
+
+    qds_rows = doc.get("quality_data_sheets") or []
+    if "quality_data_sheets" in doc and repo_rel.suffix != ".yaml":
+        violations.append(
+            f"{rel}: a data YAML carrying quality_data_sheets must use the .yaml suffix"
+        )
+    if not qds_rows:
+        return violations
     if not repo_rel.stem.startswith("QDS_"):
         violations.append(
             f"{rel}: a data YAML carrying quality_data_sheets must use a QDS_*.yaml filename"
@@ -379,26 +570,123 @@ def check_corpus_refs(doc: Any, rel: Path, indices: CorpusIndices) -> list[str]:
         return violations
     violations += _check_qds_filename(doc, rel)
 
+    local_run_ids = {
+        str(run.get("id"))
+        for run in doc.get("evaluation_runs", []) or []
+        if isinstance(run, dict) and run.get("id")
+    }
+    for pin_i, pin in enumerate(doc.get("qds_replay_pins", []) or []):
+        if not isinstance(pin, dict):
+            continue
+        pin_path = f"$.qds_replay_pins[{pin_i}]"
+        qds_ref = pin.get("qds_ref")
+        qds_target = None
+        if isinstance(qds_ref, str):
+            qds_target = _resolve(
+                qds_ref,
+                "quality_data_sheet",
+                indices,
+                rel,
+                f"{pin_path}.qds_ref",
+                violations,
+            )
+        else:
+            violations.append(f"{rel}: {pin_path}.qds_ref must name a QualityDataSheet")
+        source_refs = pin.get("source_evaluation_run_refs")
+        if not isinstance(source_refs, list) or not all(
+            isinstance(ref, str) for ref in source_refs
+        ):
+            violations.append(
+                f"{rel}: {pin_path}.source_evaluation_run_refs must be a list of "
+                "EvaluationRun ids"
+            )
+            source_refs = []
+        for ref_i, run_ref in enumerate(source_refs):
+            _resolve(
+                run_ref,
+                "evaluation_run",
+                indices,
+                rel,
+                f"{pin_path}.source_evaluation_run_refs[{ref_i}]",
+                violations,
+            )
+        if source_refs and local_run_ids.isdisjoint(source_refs):
+            violations.append(
+                f"{rel}: {pin_path} is not owned by any source EvaluationRun in "
+                "the same document"
+            )
+        if qds_target is not None and isinstance(qds_target.node, dict):
+            qds_refs = qds_target.node.get("derived_from_evaluation_run_refs") or []
+            if source_refs != qds_refs:
+                violations.append(
+                    f"{rel}: {pin_path}.source_evaluation_run_refs differs from "
+                    f"target QDS {qds_ref!r} derivation refs"
+                )
+            qds_contract = str(qds_target.node.get("emitter_contract_version") or "")
+            pin_contract = str(pin.get("emitter_contract_version") or "")
+            if pin_contract != qds_contract:
+                violations.append(
+                    f"{rel}: {pin_path}.emitter_contract_version {pin_contract!r} "
+                    f"differs from target QDS {qds_ref!r} contract {qds_contract!r}"
+                )
+
     def check(
         node: Any,
         path: str,
         current_run: dict[str, Any] | None = None,
         current_qds: dict[str, Any] | None = None,
+        copied_source_key: str | None = None,
+        qds_block: str | None = None,
+        routed_scalar_slot: bool = False,
     ) -> None:
         if isinstance(node, dict):
+            qds_routed_slots, qds_routed_blocks = _qds_contract_routing(current_qds)
             source_run_ref = node.get("source_evaluation_run_ref")
             source_measurement_ref = node.get("source_measurement_ref")
+            source_row_ref = node.get("source_row_ref")
             source_run = None
             source_measurement = None
+            source_row = None
             has_source_run = isinstance(source_run_ref, str)
             has_source_measurement = isinstance(source_measurement_ref, str)
-            if has_source_run != has_source_measurement:
+            has_source_row = isinstance(source_row_ref, str)
+            modern_qds = (
+                current_qds is not None
+                and not _is_frozen_legacy_qds(rel, current_qds)
+            )
+            if has_source_measurement and has_source_row:
+                violations.append(
+                    f"{rel}: {path} cannot carry both source_measurement_ref and "
+                    "source_row_ref"
+                )
+            if has_source_measurement != has_source_run and not has_source_row:
                 missing = (
                     "source_measurement_ref" if has_source_run else "source_evaluation_run_ref"
                 )
                 violations.append(
                     f"{rel}: {path} must pair source_evaluation_run_ref and "
                     f"source_measurement_ref; {missing} is missing"
+                )
+            if has_source_row != has_source_run and not has_source_measurement:
+                missing = "source_row_ref" if has_source_run else "source_evaluation_run_ref"
+                violations.append(
+                    f"{rel}: {path} must pair source_evaluation_run_ref and "
+                    f"source_row_ref; {missing} is missing"
+                )
+            if (
+                modern_qds
+                and (routed_scalar_slot or _looks_like_routed_scalar(node))
+                and not has_source_measurement
+            ):
+                violations.append(
+                    f"{rel}: {path} is a routed scalar in a nonlegacy QDS and must "
+                    "carry source_evaluation_run_ref plus source_measurement_ref"
+                )
+            if modern_qds and copied_source_key is not None and not has_source_row:
+                violations.append(
+                    f"{rel}: {path} is a copied {copied_source_key} row in a "
+                    "nonlegacy QDS and must carry source_evaluation_run_ref plus "
+                    "source_row_ref"
                 )
             if isinstance(source_run_ref, str):
                 source_run = _resolve(
@@ -416,6 +704,15 @@ def check_corpus_refs(doc: Any, rel: Path, indices: CorpusIndices) -> list[str]:
                     indices,
                     rel,
                     f"{path}.source_measurement_ref",
+                    violations,
+                )
+            if isinstance(source_row_ref, str):
+                source_row = _resolve(
+                    source_row_ref,
+                    "structured_row",
+                    indices,
+                    rel,
+                    f"{path}.source_row_ref",
                     violations,
                 )
             if source_run is not None and source_measurement is not None:
@@ -442,7 +739,11 @@ def check_corpus_refs(doc: Any, rel: Path, indices: CorpusIndices) -> list[str]:
                     source_measurement.owner_run_id == source_run_ref
                     and isinstance(source_node, dict)
                 ):
-                    expected = _expected_wrapped_measurement(source_node, source_run_ref)
+                    expected = _expected_wrapped_measurement(
+                        source_node,
+                        source_run_ref,
+                        source_measurement.source_tool_families,
+                    )
                     if node != expected:
                         differing = sorted(
                             key
@@ -453,6 +754,47 @@ def check_corpus_refs(doc: Any, rel: Path, indices: CorpusIndices) -> list[str]:
                         violations.append(
                             f"{rel}: {path} does not exactly match source measurement "
                             f"{source_measurement_ref!r}; differing fields: "
+                            f"{', '.join(differing)}"
+                        )
+            if source_run is not None and source_row is not None:
+                if source_row.owner_run_id != source_run_ref:
+                    violations.append(
+                        f"{rel}: {path}.source_row_ref = {source_row_ref!r} belongs to "
+                        f"{source_row.owner_run_id!r}, not paired "
+                        f"source_evaluation_run_ref {source_run_ref!r}"
+                    )
+                if copied_source_key and source_row.source_collection != copied_source_key:
+                    violations.append(
+                        f"{rel}: {path}.source_row_ref = {source_row_ref!r} resolves "
+                        f"to {source_row.source_collection!r}, expected "
+                        f"{copied_source_key!r}"
+                    )
+                if current_qds is None:
+                    violations.append(
+                        f"{rel}: {path} carries source refs outside a QualityDataSheet"
+                    )
+                else:
+                    derived_refs = current_qds.get("derived_from_evaluation_run_refs") or []
+                    if source_run_ref not in derived_refs:
+                        violations.append(
+                            f"{rel}: {path}.source_evaluation_run_ref = "
+                            f"{source_run_ref!r} is not an input in the enclosing QDS "
+                            "derived_from_evaluation_run_refs"
+                        )
+                if isinstance(source_row.node, dict):
+                    expected = _expected_structured_row(
+                        source_row.node, str(source_run_ref)
+                    )
+                    if node != expected:
+                        differing = sorted(
+                            key
+                            for key in set(node) | set(expected)
+                            if node.get(key) != expected.get(key)
+                            or (key in node) != (key in expected)
+                        )
+                        violations.append(
+                            f"{rel}: {path} does not exactly match source structured "
+                            f"row {source_row_ref!r}; differing fields: "
                             f"{', '.join(differing)}"
                         )
 
@@ -534,11 +876,43 @@ def check_corpus_refs(doc: Any, rel: Path, indices: CorpusIndices) -> list[str]:
                             violations.extend(_check_evidence_path(ref, rel, evidence_path))
 
                 # Source refs were resolved together above so ownership can be checked.
-                if key not in {"source_evaluation_run_ref", "source_measurement_ref"}:
-                    check(value, child, current_run, current_qds)
+                if key not in {
+                    "source_evaluation_run_ref",
+                    "source_measurement_ref",
+                    "source_row_ref",
+                }:
+                    child_qds_block = qds_block
+                    if node is current_qds and key in qds_routed_blocks:
+                        child_qds_block = key
+                    child_is_routed_scalar = (
+                        child_qds_block is not None
+                        and (child_qds_block, key) in qds_routed_slots
+                    )
+                    child_source_key = (
+                        QDS_COPIED_ROW_SOURCE_KEYS.get(key)
+                        if current_qds is not None and isinstance(value, list)
+                        else None
+                    )
+                    check(
+                        value,
+                        child,
+                        current_run,
+                        current_qds,
+                        child_source_key,
+                        child_qds_block,
+                        child_is_routed_scalar,
+                    )
         elif isinstance(node, list):
             for i, value in enumerate(node):
-                check(value, f"{path}[{i}]", current_run, current_qds)
+                check(
+                    value,
+                    f"{path}[{i}]",
+                    current_run,
+                    current_qds,
+                    copied_source_key,
+                    qds_block,
+                    routed_scalar_slot,
+                )
 
     check(doc, "$")
 

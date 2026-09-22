@@ -2,11 +2,15 @@
 """Gate committed QDS trust claims against their source EvaluationRuns.
 
 For every non-legacy QDS, rebuild cross-tool coverage from the referenced
-EvaluationRuns with the emitter itself, using the catalog's canonical Tool
-families. Neither editable ``gap_status`` prose nor self-asserted
-``oracle_family`` metadata is authoritative. Historical sheets are exempt only
-when their repository path, QDS id, and exact issue timestamp match the frozen
-allowlist below; an arbitrary backdated file is not history.
+EvaluationRuns using their source-pinned Tool families. Neither editable
+``gap_status`` prose nor self-asserted ``oracle_family`` metadata is
+authoritative. The complete sheet is replayed with a retained emitter-contract
+module and source-owned Tool/recommendation/assumption snapshots, then checked
+against a source-owned canonical byte pin. Later emitter, catalog, or registry
+changes therefore cannot reinterpret it.
+Historical sheets are exempt only when their repository path, QDS id, exact
+issue timestamp, and full-file digest match the frozen allowlist below; an
+arbitrary backdated or edited file is not history.
 
 Network-free. ``--root`` exists for the tests.
 """
@@ -14,50 +18,62 @@ from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import sys
+import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-import qds_emit
+import qds_emit_contract_v1
 
 
 # These immutable artifacts predate source-derived committed-QDS enforcement.
-# The tuple is deliberately stronger than a date cutover: changing the path,
-# id, or timestamp removes the exemption.
-LEGACY_QDS: dict[str, tuple[str, str]] = {
+# Each exemption is pinned to the full committed file bytes as well as its
+# identity.  A scientific-value, provenance, or formatting change therefore
+# creates a new artifact that must satisfy the current guard.
+LEGACY_QDS: dict[str, tuple[str, str, str]] = {
     "data/coscientists/openscientist/QDS_1sar_cdba2c07_2026-04-24.yaml": (
         "QDS_1sar_cdba2c07_2026-04-24",
         "2026-04-26T04:41:16+00:00",
+        "5e852ba56031cfe17571bacaa2330e1cb141fc0497a084cc1c2338ff6dfcdafa",
     ),
     "data/coscientists/openscientist/QDS_1sar_cdba2c07_2026-04-26.yaml": (
         "QDS_1sar_cdba2c07_2026-04-26",
         "2026-04-26T09:12:19+00:00",
+        "83a10cd12ec24a5af5ae0d70e37b8515d8a5f11cfc0ca4a238582b2fa4c7c76c",
     ),
     "data/coscientists/openscientist/QDS_1sar_cdba2c07_2026-04-30.yaml": (
         "QDS_1sar_cdba2c07_2026-04-30",
         "2026-05-01T04:17:12+00:00",
+        "25ea923cb19803dabd7ae092eeaf597e7a042b7e9cdfe40c497f57686757f6f4",
     ),
     "data/coscientists/openscientist/QDS_1sar_cdba2c07_2026-05-01.yaml": (
         "QDS_1sar_cdba2c07_2026-05-01",
         "2026-05-01T07:09:51+00:00",
+        "601cabe3d12bc8ab3014b7cfe2c8e2a419046302258bc65a6b99eae73c40e840",
     ),
     "data/coscientists/openscientist/QDS_1sar_cdba2c07_2026-05-04.yaml": (
         "QDS_1sar_cdba2c07_2026-05-04",
         "2026-05-05T04:27:11+00:00",
+        "6be732d455b91c1a81741cca845f7d3cdc31af4311a29c1f7e7dc1e430d97136",
     ),
     "data/coscientists/openscientist/QDS_1sar_cdba2c07_2026-05-05.yaml": (
         "QDS_1sar_cdba2c07_2026-05-05",
         "2026-05-05T07:54:30+00:00",
+        "07243f889da2801004822531eb6900d2192f1a713a412c208adebd873a563319",
     ),
     "data/coscientists/openscientist/QDS_1sar_cdba2c07_2026-09-07.yaml": (
         "QDS_1sar_cdba2c07_2026-09-07",
         "2026-09-10T04:11:37+00:00",
+        "f0c72a90d421fb13c0bac534a3247c489ef0c058e83c0d5fe44c1398c167f439",
     ),
     "data/examples/qds/QDS_synth_active_site_2026-04-26.yaml": (
         "QDS_synth_active_site_2026-04-26",
         "2026-04-26T08:50:58+00:00",
+        "bc46cb206d95e56f2b29ff1c7c4969b2bc2bddbcfcc0872ede39d55dbedd35d6",
     ),
 }
 
@@ -71,12 +87,43 @@ def _relative(path: Path, root: Path) -> str:
 
 def _is_frozen_legacy(path: Path, root: Path, qds: dict[str, Any]) -> bool:
     expected = LEGACY_QDS.get(_relative(path, root))
-    return expected == (str(qds.get("id") or ""), str(qds.get("issued_at") or ""))
+    if expected is None:
+        return False
+    try:
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return False
+    return expected == (
+        str(qds.get("id") or ""),
+        str(qds.get("issued_at") or ""),
+        digest,
+    )
 
 
-def _load_eval_runs(root: Path, failures: list[str]) -> dict[str, list[dict[str, Any]]]:
-    runs: dict[str, list[dict[str, Any]]] = {}
-    for path in sorted((root / "data").rglob("*.yaml")):
+def _yaml_paths(root: Path, pattern: str = "*") -> list[Path]:
+    """Discover both accepted YAML suffixes without double-counting paths."""
+    return sorted(
+        set(root.rglob(f"{pattern}.yaml")) | set(root.rglob(f"{pattern}.yml"))
+    )
+
+
+@dataclass(frozen=True)
+class EvalRunSource:
+    """An EvaluationRun plus pinned source metadata from its document."""
+
+    run: dict[str, Any]
+    structures: tuple[dict[str, Any], ...]
+    tools: tuple[dict[str, Any], ...]
+    tool_recommendations: tuple[dict[str, Any], ...]
+    assumptions: tuple[dict[str, Any], ...]
+    has_tool_recommendations: bool
+    has_assumptions: bool
+    qds_replay_pins: tuple[dict[str, Any], ...]
+
+
+def _load_eval_runs(root: Path, failures: list[str]) -> dict[str, list[EvalRunSource]]:
+    runs: dict[str, list[EvalRunSource]] = {}
+    for path in _yaml_paths(root / "data"):
         try:
             doc = yaml.safe_load(path.read_text()) or {}
         except (yaml.YAMLError, OSError):
@@ -85,7 +132,20 @@ def _load_eval_runs(root: Path, failures: list[str]) -> dict[str, list[dict[str,
         for run in doc.get("evaluation_runs", []) or []:
             run_id = str(run.get("id") or "").strip()
             if run_id:
-                runs.setdefault(run_id, []).append(run)
+                runs.setdefault(run_id, []).append(
+                    EvalRunSource(
+                        run=run,
+                        structures=tuple(doc.get("structures", []) or []),
+                        tools=tuple(doc.get("tools", []) or []),
+                        tool_recommendations=tuple(
+                            doc.get("tool_recommendations", []) or []
+                        ),
+                        assumptions=tuple(doc.get("assumptions", []) or []),
+                        has_tool_recommendations="tool_recommendations" in doc,
+                        has_assumptions="assumptions" in doc,
+                        qds_replay_pins=tuple(doc.get("qds_replay_pins", []) or []),
+                    )
+                )
     for run_id, matches in sorted(runs.items()):
         if len(matches) > 1:
             failures.append(
@@ -98,7 +158,7 @@ def _load_eval_runs(root: Path, failures: list[str]) -> dict[str, list[dict[str,
 def _canonical_row_errors(
     path: Path,
     rows: list[dict[str, Any]],
-    tool_families: dict[str, str],
+    tool_families: dict[str, str] | None,
 ) -> list[str]:
     errors: list[str] = []
     for row in rows:
@@ -123,6 +183,8 @@ def _canonical_row_errors(
             ("non_cctbx", non_cctbx),
         ):
             for tool_id in tool_ids:
+                if tool_families is None:
+                    continue
                 canonical = tool_families.get(str(tool_id))
                 if canonical is None:
                     errors.append(
@@ -137,10 +199,178 @@ def _canonical_row_errors(
     return errors
 
 
+_PIN_DIGEST_FIELDS = (
+    "canonical_qds_sha256",
+    "emitter_source_sha256",
+    "source_tools_sha256",
+    "source_tool_recommendations_sha256",
+    "source_tool_assumptions_sha256",
+)
+
+
+def _snapshot_digest(key: str, rows: list[dict[str, Any]]) -> str:
+    """Hash one source snapshot independently of emitter serialization."""
+    payload = yaml.safe_dump(
+        {key: rows}, sort_keys=True, allow_unicode=True
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _deduplicate_snapshot_rows(
+    rows: list[dict[str, Any]], *, label: str
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Merge identical snapshots while rejecting conflicting duplicate ids."""
+    merged: list[dict[str, Any]] = []
+    by_id: dict[str, str] = {}
+    errors: list[str] = []
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            errors.append(f"{label} row {index} is not an object")
+            continue
+        row_id = str(row.get("id") or "").strip()
+        if not row_id:
+            errors.append(f"{label} row {index} has no id")
+            continue
+        canonical = yaml.safe_dump(row, sort_keys=True, allow_unicode=True)
+        prior = by_id.get(row_id)
+        if prior is None:
+            by_id[row_id] = canonical
+            merged.append(copy.deepcopy(row))
+        elif prior != canonical:
+            errors.append(f"{label} has conflicting duplicate id {row_id!r}")
+    return merged, errors
+
+
+def _canonical_qds_text(qds: dict[str, Any]) -> str:
+    """Serialize independently of qds_emit's mutable implementation."""
+    return yaml.safe_dump(
+        {"quality_data_sheets": [qds]},
+        sort_keys=False,
+        default_flow_style=False,
+        allow_unicode=True,
+    )
+
+
+def _validate_contract_1_pin(
+    path: Path,
+    qds: dict[str, Any],
+    refs: list[Any],
+    source_pins: list[dict[str, Any]],
+    source_structures: list[dict[str, Any]],
+    source_tools: list[dict[str, Any]],
+    source_recommendations: list[dict[str, Any]],
+    source_assumptions: list[dict[str, Any]],
+    source_runs: list[dict[str, Any]],
+) -> list[str]:
+    """Validate contract 1 through its source-owned, content-addressed boundary.
+
+    The output digest protects the complete canonical sheet. The other digests
+    bind the frozen implementation and source-owned snapshots. Full replay proves
+    that the output is derived from those sources rather than merely self-attested
+    by a matching byte hash.
+    """
+    errors: list[str] = []
+    qds_id = str(qds.get("id") or "")
+    matches = [pin for pin in source_pins if pin.get("qds_ref") == qds_id]
+    unique = {
+        yaml.safe_dump(pin, sort_keys=True, allow_unicode=True): pin for pin in matches
+    }
+    if len(unique) != 1:
+        return [
+            f"{path.name}: contract 1 requires exactly one source-owned replay "
+            f"pin for {qds_id!r}; found {len(unique)}"
+        ]
+    pin = next(iter(unique.values()))
+    if str(pin.get("emitter_contract_version") or "") != "1":
+        errors.append(
+            f"{path.name}: replay pin contract version does not match QDS contract 1"
+        )
+    if [str(ref) for ref in pin.get("source_evaluation_run_refs", []) or []] != [
+        str(ref) for ref in refs
+    ]:
+        errors.append(
+            f"{path.name}: replay pin source EvaluationRun refs differ from the QDS"
+        )
+    for field in _PIN_DIGEST_FIELDS:
+        value = str(pin.get(field) or "")
+        if len(value) != 64 or any(ch not in "0123456789abcdef" for ch in value):
+            errors.append(
+                f"{path.name}: replay pin {field} must be a lowercase SHA-256 digest"
+            )
+
+    actual_inputs = {
+        "emitter_source_sha256": hashlib.sha256(
+            Path(qds_emit_contract_v1.__file__).read_bytes()
+        ).hexdigest(),
+        "source_tools_sha256": _snapshot_digest("tools", source_tools),
+        "source_tool_recommendations_sha256": _snapshot_digest(
+            "tool_recommendations", source_recommendations
+        ),
+        "source_tool_assumptions_sha256": _snapshot_digest(
+            "assumptions", source_assumptions
+        ),
+    }
+    for field, actual in actual_inputs.items():
+        if pin.get(field) != actual:
+            errors.append(
+                f"{path.name}: replay pin {field} differs from the retained "
+                "contract/source snapshot"
+            )
+
+    canonical_text = _canonical_qds_text(qds)
+    if path.read_text() != canonical_text:
+        errors.append(
+            f"{path.name}: committed QDS is not independently canonical YAML; "
+            "regenerate the immutable artifact"
+        )
+    actual_digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    if pin.get("canonical_qds_sha256") != actual_digest:
+        errors.append(
+            f"{path.name}: committed QDS differs from its source-owned canonical "
+            "byte pin"
+        )
+
+    replay_doc = {
+        "structures": source_structures,
+        "tools": source_tools,
+        "tool_recommendations": source_recommendations,
+        "assumptions": source_assumptions,
+        "evaluation_runs": source_runs,
+    }
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            eval_path = Path(tmp) / "source.yaml"
+            eval_path.write_text(
+                yaml.safe_dump(replay_doc, sort_keys=False, allow_unicode=True)
+            )
+            replayed = qds_emit_contract_v1._emit_qds_contract_1(
+                [eval_path],
+                qds_id=str(qds.get("id") or ""),
+                structure_id=str(qds.get("structure_ref") or ""),
+                subject_ref=qds.get("subject_ref"),
+                coverage_scope=qds.get("coverage_scope"),
+                scope_notes=qds.get("scope_notes"),
+                issued_at=qds.get("issued_at"),
+                require_pinned_tool_snapshot=True,
+            )
+        if replayed != qds:
+            errors.append(
+                f"{path.name}: committed QDS differs from deterministic frozen "
+                "contract-1 replay of its source snapshots"
+            )
+    except (qds_emit_contract_v1.QdsCompletenessError, SystemExit) as exc:
+        errors.append(f"{path.name}: frozen contract-1 replay failed: {exc}")
+    return errors
+
+
+REPLAY_CONTRACT_VALIDATORS = {"1": _validate_contract_1_pin}
+REPLAY_CONTRACT_EMITTERS = {"1": qds_emit_contract_v1}
+
+
 def _rebuild_coverage(
     path: Path,
     qds: dict[str, Any],
-    eval_runs: dict[str, list[dict[str, Any]]],
+    eval_runs: dict[str, list[EvalRunSource]],
 ) -> tuple[dict[str, Any] | None, list[str]]:
     errors: list[str] = []
     refs = qds.get("derived_from_evaluation_run_refs") or []
@@ -150,6 +380,11 @@ def _rebuild_coverage(
         errors.append(f"{path.name}: QDS repeats a source EvaluationRun ref")
 
     source_runs: list[dict[str, Any]] = []
+    source_structures: list[dict[str, Any]] = []
+    source_tools: list[dict[str, Any]] = []
+    source_recommendations: list[dict[str, Any]] = []
+    source_assumptions: list[dict[str, Any]] = []
+    source_pins: list[dict[str, Any]] = []
     for ref in refs:
         matches = eval_runs.get(str(ref), [])
         if len(matches) != 1:
@@ -158,30 +393,166 @@ def _rebuild_coverage(
                 f"{len(matches)} times, expected exactly once"
             )
         else:
-            source_runs.append(copy.deepcopy(matches[0]))
+            source_runs.append(copy.deepcopy(matches[0].run))
+            source_structures.extend(copy.deepcopy(matches[0].structures))
+            source_tools.extend(copy.deepcopy(matches[0].tools))
+            source_recommendations.extend(
+                copy.deepcopy(matches[0].tool_recommendations)
+            )
+            source_assumptions.extend(copy.deepcopy(matches[0].assumptions))
+            source_pins.extend(copy.deepcopy(matches[0].qds_replay_pins))
+            if not matches[0].has_tool_recommendations:
+                errors.append(
+                    f"{path.name}: source EvaluationRun {ref!r} document has no "
+                    "top-level tool_recommendations snapshot"
+                )
+            if not matches[0].has_assumptions:
+                errors.append(
+                    f"{path.name}: source EvaluationRun {ref!r} document has no "
+                    "top-level assumptions snapshot"
+                )
+    for rows, label, assign in (
+        (source_structures, "source Structure snapshot", "structures"),
+        (source_tools, "source Tool snapshot", "tools"),
+        (
+            source_recommendations,
+            "source tool-recommendation snapshot",
+            "recommendations",
+        ),
+        (source_assumptions, "source tool-assumption snapshot", "assumptions"),
+    ):
+        merged, merge_errors = _deduplicate_snapshot_rows(rows, label=label)
+        errors.extend(f"{path.name}: {error}" for error in merge_errors)
+        if assign == "structures":
+            source_structures = merged
+        elif assign == "tools":
+            source_tools = merged
+        elif assign == "recommendations":
+            source_recommendations = merged
+        else:
+            source_assumptions = merged
     if errors:
         return None, errors
 
+    replay_source_runs = copy.deepcopy(source_runs)
+
     try:
+        contract_version = str(qds.get("emitter_contract_version") or "")
+        contract_validator = REPLAY_CONTRACT_VALIDATORS.get(contract_version)
+        contract_emitter = REPLAY_CONTRACT_EMITTERS.get(contract_version)
+        if contract_validator is None or contract_emitter is None:
+            errors.append(
+                f"{path.name}: QDS declares unsupported or missing "
+                f"emitter_contract_version {contract_version!r}"
+            )
+            return None, errors
+        if not source_tools:
+            raise contract_emitter.QdsCompletenessError(
+                "QDS contract-1 replay requires a source-pinned Tool snapshot"
+            )
+        tool_families = contract_emitter._tool_families_from_rows(
+            source_tools, source_name="source Tool snapshot"
+        )
         for run in source_runs:
             run_id = str(run.get("id") or "<missing id>")
-            run["measurements"] = qds_emit._canonicalize_measurement_tools(
-                run.get("measurements", []) or [], context=f"EvaluationRun {run_id}"
+            run["measurements"] = contract_emitter._canonicalize_measurement_tools(
+                run.get("measurements", []) or [],
+                context=f"EvaluationRun {run_id}",
+                tool_families=tool_families,
             )
-        filtered = qds_emit._annotated_runs(source_runs, qds.get("subject_ref"))
+        source_runs.sort(
+            key=lambda run: (str(run.get("run_date") or ""), str(run.get("id") or ""))
+        )
+
+        explicit_subjects = contract_emitter._explicit_subjects(source_runs)
+        committed_subject = qds.get("subject_ref")
+        effective_subject = committed_subject
+        if effective_subject is None and len(explicit_subjects) == 1:
+            effective_subject = next(iter(explicit_subjects))
+            errors.append(
+                f"{path.name}: QDS omits subject_ref, but source evidence resolves "
+                f"to {effective_subject!r}"
+            )
+        elif effective_subject is None and len(explicit_subjects) > 1:
+            raise contract_emitter.QdsCompletenessError(
+                "QDS inputs contain multiple explicit measurement or structured-row "
+                f"subjects ({', '.join(sorted(explicit_subjects))}); QDS subject_ref "
+                "is required"
+            )
+        elif (
+            effective_subject is not None
+            and explicit_subjects
+            and effective_subject not in explicit_subjects
+        ):
+            raise contract_emitter.QdsCompletenessError(
+                f"QDS subject {effective_subject!r} has no exact evidence in the "
+                "inputs; explicit evidence exists only for "
+                f"{', '.join(sorted(explicit_subjects))}"
+            )
+
+        filtered = contract_emitter._annotated_runs(source_runs, effective_subject)
+        if not filtered:
+            raise contract_emitter.QdsCompletenessError(
+                f"QDS subject {effective_subject!r} left no applicable evaluation runs"
+            )
+        retained_refs = [str(run.get("id") or "") for run in filtered]
+        if retained_refs != [str(ref) for ref in refs]:
+            errors.append(
+                f"{path.name}: source EvaluationRun refs differ from the runs retained "
+                "by subject admission"
+            )
         measurements = [
             measurement
             for run in filtered
-            for measurement in qds_emit._final_or_all_measurements(run)
+            for measurement in contract_emitter._final_or_all_measurements(run)
         ]
-        expected = qds_emit.build_cross_tool_coverage(
-            str(qds.get("id") or ""), measurements, qds.get("subject_ref")
+        expected = contract_emitter.build_cross_tool_coverage(
+            str(qds.get("id") or ""),
+            measurements,
+            effective_subject,
+            tool_families=tool_families,
         )
-        qds_emit._check_trust_invariant(
+
+        measured_tasks = {
+            measurement.get("catalog_task_ref") for measurement in measurements
+        }
+        rebuilt_waivers: list[dict[str, Any]] = []
+        seen_waiver_ids: set[Any] = set()
+        for run in filtered:
+            for waiver in run.get("cross_tool_waivers", []) or []:
+                if waiver.get("catalog_task_ref") not in measured_tasks:
+                    continue
+                if waiver.get("id") in seen_waiver_ids:
+                    continue
+                seen_waiver_ids.add(waiver.get("id"))
+                rebuilt_waivers.append(copy.deepcopy(waiver))
+        committed_waivers = qds.get("cross_tool_waivers", []) or []
+        if committed_waivers != rebuilt_waivers:
+            errors.append(
+                f"{path.name}: committed cross_tool_waivers differ from waivers "
+                "rebuilt from retained source EvaluationRuns"
+            )
+        contract_emitter._check_trust_invariant(
             {"cross_tool_coverage": expected},
-            qds.get("cross_tool_waivers", []) or [],
+            rebuilt_waivers,
         )
-    except (qds_emit.QdsCompletenessError, SystemExit) as exc:
+        # Full-sheet derivation is replayed through the retained contract module
+        # using only source-owned snapshots; today's emitter/catalog/registries
+        # cannot redefine an already-issued sheet.
+        errors.extend(
+            contract_validator(
+                path,
+                qds,
+                refs,
+                source_pins,
+                source_structures,
+                source_tools,
+                source_recommendations,
+                source_assumptions,
+                replay_source_runs,
+            )
+        )
+    except SystemExit as exc:
         errors.append(f"{path.name}: source-derived trust check failed: {exc}")
         return None, errors
     return expected, errors
@@ -191,14 +562,14 @@ def check_sheet(
     path: Path,
     root: Path,
     qds: dict[str, Any],
-    eval_runs: dict[str, list[dict[str, Any]]],
-    tool_families: dict[str, str],
+    eval_runs: dict[str, list[EvalRunSource]],
     failures: list[str],
     grandfathered: list[str],
 ) -> None:
     if _is_frozen_legacy(path, root, qds):
         grandfathered.append(
-            f"{_relative(path, root)}: {qds.get('id')} (frozen path/id/timestamp)"
+            f"{_relative(path, root)}: {qds.get('id')} "
+            "(frozen path/id/timestamp/SHA-256)"
         )
         return
 
@@ -219,7 +590,9 @@ def check_sheet(
     if not isinstance(rows, list) or not rows:
         failures.append(f"{path.name}: {qds_id} has no task_coverage rows")
         return
-    failures.extend(_canonical_row_errors(path, rows, tool_families))
+    # Exact source-snapshot reconstruction below is the family authority for modern
+    # immutable sheets; the live catalog must not redefine an old artifact.
+    failures.extend(_canonical_row_errors(path, rows, None))
 
     expected, rebuild_errors = _rebuild_coverage(path, qds, eval_runs)
     failures.extend(rebuild_errors)
@@ -238,16 +611,8 @@ def main() -> int:
     failures: list[str] = []
     grandfathered: list[str] = []
 
-    catalog_path = root / "ref" / "catalog.yaml"
-    qds_emit.CATALOG_PATH = catalog_path
-    try:
-        tool_families = qds_emit._load_catalog_tool_families()
-    except (qds_emit.QdsCompletenessError, OSError, yaml.YAMLError) as exc:
-        print(f"FAIL  cannot load canonical Tool families: {exc}")
-        return 1
-
     eval_runs = _load_eval_runs(root, failures)
-    for path in sorted((root / "data").rglob("QDS_*.yaml")):
+    for path in _yaml_paths(root / "data", "QDS_*"):
         try:
             doc = yaml.safe_load(path.read_text()) or {}
         except (yaml.YAMLError, OSError) as exc:
@@ -262,7 +627,6 @@ def main() -> int:
                 root,
                 qds,
                 eval_runs,
-                tool_families,
                 failures,
                 grandfathered,
             )

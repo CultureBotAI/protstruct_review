@@ -12,7 +12,7 @@ Reproduce with:
 python3 scripts/bench_t16_bsa_vs_pisa.py --cache <dir> --json <out.json>
 ```
 
-## Configuration (matched, per the tolerance's own precondition)
+## Configuration (matched probe radius, benchmarked asymmetric selections)
 
 | | biotite | PDBePISA |
 |---|---|---|

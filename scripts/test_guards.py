@@ -23,6 +23,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import qds_emit as current_qds_emitter
+
 REPO = Path(__file__).resolve().parent.parent
 PASSED = 0
 
@@ -142,6 +144,24 @@ for _p in _real:
     _doc = yaml.safe_load(_p.read_text())
     check(f"  {_p.relative_to(REPO)}",
           integrity.check_structure_refs(_doc, _p.relative_to(REPO), set()), [])
+
+_source_measurement = {
+    "id": "M_snapshot",
+    "metric_definition_ref": "T06_r-free",
+    "oracle_tool_ref": "gemmi validate",
+    "oracle_family": "non_cctbx",
+    "oracle_measure": {"value_numeric": 0.2},
+}
+_wrapped = integrity._expected_wrapped_measurement(
+    _source_measurement,
+    "EVAL_snapshot",
+    (("gemmi validate", "non_cctbx"),),
+)
+check(
+    "wrapped lineage uses the source-pinned Tool family",
+    _wrapped["oracle_family"],
+    "non_cctbx",
+)
 
 
 # --- Round 26: the status vocabulary is declared, not inferred from predicates -----
@@ -468,6 +488,7 @@ _new_doc = {"evaluation_runs": [{
 }]}
 _qds_doc = {"quality_data_sheets": [{
     "id": "QDS_new",
+    "emitter_contract_version": "1",
     "structure_ref": "1sar",
     "derived_from_evaluation_run_refs": ["EVAL_old", "EVAL_new"],
     "value": {
@@ -581,6 +602,137 @@ _violations = integrity.check_corpus_refs(
 check("a wrapped scalar cannot silently omit source metadata",
       any("does not exactly match source measurement" in v and "notes" in v
           for v in _violations), True)
+
+_missing_source_pair = _copy.deepcopy(_qds_doc)
+del _missing_source_pair["quality_data_sheets"][0]["value"][
+    "source_evaluation_run_ref"]
+del _missing_source_pair["quality_data_sheets"][0]["value"][
+    "source_measurement_ref"]
+_violations = integrity.check_corpus_refs(
+    _missing_source_pair, Path("missing-source-pair.yaml"), _cross_index)
+check("a nonlegacy routed scalar cannot omit both lineage fields",
+      any("routed scalar in a nonlegacy QDS" in v for v in _violations), True)
+
+_missing_all_self_description = _copy.deepcopy(_qds_doc)
+_adversarial_qds = _missing_all_self_description["quality_data_sheets"][0]
+_untrusted_scalar = _adversarial_qds.pop("value")
+_adversarial_qds["interface_quality_summary"] = {
+    "id": "QDS_new_interface_quality",
+    "interface_dockq_score": _untrusted_scalar,
+}
+del _untrusted_scalar["source_evaluation_run_ref"]
+del _untrusted_scalar["source_measurement_ref"]
+del _untrusted_scalar["metric_definition_ref"]
+_untrusted_scalar["value_numeric"] = 0.123
+_violations = integrity.check_corpus_refs(
+    _missing_all_self_description, Path("missing-all-self-description.yaml"),
+    _cross_index)
+check("a routed slot cannot evade lineage by deleting its metric identity too",
+      any("routed scalar in a nonlegacy QDS" in v for v in _violations), True)
+
+_source_without_family = _copy.deepcopy(_new_doc)
+del _source_without_family["evaluation_runs"][0]["measurements"][0]["oracle_family"]
+_canonical_records = [
+    (Path("old.yaml"), _old_doc),
+    (Path("new-without-family.yaml"), _source_without_family),
+    (Path("qds.yaml"), _qds_doc),
+]
+_canonical_index = integrity.build_corpus_indices(_canonical_records)
+check("source payload comparison accounts for emitter family canonicalization",
+      integrity.check_corpus_refs(
+          _qds_doc, Path("qds.yaml"), _canonical_index), [])
+
+_source_interface = {
+    "id": "IFACE_source",
+    "structure_ref": "1sar",
+    "subject_ref": "artifact:new#model.pdb",
+    "reference_subject_ref": "repo:reference.pdb",
+    "model_to_native_chain_mapping": "AB:AB",
+    "dockq_score": {"value_numeric": 0.9},
+    "buried_surface_area": {"value_numeric": 437.8, "unit": "Å²"},
+}
+_row_eval_doc = {"evaluation_runs": [{
+    "id": "EVAL_rows", "run_date": "2026-02-02", "structure_ref": "1sar",
+    "interface_qualities": [_copy.deepcopy(_source_interface)],
+}]}
+_emitted_interface = _copy.deepcopy(_source_interface)
+_emitted_interface.update({
+    "source_evaluation_run_ref": "EVAL_rows",
+    "source_row_ref": "IFACE_source",
+})
+_row_qds_doc = {"quality_data_sheets": [{
+    "id": "QDS_rows",
+    "emitter_contract_version": "1",
+    "structure_ref": "1sar",
+    "derived_from_evaluation_run_refs": ["EVAL_rows"],
+    "coverage_scope": "partial",
+    "interface_quality_summary": {
+        "id": "QDS_rows_interface_quality",
+        "interface_qualities": [_emitted_interface],
+    },
+}]}
+_row_records = [
+    (Path("row-eval.yaml"), _row_eval_doc),
+    (Path("row-qds.yaml"), _row_qds_doc),
+]
+_row_index = integrity.build_corpus_indices(_row_records)
+check("a copied structured row with exact lineage and payload resolves",
+      integrity.check_corpus_refs(
+          _row_qds_doc, Path("row-qds.yaml"), _row_index), [])
+
+_future_route_id = "T99_future_nested_interface_bsa"
+current_qds_emitter.METRIC_TO_QDS_SLOT[_future_route_id] = (
+    "interface_quality_summary", "buried_surface_area"
+)
+_drift_module_name = "check_referential_integrity_route_drift"
+try:
+    _drift_spec = importlib.util.spec_from_file_location(
+        _drift_module_name, REPO / "scripts/check_referential_integrity.py"
+    )
+    _drift_integrity = importlib.util.module_from_spec(_drift_spec)
+    sys.modules[_drift_module_name] = _drift_integrity
+    _drift_spec.loader.exec_module(_drift_integrity)
+    _drift_index = _drift_integrity.build_corpus_indices(_row_records)
+    _route_drift_violations = _drift_integrity.check_corpus_refs(
+        _row_qds_doc, Path("row-qds.yaml"), _drift_index
+    )
+finally:
+    current_qds_emitter.METRIC_TO_QDS_SLOT.pop(_future_route_id)
+    sys.modules.pop(_drift_module_name, None)
+check(
+    "future current-emitter routes cannot reinterpret a contract-1 structured row",
+    _route_drift_violations,
+    [],
+)
+
+_drifted_row = _copy.deepcopy(_row_qds_doc)
+_drifted_row["quality_data_sheets"][0]["interface_quality_summary"][
+    "interface_qualities"][0]["dockq_score"]["value_numeric"] = 1.0
+_violations = integrity.check_corpus_refs(
+    _drifted_row, Path("row-drift.yaml"), _row_index)
+check("a copied structured payload cannot diverge from its source",
+      any("does not exactly match source structured row" in v
+          for v in _violations), True)
+
+_unlinked_row = _copy.deepcopy(_row_qds_doc)
+_row = _unlinked_row["quality_data_sheets"][0]["interface_quality_summary"][
+    "interface_qualities"][0]
+del _row["source_evaluation_run_ref"]
+del _row["source_row_ref"]
+_violations = integrity.check_corpus_refs(
+    _unlinked_row, Path("row-unlinked.yaml"), _row_index)
+check("a copied structured row cannot omit both lineage fields",
+      any("copied interface_qualities row in a nonlegacy QDS" in v
+          for v in _violations), True)
+
+check("record-shaped .yml files are explicitly rejected",
+      any("must use the .yaml suffix" in v for v in integrity._check_qds_filename(
+          _row_qds_doc, Path("data/x/QDS_rows.yml"))), True)
+
+check("EvaluationRun .yml files are explicitly rejected too",
+      any("evaluation_runs must use the .yaml suffix" in v
+          for v in integrity._check_qds_filename(
+              _row_eval_doc, Path("data/x/EVAL_rows.yml"))), True)
 
 _outside_qds = _copy.deepcopy(_qds_doc["quality_data_sheets"][0]["value"])
 _violations = integrity.check_corpus_refs(
@@ -728,6 +880,70 @@ _violations = integrity.check_corpus_refs(
 check("a QDS cannot list one derivation input twice",
       any("derived_from_evaluation_run_refs" in v and "duplicates 'EVAL_new'" in v
           for v in _violations), True)
+
+_pin_doc = _copy.deepcopy(_new_doc)
+_pin_doc["qds_replay_pins"] = [{
+    "id": "PIN_QDS_new",
+    "qds_ref": "QDS_new",
+    "source_evaluation_run_refs": ["EVAL_old", "EVAL_new"],
+    "emitter_contract_version": "1",
+}]
+_pin_records = [
+    (Path("old.yaml"), _old_doc),
+    (Path("pin.yaml"), _pin_doc),
+    (Path("qds.yaml"), _qds_doc),
+]
+_pin_index = integrity.build_corpus_indices(_pin_records)
+check("a replay pin resolves its target QDS and exact source runs",
+      integrity.check_corpus_refs(_pin_doc, Path("pin.yaml"), _pin_index), [])
+
+_dangling_pin_qds = _copy.deepcopy(_pin_doc)
+_dangling_pin_qds["qds_replay_pins"][0]["qds_ref"] = "QDS_missing"
+_violations = integrity.check_corpus_refs(
+    _dangling_pin_qds, Path("dangling-pin-qds.yaml"), _pin_index)
+check("a replay pin cannot name a missing QDS",
+      any("qds_ref" in v and "QDS_missing" in v and "does not resolve" in v
+          for v in _violations), True)
+
+_dangling_pin_run = _copy.deepcopy(_pin_doc)
+_dangling_pin_run["qds_replay_pins"][0]["source_evaluation_run_refs"][0] = (
+    "EVAL_missing"
+)
+_violations = integrity.check_corpus_refs(
+    _dangling_pin_run, Path("dangling-pin-run.yaml"), _pin_index)
+check("a replay pin cannot name a missing source run",
+      any("source_evaluation_run_refs[0]" in v and "EVAL_missing" in v
+          and "does not resolve" in v for v in _violations), True)
+check("a replay pin must exactly match its QDS derivation refs",
+      any("differs from target QDS" in v for v in _violations), True)
+
+_orphan_pin = {"qds_replay_pins": _copy.deepcopy(_pin_doc["qds_replay_pins"])}
+_violations = integrity.check_corpus_refs(
+    _orphan_pin, Path("orphan-pin.yaml"), _pin_index)
+check("a replay pin must be owned by a source run in its document",
+      any("not owned by any source EvaluationRun" in v for v in _violations), True)
+
+_duplicate_pin_a = {"qds_replay_pins": _copy.deepcopy(_pin_doc["qds_replay_pins"])}
+_duplicate_pin_b = {"qds_replay_pins": _copy.deepcopy(_pin_doc["qds_replay_pins"])}
+_duplicate_pin_b["qds_replay_pins"][0]["id"] = "PIN_QDS_new_second"
+_duplicate_pin_index = integrity.build_corpus_indices(
+    _cross_records
+    + [(Path("pin-a.yaml"), _duplicate_pin_a),
+       (Path("pin-b.yaml"), _duplicate_pin_b)]
+)
+_duplicate_pin_messages = integrity.check_duplicate_ids(_duplicate_pin_index)
+check("multiple replay pins for one QDS are diagnosed corpus-wide",
+      any("multiple QdsReplayPins target qds_ref 'QDS_new'" in v
+          for v in _duplicate_pin_messages), True)
+_duplicate_pin_b["qds_replay_pins"][0]["id"] = "PIN_QDS_new"
+_duplicate_pin_index = integrity.build_corpus_indices(
+    _cross_records
+    + [(Path("pin-a.yaml"), _duplicate_pin_a),
+       (Path("pin-b.yaml"), _duplicate_pin_b)]
+)
+check("duplicate replay-pin ids are diagnosed corpus-wide",
+      any("duplicate QdsReplayPin id 'PIN_QDS_new'" in v
+          for v in integrity.check_duplicate_ids(_duplicate_pin_index)), True)
 
 # Exercise the actual corpus through the same API, including ignored files because
 # target_paths uses Path.rglob rather than a gitignore-aware search.

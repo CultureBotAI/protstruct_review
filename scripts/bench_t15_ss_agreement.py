@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Benchmark the secondary-structure agreement floor: DSSP vs biotite P-SEA.
+"""Benchmark DSSP/biotite agreement under the current exact-denominator rule.
 
-Settles the `Secondary-structure agreement` `[template]` tolerance in
-`ref/thresholds_and_standards.md`, whose second clause is "two independent assigners
-floor ≥ 0.80 on a well-ordered model". `scripts/t15_ss_agreement.py` computes the
-metric but had never been run over a set — only on the repo's own 1SAR.
+The historical run retired a 0.80 floor, but did not retain the per-assigner
+counts needed to prove today's exact residue-key denominator. New runs retain
+those counts and report the provisional content-qualified 0.65 expectation without
+presenting either the content precondition or historical agreement values as a
+current gradeable calibration.
 
 This is one of the few tolerances where cross-tool agreement means what it says: DSSP
 assigns from **hydrogen-bond energetics** (Kabsch & Sander) and biotite's P-SEA from
@@ -12,8 +13,10 @@ assigns from **hydrogen-bond energetics** (Kabsch & Sander) and biotite's P-SEA 
 non-cctbx.
 
 Usage:
-    python3 scripts/bench_t15_ss_agreement.py 1UBQ 1LYZ --cache DIR --json out.json
-    python3 scripts/bench_t15_ss_agreement.py --ids-file ids.json --cache DIR
+    python3 scripts/bench_t15_ss_agreement.py 1UBQ 1LYZ --cache DIR \
+      --evidence-dir .cache/t15-evidence --json out.json
+    python3 scripts/bench_t15_ss_agreement.py --ids-file ids.json --cache DIR \
+      --evidence-dir .cache/t15-evidence
 """
 from __future__ import annotations
 
@@ -39,10 +42,13 @@ REPO = Path(__file__).resolve().parent.parent
 T15 = REPO / "scripts" / "t15_ss_agreement.py"
 
 _COUNTS = re.compile(r"(\d+)/(\d+)\s+concordant")
+_ASSIGNER_COUNTS = re.compile(
+    r"DSSP\s+(\d+),\s+biotite\s+(\d+),\s+(\d+)\s+scored by only one"
+)
 
-# Minimum fraction of residues DSSP assigns to H or E for the agreement number to
-# mean anything. Below this there is no secondary structure to agree *about*, and the
-# metric saturates towards 1.0 — see `ss_content` and the write-up.
+# Provisional fraction of residues DSSP assigns to H or E below which coil/coil
+# calls may dominate and agreement loses interpretive range. This is an
+# informational benchmark annotation, not a model-quality pass/fail threshold.
 MIN_SS_CONTENT = 0.20
 
 # Well-known, well-ordered structures spanning fold class: all-α, all-β, α/β, α+β.
@@ -81,14 +87,32 @@ def _rows_by_metric(text: str) -> dict[str, dict[str, Any]]:
     }
 
 
-def run_t15(model: Path, cache: Path) -> dict[str, Any] | None:
+def run_t15(
+    model: Path, cache: Path, evidence_dir: Path
+) -> dict[str, Any] | None:
     """Run the harness and read agreement plus content from its typed YAML rows."""
     log = cache / f"t15_{model.stem}.log"
+    evidence = evidence_dir / f"{model.stem}.t15-evidence.json"
+    evidence_ref = evidence.resolve().relative_to(REPO.resolve()).as_posix()
     rows = _rows_by_metric(log.read_text(errors="ignore")) if log.exists() else {}
     required = {"T15_secondary_structure_agreement", "T15_secondary_structure_content"}
-    if not required.issubset(rows):
+    bound_rows = required.issubset(rows) and all(
+        rows[metric].get("evidence_refs") == [evidence_ref]
+        for metric in required
+    )
+    if not bound_rows or not evidence.is_file():
+        if evidence.exists():
+            return None
         run_logged(
-            [sys.executable, T15, model, "--eval-id", "EVAL_BENCH"],
+            [
+                sys.executable,
+                T15,
+                model,
+                "--eval-id",
+                "EVAL_BENCH",
+                "--evidence-out",
+                evidence,
+            ],
             log,
             timeout=3600,
         )
@@ -103,15 +127,27 @@ def run_t15(model: Path, cache: Path) -> dict[str, Any] | None:
     if agreement.get("value_numeric") is None or content.get("value_numeric") is None:
         return None
     counts = _COUNTS.search(text)
+    assigner_counts = _ASSIGNER_COUNTS.search(text)
+    if counts is None or assigner_counts is None:
+        return None
+    n_dssp, n_biotite, n_dropped = map(int, assigner_counts.groups())
+    n_scored = int(counts.group(2))
+    if n_dssp != n_biotite or n_dropped != 0 or n_scored != n_dssp:
+        return None
     return {
         "agreement": float(agreement["value_numeric"]),
         "ss_content": float(content["value_numeric"]),
-        "n_concordant": int(counts.group(1)) if counts else None,
-        "n_scored": int(counts.group(2)) if counts else None,
+        "n_concordant": int(counts.group(1)),
+        "n_scored": n_scored,
+        "n_dssp": n_dssp,
+        "n_biotite": n_biotite,
+        "n_dropped": n_dropped,
     }
 
 
-def collect(pdb_ids: list[str], cache: Path) -> tuple[list[dict], list[dict]]:
+def collect(
+    pdb_ids: list[str], cache: Path, evidence_dir: Path
+) -> tuple[list[dict], list[dict]]:
     """Run the two assigners over every entry."""
     rows, skipped = [], []
     for pdb_id in pdb_ids:
@@ -121,7 +157,7 @@ def collect(pdb_ids: list[str], cache: Path) -> tuple[list[dict], list[dict]]:
         if model is None:
             skipped.append({"pdb_id": pdb_id, "reason": "no PDB-format model"})
             continue
-        result = run_t15(model, cache)
+        result = run_t15(model, cache, evidence_dir)
         if result is None:
             print("  ! t15_ss_agreement failed", file=sys.stderr)
             skipped.append({"pdb_id": pdb_id, "reason": "t15_ss_agreement failed"})
@@ -129,16 +165,25 @@ def collect(pdb_ids: list[str], cache: Path) -> tuple[list[dict], list[dict]]:
         content = result.pop("ss_content")
         rows.append({"pdb_id": pdb_id, **result,
                      "ss_content": content,
-                     "interpretable": content is not None and content >= MIN_SS_CONTENT,
-                     "meets_0_80_floor": result["agreement"] >= 0.80})
-        flag = "" if (content or 0) >= MIN_SS_CONTENT else "  <- DEGENERATE (little/no SS)"
+                     "clears_provisional_content_precondition": (
+                         content is not None and content >= MIN_SS_CONTENT
+                     ),
+                     "meets_provisional_0_65_expectation": (
+                         content is not None
+                         and content >= MIN_SS_CONTENT
+                         and result["agreement"] >= 0.65
+                     )})
+        flag = (
+            "" if (content or 0) >= MIN_SS_CONTENT
+            else "  <- LOW CONTENT (agreement interpretation weak; not a quality verdict)"
+        )
         print(f"  agreement {result['agreement']:.4f} over {result['n_scored']} residues,"
               f" SS content {content}{flag}", file=sys.stderr)
     return rows, skipped
 
 
 def summarize(rows: list[dict]) -> dict[str, Any]:
-    """Agreement distribution and how often the asserted floor holds."""
+    """Agreement distribution under the exact denominator, without grading it."""
     if not rows:
         return {"n": 0}
     values = sorted(r["agreement"] for r in rows)
@@ -149,10 +194,22 @@ def summarize(rows: list[dict]) -> dict[str, Any]:
         "p10": round(values[idx], 4),
         "min": round(values[0], 4),
         "max": round(values[-1], 4),
-        "n_meeting_0_80_floor": sum(1 for r in rows if r["meets_0_80_floor"]),
-        "below_floor": [r["pdb_id"] for r in rows if not r["meets_0_80_floor"]],
-        "n_degenerate_low_ss_content": sum(1 for r in rows if not r["interpretable"]),
-        "degenerate": [r["pdb_id"] for r in rows if not r["interpretable"]],
+        "n_meeting_provisional_0_65_expectation": sum(
+            1 for r in rows if r["meets_provisional_0_65_expectation"]
+        ),
+        "below_provisional_expectation": [
+            r["pdb_id"]
+            for r in rows
+            if not r["meets_provisional_0_65_expectation"]
+        ],
+        "n_below_provisional_content_precondition": sum(
+            1 for r in rows if not r["clears_provisional_content_precondition"]
+        ),
+        "below_provisional_content_precondition": [
+            r["pdb_id"]
+            for r in rows
+            if not r["clears_provisional_content_precondition"]
+        ],
     }
 
 
@@ -164,6 +221,11 @@ def main() -> int:
     ap.add_argument("pdb_ids", nargs="*")
     ap.add_argument("--ids-file")
     ap.add_argument("--cache")
+    ap.add_argument(
+        "--evidence-dir",
+        default=str(REPO / ".cache" / "bench_t15_evidence"),
+        help="repository-local directory for no-overwrite per-model T15 evidence",
+    )
     ap.add_argument("--json", dest="json_out")
     args = ap.parse_args()
 
@@ -175,7 +237,12 @@ def main() -> int:
         ids = DEFAULT_SET
 
     cache = Path(args.cache) if args.cache else Path(tempfile.gettempdir()) / "bench_cache_t15"
-    rows, skipped = collect(ids, cache)
+    evidence_dir = Path(args.evidence_dir).resolve()
+    try:
+        evidence_dir.relative_to(REPO.resolve())
+    except ValueError:
+        ap.error("--evidence-dir must be inside the repository for portable evidence_refs")
+    rows, skipped = collect(ids, cache, evidence_dir)
     summary = summarize(rows)
     if args.json_out:
         Path(args.json_out).write_text(

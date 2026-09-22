@@ -55,11 +55,20 @@ def _quality_doc_with_governed_bundles() -> dict:
     """Upgrade the historical synthetic fixture for current bundle invariants."""
     doc = copy.deepcopy(yaml.safe_load(EVAL_QUALITY.read_text()))
     run = doc["evaluation_runs"][0]
+    for row in run.get("measurements", []):
+        if (
+            row.get("metric_definition_ref") in qds_emit.TEXTUAL_SUMMARY_METRIC_IDS
+            and (row.get("oracle_measure") or {}).get("value_text")
+        ):
+            row["pass_status"] = "informational"
     agreement = next(
         row
         for row in run["measurements"]
         if row.get("metric_definition_ref") == "T15_secondary_structure_agreement"
     )
+    agreement["pass_status"] = "informational"
+    agreement.pop("pass_criterion", None)
+    agreement["bundle_ref"] = "EVAL_synth_quality_T15_SS_BUNDLE"
     content = copy.deepcopy(agreement)
     content.update(
         {
@@ -67,7 +76,8 @@ def _quality_doc_with_governed_bundles() -> dict:
             "metric_definition_ref": "T15_secondary_structure_content",
             "oracle_tool_ref": "DSSP",
             "oracle_measure": {"value_numeric": 0.40, "unit": "fraction"},
-            "notes": "Synthetic DSSP H+E content for the governed T15 gate.",
+            "pass_status": "informational",
+            "notes": "Synthetic DSSP H+E content interpretability diagnostic.",
         }
     )
     run["measurements"].append(content)
@@ -86,12 +96,22 @@ def _quality_doc_with_governed_bundles() -> dict:
     for row in comparison_rows:
         row["reference_subject_ref"] = "native:synth_quality"
         row["evidence_refs"] = ["raw:synth_quality_dockq"]
+    bsa = next(
+        row
+        for row in run["measurements"]
+        if row.get("metric_definition_ref")
+        == "T16_interface_buried_surface_area"
+    )
+    bsa["evidence_refs"] = ["raw:synth_quality_bsa"]
     for interface in run.get("interface_qualities", []) or []:
         if (interface.get("dockq_score") or {}).get("value_numeric") == 0.73:
             interface["capri_quality_class"] = {"value_text": "Medium"}
             interface["reference_subject_ref"] = "native:synth_quality"
             interface["model_to_native_chain_mapping"] = "AB:AB"
-            interface["evidence_refs"] = ["raw:synth_quality_dockq"]
+            interface["evidence_refs"] = [
+                "raw:synth_quality_dockq",
+                "raw:synth_quality_bsa",
+            ]
     return doc
 
 
@@ -332,10 +352,10 @@ def test_quality_indicator_extensions_present() -> None:
 
     cls = qds.get("classification_summary") or {}
     _check("secondary_structure_agreement" in cls,
-           "secondary_structure_agreement (the gradeable T15 metric) missing from classification_summary")
+           "secondary_structure_agreement missing from classification_summary")
     ssa = cls.get("secondary_structure_agreement") or {}
     _check(ssa.get("value_numeric") is not None,
-           "secondary_structure_agreement must carry a numeric value — it is the gradeable T15 metric")
+           "secondary_structure_agreement must carry a numeric informational value")
     _check(cls.get("secondary_structure_assignments"), "secondary_structure_assignments missing")
     _check(cls.get("domain_assignments"), "domain_assignments missing")
     _check("fold_classification" in cls, "fold_classification missing")
@@ -485,6 +505,27 @@ def _emit_legacy_1sar(
         for measurement in run.get("measurements", [])
         if measurement.get("metric_definition_ref") not in refinement_metrics
     ]
+    for measurement in run["measurements"]:
+        # Historical rows predate the schema's exactly-one typed-value carrier
+        # contract. Upgrade this in-memory fixture before exercising unrelated
+        # legacy local-block builders; the adversarial test below proves that
+        # real emission rejects the original dual-carrier form.
+        for field in qds_emit.TYPED_VALUE_FIELDS:
+            value = measurement.get(field)
+            if not isinstance(value, dict):
+                continue
+            if value.get("value_numeric") is not None:
+                value.pop("value_text", None)
+                value.pop("is_not_applicable", None)
+        if (
+            measurement.get("metric_definition_ref")
+            in qds_emit.TEXTUAL_SUMMARY_METRIC_IDS
+            and (measurement.get("oracle_measure") or {}).get("value_text")
+        ):
+            # Historical fixture rows predate the label-only rule. This helper
+            # upgrades them to the current contract before testing unrelated
+            # builders; the dedicated adversarial test below proves rejection.
+            measurement["pass_status"] = "informational"
     cctbx_claims = {
         tuple(measurement.get(field) for field in (
             "catalog_task_ref", "metric_definition_ref", "subject_ref",
@@ -551,6 +592,11 @@ def _measurement(
     }
     if subject is not None:
         row["subject_ref"] = subject
+    if metric in {
+        "T15_secondary_structure_agreement",
+        "T15_secondary_structure_content",
+    }:
+        row["bundle_ref"] = f"T15:{subject or 'unlabelled'}:{selector}"
     return row
 
 
@@ -682,6 +728,281 @@ def test_superseded_assumptions_are_not_republished() -> None:
     ids = {a["id"] for a in qds_emit.build_assumptions_report([old, correction])}
     _check(ids == {"A_retained"}, "later runs remove explicitly superseded assumptions")
     print("PASS  test_superseded_assumptions_are_not_republished")
+
+
+def test_explicit_assumption_registry_snapshot_is_applied() -> None:
+    assumption = {
+        "id": "ASSUMPTION_snapshot_tool",
+        "tool_ref": "Snapshot Tool",
+        "as_of_date": "2026-09-21",
+        "effective_at": "2026-09-21T12:00:00+00:00",
+        "description": "Assumption retained in the source-owned snapshot.",
+    }
+    run = {
+        "id": "EVAL_explicit_assumption_snapshot",
+        "measurements": [
+            {
+                "id": "M_explicit_assumption_snapshot",
+                "oracle_tool_ref": "Snapshot Tool",
+            }
+        ],
+    }
+    report = qds_emit.build_assumptions_report(
+        [run],
+        "2026-09-22T00:00:00+00:00",
+        registry_rows=[assumption],
+    )
+    _check(
+        report == [assumption],
+        "an explicit source-owned assumption registry did not surface the "
+        "assumption matching the measurement's oracle tool",
+    )
+    print("PASS  test_explicit_assumption_registry_snapshot_is_applied")
+
+
+def test_pinned_source_snapshots_deduplicate_and_reject_conflicts() -> None:
+    tool = {
+        "id": "Snapshot Tool",
+        "version": "1.0",
+        "family": "non_cctbx",
+        "catalog_tasks_served": [],
+    }
+    recommendation = {
+        "id": "REC_snapshot",
+        "metric_definition_ref": "T15_secondary_structure_content",
+        "as_of_date": "2026-09-21",
+        "effective_at": "2026-09-21T12:00:00+00:00",
+        "recommendation": "Pinned recommendation snapshot.",
+    }
+    assumption = {
+        "id": "ASSUMPTION_snapshot",
+        "tool_ref": "Snapshot Tool",
+        "as_of_date": "2026-09-21",
+        "effective_at": "2026-09-21T12:00:00+00:00",
+        "description": "Pinned assumption snapshot.",
+    }
+
+    def source_document(run_id: str) -> dict:
+        return {
+            "tools": [copy.deepcopy(tool)],
+            "tool_recommendations": [copy.deepcopy(recommendation)],
+            "assumptions": [copy.deepcopy(assumption)],
+            "evaluation_runs": [
+                {
+                    "id": run_id,
+                    "structure_ref": "synth",
+                    "run_date": "2026-09-21",
+                    "catalog_tasks_applied": [],
+                    "measurements": [],
+                }
+            ],
+        }
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        first = Path(tmpdir) / "first.yaml"
+        second = Path(tmpdir) / "second.yaml"
+        first.write_text(
+            yaml.safe_dump(source_document("EVAL_snapshot_first"), sort_keys=False)
+        )
+        second.write_text(
+            yaml.safe_dump(source_document("EVAL_snapshot_second"), sort_keys=False)
+        )
+        qds = qds_emit.emit_qds(
+            [first, second],
+            qds_id="QDS_snapshot_deduplication",
+            structure_id="synth",
+            coverage_scope="cumulative",
+            issued_at="2026-09-22T00:00:00+00:00",
+            emitter_contract_version="1",
+            require_pinned_tool_snapshot=True,
+        )
+        _check(
+            qds["derived_from_evaluation_run_refs"]
+            == ["EVAL_snapshot_first", "EVAL_snapshot_second"],
+            "contract-1 replay did not accept identical per-document source snapshots",
+        )
+
+        conflict_cases = (
+            ("tools", "family", "cctbx", "source Tool snapshot"),
+            (
+                "tool_recommendations",
+                "recommendation",
+                "Conflicting recommendation snapshot.",
+                "source tool-recommendation snapshot",
+            ),
+            (
+                "assumptions",
+                "description",
+                "Conflicting assumption snapshot.",
+                "source tool-assumption snapshot",
+            ),
+        )
+        for field, changed_key, changed_value, expected_label in conflict_cases:
+            conflicting = source_document("EVAL_snapshot_second")
+            conflicting[field][0][changed_key] = changed_value
+            second.write_text(yaml.safe_dump(conflicting, sort_keys=False))
+            assert_raises_completeness(
+                lambda: qds_emit.emit_qds(
+                    [first, second],
+                    qds_id="QDS_snapshot_conflict",
+                    structure_id="synth",
+                    coverage_scope="cumulative",
+                    issued_at="2026-09-22T00:00:00+00:00",
+                    emitter_contract_version="1",
+                    require_pinned_tool_snapshot=True,
+                ),
+                [
+                    "source-snapshot integrity failed",
+                    expected_label,
+                    "conflicting duplicate id",
+                ],
+                f"two source documents disagreed on {field!r} for one snapshot id",
+            )
+
+    print("PASS  test_pinned_source_snapshots_deduplicate_and_reject_conflicts")
+
+
+def test_registry_snapshots_exclude_future_rows() -> None:
+    run = {
+        "id": "EVAL_registry_cutoff",
+        "measurements": [
+            {
+                "id": "M_registry_cutoff",
+                "metric_definition_ref": "T15_secondary_structure_content",
+                "oracle_tool_ref": "DSSP",
+            }
+        ],
+    }
+    recommendations = {
+        "tool_recommendations": [
+            {
+                "id": "REC_active",
+                "metric_definition_ref": "T15_secondary_structure_content",
+                "as_of_date": "2026-09-21",
+                "effective_at": "2026-09-21T12:00:00+00:00",
+            },
+            {
+                "id": "REC_later_same_day",
+                "metric_definition_ref": "T15_secondary_structure_content",
+                "as_of_date": "2026-09-22",
+                "effective_at": "2026-09-22T20:00:00+00:00",
+                "supersedes_recommendation_ref": "REC_active",
+            },
+            {
+                "id": "REC_future",
+                "metric_definition_ref": "T15_secondary_structure_content",
+                "as_of_date": "2027-01-01",
+                "effective_at": "2027-01-01T12:00:00+00:00",
+                "supersedes_recommendation_ref": "REC_later_same_day",
+            },
+        ]
+    }
+    assumptions = {
+        "assumptions": [
+            {
+                "id": "ASSUM_active",
+                "tool_ref": "DSSP",
+                "as_of_date": "2026-09-21",
+                "effective_at": "2026-09-21T12:00:00+00:00",
+            },
+            {
+                "id": "ASSUM_later_same_day",
+                "tool_ref": "DSSP",
+                "as_of_date": "2026-09-22",
+                "effective_at": "2026-09-22T20:00:00+00:00",
+                "supersedes_assumption_ref": "ASSUM_active",
+            },
+            {
+                "id": "ASSUM_future",
+                "tool_ref": "DSSP",
+                "as_of_date": "2027-01-01",
+                "effective_at": "2027-01-01T12:00:00+00:00",
+                "supersedes_assumption_ref": "ASSUM_later_same_day",
+            },
+        ]
+    }
+    old_recs = qds_emit.TOOL_RECS_PATH
+    old_assumptions = qds_emit.TOOL_ASSUMPTIONS_PATH
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            qds_emit.TOOL_RECS_PATH = Path(tmpdir) / "tool_recommendations.yaml"
+            qds_emit.TOOL_ASSUMPTIONS_PATH = Path(tmpdir) / "tool_assumptions.yaml"
+            qds_emit.TOOL_RECS_PATH.write_text(yaml.safe_dump(recommendations))
+            qds_emit.TOOL_ASSUMPTIONS_PATH.write_text(yaml.safe_dump(assumptions))
+            cutoff = "2026-09-22T00:18:11-07:00"
+            rec_ids = {
+                row["id"]
+                for row in qds_emit.build_tool_recommendations_applied([run], cutoff)
+            }
+            assumption_ids = {
+                row["id"]
+                for row in qds_emit.build_assumptions_report([run], cutoff)
+            }
+            _check(rec_ids == {"REC_active"},
+                   "a future recommendation leaked into a historical QDS snapshot")
+            _check(assumption_ids == {"ASSUM_active"},
+                   "a future tool assumption leaked into a historical QDS snapshot")
+
+            later_same_day_cutoff = "2026-09-22T21:00:00+00:00"
+            same_day_rec_ids = {
+                row["id"]
+                for row in qds_emit.build_tool_recommendations_applied(
+                    [run], later_same_day_cutoff
+                )
+            }
+            same_day_assumption_ids = {
+                row["id"]
+                for row in qds_emit.build_assumptions_report(
+                    [run], later_same_day_cutoff
+                )
+            }
+            _check(same_day_rec_ids == {"REC_later_same_day"},
+                   "precise same-day recommendation activation was ignored")
+            _check(same_day_assumption_ids == {"ASSUM_later_same_day"},
+                   "precise same-day assumption activation was ignored")
+
+            future_cutoff = "2027-01-02T00:00:00+00:00"
+            future_rec_ids = {
+                row["id"]
+                for row in qds_emit.build_tool_recommendations_applied(
+                    [run], future_cutoff
+                )
+            }
+            future_assumption_ids = {
+                row["id"]
+                for row in qds_emit.build_assumptions_report([run], future_cutoff)
+            }
+            _check(future_rec_ids == {"REC_future"},
+                   "an active recommendation revision did not retire its predecessor")
+            _check(future_assumption_ids == {"ASSUM_future"},
+                   "an active assumption revision did not retire its predecessor")
+
+            broken_recommendations = copy.deepcopy(recommendations)
+            broken_recommendations["tool_recommendations"][2][
+                "supersedes_recommendation_ref"
+            ] = "REC_missing"
+            qds_emit.TOOL_RECS_PATH.write_text(
+                yaml.safe_dump(broken_recommendations)
+            )
+            assert_raises_completeness(
+                lambda: qds_emit.build_tool_recommendations_applied(
+                    [run], cutoff
+                ),
+                ["tool-recommendation registry", "dangling", "REC_missing"],
+                "an inactive future registry revision named a missing predecessor",
+            )
+
+            recommendations["tool_recommendations"][0].pop("as_of_date")
+            qds_emit.TOOL_RECS_PATH.write_text(yaml.safe_dump(recommendations))
+            assert_raises_completeness(
+                lambda: qds_emit.build_tool_recommendations_applied([run], cutoff),
+                ["tool-recommendation registry", "REC_active", "no as_of_date"],
+                "an undated recommendation entered an immutable QDS snapshot",
+            )
+    finally:
+        qds_emit.TOOL_RECS_PATH = old_recs
+        qds_emit.TOOL_ASSUMPTIONS_PATH = old_assumptions
+    print("PASS  test_registry_snapshots_exclude_future_rows")
 
 
 def test_subject_inference_includes_structured_rows_and_rejects_typos() -> None:
@@ -1102,16 +1423,16 @@ def test_non_results_cannot_populate_summary_slots() -> None:
         "aborted", "T05_clashscore", 0.0, tool="MolProbity (gold)"
     )
     aborted["oracle_measure"] = {"value_text": "tool aborted before producing a score"}
-    empty = _measurement(
-        "empty", "T05_clashscore", 0.0, tool="MolProbity (gold)"
+    not_applicable = _measurement(
+        "not_applicable", "T05_clashscore", 0.0, tool="MolProbity (gold)"
     )
-    empty["oracle_measure"] = {}
+    not_applicable["oracle_measure"] = {"is_not_applicable": True}
     run = {
         "id": "EVAL_non_results",
         "structure_ref": "synth",
         "run_date": "2026-09-21",
         "catalog_tasks_applied": ["T05"],
-        "measurements": [aborted, empty, numeric],
+        "measurements": [aborted, not_applicable, numeric],
         "cross_tool_waivers": [
             {
                 "id": "WAIVER_numeric_cctbx",
@@ -1142,17 +1463,267 @@ def test_non_results_cannot_populate_summary_slots() -> None:
     print("PASS  test_non_results_cannot_populate_summary_slots")
 
 
+def test_typed_value_carriers_are_exactly_one() -> None:
+    numeric = _measurement(
+        "M_bad_numeric_carrier", "T05_clashscore", 7.0,
+        tool="MolProbity (gold)", selector="whole model",
+    )
+    categorical = {
+        "id": "M_bad_categorical_carrier",
+        "catalog_task_ref": "T15",
+        "stage": "final",
+        "scope": "complex",
+        "metric_definition_ref": "T15_fold_classification",
+        "oracle_tool_ref": "DSSP",
+        "oracle_family": "non_cctbx",
+        "oracle_measure": {"value_text": "alpha/beta"},
+        "pass_status": "informational",
+    }
+
+    cases: list[tuple[str, dict, str, object, list[str]]] = [
+        (
+            "numeric plus text", numeric, "oracle_measure",
+            {"value_numeric": 7.0, "value_text": "also seven"},
+            ["exactly one", "value_numeric", "value_text"],
+        ),
+        (
+            "numeric plus N/A", numeric, "oracle_measure",
+            {"value_numeric": 7.0, "is_not_applicable": True},
+            ["exactly one", "is_not_applicable"],
+        ),
+        (
+            "boolean numeric", numeric, "oracle_measure",
+            {"value_numeric": True},
+            ["finite non-boolean"],
+        ),
+        (
+            "non-finite numeric", numeric, "oracle_measure",
+            {"value_numeric": float("nan")},
+            ["finite non-boolean"],
+        ),
+        (
+            "false N/A", numeric, "oracle_measure",
+            {"is_not_applicable": False},
+            ["literal true", "exactly one"],
+        ),
+        (
+            "missing carrier", numeric, "oracle_measure", {},
+            ["exactly one"],
+        ),
+        (
+            "null payload", numeric, "oracle_measure", None,
+            ["must be an object"],
+        ),
+        (
+            "blank text", categorical, "oracle_measure",
+            {"value_text": "  \t"},
+            ["non-empty string", "exactly one"],
+        ),
+        (
+            "categorical plus N/A", categorical, "oracle_measure",
+            {"value_text": "alpha/beta", "is_not_applicable": True},
+            ["exactly one", "value_text", "is_not_applicable"],
+        ),
+        (
+            "categorical plus non-finite numeric", categorical, "oracle_measure",
+            {"value_text": "alpha/beta", "value_numeric": float("inf")},
+            ["finite non-boolean"],
+        ),
+        (
+            "dual-carrier agent claim", numeric, "agent_claim",
+            {"value_numeric": 7.0, "value_text": "approximately seven"},
+            ["agent_claim", "exactly one"],
+        ),
+        (
+            "invalid delta N/A", numeric, "delta",
+            {"is_not_applicable": False},
+            ["delta", "literal true"],
+        ),
+    ]
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "typed_carriers.yaml"
+        for label, template, field, payload, fragments in cases:
+            measurement = copy.deepcopy(template)
+            measurement[field] = payload
+            run = {
+                "id": f"EVAL_{label.replace(' ', '_')}",
+                "structure_ref": "synth",
+                "run_date": "2026-09-21",
+                "catalog_tasks_applied": [measurement["catalog_task_ref"]],
+                "measurements": [measurement],
+            }
+            _write_eval(path, [run])
+            assert_raises_completeness(
+                lambda: qds_emit.emit_qds(
+                    [path], qds_id="QDS_bad_typed_carrier",
+                    structure_id="synth", coverage_scope="cumulative",
+                ),
+                ["typed value-carrier", measurement["id"], *fragments],
+                f"{label} was accepted",
+            )
+
+        missing_oracle = copy.deepcopy(numeric)
+        missing_oracle.pop("oracle_measure")
+        _write_eval(path, [{
+            "id": "EVAL_missing_oracle_payload",
+            "structure_ref": "synth",
+            "run_date": "2026-09-21",
+            "catalog_tasks_applied": ["T05"],
+            "measurements": [missing_oracle],
+        }])
+        assert_raises_completeness(
+            lambda: qds_emit.emit_qds(
+                [path], qds_id="QDS_missing_oracle_payload",
+                structure_id="synth", coverage_scope="cumulative",
+            ),
+            ["typed value-carrier", missing_oracle["id"],
+             "oracle_measure", "typed oracle value is required"],
+            "a routed/coverage measurement omitted oracle_measure",
+        )
+
+        structured_cases = (
+            (
+                "interface_qualities",
+                {
+                    "id": "IFACE_dual_carrier",
+                    "structure_ref": "synth",
+                    "dockq_score": {
+                        "value_numeric": 0.9,
+                        "value_text": "High-like score",
+                    },
+                },
+                "dockq_score",
+            ),
+            (
+                "pairwise_comparisons",
+                {
+                    "id": "PAIR_dual_carrier",
+                    "candidate_ref": "synth",
+                    "reference_ref": "native",
+                    "reference_kind": "deposited_model",
+                    "alignment_method": "synthetic",
+                    "tm_score": {
+                        "value_numeric": 0.9,
+                        "is_not_applicable": True,
+                    },
+                },
+                "tm_score",
+            ),
+        )
+        for collection, row, field in structured_cases:
+            _write_eval(path, [{
+                "id": f"EVAL_bad_{collection}",
+                "structure_ref": "synth",
+                "run_date": "2026-09-21",
+                "catalog_tasks_applied": [],
+                "measurements": [],
+                collection: [row],
+            }])
+            assert_raises_completeness(
+                lambda: qds_emit.emit_qds(
+                    [path], qds_id=f"QDS_bad_{collection}",
+                    structure_id="synth", coverage_scope="cumulative",
+                ),
+                ["typed value-carrier", collection, row["id"], field, "exactly one"],
+                f"a copied {collection} row carried a dual {field} value",
+            )
+    print("PASS  test_typed_value_carriers_are_exactly_one")
+
+
+def test_label_verdicts_and_cross_family_disagreements_fail() -> None:
+    categorical = {
+        "id": "M_categorical_verdict",
+        "catalog_task_ref": "T15",
+        "stage": "final",
+        "scope": "complex",
+        "metric_definition_ref": "T15_fold_classification",
+        "oracle_tool_ref": "phenix.validation",
+        "oracle_family": "cctbx",
+        "oracle_measure": {"value_text": "alpha/beta"},
+        "pass_criterion": "must be alpha/beta",
+        "pass_status": "pass",
+    }
+    run = {
+        "id": "EVAL_categorical_verdict",
+        "structure_ref": "synth",
+        "run_date": "2026-09-21",
+        "catalog_tasks_applied": ["T15"],
+        "measurements": [categorical],
+    }
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "categorical.yaml"
+        _write_eval(path, [run])
+        assert_raises_completeness(
+            lambda: qds_emit.emit_qds(
+                [path], qds_id="QDS_categorical", structure_id="synth",
+                coverage_scope="cumulative",
+            ),
+            ["label-valued", "pass_status=informational"],
+            "a cctbx-only categorical pass bypassed the trust model",
+        )
+
+        for payload in (
+            {"value_numeric": 1.0},
+            {"value_numeric": 1.0, "value_text": "alpha/beta"},
+        ):
+            categorical["oracle_measure"] = payload
+            _write_eval(path, [run])
+            expected = (
+                ["typed value-carrier", "exactly one", "value_numeric", "value_text"]
+                if "value_text" in payload
+                else ["label-valued", "value_text only", "value_numeric"]
+            )
+            assert_raises_completeness(
+                lambda: qds_emit.emit_qds(
+                    [path], qds_id="QDS_categorical_numeric",
+                    structure_id="synth", coverage_scope="cumulative",
+                ),
+                expected,
+                f"categorical payload {payload!r} escaped through the numeric path",
+            )
+
+        cctbx = _measurement(
+            "M_cctbx_fail", "T05_clashscore", 100.0,
+            tool="phenix.validation", selector="whole model",
+        )
+        cctbx["oracle_family"] = "cctbx"
+        cctbx["pass_status"] = "fail_by_oracle"
+        independent = _measurement(
+            "M_independent_pass", "T05_clashscore", 1.0,
+            tool="MolProbity (gold)", selector="whole model",
+        )
+        independent["pass_status"] = "pass"
+        run.update({
+            "id": "EVAL_cross_family_disagreement",
+            "catalog_tasks_applied": ["T05"],
+            "measurements": [cctbx, independent],
+        })
+        _write_eval(path, [run])
+        assert_raises_completeness(
+            lambda: qds_emit.emit_qds(
+                [path], qds_id="QDS_disagreement", structure_id="synth",
+                coverage_scope="cumulative",
+            ),
+            ["contradictory cctbx/non-cctbx", "tiebreaker"],
+            "opposite cross-family verdicts were silently reported as coverage",
+        )
+    print("PASS  test_label_verdicts_and_cross_family_disagreements_fail")
+
+
 def test_t15_content_agreement_is_one_governed_bundle() -> None:
-    def agreement(mid: str, *, status: str = "pass") -> dict:
+    def agreement(mid: str, *, status: str = "informational") -> dict:
         row = _measurement(mid, "T15_secondary_structure_agreement", 0.99)
         row["pass_status"] = status
         return row
 
-    def content(mid: str, value: float, *, status: str) -> dict:
+    def content(mid: str, value: float, *, status: str = "informational") -> dict:
         row = _measurement(
             mid, "T15_secondary_structure_content", value, tool="DSSP"
         )
         row["pass_status"] = status
+        if status != "informational":
+            row["pass_criterion"] = "DSSP H+E content >= 0.20"
         return row
 
     def run(run_id: str, rows: list[dict]) -> dict:
@@ -1166,21 +1737,73 @@ def test_t15_content_agreement_is_one_governed_bundle() -> None:
 
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "t15.yaml"
+        _write_eval(path, [run("EVAL_content_only", [content("content", 0.10)])])
+        content_only_qds = qds_emit.emit_qds(
+            [path], qds_id="QDS_t15_content_only", structure_id="synth",
+            coverage_scope="cumulative",
+        )
+        content_only = content_only_qds["classification_summary"][
+            "secondary_structure_content"
+        ]
+        _check(
+            content_only["value_numeric"] == 0.10
+            and content_only["pass_status"] == "informational"
+            and "pass_criterion" not in content_only,
+            "valid content-only T15 evidence remains informational below 0.20",
+        )
+
+        _write_eval(path, [run(
+            "EVAL_graded_content_only",
+            [content("content", 0.40, status="pass")],
+        )])
+        assert_raises_completeness(
+            lambda: qds_emit.emit_qds(
+                [path], qds_id="QDS_t15_graded_content_only", structure_id="synth",
+                coverage_scope="cumulative",
+            ),
+            ["T15", "content diagnostic", "non-gradeable", "informational"],
+            "a gradeable-looking content-only T15 row bypassed bundle validation",
+        )
+
+        criterion_only = content("criterion_only", 0.40)
+        criterion_only["pass_criterion"] = "DSSP H+E content >= 0.20"
+        _write_eval(path, [run("EVAL_content_criterion_only", [criterion_only])])
+        assert_raises_completeness(
+            lambda: qds_emit.emit_qds(
+                [path], qds_id="QDS_t15_content_criterion_only", structure_id="synth",
+                coverage_scope="cumulative",
+            ),
+            ["T15 content-only row", "content diagnostic", "pass_criterion"],
+            "an informational content-only T15 row retained a pass criterion",
+        )
+
+        _write_eval(path, [run("EVAL_content_out_of_range", [
+            content("content", 1.01)
+        ])])
+        assert_raises_completeness(
+            lambda: qds_emit.emit_qds(
+                [path], qds_id="QDS_t15_content_out_of_range", structure_id="synth",
+                coverage_scope="cumulative",
+            ),
+            ["T15", "content diagnostic", "[0, 1]"],
+            "an out-of-range content-only T15 fraction was routed",
+        )
+
         _write_eval(path, [run("EVAL_agreement_only", [agreement("agreement")])])
         assert_raises_completeness(
             lambda: qds_emit.emit_qds(
                 [path], qds_id="QDS_t15_missing", structure_id="synth",
                 coverage_scope="cumulative",
             ),
-            ["T15 coherence", "requires a content-gate measurement", "same run"],
-            "T15 agreement emitted without its content gate",
+            ["T15 coherence", "requires a content-diagnostic measurement", "same run"],
+            "T15 agreement emitted without its content diagnostic",
         )
 
         _write_eval(
             path,
             [
                 run("EVAL_agreement", [agreement("agreement")]),
-                run("EVAL_unrelated_content", [content("content", 0.40, status="pass")]),
+                run("EVAL_unrelated_content", [content("content", 0.40)]),
             ],
         )
         assert_raises_completeness(
@@ -1192,24 +1815,38 @@ def test_t15_content_agreement_is_one_governed_bundle() -> None:
             "T15 content and agreement from unrelated runs were mixed",
         )
 
-        _write_eval(
-            path,
-            [run("EVAL_failed_gate", [agreement("agreement"),
-                                       content("content", 0.10, status="fail_by_oracle")])],
-        )
+        graded_agreement = agreement("agreement", status="pass")
+        graded_agreement["pass_criterion"] = "agreement >= 0.65"
+        _write_eval(path, [run("EVAL_invalid_agreement_grade", [
+            graded_agreement,
+            content("content", 0.40),
+        ])])
         assert_raises_completeness(
             lambda: qds_emit.emit_qds(
                 [path], qds_id="QDS_t15_failed", structure_id="synth",
                 coverage_scope="cumulative",
             ),
-            ["T15 bundle is inconsistent", "below the governed 0.20 gate"],
-            "a passing T15 agreement bypassed its failed content gate",
+            ["T15 bundle is inconsistent", "non-gradeable", "informational"],
+            "a provisional T15 oracle-pair agreement was graded",
+        )
+
+        _write_eval(path, [run("EVAL_invalid_content_grade", [
+            agreement("agreement"),
+            content("content", 0.40, status="pass"),
+        ])])
+        assert_raises_completeness(
+            lambda: qds_emit.emit_qds(
+                [path], qds_id="QDS_t15_content_grade", structure_id="synth",
+                coverage_scope="cumulative",
+            ),
+            ["T15 bundle is inconsistent", "content", "non-gradeable", "informational"],
+            "the provisional T15 content diagnostic was graded",
         )
 
         _write_eval(
             path,
             [run("EVAL_consistent", [agreement("agreement"),
-                                      content("content", 0.40, status="pass")])],
+                                      content("content", 0.10)])],
         )
         qds = qds_emit.emit_qds(
             [path], qds_id="QDS_t15_consistent", structure_id="synth",
@@ -1222,6 +1859,31 @@ def test_t15_content_agreement_is_one_governed_bundle() -> None:
         }
         _check(sources == {"EVAL_consistent"},
                "T15 summary did not retain one coherent source bundle")
+        _check(
+            summary["secondary_structure_content"]["value_numeric"] == 0.10
+            and summary["secondary_structure_content"]["pass_status"] == "informational"
+            and "pass_criterion" not in summary["secondary_structure_content"],
+            "low T15 content remained an informational interpretability diagnostic",
+        )
+
+        mismatched_agreement = agreement("agreement_mismatched_bundle")
+        mismatched_content = content("content_mismatched_bundle", 0.40)
+        mismatched_agreement["bundle_ref"] = "bundle:agreement-invocation"
+        mismatched_content["bundle_ref"] = "bundle:content-from-other-invocation"
+        mismatched_agreement["provenance_ref"] = "run:dssp-on-A"
+        mismatched_content["provenance_ref"] = "run:agreement-on-B"
+        _write_eval(
+            path,
+            [run("EVAL_mismatched_bundle", [mismatched_agreement, mismatched_content])],
+        )
+        assert_raises_completeness(
+            lambda: qds_emit.emit_qds(
+                [path], qds_id="QDS_t15_mismatched_bundle", structure_id="synth",
+                coverage_scope="cumulative",
+            ),
+            ["T15 coherence", "same run"],
+            "T15 rows from different invocations were accepted as one bundle",
+        )
     print("PASS  test_t15_content_agreement_is_one_governed_bundle")
 
 
@@ -1256,18 +1918,37 @@ def test_t16_interface_summary_is_one_consistent_bundle() -> None:
             "interface_qualities": interfaces or [],
         }
 
-    def interface(selector: str, reference: str, evidence: str) -> dict:
-        return {
+    def interface(
+        selector: str,
+        reference: str,
+        evidence: str | list[str],
+        *,
+        bsa_value: float | None = None,
+        dockq_value: float | None = None,
+        capri_value: str | None = None,
+    ) -> dict:
+        row = {
             "id": selector,
             "structure_ref": "synth",
             "reference_subject_ref": reference,
             "model_to_native_chain_mapping": "AB:AB",
-            "evidence_refs": [evidence],
+            "evidence_refs": (
+                list(evidence) if isinstance(evidence, list) else [evidence]
+            ),
         }
+        if bsa_value is not None:
+            row["buried_surface_area"] = {
+                "value_numeric": bsa_value,
+            }
+        if dockq_value is not None:
+            row["dockq_score"] = {"value_numeric": dockq_value}
+        if capri_value is not None:
+            row["capri_quality_class"] = {"value_text": capri_value}
+        return row
 
     bsa = numeric(
         "bsa", "T16_interface_buried_surface_area", 500.0,
-        "biotite SASA", "IFACE_AB",
+        "biotite SASA", "IFACE_AB", evidence="raw:bsa",
     )
     dockq = numeric(
         "dockq", "T16_interface_dockq_score", 0.95,
@@ -1277,9 +1958,9 @@ def test_t16_interface_summary_is_one_consistent_bundle() -> None:
         "capri", "High", "IFACE_EF", "native:2", "raw:ef"
     )
     mixed_interfaces = [
-        interface("IFACE_AB", "native:1", "raw:ab"),
-        interface("IFACE_CD", "native:1", "raw:cd"),
-        interface("IFACE_EF", "native:2", "raw:ef"),
+        interface("IFACE_AB", "native:1", "raw:bsa", bsa_value=500.0),
+        interface("IFACE_CD", "native:1", "raw:cd", dockq_value=0.95),
+        interface("IFACE_EF", "native:2", "raw:ef", capri_value="High"),
     ]
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "t16.yaml"
@@ -1301,7 +1982,10 @@ def test_t16_interface_summary_is_one_consistent_bundle() -> None:
         capri_wrong = capri(
             "capri", "Incorrect", "IFACE_AB", "native:1", "raw:cd"
         )
-        identity_interface = [interface("IFACE_AB", "native:1", "raw:cd")]
+        identity_interface = [interface(
+            "IFACE_AB", "native:1", ["raw:cd", "raw:bsa"],
+            bsa_value=500.0, dockq_value=0.95, capri_value="Incorrect",
+        )]
         _write_eval(
             path, [run([bsa, dockq_same, capri_wrong], identity_interface)]
         )
@@ -1315,7 +1999,60 @@ def test_t16_interface_summary_is_one_consistent_bundle() -> None:
         )
 
         capri_high = capri("capri", "High", "IFACE_AB", "native:1", "raw:cd")
-        interfaces = identity_interface
+        interfaces = [interface(
+            "IFACE_AB", "native:1", ["raw:cd", "raw:bsa"],
+            bsa_value=500.0, dockq_value=0.95, capri_value="High",
+        )]
+        for field, wrong_payload in (
+            ("buried_surface_area", {"value_numeric": 999.0}),
+            ("dockq_score", {"value_numeric": 0.01}),
+            ("capri_quality_class", {"value_text": "Incorrect"}),
+        ):
+            contradictory_interfaces = copy.deepcopy(interfaces)
+            contradictory_interfaces[0][field] = wrong_payload
+            _write_eval(
+                path,
+                [run([bsa, dockq_same, capri_high], contradictory_interfaces)],
+            )
+            assert_raises_completeness(
+                lambda: qds_emit.emit_qds(
+                    [path], qds_id=f"QDS_t16_payload_{field}", structure_id="synth",
+                    coverage_scope="cumulative",
+                ),
+                ["T16 interface-context integrity failed", "oracle_measure",
+                 "does not exactly match", field],
+                f"a T16 scalar contradicted InterfaceQuality.{field}",
+            )
+        missing_bsa_evidence = copy.deepcopy(bsa)
+        missing_bsa_evidence.pop("evidence_refs")
+        _write_eval(
+            path,
+            [run([missing_bsa_evidence, dockq_same, capri_high], interfaces)],
+        )
+        assert_raises_completeness(
+            lambda: qds_emit.emit_qds(
+                [path], qds_id="QDS_t16_bsa_no_evidence", structure_id="synth",
+                coverage_scope="cumulative",
+            ),
+            ["T16 interface-context integrity failed", "bsa", "no retained",
+             "evidence_refs"],
+            "a BSA scalar had no retained evidence",
+        )
+        bsa_evidence_not_retained = copy.deepcopy(interfaces)
+        bsa_evidence_not_retained[0]["evidence_refs"] = ["raw:cd"]
+        _write_eval(
+            path,
+            [run([bsa, dockq_same, capri_high], bsa_evidence_not_retained)],
+        )
+        assert_raises_completeness(
+            lambda: qds_emit.emit_qds(
+                [path], qds_id="QDS_t16_bsa_evidence_not_retained",
+                structure_id="synth", coverage_scope="cumulative",
+            ),
+            ["T16 interface-context integrity failed", "bsa", "evidence_refs",
+             "not retained"],
+            "a structured row omitted the BSA scalar's evidence",
+        )
         _write_eval(path, [run([bsa, dockq_same, capri_high], interfaces)])
         qds = qds_emit.emit_qds(
             [path], qds_id="QDS_t16_consistent", structure_id="synth",
@@ -1327,6 +2064,37 @@ def test_t16_interface_summary_is_one_consistent_bundle() -> None:
             == summary["capri_interface_quality_class"]["scope_selector"]
             == "IFACE_AB",
             "T16 comparison rows did not retain one interface mapping",
+        )
+
+        half_labelled_rows = copy.deepcopy([bsa, dockq_same, capri_high])
+        for row in half_labelled_rows:
+            row["subject_ref"] = "artifact:model"
+        _write_eval(path, [run(half_labelled_rows, interfaces)])
+        assert_raises_completeness(
+            lambda: qds_emit.emit_qds(
+                [path], qds_id="QDS_t16_half_labelled", structure_id="synth",
+                subject_ref="artifact:model", coverage_scope="cumulative",
+            ),
+            ["T16 interface-context integrity failed", "subject_ref",
+             "does not exactly match", "interface=None"],
+            "a subject-bound T16 scalar was paired with an unlabelled InterfaceQuality",
+        )
+
+        half_labelled_interfaces = copy.deepcopy(interfaces)
+        half_labelled_interfaces[0]["subject_ref"] = "artifact:model"
+        _write_eval(
+            path,
+            [run(copy.deepcopy([bsa, dockq_same, capri_high]), half_labelled_interfaces)],
+        )
+        assert_raises_completeness(
+            lambda: qds_emit.emit_qds(
+                [path], qds_id="QDS_t16_inverse_half_labelled",
+                structure_id="synth", subject_ref="artifact:model",
+                coverage_scope="cumulative",
+            ),
+            ["T16 interface-context integrity failed", "subject_ref",
+             "does not exactly match", "measurement=None"],
+            "an unlabelled T16 scalar was paired with a subject-bound InterfaceQuality",
         )
     print("PASS  test_t16_interface_summary_is_one_consistent_bundle")
 
@@ -1395,6 +2163,80 @@ def test_programmatic_source_admission_contract() -> None:
     print("PASS  test_programmatic_source_admission_contract")
 
 
+def test_structure_identity_comes_from_pinned_eval_source() -> None:
+    run = {
+        "id": "EVAL_identity_source",
+        "structure_ref": "synth",
+        "run_date": "2026-09-22",
+        "catalog_tasks_applied": [],
+        "measurements": [],
+    }
+    structure = {
+        "id": "synth",
+        "id_kind": "pdb",
+        "method": "xray",
+        "resolution_a": 2.0,
+        "space_group": "P 1",
+        "description": "Pinned source description.",
+    }
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "source.yaml"
+        path.write_text(
+            yaml.safe_dump(
+                {"structures": [structure], "evaluation_runs": [run]},
+                sort_keys=False,
+            )
+        )
+        qds = qds_emit.emit_qds(
+            [path],
+            qds_id="QDS_identity_source",
+            structure_id="synth",
+            coverage_scope="cumulative",
+            issued_at="2026-09-22T00:00:00+00:00",
+        )
+        _check(
+            qds["identity_block"]
+            == {
+                "id": "QDS_identity_source_identity",
+                "pdb_id": "synth",
+                "method": "xray",
+                "resolution_a": 2.0,
+                "space_group": "P 1",
+                "description": "Pinned source description.",
+            },
+            "identity metadata was not derived exactly from the input Structure",
+        )
+
+        assert_raises_completeness(
+            lambda: qds_emit.emit_qds(
+                [path],
+                qds_id="QDS_identity_method_conflict",
+                structure_id="synth",
+                structure_method="nmr",
+                coverage_scope="cumulative",
+            ),
+            ["structure identity source failed", "method", "nmr", "xray"],
+            "an explicit method overrode the pinned Structure source",
+        )
+        assert_raises_completeness(
+            lambda: qds_emit.emit_qds(
+                [path],
+                qds_id="QDS_identity_description_conflict",
+                structure_id="synth",
+                structure_description="QDS-only replacement.",
+                coverage_scope="cumulative",
+            ),
+            [
+                "structure identity source failed",
+                "description",
+                "QDS-only replacement.",
+                "Pinned source description.",
+            ],
+            "an explicit description overrode the pinned Structure source",
+        )
+    print("PASS  test_structure_identity_comes_from_pinned_eval_source")
+
+
 def main() -> int:
     test_coverage_never_claims_an_absent_family()
     test_1sar_geometry_slots_all_present()
@@ -1411,6 +2253,9 @@ def main() -> int:
     test_subject_selection_preserves_provenance_and_is_order_independent()
     test_refinement_triple_is_one_code_path()
     test_superseded_assumptions_are_not_republished()
+    test_explicit_assumption_registry_snapshot_is_applied()
+    test_pinned_source_snapshots_deduplicate_and_reject_conflicts()
+    test_registry_snapshots_exclude_future_rows()
     test_subject_inference_includes_structured_rows_and_rejects_typos()
     test_subject_filter_reaches_every_downstream_builder()
     test_subject_filter_covers_every_structured_row_family()
@@ -1422,9 +2267,12 @@ def main() -> int:
     test_immutable_output_allows_only_identical_noop()
     test_emission_contract_requires_scope_notes_and_pinned_file_time()
     test_non_results_cannot_populate_summary_slots()
+    test_typed_value_carriers_are_exactly_one()
+    test_label_verdicts_and_cross_family_disagreements_fail()
     test_t15_content_agreement_is_one_governed_bundle()
     test_t16_interface_summary_is_one_consistent_bundle()
     test_programmatic_source_admission_contract()
+    test_structure_identity_comes_from_pinned_eval_source()
     print("\nall qds_emit regression tests passed")
     return 0
 

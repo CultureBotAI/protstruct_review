@@ -6,16 +6,17 @@ De-provisionalizes the `Interface buried surface area | |Δ| ≤ 10 %` tolerance
 measuring the actual inter-program spread on a set of deposited complexes instead
 of asserting a magnitude.
 
-Method (matched configuration, per the tolerance's own precondition):
+Method (matched probe radius, with the asymmetric atom selections actually benchmarked):
   - biotite  : Shrake-Rupley SASA, 1.4 Å probe, ProtOr radii, protein atoms only
                (`struc.filter_amino_acids` — no waters, no hetero), exactly the
                recipe `scripts/t16_interface_quality.py` uses. Total buried area
                ΣSASA(chains) − SASA(complex), i.e. *both* sides of the interface.
   - PDBePISA : `interface_area` from the PDBe PISA REST API for biological
                assembly 1. PISA reports the area buried on *one* side (the mean of
-               the two), so the matched quantity is 2 × interface_area. PISA uses a
+               the two), so the comparable quantity is 2 × interface_area. PISA uses a
                Lee & Richards surface and includes ligand/hetero atoms in the
-               molecule surface; those are the residual definitional differences.
+               molecule surface; those deliberate definitional differences are part
+               of the empirical tolerance, not a matched-protein-only comparison.
 
 Comparison is per interface, restricted to protein-protein interfaces between two
 distinct author chains present in the asymmetric unit (symmetry-mate interfaces are

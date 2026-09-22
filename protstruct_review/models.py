@@ -214,6 +214,10 @@ class PassStatus(str, Enum):
     """
     Meets the criterion
     """
+    fail_criterion = "fail_criterion"
+    """
+    Fails a declared criterion without asserting disagreement with an agent claim
+    """
     fail_by_oracle = "fail_by_oracle"
     """
     Independent oracle disagrees with agent claim and criterion fails
@@ -527,6 +531,7 @@ class Container(ConfiguredBaseModel):
     agent_artifacts: Optional[list[AgentArtifact]] = Field(default=[], json_schema_extra = { "linkml_meta": {'domain_of': ['Container']} })
     evaluation_runs: Optional[list[EvaluationRun]] = Field(default=[], json_schema_extra = { "linkml_meta": {'domain_of': ['Container']} })
     quality_data_sheets: Optional[list[QualityDataSheet]] = Field(default=[], json_schema_extra = { "linkml_meta": {'domain_of': ['Container']} })
+    qds_replay_pins: Optional[list[QdsReplayPin]] = Field(default=[], description="""Source-owned content pins for immutable QDS artifacts. Validation replays a retained emitter contract against source-owned snapshots and compares the result with a stable canonical byte projection, without reading the current emitter, catalog, or registries.""", json_schema_extra = { "linkml_meta": {'domain_of': ['Container']} })
     tool_recommendations: Optional[list[ToolRecommendation]] = Field(default=[], json_schema_extra = { "linkml_meta": {'domain_of': ['Container']} })
     pairwise_comparisons: Optional[list[PairwiseComparison]] = Field(default=[], json_schema_extra = { "linkml_meta": {'domain_of': ['Container', 'EvaluationRun', 'QualityDataSheet']} })
     residues: Optional[list[ResidueRef]] = Field(default=[], json_schema_extra = { "linkml_meta": {'domain_of': ['Container']} })
@@ -576,6 +581,16 @@ class Finding(ConfiguredBaseModel):
                        'CoordinationContact']} })
 
 
+class SourceRowLineage(ConfiguredBaseModel):
+    """
+    Exact EvaluationRun row copied into a nonlegacy QDS.
+    """
+    linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'https://w3id.org/protstruct-review/schema', 'mixin': True})
+
+    source_evaluation_run_ref: Optional[str] = Field(default=None, description="""EvaluationRun that owns source_row_ref.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SourceRowLineage', 'TypedMeasurementValue']} })
+    source_row_ref: Optional[str] = Field(default=None, description="""Id of the structured source row copied into the QDS.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SourceRowLineage']} })
+
+
 class CatalogTask(ConfiguredBaseModel):
     """
     One row in the T01..T17 task catalog.
@@ -593,6 +608,7 @@ class CatalogTask(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -654,6 +670,7 @@ class Tool(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -712,6 +729,7 @@ class MetricDefinition(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -779,6 +797,7 @@ class Structure(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -841,6 +860,7 @@ class ExperimentalData(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -901,6 +921,7 @@ class AgentArtifact(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -970,6 +991,7 @@ class Refinement(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -1040,6 +1062,7 @@ class MeasurementProvenance(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -1098,6 +1121,7 @@ class MeasurementValue(Finding):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -1204,6 +1228,7 @@ class MeasurementValue(Finding):
                        'Assumption',
                        'CoordinationContact']} })
     provenance_ref: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue']} })
+    bundle_ref: Optional[str] = Field(default=None, description="""Stable invocation/bundle id shared by coupled measurements that must be selected and interpreted together.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue', 'TypedMeasurementValue']} })
     evidence_refs: Optional[list[str]] = Field(default=[], description="""Retained raw outputs or EvaluationRun ids supporting this measurement.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue',
                        'TypedMeasurementValue',
                        'ToolRecommendation',
@@ -1229,7 +1254,7 @@ class TypedMeasurementValue(ConfiguredBaseModel):
     max_value: Optional[float] = Field(default=None, description="""Maximum across the array (paired with `mean`).""", json_schema_extra = { "linkml_meta": {'domain_of': ['TypedMeasurementValue']} })
     count: Optional[int] = Field(default=None, description="""Number of values summarised by `mean`/`std_dev`. Required when `mean` is set, so a downstream consumer can interpret the summary statistics.""", json_schema_extra = { "linkml_meta": {'domain_of': ['TypedMeasurementValue']} })
     source_measurement_ref: Optional[str] = Field(default=None, description="""MeasurementValue id from which this QDS scalar was selected.""", json_schema_extra = { "linkml_meta": {'domain_of': ['TypedMeasurementValue']} })
-    source_evaluation_run_ref: Optional[str] = Field(default=None, description="""EvaluationRun id containing source_measurement_ref.""", json_schema_extra = { "linkml_meta": {'domain_of': ['TypedMeasurementValue']} })
+    source_evaluation_run_ref: Optional[str] = Field(default=None, description="""EvaluationRun id containing source_measurement_ref.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SourceRowLineage', 'TypedMeasurementValue']} })
     metric_definition_ref: Optional[str] = Field(default=None, description="""Canonical metric carried through when a QDS wraps a measurement.""", json_schema_extra = { "linkml_meta": {'domain_of': ['Finding',
                        'MeasurementValue',
                        'TypedMeasurementValue',
@@ -1290,6 +1315,7 @@ class TypedMeasurementValue(ConfiguredBaseModel):
                        'ToolRecommendation',
                        'InterfaceQuality',
                        'Assumption']} })
+    bundle_ref: Optional[str] = Field(default=None, description="""Coupled source-measurement bundle id carried through verbatim.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue', 'TypedMeasurementValue']} })
     notes: Optional[str] = Field(default=None, description="""Source caveats and interpretation carried through verbatim.""", json_schema_extra = { "linkml_meta": {'domain_of': ['Finding',
                        'MeasurementValue',
                        'TypedMeasurementValue',
@@ -1322,6 +1348,7 @@ class HeadlineFinding(Finding):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -1408,6 +1435,7 @@ class EvaluationRun(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -1481,6 +1509,133 @@ class EvaluationRun(ConfiguredBaseModel):
     headline_verdict: Optional[str] = Field(default=None, description="""One-paragraph human summary of the eval outcome.""", json_schema_extra = { "linkml_meta": {'domain_of': ['EvaluationRun', 'QualityDataSheet']} })
 
 
+class QdsReplayPin(ConfiguredBaseModel):
+    """
+    Content-addressed replay boundary stored with the source EvaluationRun. The output hash is authoritative for canonical bytes. The remaining hashes bind the retained emitter implementation and source-owned Tool, recommendation, and assumption snapshots used for deterministic replay; live registries and the live catalog are deliberately excluded.
+    """
+    linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'https://w3id.org/protstruct-review/schema'})
+
+    id: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['CatalogTask',
+                       'Tool',
+                       'MetricDefinition',
+                       'Structure',
+                       'ExperimentalData',
+                       'AgentArtifact',
+                       'Refinement',
+                       'MeasurementProvenance',
+                       'MeasurementValue',
+                       'HeadlineFinding',
+                       'EvaluationRun',
+                       'QdsReplayPin',
+                       'QualityDataSheet',
+                       'IdentityBlock',
+                       'GeometrySummary',
+                       'RefinementSummary',
+                       'MapSummary',
+                       'CrossToolCoverage',
+                       'TaskCoverage',
+                       'CrossToolWaiver',
+                       'DataQualitySummary',
+                       'PredictedConfidenceSummary',
+                       'PackingSummary',
+                       'ClassificationSummary',
+                       'InterfaceQualitySummary',
+                       'PredictionEnsembleSummary',
+                       'NmrValidationSummary',
+                       'PairwiseComparison',
+                       'ToolRecommendation',
+                       'ResidueRef',
+                       'ResidueOutlier',
+                       'DensityPeak',
+                       'FlaggedRegion',
+                       'PerResidueValue',
+                       'PerResidueQuality',
+                       'SecondaryStructureAssignment',
+                       'DomainAssignment',
+                       'InterfaceQuality',
+                       'NmrEnsembleQuality',
+                       'PredictionEnsembleQuality',
+                       'Ligand',
+                       'LigandQuality',
+                       'Assumption',
+                       'CoordinationContact',
+                       'Site',
+                       'SiteQuality']} })
+    qds_ref: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['QdsReplayPin']} })
+    source_evaluation_run_refs: list[str] = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['QdsReplayPin']} })
+    emitter_contract_version: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['QdsReplayPin', 'QualityDataSheet']} })
+    canonical_qds_sha256: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['QdsReplayPin']} })
+    emitter_source_sha256: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['QdsReplayPin']} })
+    source_tools_sha256: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['QdsReplayPin']} })
+    source_tool_recommendations_sha256: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['QdsReplayPin']} })
+    source_tool_assumptions_sha256: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['QdsReplayPin']} })
+
+    @field_validator('canonical_qds_sha256')
+    def pattern_canonical_qds_sha256(cls, v):
+        pattern=re.compile(r"^[0-9a-f]{64}$")
+        if isinstance(v, list):
+            for element in v:
+                if isinstance(element, str) and not pattern.match(element):
+                    err_msg = f"Invalid canonical_qds_sha256 format: {element}"
+                    raise ValueError(err_msg)
+        elif isinstance(v, str) and not pattern.match(v):
+            err_msg = f"Invalid canonical_qds_sha256 format: {v}"
+            raise ValueError(err_msg)
+        return v
+
+    @field_validator('emitter_source_sha256')
+    def pattern_emitter_source_sha256(cls, v):
+        pattern=re.compile(r"^[0-9a-f]{64}$")
+        if isinstance(v, list):
+            for element in v:
+                if isinstance(element, str) and not pattern.match(element):
+                    err_msg = f"Invalid emitter_source_sha256 format: {element}"
+                    raise ValueError(err_msg)
+        elif isinstance(v, str) and not pattern.match(v):
+            err_msg = f"Invalid emitter_source_sha256 format: {v}"
+            raise ValueError(err_msg)
+        return v
+
+    @field_validator('source_tools_sha256')
+    def pattern_source_tools_sha256(cls, v):
+        pattern=re.compile(r"^[0-9a-f]{64}$")
+        if isinstance(v, list):
+            for element in v:
+                if isinstance(element, str) and not pattern.match(element):
+                    err_msg = f"Invalid source_tools_sha256 format: {element}"
+                    raise ValueError(err_msg)
+        elif isinstance(v, str) and not pattern.match(v):
+            err_msg = f"Invalid source_tools_sha256 format: {v}"
+            raise ValueError(err_msg)
+        return v
+
+    @field_validator('source_tool_recommendations_sha256')
+    def pattern_source_tool_recommendations_sha256(cls, v):
+        pattern=re.compile(r"^[0-9a-f]{64}$")
+        if isinstance(v, list):
+            for element in v:
+                if isinstance(element, str) and not pattern.match(element):
+                    err_msg = f"Invalid source_tool_recommendations_sha256 format: {element}"
+                    raise ValueError(err_msg)
+        elif isinstance(v, str) and not pattern.match(v):
+            err_msg = f"Invalid source_tool_recommendations_sha256 format: {v}"
+            raise ValueError(err_msg)
+        return v
+
+    @field_validator('source_tool_assumptions_sha256')
+    def pattern_source_tool_assumptions_sha256(cls, v):
+        pattern=re.compile(r"^[0-9a-f]{64}$")
+        if isinstance(v, list):
+            for element in v:
+                if isinstance(element, str) and not pattern.match(element):
+                    err_msg = f"Invalid source_tool_assumptions_sha256 format: {element}"
+                    raise ValueError(err_msg)
+        elif isinstance(v, str) and not pattern.match(v):
+            err_msg = f"Invalid source_tool_assumptions_sha256 format: {v}"
+            raise ValueError(err_msg)
+        return v
+
+
 class QualityDataSheet(ConfiguredBaseModel):
     """
     Per-structure citable snapshot of cross-tool findings. Generated from one or more EvaluationRun records by scripts/qds_emit.py and treated as immutable: when oracles change or new measurements arrive, emit a new QDS (different id / issued_at), don't mutate the old one.
@@ -1498,6 +1653,7 @@ class QualityDataSheet(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -1565,6 +1721,7 @@ class QualityDataSheet(ConfiguredBaseModel):
     coverage_scope: Optional[QdsCoverageScope] = Field(default=None, description="""Cumulative sheet or explicitly bounded partial update.""", json_schema_extra = { "linkml_meta": {'domain_of': ['QualityDataSheet']} })
     scope_notes: Optional[str] = Field(default=None, description="""Human-readable boundary or carry-forward statement for coverage_scope.""", json_schema_extra = { "linkml_meta": {'domain_of': ['QualityDataSheet']} })
     issued_at: datetime  = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['QualityDataSheet']} })
+    emitter_contract_version: Optional[str] = Field(default=None, description="""Versioned qds_emit selection/routing contract used to build this immutable sheet. Modern committed sheets must declare a supported version so later emitter changes cannot silently redefine replay.""", json_schema_extra = { "linkml_meta": {'domain_of': ['QdsReplayPin', 'QualityDataSheet']} })
     identity_block: Optional[IdentityBlock] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['QualityDataSheet']} })
     geometry_summary: Optional[GeometrySummary] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['QualityDataSheet']} })
     refinement_summary: Optional[RefinementSummary] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['QualityDataSheet']} })
@@ -1603,6 +1760,7 @@ class IdentityBlock(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -1667,6 +1825,7 @@ class GeometrySummary(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -1733,6 +1892,7 @@ class RefinementSummary(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -1791,6 +1951,7 @@ class MapSummary(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -1856,6 +2017,7 @@ class CrossToolCoverage(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -1910,6 +2072,7 @@ class TaskCoverage(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -2012,6 +2175,7 @@ class CrossToolWaiver(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -2093,7 +2257,7 @@ class CrossToolWaiver(ConfiguredBaseModel):
                        'TaskCoverage',
                        'CrossToolWaiver']} })
     reason: str = Field(default=..., description="""Why no non-cctbx oracle ran — name the missing tool or the documented no-equivalent gap, not a restatement of the fact.""", json_schema_extra = { "linkml_meta": {'domain_of': ['CrossToolWaiver']} })
-    as_of_date: date = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['CrossToolWaiver', 'ToolRecommendation']} })
+    as_of_date: date = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['CrossToolWaiver', 'ToolRecommendation', 'Assumption']} })
 
 
 class DataQualitySummary(ConfiguredBaseModel):
@@ -2113,6 +2277,7 @@ class DataQualitySummary(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -2173,6 +2338,7 @@ class PredictedConfidenceSummary(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -2235,6 +2401,7 @@ class PackingSummary(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -2291,6 +2458,7 @@ class ClassificationSummary(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -2325,7 +2493,7 @@ class ClassificationSummary(ConfiguredBaseModel):
                        'CoordinationContact',
                        'Site',
                        'SiteQuality']} })
-    secondary_structure_agreement: Optional[TypedMeasurementValue] = Field(default=None, description="""Fraction of residues on which two independent secondary-structure assigners agree (three-state). The gradeable T15 metric.""", json_schema_extra = { "linkml_meta": {'domain_of': ['ClassificationSummary']} })
+    secondary_structure_agreement: Optional[TypedMeasurementValue] = Field(default=None, description="""Fraction of residues on which two independent secondary-structure assigners agree (three-state). Currently informational for the oracle pair pending exact-denominator recalibration.""", json_schema_extra = { "linkml_meta": {'domain_of': ['ClassificationSummary']} })
     secondary_structure_content: Optional[TypedMeasurementValue] = Field(default=None, description="""Fraction of DSSP-scored residues assigned helix or strand (H+E).""", json_schema_extra = { "linkml_meta": {'domain_of': ['ClassificationSummary']} })
     secondary_structure_assignment: Optional[TypedMeasurementValue] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['ClassificationSummary']} })
     structural_domain_assignment: Optional[TypedMeasurementValue] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['ClassificationSummary']} })
@@ -2351,6 +2519,7 @@ class InterfaceQualitySummary(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -2408,6 +2577,7 @@ class PredictionEnsembleSummary(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -2463,6 +2633,7 @@ class NmrValidationSummary(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -2502,11 +2673,12 @@ class NmrValidationSummary(ConfiguredBaseModel):
     nmr_ensemble_qualities: Optional[list[NmrEnsembleQuality]] = Field(default=[], json_schema_extra = { "linkml_meta": {'domain_of': ['Container', 'EvaluationRun', 'NmrValidationSummary']} })
 
 
-class PairwiseComparison(ConfiguredBaseModel):
+class PairwiseComparison(SourceRowLineage):
     """
     Candidate vs reference structure comparison. Modern default per ref/quality_reporting.md is to report TM-score AND lDDT as a mandatory pair (CASP15+ consensus, Mariani et al. 2013); CA RMSD is reported additionally for legibility but is not the basis of the verdict on its own.
     """
-    linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'https://w3id.org/protstruct-review/schema'})
+    linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'https://w3id.org/protstruct-review/schema',
+         'mixins': ['SourceRowLineage']})
 
     id: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['CatalogTask',
                        'Tool',
@@ -2519,6 +2691,7 @@ class PairwiseComparison(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -2592,6 +2765,8 @@ class PairwiseComparison(ConfiguredBaseModel):
     delta_cc_mask: Optional[TypedMeasurementValue] = Field(default=None, description="""ΔCC_mask for cryo-EM, same baseline rules as delta_r_free.""", json_schema_extra = { "linkml_meta": {'domain_of': ['PairwiseComparison']} })
     delta_baseline: Optional[DeltaBaseline] = Field(default=None, description="""Required when any delta_* slot is populated.""", json_schema_extra = { "linkml_meta": {'domain_of': ['PairwiseComparison']} })
     verdict: Optional[str] = Field(default=None, description="""improved / equivalent / worse / incomparable, with rationale.""", json_schema_extra = { "linkml_meta": {'domain_of': ['PairwiseComparison']} })
+    source_evaluation_run_ref: Optional[str] = Field(default=None, description="""EvaluationRun that owns source_row_ref.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SourceRowLineage', 'TypedMeasurementValue']} })
+    source_row_ref: Optional[str] = Field(default=None, description="""Id of the structured source row copied into the QDS.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SourceRowLineage']} })
 
 
 class ToolRecommendation(ConfiguredBaseModel):
@@ -2611,6 +2786,7 @@ class ToolRecommendation(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -2671,7 +2847,9 @@ class ToolRecommendation(ConfiguredBaseModel):
                        'ToolRecommendation',
                        'InterfaceQuality',
                        'Assumption']} })
-    as_of_date: Optional[date] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['CrossToolWaiver', 'ToolRecommendation']} })
+    as_of_date: Optional[date] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['CrossToolWaiver', 'ToolRecommendation', 'Assumption']} })
+    effective_at: Optional[datetime ] = Field(default=None, description="""Exact timezone-qualified activation instant used for immutable QDS time slicing. Required for canonical registry rows.""", json_schema_extra = { "linkml_meta": {'domain_of': ['ToolRecommendation', 'Assumption']} })
+    supersedes_recommendation_ref: Optional[str] = Field(default=None, description="""Earlier dated recommendation revision retired by this row. Keep the predecessor in the registry so older immutable QDS snapshots remain reproducible; emission selects the newest active lineage member.""", json_schema_extra = { "linkml_meta": {'domain_of': ['ToolRecommendation']} })
     notes: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Finding',
                        'MeasurementValue',
                        'TypedMeasurementValue',
@@ -2703,6 +2881,7 @@ class ResidueRef(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -2759,11 +2938,12 @@ class ResidueRef(ConfiguredBaseModel):
     insertion_code: Optional[str] = Field(default=None, description="""PDB insertion code where present (rare).""", json_schema_extra = { "linkml_meta": {'domain_of': ['ResidueRef']} })
 
 
-class ResidueOutlier(ConfiguredBaseModel):
+class ResidueOutlier(SourceRowLineage):
     """
     One residue flagged by a validation tool. A residue can have multiple ResidueOutlier rows (e.g. both a Ramachandran and a rotamer outlier). The bare existence of this row is the assertion; the numeric magnitude lives on `metric_value`.
     """
-    linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'https://w3id.org/protstruct-review/schema'})
+    linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'https://w3id.org/protstruct-review/schema',
+         'mixins': ['SourceRowLineage']})
 
     id: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['CatalogTask',
                        'Tool',
@@ -2776,6 +2956,7 @@ class ResidueOutlier(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -2842,13 +3023,16 @@ class ResidueOutlier(ConfiguredBaseModel):
                        'Assumption']} })
     metric_value: Optional[TypedMeasurementValue] = Field(default=None, description="""Numeric magnitude of the outlier (e.g. clash overlap in Å, rotamer χ deviation in degrees, RSRZ z-score). The kind determines the unit; cite it on the MeasurementValue.""", json_schema_extra = { "linkml_meta": {'domain_of': ['ResidueOutlier']} })
     details: Optional[str] = Field(default=None, description="""Free-text annotation (e.g. \"ω = 8.91° non-Pro cis\").""", json_schema_extra = { "linkml_meta": {'domain_of': ['ResidueOutlier']} })
+    source_evaluation_run_ref: Optional[str] = Field(default=None, description="""EvaluationRun that owns source_row_ref.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SourceRowLineage', 'TypedMeasurementValue']} })
+    source_row_ref: Optional[str] = Field(default=None, description="""Id of the structured source row copied into the QDS.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SourceRowLineage']} })
 
 
-class DensityPeak(ConfiguredBaseModel):
+class DensityPeak(SourceRowLineage):
     """
     A difference-density (mFo−DFc) peak that is not explained by the modelled atoms. Positive peaks = unmodelled mass; negative peaks = modelled atoms with no density support. The driving example includes peaks > 4σ as a critical eval signal.
     """
-    linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'https://w3id.org/protstruct-review/schema'})
+    linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'https://w3id.org/protstruct-review/schema',
+         'mixins': ['SourceRowLineage']})
 
     id: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['CatalogTask',
                        'Tool',
@@ -2861,6 +3045,7 @@ class DensityPeak(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -2927,13 +3112,16 @@ class DensityPeak(ConfiguredBaseModel):
                        'NmrEnsembleQuality',
                        'PredictionEnsembleQuality',
                        'Assumption']} })
+    source_evaluation_run_ref: Optional[str] = Field(default=None, description="""EvaluationRun that owns source_row_ref.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SourceRowLineage', 'TypedMeasurementValue']} })
+    source_row_ref: Optional[str] = Field(default=None, description="""Id of the structured source row copied into the QDS.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SourceRowLineage']} })
 
 
-class FlaggedRegion(ConfiguredBaseModel):
+class FlaggedRegion(SourceRowLineage):
     """
     A contiguous stretch of residues with an issue (disordered loop, poor-density region, dense clash region, ...). Useful when the problem is a region rather than a single residue.
     """
-    linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'https://w3id.org/protstruct-review/schema'})
+    linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'https://w3id.org/protstruct-review/schema',
+         'mixins': ['SourceRowLineage']})
 
     id: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['CatalogTask',
                        'Tool',
@@ -2946,6 +3134,7 @@ class FlaggedRegion(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -3027,13 +3216,16 @@ class FlaggedRegion(ConfiguredBaseModel):
                        'Site']} })
     severity: Optional[Severity] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['ResidueOutlier', 'FlaggedRegion']} })
     summary: Optional[str] = Field(default=None, description="""One-line human description of why the region is flagged.""", json_schema_extra = { "linkml_meta": {'domain_of': ['FlaggedRegion']} })
+    source_evaluation_run_ref: Optional[str] = Field(default=None, description="""EvaluationRun that owns source_row_ref.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SourceRowLineage', 'TypedMeasurementValue']} })
+    source_row_ref: Optional[str] = Field(default=None, description="""Id of the structured source row copied into the QDS.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SourceRowLineage']} })
 
 
-class PerResidueValue(ConfiguredBaseModel):
+class PerResidueValue(SourceRowLineage):
     """
     A scalar paired with a residue ref. Used by PerResidueQuality. `metric_definition_ref` is required so the QDS emitter can route each value to the correct per-residue array (lDDT vs displacement vs RSRZ vs Ramachandran-Z) without substring heuristics.
     """
-    linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'https://w3id.org/protstruct-review/schema'})
+    linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'https://w3id.org/protstruct-review/schema',
+         'mixins': ['SourceRowLineage']})
 
     id: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['CatalogTask',
                        'Tool',
@@ -3046,6 +3238,7 @@ class PerResidueValue(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -3117,6 +3310,8 @@ class PerResidueValue(ConfiguredBaseModel):
                        'NmrEnsembleQuality',
                        'PredictionEnsembleQuality',
                        'Assumption']} })
+    source_evaluation_run_ref: Optional[str] = Field(default=None, description="""EvaluationRun that owns source_row_ref.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SourceRowLineage', 'TypedMeasurementValue']} })
+    source_row_ref: Optional[str] = Field(default=None, description="""Id of the structured source row copied into the QDS.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SourceRowLineage']} })
 
 
 class PerResidueQuality(ConfiguredBaseModel):
@@ -3136,6 +3331,7 @@ class PerResidueQuality(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -3183,11 +3379,12 @@ class PerResidueQuality(ConfiguredBaseModel):
     flagged_regions: Optional[list[FlaggedRegion]] = Field(default=[], json_schema_extra = { "linkml_meta": {'domain_of': ['EvaluationRun', 'PerResidueQuality']} })
 
 
-class SecondaryStructureAssignment(ConfiguredBaseModel):
+class SecondaryStructureAssignment(SourceRowLineage):
     """
     DSSP/STRIDE-style assignment for a residue range.
     """
-    linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'https://w3id.org/protstruct-review/schema'})
+    linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'https://w3id.org/protstruct-review/schema',
+         'mixins': ['SourceRowLineage']})
 
     id: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['CatalogTask',
                        'Tool',
@@ -3200,6 +3397,7 @@ class SecondaryStructureAssignment(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -3298,13 +3496,16 @@ class SecondaryStructureAssignment(ConfiguredBaseModel):
                        'PredictionEnsembleQuality',
                        'Assumption',
                        'CoordinationContact']} })
+    source_evaluation_run_ref: Optional[str] = Field(default=None, description="""EvaluationRun that owns source_row_ref.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SourceRowLineage', 'TypedMeasurementValue']} })
+    source_row_ref: Optional[str] = Field(default=None, description="""Id of the structured source row copied into the QDS.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SourceRowLineage']} })
 
 
-class DomainAssignment(ConfiguredBaseModel):
+class DomainAssignment(SourceRowLineage):
     """
     Structural domain and fold-classification assignment.
     """
-    linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'https://w3id.org/protstruct-review/schema'})
+    linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'https://w3id.org/protstruct-review/schema',
+         'mixins': ['SourceRowLineage']})
 
     id: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['CatalogTask',
                        'Tool',
@@ -3317,6 +3518,7 @@ class DomainAssignment(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -3418,13 +3620,16 @@ class DomainAssignment(ConfiguredBaseModel):
                        'PredictionEnsembleQuality',
                        'Assumption',
                        'CoordinationContact']} })
+    source_evaluation_run_ref: Optional[str] = Field(default=None, description="""EvaluationRun that owns source_row_ref.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SourceRowLineage', 'TypedMeasurementValue']} })
+    source_row_ref: Optional[str] = Field(default=None, description="""Id of the structured source row copied into the QDS.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SourceRowLineage']} })
 
 
-class InterfaceQuality(ConfiguredBaseModel):
+class InterfaceQuality(SourceRowLineage):
     """
     Structured quality record for one interface or assembly contact.
     """
-    linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'https://w3id.org/protstruct-review/schema'})
+    linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'https://w3id.org/protstruct-review/schema',
+         'mixins': ['SourceRowLineage']})
 
     id: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['CatalogTask',
                        'Tool',
@@ -3437,6 +3642,7 @@ class InterfaceQuality(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -3542,13 +3748,16 @@ class InterfaceQuality(ConfiguredBaseModel):
                        'PredictionEnsembleQuality',
                        'Assumption',
                        'CoordinationContact']} })
+    source_evaluation_run_ref: Optional[str] = Field(default=None, description="""EvaluationRun that owns source_row_ref.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SourceRowLineage', 'TypedMeasurementValue']} })
+    source_row_ref: Optional[str] = Field(default=None, description="""Id of the structured source row copied into the QDS.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SourceRowLineage']} })
 
 
-class NmrEnsembleQuality(ConfiguredBaseModel):
+class NmrEnsembleQuality(SourceRowLineage):
     """
     Structured NMR ensemble/restraint validation record.
     """
-    linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'https://w3id.org/protstruct-review/schema'})
+    linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'https://w3id.org/protstruct-review/schema',
+         'mixins': ['SourceRowLineage']})
 
     id: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['CatalogTask',
                        'Tool',
@@ -3561,6 +3770,7 @@ class NmrEnsembleQuality(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -3650,13 +3860,16 @@ class NmrEnsembleQuality(ConfiguredBaseModel):
                        'PredictionEnsembleQuality',
                        'Assumption',
                        'CoordinationContact']} })
+    source_evaluation_run_ref: Optional[str] = Field(default=None, description="""EvaluationRun that owns source_row_ref.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SourceRowLineage', 'TypedMeasurementValue']} })
+    source_row_ref: Optional[str] = Field(default=None, description="""Id of the structured source row copied into the QDS.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SourceRowLineage']} })
 
 
-class PredictionEnsembleQuality(ConfiguredBaseModel):
+class PredictionEnsembleQuality(SourceRowLineage):
     """
     Structured predicted-model ensemble convergence record.
     """
-    linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'https://w3id.org/protstruct-review/schema'})
+    linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'https://w3id.org/protstruct-review/schema',
+         'mixins': ['SourceRowLineage']})
 
     id: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['CatalogTask',
                        'Tool',
@@ -3669,6 +3882,7 @@ class PredictionEnsembleQuality(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -3758,6 +3972,8 @@ class PredictionEnsembleQuality(ConfiguredBaseModel):
                        'PredictionEnsembleQuality',
                        'Assumption',
                        'CoordinationContact']} })
+    source_evaluation_run_ref: Optional[str] = Field(default=None, description="""EvaluationRun that owns source_row_ref.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SourceRowLineage', 'TypedMeasurementValue']} })
+    source_row_ref: Optional[str] = Field(default=None, description="""Id of the structured source row copied into the QDS.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SourceRowLineage']} })
 
 
 class Ligand(ConfiguredBaseModel):
@@ -3777,6 +3993,7 @@ class Ligand(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -3871,6 +4088,7 @@ class LigandQuality(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -3932,6 +4150,7 @@ class Assumption(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -3966,6 +4185,9 @@ class Assumption(ConfiguredBaseModel):
                        'CoordinationContact',
                        'Site',
                        'SiteQuality']} })
+    as_of_date: Optional[date] = Field(default=None, description="""Date this registry assumption became active. Required for rows in ref/tool_assumptions.yaml so immutable QDS emission can exclude assumptions introduced after the sheet was issued; embedded measurement/run assumptions are already pinned by their source EVAL.""", json_schema_extra = { "linkml_meta": {'domain_of': ['CrossToolWaiver', 'ToolRecommendation', 'Assumption']} })
+    effective_at: Optional[datetime ] = Field(default=None, description="""Exact timezone-qualified activation instant for rows in ref/tool_assumptions.yaml. Embedded EVAL assumptions do not need it.""", json_schema_extra = { "linkml_meta": {'domain_of': ['ToolRecommendation', 'Assumption']} })
+    supersedes_assumption_ref: Optional[str] = Field(default=None, description="""Earlier dated registry assumption revision retired by this row. The predecessor remains available to QDS snapshots issued before this row became active.""", json_schema_extra = { "linkml_meta": {'domain_of': ['Assumption']} })
     kind: AssumptionKind = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['ExperimentalData',
                        'FlaggedRegion',
                        'Assumption',
@@ -4033,6 +4255,7 @@ class CoordinationContact(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -4109,6 +4332,7 @@ class Site(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -4203,6 +4427,7 @@ class SiteQuality(ConfiguredBaseModel):
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
+                       'QdsReplayPin',
                        'QualityDataSheet',
                        'IdentityBlock',
                        'GeometrySummary',
@@ -4251,6 +4476,7 @@ class SiteQuality(ConfiguredBaseModel):
 # see https://pydantic-docs.helpmanual.io/usage/models/#rebuilding-a-model
 Container.model_rebuild()
 Finding.model_rebuild()
+SourceRowLineage.model_rebuild()
 CatalogTask.model_rebuild()
 Tool.model_rebuild()
 MetricDefinition.model_rebuild()
@@ -4263,6 +4489,7 @@ MeasurementValue.model_rebuild()
 TypedMeasurementValue.model_rebuild()
 HeadlineFinding.model_rebuild()
 EvaluationRun.model_rebuild()
+QdsReplayPin.model_rebuild()
 QualityDataSheet.model_rebuild()
 IdentityBlock.model_rebuild()
 GeometrySummary.model_rebuild()

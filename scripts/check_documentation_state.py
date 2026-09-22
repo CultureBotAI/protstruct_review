@@ -26,6 +26,16 @@ STATE_RE = re.compile(
 TASK_RE = re.compile(r"T\d{2}")
 DRIVER_RE = re.compile(r"driving_example_(T\d{2})\.md")
 TASK_SECTION_RE = re.compile(r"^### (T\d{2}) — (.+)$", re.MULTILINE)
+PHENIX_FIELD_RE = re.compile(r"^- \*\*PHENIX tool\(s\):\*\*(.*)$", re.MULTILINE)
+CODE_TOKEN_RE = re.compile(r"`([^`]+)`")
+UNQUOTED_PHENIX_TOOL_RE = re.compile(
+    r"\b(?:phenix|mmtbx)\.[A-Za-z0-9_.-]+\b", re.IGNORECASE
+)
+PHENIX_TOOL_ENTRY = r"`[A-Za-z0-9_.-]+`(?:\s+\([^()`\n]*\))?"
+PHENIX_TOOL_LIST_RE = re.compile(
+    rf"^\s*{PHENIX_TOOL_ENTRY}(?:\s*,\s*{PHENIX_TOOL_ENTRY})*\s*$"
+)
+PHENIX_NONE_FIELD_RE = re.compile(r"^\s*none(?:\s+—\s+[^`\n]+)?\s*$")
 
 RUNNABLE_WRAPPERS = {
     "T15": ("scripts/t15_ss_agreement.py",),
@@ -52,6 +62,21 @@ STALE_TEXT = {
     ),
     "schemas/README.md": ("T01–T14",),
     "schemas/protstruct_review.yaml": ("T01..T14",),
+}
+
+BSA_STALE_TEXT = {
+    "ref/tasks_and_evaluations.md": (
+        "with matched 1.4 Å probe and protein-only atom selection",
+    ),
+    "ref/tool_recommendations.yaml": ("under matched conditions",),
+    "scripts/bench_t16_bsa_vs_pisa.py": ("Method (matched configuration",),
+    "ref/research/tolerance_benchmark_interface_bsa.md": (
+        "## Configuration (matched,",
+    ),
+    "ref/research/template_tolerance_review.md": (
+        "matched-configuration (same probe radius, same atom selection) benchmark exists",
+        "Two provisional values now stand (interface BSA, Wilson B)",
+    ),
 }
 
 
@@ -84,6 +109,29 @@ def markdown_task_sections(text: str) -> dict[str, tuple[str, str]]:
         )
         for index, match in enumerate(headings)
     }
+
+
+def phenix_tools_from_section(section_text: str) -> set[str]:
+    """Return the exact code-token set from one task's PHENIX-tool field."""
+    fields = PHENIX_FIELD_RE.findall(section_text)
+    if len(fields) != 1:
+        raise ValueError(f"expected exactly one PHENIX tool(s) field, found {len(fields)}")
+    field = fields[0]
+    unquoted = sorted(
+        set(UNQUOTED_PHENIX_TOOL_RE.findall(CODE_TOKEN_RE.sub("", field)))
+    )
+    if unquoted:
+        raise ValueError(
+            "PHENIX tool field has unquoted tool token(s): " + ", ".join(unquoted)
+        )
+    if PHENIX_NONE_FIELD_RE.fullmatch(field):
+        return set()
+    if not PHENIX_TOOL_LIST_RE.fullmatch(field):
+        raise ValueError(
+            "PHENIX tool field must contain only comma-separated backticked tools "
+            "with optional parenthesized annotations, or an explicit none explanation"
+        )
+    return set(CODE_TOKEN_RE.findall(field))
 
 
 def collect_problems(repo_root: Path) -> list[str]:
@@ -144,12 +192,85 @@ def collect_problems(repo_root: Path) -> list[str]:
                 f"ref/tasks_and_evaluations.md: {task_id} heading {heading_name!r} "
                 f"does not match catalog task_name {expected_name!r}"
             )
-        for tool_ref in task.get("phenix_tool_refs") or []:
-            if isinstance(tool_ref, str) and tool_ref not in section_text:
+        expected_tools = {
+            tool_ref
+            for tool_ref in task.get("phenix_tool_refs") or []
+            if isinstance(tool_ref, str)
+        }
+        try:
+            documented_tools = phenix_tools_from_section(section_text)
+        except ValueError as exc:
+            problems.append(f"ref/tasks_and_evaluations.md: {task_id}: {exc}")
+        else:
+            missing_tools = sorted(expected_tools - documented_tools)
+            extra_tools = sorted(documented_tools - expected_tools)
+            if missing_tools:
                 problems.append(
-                    f"ref/tasks_and_evaluations.md: {task_id} does not name "
-                    f"catalog PHENIX tool {tool_ref!r}"
+                    f"ref/tasks_and_evaluations.md: {task_id} PHENIX tool field "
+                    "is missing catalog tool(s): " + ", ".join(missing_tools)
                 )
+            if extra_tools:
+                problems.append(
+                    f"ref/tasks_and_evaluations.md: {task_id} PHENIX tool field "
+                    "has tool(s) absent from the catalog: " + ", ".join(extra_tools)
+                )
+
+    for relative_path, stale_phrases in BSA_STALE_TEXT.items():
+        path = repo_root / relative_path
+        if not path.is_file():
+            continue
+        text = path.read_text()
+        for stale in stale_phrases:
+            if stale in text:
+                problems.append(f"{relative_path}: stale BSA claim remains: {stale!r}")
+
+    recommendations_path = repo_root / "ref/tool_recommendations.yaml"
+    if recommendations_path.is_file():
+        try:
+            recommendations_doc = yaml.safe_load(recommendations_path.read_text()) or {}
+        except (OSError, yaml.YAMLError) as exc:
+            problems.append(f"ref/tool_recommendations.yaml: cannot read: {exc}")
+        else:
+            for index, recommendation in enumerate(
+                recommendations_doc.get("tool_recommendations") or []
+            ):
+                if not isinstance(recommendation, dict):
+                    continue
+                if not recommendation.get("as_of_date"):
+                    recommendation_id = recommendation.get("id") or f"row {index}"
+                    problems.append(
+                        "ref/tool_recommendations.yaml: "
+                        f"{recommendation_id} has no as_of_date"
+                    )
+                if not recommendation.get("effective_at"):
+                    recommendation_id = recommendation.get("id") or f"row {index}"
+                    problems.append(
+                        "ref/tool_recommendations.yaml: "
+                        f"{recommendation_id} has no effective_at"
+                    )
+
+    assumptions_path = repo_root / "ref/tool_assumptions.yaml"
+    if assumptions_path.is_file():
+        try:
+            assumptions_doc = yaml.safe_load(assumptions_path.read_text()) or {}
+        except (OSError, yaml.YAMLError) as exc:
+            problems.append(f"ref/tool_assumptions.yaml: cannot read: {exc}")
+        else:
+            for index, assumption in enumerate(assumptions_doc.get("assumptions") or []):
+                if not isinstance(assumption, dict):
+                    continue
+                if not assumption.get("as_of_date"):
+                    assumption_id = assumption.get("id") or f"row {index}"
+                    problems.append(
+                        "ref/tool_assumptions.yaml: "
+                        f"{assumption_id} has no as_of_date"
+                    )
+                if not assumption.get("effective_at"):
+                    assumption_id = assumption.get("id") or f"row {index}"
+                    problems.append(
+                        "ref/tool_assumptions.yaml: "
+                        f"{assumption_id} has no effective_at"
+                    )
 
     first_id, last_id = task_ids[0], task_ids[-1]
     expected_state = (first_id, last_id, len(task_ids), len(driver_ids))

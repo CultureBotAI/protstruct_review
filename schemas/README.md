@@ -29,7 +29,7 @@ linkml-validate --schema schemas/protstruct_review.yaml \
     data/examples/eval/EVAL_1sar_cdba2c07_2026-04-24.yaml
 ```
 
-`linkml-validate` (LinkML 1.9.6) infers the target class from the YAML structure when the schema declares a `tree_root`. The `Container` class in this schema is the tree root and accepts any subset of `catalog_tasks`, `tools`, `metric_definitions`, `structures`, `experimental_data`, `agent_artifacts`, `evaluation_runs`, `quality_data_sheets`.
+`linkml-validate` (LinkML 1.9.6) infers the target class from the YAML structure when the schema declares a `tree_root`. The `Container` class in this schema is the tree root and accepts any subset of `catalog_tasks`, `tools`, `metric_definitions`, `structures`, `experimental_data`, `agent_artifacts`, `evaluation_runs`, `quality_data_sheets`, `qds_replay_pins`, `tool_recommendations`, and `assumptions`.
 
 ## Quick-start: regenerate Pydantic models
 

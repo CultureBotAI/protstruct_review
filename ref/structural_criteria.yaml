@@ -74,6 +74,68 @@ criteria:
         interpretation: "Worst matched-convention disagreement in the benchmark, and the reason the tolerance carries a 20 % relative term: 2.27 units is 17 % of a clashscore of 13.6. The same model under a mismatched H convention differs by 14.9 units."
     notes: "The H-build convention is not a caveat but the dominant term: benchmarked, a nuclear-vs-electron-cloud mismatch shifts the score by a median of 9.95 units (max 22.97), while a matched convention agrees to a median of 0.115. The earlier in-repo 1SAR figure (≈ 0.5) understated this by an order of magnitude because it compared two electron-cloud builds. H-atom COUNT agreement (benchmarked max 0.013 %) does not imply H-position agreement and must not be cited as evidence that two H builds match."
 
+  - id: T15_secondary_structure_content
+    name: DSSP secondary-structure content
+    category: classification
+    catalog_task_refs:
+      - T15
+    unit: fraction
+    is_gradeable: false
+    definition: >-
+      Fraction of all DSSP-scored residues assigned helix or strand after the
+      same H/E/C collapse used for the paired-assigner T15 agreement. This is a
+      provisional interpretability diagnostic, not a structure-quality score:
+      values below 0.20 warn that coil/coil agreement can dominate and make a
+      high paired-assigner agreement fraction misleading. The available bad-end
+      controls are too sparse to calibrate 0.20 as a quality threshold.
+    definition_refs:
+      - ref: Kabsch1983
+        full: "Kabsch W, Sander C. DSSP. Biopolymers 1983; 22:2577-2637."
+    computations:
+      - tool: DSSP
+        family: non_cctbx
+        installed: true
+        recipe: "mkdssp --output-format dssp model.pdb out.dssp  # collapse to H/E/C, then (n_H + n_E) / n_DSSP"
+        recipe_language: bash
+        recipe_notes: >-
+          scripts/t15_ss_agreement.py normalizes the input, requires an exact
+          residue-key set for the paired agreement, and emits content from the
+          complete DSSP assignment rather than an assigner intersection.
+    value_ranges:
+      expected:
+        text: "Provisional interpretability precondition: ≥ 0.20 suggests enough non-coil assignment for the paired-assigner agreement to have useful range; < 0.20 warns that coil/coil agreement may dominate. This is informational in both directions. Historical benchmark: 0.458–0.784 for 16 well-ordered X-ray structures; 0.000–0.105 for three coordinate-perturbed 1UBQ controls."
+      resolution_dependence: >-
+        The provisional precondition was placed in the observed gap between three
+        perturbed 1UBQ controls and one disordered-NMR control; it is not a calibrated
+        fold-, modality-, disorder-, or model-quality threshold.
+    example_measurements:
+      - structure_id: 2jz4_model_1
+        value_numeric: 0.371
+        unit: fraction
+        tool: DSSP
+        source: "ref/research/tolerance_benchmark_ss_agreement.md"
+        verdict: informational
+        interpretation: >-
+          The disordered NMR model still contains enough DSSP strand assignment
+          to give the paired-agreement number useful interpretive range; clearing
+          the provisional precondition is not a claim that the model is well ordered.
+      - structure_id: 1ubq_perturbed_1A
+        value_numeric: 0.026
+        unit: fraction
+        tool: DSSP
+        source: "ref/research/tolerance_benchmark_ss_agreement.md"
+        verdict: informational
+        interpretation: >-
+          Severe coordinate noise leaves only 2 of 76 residues non-coil while
+          the two-assigner agreement rises to 0.8816, demonstrating why low content
+          warns against interpreting agreement. It does not establish that low H+E
+          content is itself a general model-quality failure.
+    notes: >-
+      The 0.20 value separates this small retained benchmark, but the bad end is
+      only three noisy versions of 1UBQ plus one disordered NMR model. It is therefore
+      an informational precondition for interpreting this particular agreement
+      metric, not a gradeable verdict and not a general structural-quality threshold.
+
   - id: T15_secondary_structure_agreement
     name: Secondary-structure assignment agreement (three-state)
     category: classification
@@ -84,9 +146,13 @@ criteria:
     definition: >-
       Fraction of residues assigned the same three-state (H/E/C) secondary-structure
       label by two independent assigners. For the oracle-side T15 result this value is
-      interpretable only after DSSP H+E content passes its 0.20 gate; the per-residue
-      labels themselves are informational. Agent-vs-DSSP agreement is a separate
-      comparison with a 0.85 threshold when an agent assignment exists.
+      most interpretable when DSSP H+E content clears its provisional 0.20
+      precondition. Below it, coil/coil agreement can dominate; that weakens the
+      agreement's interpretation but does not grade the model. The historical
+      calibration did not retain separate per-assigner counts proving today's exact
+      residue-key denominator, so oracle-pair agreement is informational pending a
+      rerun. This criterion remains gradeable only in the separate agent-vs-DSSP
+      comparison, which has a 0.85 threshold when an agent assignment exists.
     definition_refs:
       - ref: Kabsch1983
         full: "Kabsch W, Sander C. DSSP. Biopolymers 1983; 22:2577-2637."
@@ -104,51 +170,53 @@ criteria:
         installed: true
         recipe: "python: struc.annotate_sse(chain)  # Labesse P-SEA, Cα geometry; a/b/c -> H/E/C"
         recipe_language: python
-        recipe_notes: "Cα-geometry method; a different algorithm family from DSSP. Agreement is non-tautological only after the DSSP H+E content gate passes. scripts/t15_ss_agreement.py."
+        recipe_notes: "Cα-geometry method; a different algorithm family from DSSP. Use DSSP H+E content as a provisional, informational check on whether coil/coil agreement may dominate. scripts/t15_ss_agreement.py."
     value_ranges:
-      normal:
-        min_value: 0.65
-        text: "Given DSSP H+E content ≥ 0.20, DSSP-vs-biotite agreement ≥ 0.65 passes the oracle-side floor"
-      anomalous:
-        text: "DSSP H+E content < 0.20 makes even high agreement a failure signal; with adequate content, agreement < 0.65 flags cross-tool disagreement"
+      expected:
+        text: "Report DSSP-vs-biotite agreement informationally. DSSP H+E content ≥ 0.20 provisionally supports interpreting it; content < 0.20 warns that coil/coil calls may dominate but is not a model-quality failure. The historical 0.65 agreement expectation is not a gradeable floor until exact-denominator recalibration."
       resolution_dependence: "Disagreement concentrates at helix/strand ends and is fold-class dependent: expect α-rich ~0.80-0.85 and β-rich ~0.68-0.72 for DSSP vs biotite P-SEA."
     cross_tool_agreement:
-      tolerance: "oracle-side, in order: DSSP H+E content ≥ 0.20, then DSSP-vs-biotite agreement ≥ 0.65; separate agent-vs-DSSP clause ≥ 0.85 when an agent assignment exists, otherwise unevaluable"
+      tolerance: "oracle-side: report DSSP H+E content and DSSP-vs-biotite agreement informationally; ≥ 0.20 is only a provisional interpretability precondition for the agreement, and the historical 0.65 expectation is not gradeable until exact-denominator recalibration. The separate agent-vs-DSSP clause is ≥ 0.85 when an agent assignment exists, otherwise unevaluable."
       tools: "DSSP vs biotite P-SEA (t15_ss_agreement.py)"
-      precondition: "disclose which assigner was used. GATE ON SS CONTENT, NOT AGREEMENT: three-state agreement is degenerate at the bad end — a model with no secondary structure scores 1.0 because both assigners label everything coil, so perturbing 1UBQ raises its agreement from 0.75 to 1.00 at 2 Å noise. High agreement with low SS content is a FAILURE signal. Given adequate content the agreement floor is fold-class dependent — expect α-rich ~0.80-0.85 and β-rich ~0.68-0.72, because P-SEA infers strands from Cα geometry and DSSP from backbone H-bonds"
+      precondition: "Disclose which assigner was used and report SS content with agreement. Three-state agreement loses interpretive range at the all-coil end — a model with no assigned secondary structure scores 1.0 because both assigners label everything coil, and perturbing 1UBQ raises its agreement from 0.75 to 1.00 at 2 Å noise. Low content therefore warns that a high agreement is weak evidence; it is not by itself a model-quality failure. Historical fold-dependent expectations (α-rich ~0.80-0.85, β-rich ~0.68-0.72) are not gradeable until exact-denominator recalibration."
       provenance:
         - benchmark
-      citation: "ref/research/tolerance_benchmark_ss_agreement.md — 16 well-ordered structures (agreement 0.679-0.850, SS content 0.46-0.78) plus 4 degraded models (agreement 0.74-1.00, SS content 0.00-0.37); the previous 0.80 floor failed on 12/16 good structures while passing the 1 Å and 2 Å wreckage (scripts/bench_t15_ss_agreement.py, issue #38)"
-      provisional: false
+      citation: "ref/research/tolerance_benchmark_ss_agreement.md — historical intersection-denominator run; separate n_dssp/n_biotite/n_dropped values were not retained, so a current exact-denominator rerun is required before grading"
+      provisional: true
     example_measurements:
       - structure_id: 1sar
         value_numeric: 0.8646
         unit: fraction
         tool: DSSP + biotite P-SEA
         source: "scripts/t15_ss_agreement.py run on data/pdb_mtz/1sar_deposited.pdb (166/192 = 0.8646 after normalized-input fixes)"
-        verdict: normal
-        interpretation: "166/192 residues concordant on the common normalized residue set; DSSP H+E content is 75/192 = 0.3906, so the content gate passes. NOT typical: 1SAR scores higher than every one of the 16 well-ordered structures in the benchmark, and the retired 0.80 floor was generalised from this single value."
+        verdict: informational
+        interpretation: "166/192 residues concordant and the current wrapper enforces identical residue-key sets; DSSP H+E content is 75/192 = 0.3906, which clears the provisional interpretability precondition. Agreement remains informational because the multi-structure benchmark has not been rerun under that exact-denominator rule."
       - structure_id: 3est
         value_numeric: 0.6792
         unit: fraction
         tool: DSSP + biotite P-SEA
         source: "scripts/bench_t15_ss_agreement.py (163/240 concordant)"
-        verdict: normal
-        interpretation: "Lowest agreement in the benchmark, on a well-ordered β-rich protease — the regime where P-SEA's Cα-geometry strand calls diverge most from DSSP's H-bond ones. This is the case that sets the 0.65 floor. Its SS content is 0.483, well inside the interpretable range."
+        verdict: informational
+        interpretation: "Historical lowest agreement on a well-ordered β-rich protease. Separate assigner counts were not retained, so this row cannot set a current exact-denominator floor."
       - structure_id: 1ubq_perturbed_2A
         value_numeric: 1.0
         unit: fraction
         tool: DSSP + biotite P-SEA
         source: "scripts/bench_t15_ss_agreement.py (1UBQ with 2 Å Gaussian coordinate noise; DSSP assigns all 76 residues coil, SS content 0.000)"
-        verdict: anomalous
-        interpretation: "PERFECT agreement on a destroyed model — both assigners find no secondary structure and so agree on every residue. The case that shows an agreement floor cannot work and the gate must be on SS content."
+        verdict: informational
+        interpretation: "PERFECT agreement on a coordinate-perturbed control — both assigners find no secondary structure and so agree on every residue. This shows that agreement loses interpretive range at low SS content; it does not calibrate low content as a general model-quality failure."
       - structure_id: 1mbn
         value_numeric: 0.8497
         unit: fraction
         tool: DSSP + biotite P-SEA
         source: "scripts/bench_t15_ss_agreement.py (130/153 concordant)"
-        verdict: normal
+        verdict: informational
         interpretation: "Highest agreement in the benchmark, on an all-α fold — the opposite end of the fold-class dependence from 3EST."
+    notes: >-
+      is_gradeable=true refers only to agent-supplied per-residue labels compared
+      against DSSP at the registered 0.85 threshold. The DSSP-vs-biotite wrapper
+      emits a different comparison context; both of its rows must remain
+      informational with no pass_criterion until exact-denominator recalibration.
 
   - id: T16_interface_buried_surface_area
     name: Interface buried surface area

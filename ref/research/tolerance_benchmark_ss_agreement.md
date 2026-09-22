@@ -1,12 +1,13 @@
 # Tolerance benchmark — secondary-structure agreement (DSSP vs biotite P-SEA)
 
-Settles the second clause of the `Secondary-structure agreement` `[template]` tolerance in
-`ref/thresholds_and_standards.md`: "two independent assigners floor ≥ **0.80** on a well-ordered
-model". `scripts/t15_ss_agreement.py` computes the metric but had only ever been run on the repo's
-own 1SAR.
+Historical benchmark that retired the former two-assigner **0.80** floor. It does **not** currently
+settle a gradeable replacement floor: the run predates the wrapper's exact residue-key denominator
+rule and retained only concordant/common-denominator counts, not separate DSSP and biotite key
+counts. The values below therefore cannot prove that no residues were dropped from either assigner.
 
 ```bash
-python3 scripts/bench_t15_ss_agreement.py --cache <dir> --json <out.json>
+python3 scripts/bench_t15_ss_agreement.py --cache <dir> \
+  --evidence-dir .cache/bench_t15_evidence --json <out.json>
 ```
 
 ## Configuration
@@ -14,9 +15,18 @@ python3 scripts/bench_t15_ss_agreement.py --cache <dir> --json <out.json>
 - **DSSP** (`mkdssp` 4.6.1) — Kabsch & Sander hydrogen-bond energetics.
 - **biotite P-SEA** (1.7.1) — Labesse Cα-geometry method.
 
-Three-state (H/E/C) agreement over residues both assign. This is one of the few tolerances where
-cross-tool agreement means what it says: neither method can be derived from the other, and both are
-non-cctbx.
+The current wrapper requires the DSSP and biotite residue-key sets to be identical before computing
+three-state (H/E/C) agreement. Neither method can be derived from the other, and both are non-cctbx.
+Each invocation also requires a new repository-local evidence destination and refuses to overwrite
+it. The retained JSON embeds the exact normalized model and raw DSSP bytes, both assignment streams,
+hashes, and measured versions; emitted rows cite that file.
+
+> **Evidence status (2026-09-22): historical / denominator not proven.** No raw benchmark logs or
+> per-assigner counts are retained in the repository. The `concordant / scored` column below proves
+> only the old intersection denominator. Until this benchmark is rerun with `n_dssp`, `n_biotite`,
+> and `n_dropped=0` retained for every row, its agreement distribution is descriptive history and
+> must not be used as a gradeable threshold calibration. The updated runner fails closed when those
+> exact-denominator counts are absent.
 
 **A latent bug had to be fixed first.** `mkdssp` 4.x sniffs its input format and gets it wrong on
 **every** PDB file downloaded from RCSB, dying with "This file does not seem to be an mmCIF file"
@@ -30,7 +40,7 @@ Test set: 16 well-known, well-ordered structures spanning fold class.
 
 ## Results
 
-| Entry | agreement | concordant / scored | ≥ 0.80 |
+| Entry | agreement | concordant / scored | retired ≥ 0.80 diagnostic |
 |---|---:|---|---|
 | 1MBN | 0.8497 | 130/153 | yes |
 | 2CI2 | 0.8462 | 55/65 | yes |
@@ -93,23 +103,26 @@ So **no floor on agreement can work**. The degraded models span 0.74–1.00, ove
 well-ordered range and exceeding 14 of the 16 good structures. The old 0.80 floor would have passed
 the 1 Å and 2 Å wreckage while failing ubiquitin, lysozyme and trypsin.
 
-**What does discriminate is the SS content itself**: 0.458–0.784 for well-ordered structures versus
-0.000–0.105 for the perturbed ones — a clean separation with no overlap. The disordered NMR model
-sits between at 0.371, which is the right answer for a model that genuinely does contain β strands.
+**SS content separates this small benchmark**: 0.458–0.784 for the selected well-ordered structures
+versus 0.000–0.105 for three coordinate-perturbed versions of 1UBQ, with no overlap. The disordered
+NMR model sits between at 0.371. That is enough to diagnose loss of interpretive range in the
+agreement metric, but not enough to establish SS content as a general model-quality test.
 
-## Applied tolerance
+## Provisional interpretation (not a gradeable calibration)
 
 > **Two independent assigners (DSSP vs biotite P-SEA): report agreement together with the DSSP
-> secondary-structure content, and gate on the content, not on the agreement.**
+> secondary-structure content, and use content only as an informational interpretability check.**
 >
-> - **SS content (fraction of residues DSSP assigns H or E) must be ≥ 0.20** for the agreement number
->   to mean anything. Well-ordered structures run 0.46–0.78; coordinate-perturbed wreckage runs
->   0.00–0.11.
-> - **Given adequate content, expect agreement ≥ 0.65** (16 well-ordered structures: median 0.753,
->   min 0.679), fold-class dependent — **α-rich ~0.80–0.85, β-rich ~0.68–0.72**.
-> - **High agreement with low SS content is a failure signal, not a pass.** A model with no
->   secondary structure scores **1.0** because both assigners label everything coil. Never report the
->   agreement alone.
+> - **SS content (fraction of residues DSSP assigns H or E) ≥ 0.20 is a provisional precondition**
+>   for giving the agreement substantial interpretive weight. Below it, coil/coil calls may dominate.
+>   The content row remains informational on either side and does not grade model quality.
+> - **Given adequate content, 0.65 is only a provisional expectation**, derived from the historical
+>   intersection-denominator run (median 0.753, min 0.679). It must not produce a pass/fail verdict
+>   until the exact-denominator benchmark is rerun. The historical fold dependence was α-rich
+>   ~0.80–0.85 and β-rich ~0.68–0.72.
+> - **High agreement with low SS content is weak evidence, not a pass.** An all-coil assignment
+>   scores **1.0** because both assigners label every residue coil. Never report the agreement alone,
+>   and do not turn low content itself into a model-quality failure.
 >
 > The agent-vs-DSSP clause (≥ 0.85 three-state over DSSP-assigned residues) is **not** measured here
 > and is unchanged: that compares an agent against one assigner, not two assigners against each
@@ -119,10 +132,13 @@ sits between at 0.371, which is the right answer for a model that genuinely does
 
 - The 16 reference models are all X-ray and well-ordered by construction. The bad end is probed with
   4 degraded models (one disordered NMR, three noise levels), which is enough to show the metric
-  saturates but not enough to calibrate where the SS-content gate should sit precisely; 0.20 is
-  placed in the observed gap between 0.105 and 0.371, not fitted.
+  saturates but not enough to calibrate a gradeable SS-content cutoff; 0.20 is a provisional
+  interpretability precondition placed in the observed gap between 0.105 and 0.371, not fitted.
 - One implementation of each method. STRIDE (a third assigner) is not installed, so "P-SEA is the
   outlier" versus "DSSP is" cannot be distinguished.
 - The fold-class split is by inspection of 16 structures, not a controlled comparison over a
   fold-classified set.
 - Versions: mkdssp 4.6.1, biotite 1.7.1, gemmi 0.7.5 (for input normalisation).
+- The historical output omitted separate `n_dssp`, `n_biotite`, and `n_dropped` fields. An
+  ignored-file-inclusive repository and supplied-scratch search found no raw results from which
+  those fields could be recovered; a fresh benchmark run is required.

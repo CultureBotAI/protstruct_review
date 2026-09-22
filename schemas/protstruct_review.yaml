@@ -68,6 +68,7 @@ enums:
     description: Outcome of a measurement against its declared pass criterion.
     permissible_values:
       pass: { description: Meets the criterion }
+      fail_criterion: { description: Fails a declared criterion without asserting disagreement with an agent claim }
       fail_by_oracle: { description: Independent oracle disagrees with agent claim and criterion fails }
       pass_with_caveat: { description: Criterion passes but a related claim is wrong }
       pass_criterion_fail_headline: { description: Criterion passes but headline number is inaccurate }
@@ -368,6 +369,15 @@ classes:
         range: QualityDataSheet
         multivalued: true
         inlined_as_list: true
+      qds_replay_pins:
+        range: QdsReplayPin
+        multivalued: true
+        inlined_as_list: true
+        description: >-
+          Source-owned content pins for immutable QDS artifacts. Validation
+          replays a retained emitter contract against source-owned snapshots and
+          compares the result with a stable canonical byte projection, without
+          reading the current emitter, catalog, or registries.
       tool_recommendations:
         range: ToolRecommendation
         multivalued: true
@@ -436,6 +446,17 @@ classes:
         range: ToolFamily
         required: true
       notes:
+
+  SourceRowLineage:
+    mixin: true
+    description: Exact EvaluationRun row copied into a nonlegacy QDS.
+    attributes:
+      source_evaluation_run_ref:
+        range: EvaluationRun
+        description: EvaluationRun that owns source_row_ref.
+      source_row_ref:
+        range: string
+        description: Id of the structured source row copied into the QDS.
 
   # -------------------------------------------------------------- catalog
 
@@ -713,6 +734,11 @@ classes:
       notes:
       provenance_ref:
         range: MeasurementProvenance
+      bundle_ref:
+        range: string
+        description: >-
+          Stable invocation/bundle id shared by coupled measurements that must
+          be selected and interpreted together.
       evidence_refs:
         range: string
         multivalued: true
@@ -819,6 +845,9 @@ classes:
         range: string
         multivalued: true
         description: Retained raw outputs or EvaluationRun ids carried from the source row.
+      bundle_ref:
+        range: string
+        description: Coupled source-measurement bundle id carried through verbatim.
       notes:
         description: Source caveats and interpretation carried through verbatim.
 
@@ -1024,6 +1053,42 @@ classes:
 
   # ---------------------------------------------------- quality data sheet
 
+  QdsReplayPin:
+    description: >-
+      Content-addressed replay boundary stored with the source EvaluationRun.
+      The output hash is authoritative for canonical bytes. The remaining
+      hashes bind the retained emitter implementation and source-owned Tool,
+      recommendation, and assumption snapshots used for deterministic replay;
+      live registries and the live catalog are deliberately excluded.
+    attributes:
+      id:
+        identifier: true
+        required: true
+      qds_ref:
+        range: QualityDataSheet
+        required: true
+      source_evaluation_run_refs:
+        range: EvaluationRun
+        multivalued: true
+        required: true
+      emitter_contract_version:
+        required: true
+      canonical_qds_sha256:
+        required: true
+        pattern: '^[0-9a-f]{64}$'
+      emitter_source_sha256:
+        required: true
+        pattern: '^[0-9a-f]{64}$'
+      source_tools_sha256:
+        required: true
+        pattern: '^[0-9a-f]{64}$'
+      source_tool_recommendations_sha256:
+        required: true
+        pattern: '^[0-9a-f]{64}$'
+      source_tool_assumptions_sha256:
+        required: true
+        pattern: '^[0-9a-f]{64}$'
+
   QualityDataSheet:
     description: >-
       Per-structure citable snapshot of cross-tool findings. Generated from
@@ -1053,6 +1118,11 @@ classes:
       issued_at:
         range: datetime
         required: true
+      emitter_contract_version:
+        description: >-
+          Versioned qds_emit selection/routing contract used to build this
+          immutable sheet. Modern committed sheets must declare a supported
+          version so later emitter changes cannot silently redefine replay.
       identity_block:
         range: IdentityBlock
         inlined: true
@@ -1506,7 +1576,8 @@ classes:
         required: true
       secondary_structure_agreement:
         description: Fraction of residues on which two independent secondary-structure
-          assigners agree (three-state). The gradeable T15 metric.
+          assigners agree (three-state). Currently informational for the oracle pair
+          pending exact-denominator recalibration.
         range: TypedMeasurementValue
         inlined: true
       secondary_structure_content:
@@ -1589,6 +1660,8 @@ classes:
       mandatory pair (CASP15+ consensus, Mariani et al. 2013); CA RMSD
       is reported additionally for legibility but is not the basis of
       the verdict on its own.
+    mixins:
+      - SourceRowLineage
     attributes:
       id:
         identifier: true
@@ -1693,6 +1766,17 @@ classes:
           EvaluationRun ids that support this recommendation.
       as_of_date:
         range: date
+      effective_at:
+        range: datetime
+        description: >-
+          Exact timezone-qualified activation instant used for immutable QDS
+          time slicing. Required for canonical registry rows.
+      supersedes_recommendation_ref:
+        range: ToolRecommendation
+        description: >-
+          Earlier dated recommendation revision retired by this row. Keep the
+          predecessor in the registry so older immutable QDS snapshots remain
+          reproducible; emission selects the newest active lineage member.
       notes:
 
   # ---------------------------------------- residue / site / ligand v2
@@ -1728,6 +1812,8 @@ classes:
       multiple ResidueOutlier rows (e.g. both a Ramachandran and a
       rotamer outlier). The bare existence of this row is the
       assertion; the numeric magnitude lives on `metric_value`.
+    mixins:
+      - SourceRowLineage
     attributes:
       id:
         identifier: true
@@ -1761,6 +1847,8 @@ classes:
       modelled atoms. Positive peaks = unmodelled mass; negative peaks
       = modelled atoms with no density support. The driving example
       includes peaks > 4σ as a critical eval signal.
+    mixins:
+      - SourceRowLineage
     attributes:
       id:
         identifier: true
@@ -1794,6 +1882,8 @@ classes:
       A contiguous stretch of residues with an issue (disordered loop,
       poor-density region, dense clash region, ...). Useful when the
       problem is a region rather than a single residue.
+    mixins:
+      - SourceRowLineage
     attributes:
       id:
         identifier: true
@@ -1826,6 +1916,8 @@ classes:
       `metric_definition_ref` is required so the QDS emitter can route
       each value to the correct per-residue array (lDDT vs displacement
       vs RSRZ vs Ramachandran-Z) without substring heuristics.
+    mixins:
+      - SourceRowLineage
     attributes:
       id:
         identifier: true
@@ -1914,6 +2006,8 @@ classes:
 
   SecondaryStructureAssignment:
     description: DSSP/STRIDE-style assignment for a residue range.
+    mixins:
+      - SourceRowLineage
     attributes:
       id:
         identifier: true
@@ -1944,6 +2038,8 @@ classes:
 
   DomainAssignment:
     description: Structural domain and fold-classification assignment.
+    mixins:
+      - SourceRowLineage
     attributes:
       id:
         identifier: true
@@ -1977,6 +2073,8 @@ classes:
 
   InterfaceQuality:
     description: Structured quality record for one interface or assembly contact.
+    mixins:
+      - SourceRowLineage
     attributes:
       id:
         identifier: true
@@ -2021,6 +2119,8 @@ classes:
 
   NmrEnsembleQuality:
     description: Structured NMR ensemble/restraint validation record.
+    mixins:
+      - SourceRowLineage
     attributes:
       id:
         identifier: true
@@ -2046,6 +2146,8 @@ classes:
 
   PredictionEnsembleQuality:
     description: Structured predicted-model ensemble convergence record.
+    mixins:
+      - SourceRowLineage
     attributes:
       id:
         identifier: true
@@ -2180,6 +2282,24 @@ classes:
       id:
         identifier: true
         required: true
+      as_of_date:
+        range: date
+        description: >-
+          Date this registry assumption became active. Required for rows in
+          ref/tool_assumptions.yaml so immutable QDS emission can exclude
+          assumptions introduced after the sheet was issued; embedded
+          measurement/run assumptions are already pinned by their source EVAL.
+      effective_at:
+        range: datetime
+        description: >-
+          Exact timezone-qualified activation instant for rows in
+          ref/tool_assumptions.yaml. Embedded EVAL assumptions do not need it.
+      supersedes_assumption_ref:
+        range: Assumption
+        description: >-
+          Earlier dated registry assumption revision retired by this row. The
+          predecessor remains available to QDS snapshots issued before this
+          row became active.
       kind:
         range: AssumptionKind
         required: true

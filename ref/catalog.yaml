@@ -419,10 +419,12 @@ catalog_tasks:
   inputs_description: model (PDB/mmCIF)
   gold_standard: >-
     CATH/SCOPe/ECOD consensus where available; for the oracle-side secondary-structure
-    check, first require DSSP H+E content >= 0.20, then require three-state agreement
-    >= 0.65 between DSSP and an independent second assigner (STRIDE preferred,
-    biotite P-SEA the runnable fallback). Agent-vs-DSSP >= 0.85 is a separate clause
-    and is unevaluable when the agent supplies no per-residue assignment.
+    check, report DSSP H+E content and exact-denominator three-state agreement between
+    DSSP and an independent second assigner (STRIDE preferred, biotite P-SEA the
+    runnable fallback). Both are informational: content >= 0.20 is a provisional
+    interpretability precondition, not a model-quality threshold, and the historical
+    0.65 agreement expectation is non-gradeable until recalibration. Agent-vs-DSSP
+    >= 0.85 is a separate clause and is unevaluable without agent per-residue labels.
   example_dataset: PDB 1AKE (multi-domain, CATH-classified); PDB 2LYZ (single-domain control)
 - id: T16
   task_name: Interface and assembly quality
@@ -1738,10 +1740,13 @@ metric_definitions:
   description: Fraction of residues assigned the same secondary-structure state by two
     independent assigners — DSSP paired with a second assigner (STRIDE preferred,
     biotite P-SEA the runnable fallback) — collapsed to the three-state H/E/C
-    alphabet. For the oracle-side result, first require DSSP H+E content >= 0.20,
-    then require agreement >= 0.65. Agent-vs-DSSP >= 0.85 is a separate comparison
-    that is unevaluable without an agent assignment. Per-residue labels themselves
-    are carried by T15_secondary_structure_assignment as informational content.
+    alphabet. For the oracle-side result, report agreement and DSSP H+E content
+    informationally. Content >= 0.20 is a provisional precondition on interpreting
+    the agreement, not a model-quality threshold. The historical 0.65 expectation
+    is provisional and non-gradeable until exact-denominator recalibration.
+    Agent-vs-DSSP >= 0.85 is a separate comparison that is unevaluable without an
+    agent assignment. Per-residue labels themselves are carried by
+    T15_secondary_structure_assignment as informational content.
   applicable_task_refs:
   - T15
   scope: complex
@@ -1751,10 +1756,10 @@ metric_definitions:
   unit: fraction
   description: >-
     Fraction of DSSP-scored residues assigned helix or strand after the same
-    H/E/C collapse used for T15_secondary_structure_agreement. This is the
-    load-bearing >= 0.20 content gate that prevents high coil/coil agreement from
-    being mistaken for a sound secondary-structure result; apply it before the
-    >= 0.65 two-assigner agreement floor.
+    H/E/C collapse used for T15_secondary_structure_agreement. Report it as an
+    informational diagnostic alongside the currently non-gradeable two-assigner
+    agreement. Content >= 0.20 is a provisional interpretability precondition;
+    content below it warns that coil/coil calls may dominate but does not fail the model.
   applicable_task_refs:
   - T15
   scope: complex

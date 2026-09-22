@@ -99,24 +99,29 @@ wildly according to the software used."* The paper's program-independent alterna
 convention**, and point the accuracy judgement at RSZD (±3σ) / RSZO (1σ) instead of a fixed RSCC
 number. (Both are computed by EDSTATS and PDB-REDO `density-fitness`.)
 
-### Secondary-structure H/E/C agreement (tolerance 10) — defensible, boundary-caveated
+### Secondary-structure H/E/C agreement (tolerance 10) — historical finding, superseded
 
-DSSP and STRIDE agree ~**94.7 %** on well-defined secondary structure (SCOPe benchmark); three-state
-Q3 is ~82–85 %; disagreement concentrates at **helix/strand ends**, while helix/strand middles agree
-strongly. The harness's ≥ 0.80 two-assigner floor and ≥ 0.85 agent-vs-DSSP are therefore defensible
-as *boundary-tolerant* floors sitting below the ~95 % ordered-region agreement. **Keep**, with the
-caveat that the floor is dominated by loop/turn and helix/strand-boundary disagreement, not by real
-structural error. *(Frishman & Argos 1995 STRIDE; DSSP-vs-STRIDE benchmark comparisons.)*
+This literature-only pass initially treated a ≥ 0.80 two-assigner floor as defensible from reported
+DSSP/STRIDE agreement on ordered regions. The later repository benchmark disproved that use: the
+floor failed on 12/16 well-ordered structures yet passed severely perturbed all-coil controls, and
+the retained run did not prove today's exact per-assigner denominator. The bad-end sample is also
+too sparse to promote DSSP H+E content ≥ 0.20 into a quality threshold. The active rule therefore
+reports content as an informational precondition on interpreting two-assigner agreement; it grades
+neither value. The separate agent-vs-DSSP ≥ 0.85 clause remains a different comparison. See
+`tolerance_benchmark_ss_agreement.md` and the current threshold registry.
 
-### Interface BSA vs PISA (tolerance 12) — mechanism real, magnitude unvalidated
+### Interface BSA vs PISA (tolerance 12) — historical provisional finding, now benchmarked
 
-No published PISA-vs-Shrake-Rupley reproducibility figure was found, so the ±10 % is **not grounded**.
-The mechanism is real: PISA uses a Lee & Richards (1971) accessible-surface definition with a 1.4 Å
-probe, and probe radius / point density / inclusion of waters and hetero atoms all shift SASA; PISA
-also reports *interface* area by its own definition, which is not identical to the harness's
-ΣSASA(chains) − SASA(complex). **Keep provisional**; treat BSA agreement as corroboration-only until a
-matched-configuration (same probe radius, same atom selection) benchmark exists. *(Krissinel & Henrick
-2007, J. Mol. Biol. 372:774–797; Lee & Richards 1971; Shrake & Rupley 1973.)*
+This literature pass found no published PISA-vs-Shrake-Rupley reproducibility figure, so the former
+±10 % rule was initially provisional. The mechanism remains real: PISA uses a Lee & Richards (1971)
+accessible-surface definition with a 1.4 Å probe, and probe radius / point density / inclusion of
+waters and hetero atoms all shift SASA; PISA also reports *interface* area by its own definition,
+which is not identical to the harness's ΣSASA(chains) − SASA(complex). A later committed empirical
+benchmark superseded that provisional disposition: over 25 interfaces, the registered envelope is
+max(3 % of the mean, 30 Å²), with matched 1.4 Å probe radius but the selections actually measured —
+biotite protein-only versus PISA's API assembly-molecule surface, which may include ligand/hetero
+atoms. See `tolerance_benchmark_interface_bsa.md`. *(Krissinel & Henrick 2007, J. Mol. Biol.
+372:774–797; Lee & Richards 1971; Shrake & Rupley 1973.)*
 
 ## Second follow-up pass — the seven remaining tolerances
 
@@ -200,16 +205,18 @@ seven, with two quantitative refinements now folded into the registry:
   specific claim was refuted at verification; and v1→v2 is one author group's rewrite, a fair but
   imperfect stand-in for two independent programs.)
 - **Wilson B (3) — downgraded to provisional.** No primary source on inter-program Wilson-B
-  reproducibility survived verification, so the ±5 Å² is inference-only. Marked provisional alongside
-  interface BSA.
+  reproducibility survived verification, so the ±5 Å² is inference-only. At this stage it was marked
+  provisional alongside interface BSA; the later committed BSA benchmark superseded only the BSA
+  half of that historical disposition.
 - **L-test (4) — kept, with a sharper caveat.** The full scale is only 0.125 (untwinned 0.500 →
   perfect twin 0.375), so ±0.02 is ~16 % of range; and xtriage/ctruncate share the Padilla–Yeates
   *method*, so agreement checks consistent computation, not method-independence.
 - **CA RMSD (1), aligned count (2), NMR RMSF (6), R offset (7)** — all confirmed as originally revised
   (matched-configuration preconditions; unbenchmarked R-offset sign/magnitude).
 
-Two provisional values now stand (interface BSA, Wilson B), each needing a matched-configuration
-benchmark that does not yet exist in the literature.
+At the time of this pass, interface BSA and Wilson B were both provisional. Interface BSA has since
+been empirically benchmarked in this repository; this historical audit's provisional BSA wording is
+not the current rule. Consult `ref/thresholds_and_standards.md` for current status.
 
 ## Time-sensitivity
 

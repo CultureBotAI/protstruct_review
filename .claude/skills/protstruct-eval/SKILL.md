@@ -183,6 +183,9 @@ agreement**, not an absolute quality bar, and tags every rubric threshold with i
 domain reviewer can audit it. The T15/T16/T17 drivers correspond to the runnable wrappers
 `scripts/t15_ss_agreement.py`, `scripts/t16_interface_quality.py`,
 `scripts/t17_nmr_ensemble.py`, and `scripts/t17_restraint_summary.py`.
+T15 invocations must supply a new repository-local `--evidence-out`; do not paste its rows unless
+the retained JSON exists and both rows cite it. The wrapper refuses overwrite and the bundle keeps
+the exact normalized input and raw DSSP bytes, both assignment streams, hashes, and tool versions.
 
 ## Existing tasks (don't reinvent these — extend them)
 
@@ -206,8 +209,9 @@ domain reviewer can audit it. The T15/T16/T17 drivers correspond to the runnable
 | T16 | Interface and assembly quality (oracle-only — no PHENIX tool) |
 | T17 | NMR ensemble/restraint validation (oracle-only — no PHENIX tool) |
 
-T15–T17 deliberately have **no PHENIX implementation**, but their gradeable metrics are runnable
-through independent oracle paths: DSSP H+E content followed by DSSP + biotite agreement for T15,
+T15–T17 deliberately have **no PHENIX implementation**, but their numeric checks are runnable
+through independent oracle paths: informational DSSP H+E content plus informational DSSP +
+biotite agreement for T15,
 DockQ + biotite for T16, and biotite plus deposited wwPDB validation reports for T17. See
 `ref/oracle_tools.md` for versions, limitations, thresholds, and the exact wrappers.
 
@@ -238,13 +242,18 @@ Note the canonical order in the template: **compare baseline → refine → re-c
    only when it is *descriptive content* rather than the thing being graded. Such rows must carry
    `pass_status: informational`, and the task must still have a numeric metric alongside them.
    The usual move is to grade the *agreement* between two independent labellers rather than the
-   label. T15 adds an essential precondition: first require
-   `T15_secondary_structure_content` (DSSP H+E) **≥ 0.20**, then require
+   label. T15 currently has a provisional interpretability precondition, but neither oracle-pair
+   value grades model quality: report
+   `T15_secondary_structure_content` (DSSP H+E) alongside
    `T15_secondary_structure_agreement` (three-state DSSP vs an independent second assigner —
    STRIDE preferred, biotite P-SEA the runnable fallback via `scripts/t15_ss_agreement.py`)
-   **≥ 0.65**. High agreement below the content gate is a failure signal, not a pass. The separate
-   agent-vs-DSSP **≥ 0.85** clause is unevaluable when no agent assignment exists. Per-residue
-   labels ride along as informational content.
+   with both rows informational and no `pass_criterion`. Content **≥ 0.20** provisionally supports
+   interpreting the agreement; below it, coil/coil agreement may dominate, which weakens the
+   agreement rather than failing the model. The historical **0.65** expectation is non-gradeable
+   pending exact-denominator recalibration. The separate
+   agent-vs-DSSP **≥ 0.85** comparison is T15's gradeable numeric context, but that clause is
+   unevaluable when no agent assignment exists. Per-residue labels ride along as informational
+   content.
 
 5. Add the metric definition(s) to `ref/catalog.yaml` and reference them from the task's
    `metric_definition_refs`. Regenerate the TSV (step 4 of "Catalog schema" above).
@@ -287,7 +296,7 @@ When the user asks for a metric measurement (e.g. "what's the clashscore?"):
 2. **Run the recommended tool** (verify it's installed via `ref/oracle_tools.md`). If it's missing, run the next-ranked alternative and flag the gap.
 3. **Record in the eval** which tool was used (`MeasurementValue.oracle_tool_ref`). It should match the recommendation, or the discrepancy should be noted.
 4. **Cross-check against a tool from a different family.** Never let the only oracle for a measurement be a cctbx tool. The trust model in `ref/quality_reporting.md` §3 is the principle, not a courtesy.
-5. If a recommendation is wrong (a tool consistently disagrees with consensus, or a new tool outperforms the recommended one), **update `ref/tool_recommendations.yaml`** — bump `as_of_date` and add a new row, don't mutate in place. Re-run `bash scripts/validate.sh` after edits.
+5. If a recommendation is wrong (a tool consistently disagrees with consensus, or a new tool outperforms the recommended one), **update `ref/tool_recommendations.yaml`** — add a new id with a later `as_of_date`, an exact timezone-qualified `effective_at`, and `supersedes_recommendation_ref` pointing to the prior row; never mutate or delete the snapshotted predecessor. Give new or revised rows in `ref/tool_assumptions.yaml` the analogous dated/timestamped `supersedes_assumption_ref` lineage. Re-run `bash scripts/validate.sh` after edits.
 
 ## Quality Data Sheet — when to emit and what goes in it
 
@@ -310,7 +319,7 @@ The QDS holds these summary blocks (use only the ones the modality needs):
 | `per_residue_quality` | `PerResidueQuality` | populate when local/per-residue measurements exist (per-residue lDDT, displacement, RSRZ; outlier residue list; difference-density peaks; flagged regions) |
 | `site_qualities[]` | `SiteQuality` | one per active site / binding site / interface / metal site. Required when a functional site or bound ligand is present |
 | `packing_summary` | `PackingSummary` | when packing / B-factor-outlier indicators were measured (packing Z-score, unsatisfied buried H-bonds, per-residue B-factor outlier Z) |
-| `classification_summary` | `ClassificationSummary` | T15 — DSSP H+E content gate followed by secondary-structure agreement (gradeable) plus SS / domain / fold labels (informational) |
+| `classification_summary` | `ClassificationSummary` | T15 — informational DSSP H+E content diagnostic plus secondary-structure agreement (informational pending exact-denominator recalibration), with SS / domain / fold labels (informational) |
 | `interface_quality_summary` | `InterfaceQualitySummary` | T16 — total two-sided buried surface area (`ΣSASA(chains) − SASA(complex)`), DockQ, CAPRI class. Double PISA's per-side `interface_area` before comparison; BSA tolerance is `max(3% of mean, 30 Å²)`. Required when any `scope=interface` measurement exists |
 | `prediction_ensemble_summary` | `PredictionEnsembleSummary` | T07/T17 — ensemble convergence across predicted models. Required when any `scope=ensemble` measurement exists |
 | `nmr_validation_summary` | `NmrValidationSummary` | T17 — restraint violations, ensemble precision RMSD |
@@ -412,7 +421,7 @@ For waters specifically: do NOT declare every HOH as a Ligand (146 records would
    - `scope=ensemble` measurement → `PredictionEnsembleSummary` or `NmrValidationSummary` rows required
    - `pairwise_comparisons[]` on the eval → must surface in QDS
 
-3. **Fail-hard on cctbx-only coverage (#315).** Coverage is computed per metric and comparison context, never by task-level union: an unrelated or failed oracle attempt cannot close a claim. A cctbx-only or unclassifiable claim refuses to emit unless the eval declares a matching `CrossToolWaiver` (task plus metric/context qualifiers, reason, `as_of_date`). A legacy task-only waiver is accepted only when one claim for that task is gated. The waiver is surfaced on the QDS and annotates only the row it excuses (`… — WAIVED <date>: <reason>`). Non-cctbx-only coverage is deliberately not gated — the trust model forbids self-grading, not independent-only evidence. Committed QDS files are separately checked by `scripts/check_qds_trust_invariant.py` (validate step 3c); pre-2026-08-13 history is grandfathered by name on every run.
+3. **Fail-hard on cctbx-only coverage (#315).** Coverage is computed per metric and comparison context, never by task-level union: an unrelated or failed oracle attempt cannot close a claim. A cctbx-only or unclassifiable claim refuses to emit unless the eval declares a matching `CrossToolWaiver` (task plus metric/context qualifiers, reason, `as_of_date`). A legacy task-only waiver is accepted only when one claim for that task is gated. The waiver is surfaced on the QDS and annotates only the row it excuses (`… — WAIVED <date>: <reason>`). Non-cctbx-only coverage is deliberately not gated — the trust model forbids self-grading, not independent-only evidence. Committed QDS files are separately checked by `scripts/check_qds_trust_invariant.py` (validate step 3c), which rebuilds coverage and waivers from the referenced source EvaluationRuns. Modern source documents must pin the relevant top-level `Structure`, `Tool`, `tool_recommendations`, and `assumptions` snapshots plus a `qds_replay_pins` content-addressed boundary; the sheet pins `emitter_contract_version`. Whole-sheet derivation is replayed through the retained contract module using only those source snapshots, then independently canonicalized and compared with the source-owned output pin. Today's emitter, catalog, and registries cannot reinterpret an older artifact. Contract implementations and supported-version dispatch are append-only. Historical exemptions are an explicit frozen allowlist keyed by repository path, QDS identity, issue timestamp, and content fingerprint; there is no date-based grandfathering.
 
 4. **A verdict must name its criterion (#567).** Any `pass_status` that asserts an outcome requires a non-empty `pass_criterion`; `informational` means "reported without a declared criterion" and must not carry one; `fail_by_oracle` / `fail_by_oracle_within_cctbx` require the `agent_claim` they disagree with, and the latter requires `oracle_family: cctbx`. Reasoning a verdict out in `notes` while leaving `pass_criterion` empty is the defect this rule exists to stop — it is what let one 1SAR row ship marked `pass` with no criterion, and two identical rows be graded on opposite conclusions from the same premise. Committed records are checked by `scripts/check_pass_status.py` (validate step 3c-bis). The criterion and cctbx-family rules apply to every record; the two that pre-existing history violates are enforced from 2026-09-07, with older rows grandfathered by name. A `PassStatus` value the guard does not classify — or a schema it cannot read — is a hard failure, so the rules cannot silently fall out of step with the enum.
 

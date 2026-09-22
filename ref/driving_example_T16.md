@@ -64,17 +64,29 @@ Each bullet is pass/fail; all must pass for green.
 5. **Chain mapping disclosed.** The model→native chain mapping used by DockQ is recorded — a wrong
    mapping silently deflates the score. For selected chain sets with sequence-equivalent partners,
    score and retain every plausible bijection; selecting only the highest DockQ mapping does not
-   satisfy this gate.
+   satisfy this gate. Declare the headline interface explicitly and justify that selection
+   independently of mapping order (and, where mappings disagree materially, independently of simply
+   choosing the highest DockQ score). Sequence-equivalence controls are determined among the selected
+   native partners; an explicitly disclosed ordinary model→native mapping remains valid when the
+   candidate differs from the reference by missing residues or mutations.
 
 ## Notes
 
 - BSA is a property of the model alone (no reference needed) and is always computable; DockQ needs
   the deposited reference. `scripts/t16_interface_quality.py` reflects this — BSA always, DockQ
-  only with `--native`. The wrapper accepts one repeated `--mapping`, `--interface-id`, and
-  `--raw-json` triple per mapping, and requires typed `--subject-ref` and
-  `--reference-subject-ref`; the raw JSON is retained rather than deleted. Select an exact BSA
-  pair with `--chains A:B`. The current wrapper reads PDB, not mmCIF. Unless explicitly labelled
-  otherwise, every BSA in harness output is the total two-sided value; a per-side value is half
-  that total.
+  only with `--native`. The wrapper also requires `--native-chains A:B` to declare the selected
+  native interface, then accepts one repeated `--mapping`, `--interface-id`, and `--raw-json`
+  triple for every sequence-equivalent bijection within that pair. A required
+  `--headline-interface-id` selects one of those declared interface ids explicitly; CLI triple order
+  has no selection semantics. Only that mapping emits headline DockQ/CAPRI scalar measurements;
+  every scored mapping is retained as an `InterfaceQuality` control row. Native runs emit a
+  pasteable EvaluationRun fragment with separate `measurements` and `interface_qualities` lists and
+  require `--structure-id`, typed `--subject-ref`, and `--reference-subject-ref`; raw JSON is retained
+  rather than deleted. Every invocation requires a new repository-local `--bsa-evidence` JSON;
+  model hash, measured Biotite version, selected chains, 1.4 Å probe, 1000-point quadrature, raw
+  complex/separated SASAs, and the derived BSA are retained and published atomically with all
+  DockQ outputs. Select an exact BSA pair with `--chains A:B`. The current wrapper reads PDB, not
+  mmCIF. Unless explicitly labelled otherwise, every BSA in harness output is the total two-sided
+  value; a per-side value is half that total.
 - PISA remains the `top_considered` BSA oracle (deposition-grade); biotite SASA is the runnable
   `top_performing` stand-in when the web service is unreachable.

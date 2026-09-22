@@ -176,7 +176,9 @@ if ! "${PYTHON}" "${REPO_ROOT}/scripts/test_t15_ss_agreement.py"; then
 fi
 
 # 4c. T16 interface-quality pure-logic unit tests (CAPRI bands / DockQ-JSON
-#     extraction; no DockQ binary needed, so safe to run anywhere).
+#     extraction; no DockQ binary needed). The exact committed BSA replay runs
+#     only when the optional evidence-producing biotite version is installed;
+#     hash, provenance, arithmetic, and record-link checks always run.
 if ! "${PYTHON}" "${REPO_ROOT}/scripts/test_t16_interface_quality.py"; then
   fail "t16_interface_quality unit tests"
 fi

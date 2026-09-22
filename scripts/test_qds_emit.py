@@ -23,6 +23,7 @@ Wired into scripts/validate.sh.
 from __future__ import annotations
 
 import copy
+import hashlib
 import sys
 import tempfile
 from collections.abc import Callable
@@ -34,6 +35,8 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "scripts"))
 
 import qds_emit  # noqa: E402
+import qds_emit_contract_v1  # noqa: E402
+import qds_emit_contract_v2  # noqa: E402
 
 
 EVAL_1SAR = REPO / "data/coscientists/openscientist/EVAL_1sar_cdba2c07_2026-04-24.yaml"
@@ -452,6 +455,370 @@ def test_coverage_never_claims_an_absent_family() -> None:
         "an unknown tool contributed trust coverage",
     )
     print("PASS  coverage derives canonical families and rejects spoofed/unnamed tools")
+
+
+def _t14_derived_coverage_rows() -> list[dict]:
+    context = {
+        "catalog_task_ref": "T14",
+        "stage": "final",
+        "scope": "complex",
+        "scope_selector": "model",
+        "subject_ref": "artifact:synth#model.pdb",
+    }
+    return [
+        {
+            "id": "T14_SOURCE_REDUCE",
+            **context,
+            "metric_definition_ref": "T14_asn_gln_his_flip_candidates_scored",
+            "oracle_tool_ref": "reduce (standalone, Richardson)",
+            "oracle_family": "non_cctbx",
+            "oracle_measure": {"value_numeric": 14, "unit": "count"},
+            "pass_status": "informational",
+        },
+        {
+            "id": "T14_SOURCE_REDUCE2",
+            **context,
+            "metric_definition_ref": "T14_asn_gln_his_flip_candidates_scored",
+            "oracle_tool_ref": "mmtbx.reduce2",
+            "oracle_family": "cctbx",
+            "oracle_measure": {"value_numeric": 18, "unit": "count"},
+            "pass_status": "informational",
+        },
+        {
+            "id": "T14_CONFLICTS",
+            **context,
+            "metric_definition_ref": "T14_asn_gln_his_flip_set_conflicts",
+            "oracle_tool_ref": "mmtbx.reduce2",
+            "oracle_family": "cctbx",
+            "oracle_measure": {
+                "value_numeric": 0,
+                "unit": "count",
+                "count": 14,
+            },
+            "derived_from_measurement_refs": [
+                "T14_SOURCE_REDUCE",
+                "T14_SOURCE_REDUCE2",
+            ],
+            "pass_status": "informational",
+        },
+    ]
+
+
+def test_derived_coverage_uses_only_validated_source_families() -> None:
+    """A joint result gets both families without enabling arbitrary laundering."""
+    rows = _t14_derived_coverage_rows()
+    run = {
+        "id": "EVAL_T14_DERIVED",
+        "structure_ref": "synth",
+        "run_date": "2026-09-22",
+        "catalog_tasks_applied": ["T14"],
+        "measurements": rows,
+    }
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "derived.yaml"
+        _write_eval(path, [run])
+        qds = qds_emit.emit_qds(
+            [path],
+            qds_id="QDS_T14_DERIVED",
+            structure_id="synth",
+            subject_ref="artifact:synth#model.pdb",
+            coverage_scope="partial",
+            scope_notes="Synthetic T14 derived-coverage regression.",
+            issued_at="2026-09-22T12:00:00+00:00",
+        )
+    conflict = next(
+        row
+        for row in qds["cross_tool_coverage"]["task_coverage"]
+        if row.get("metric_definition_ref")
+        == "T14_asn_gln_his_flip_set_conflicts"
+    )
+    _check(
+        conflict["gap_status"] == "dual-family coverage — agreement not evaluated",
+        "a validated T14 composite did not inherit both participating families",
+    )
+    _check(
+        conflict["cctbx_oracles"] == ["mmtbx.reduce2"]
+        and conflict["non_cctbx_oracles"]
+        == ["reduce (standalone, Richardson)"],
+        "derived coverage did not name the exact contributing tool pair",
+    )
+    _check(
+        not qds.get("cross_tool_waivers"),
+        "a genuinely dual-family composite should not need a cctbx-only waiver",
+    )
+
+    annotated = copy.deepcopy(rows)
+    for row in annotated:
+        row["_source_evaluation_run_ref"] = "EVAL_T14_DERIVED"
+
+    wrong_metric = copy.deepcopy(annotated)
+    wrong_metric[0]["metric_definition_ref"] = "T14_h_added"
+    assert_raises_completeness(
+        lambda: qds_emit.build_cross_tool_coverage("QDS_bad", wrong_metric),
+        [
+            "derived-coverage integrity",
+            "T14_SOURCE_REDUCE",
+            "T14_asn_gln_his_flip_candidates_scored",
+        ],
+        "an unrelated non-cctbx metric was used to launder composite coverage",
+    )
+
+    cross_run = copy.deepcopy(annotated)
+    cross_run[0]["_source_evaluation_run_ref"] = "EVAL_OTHER"
+    assert_raises_completeness(
+        lambda: qds_emit.build_cross_tool_coverage("QDS_bad", cross_run),
+        [
+            "derived-coverage integrity",
+            "T14_SOURCE_REDUCE",
+            "belongs to another EvaluationRun",
+        ],
+        "a cross-run source conferred derived trust coverage",
+    )
+
+    mismatched_subject = copy.deepcopy(annotated)
+    mismatched_subject[0]["subject_ref"] = "artifact:other#model.pdb"
+    assert_raises_completeness(
+        lambda: qds_emit.build_cross_tool_coverage("QDS_bad", mismatched_subject),
+        ["derived-coverage integrity", "mismatched subject_ref"],
+        "a different-subject source conferred derived trust coverage",
+    )
+
+    impossible_denominator = copy.deepcopy(annotated)
+    impossible_denominator[2]["oracle_measure"]["count"] = 15
+    for label, builder in (
+        ("live", qds_emit.build_cross_tool_coverage),
+        ("frozen v2", qds_emit_contract_v2.build_cross_tool_coverage),
+    ):
+        assert_raises_completeness(
+            lambda builder=builder: builder("QDS_bad", impossible_denominator),
+            ["derived-coverage integrity", "denominator 15", "candidate count"],
+            f"{label} emitter gave dual-family credit to an impossible denominator",
+        )
+
+    graded_source = copy.deepcopy(annotated)
+    graded_source[0]["pass_status"] = "pass"
+    assert_raises_completeness(
+        lambda: qds_emit.build_cross_tool_coverage("QDS_bad", graded_source),
+        ["derived-coverage integrity", "T14_SOURCE_REDUCE", "informational"],
+        "a gradeable candidate-count source conferred composite trust coverage",
+    )
+
+    unnamed_cohort = copy.deepcopy(annotated)
+    for row in unnamed_cohort:
+        row["scope"] = "cohort"
+        row["scope_selector"] = ""
+    spoofed_task = copy.deepcopy(annotated)
+    for row in spoofed_task:
+        row["catalog_task_ref"] = "T03"
+    for label, builder in (
+        ("live", qds_emit.build_cross_tool_coverage),
+        ("frozen v2", qds_emit_contract_v2.build_cross_tool_coverage),
+    ):
+        assert_raises_completeness(
+            lambda builder=builder: builder("QDS_bad", unnamed_cohort),
+            ["derived-coverage integrity", "cohort", "scope_selector"],
+            f"{label} emitter accepted an unnamed preregistered cohort",
+        )
+        assert_raises_completeness(
+            lambda builder=builder: builder("QDS_bad", spoofed_task),
+            ["derived-coverage integrity", "catalog_task_ref", "T14"],
+            f"{label} emitter let T14 composite lineage launder another task",
+        )
+
+    def cohort_rows(
+        numerator: int,
+        denominator: int,
+        status: str,
+        criterion: str | None,
+    ) -> list[dict]:
+        cohort = copy.deepcopy(annotated)
+        for row in cohort:
+            row.update(
+                {
+                    "scope": "cohort",
+                    "scope_selector": "round48-preregistered-cohort",
+                    "subject_ref": "cohort:round48",
+                }
+            )
+        composite = cohort[2]
+        composite["oracle_measure"].update(
+            {"value_numeric": numerator, "count": denominator}
+        )
+        composite["pass_status"] = status
+        if criterion is None:
+            composite.pop("pass_criterion", None)
+        else:
+            composite["pass_criterion"] = criterion
+        return cohort
+
+    for label, builder in (
+        ("live", qds_emit.build_cross_tool_coverage),
+        ("frozen v2", qds_emit_contract_v2.build_cross_tool_coverage),
+    ):
+        for numerator, denominator, status in (
+            (0, 10, "pass_with_caveat"),
+            (1, 10, "pass"),
+            (2, 10, "fail_criterion"),
+        ):
+            coverage = builder(
+                "QDS_cohort",
+                cohort_rows(
+                    numerator,
+                    denominator,
+                    status,
+                    "conflict rate <= 10%",
+                ),
+            )
+            _check(
+                any(
+                    row.get("metric_definition_ref")
+                    == "T14_asn_gln_his_flip_set_conflicts"
+                    for row in coverage["task_coverage"]
+                ),
+                f"{label} rejected a correct {numerator}/{denominator} cohort verdict",
+            )
+        # Informational cohort observations remain allowed without a criterion.
+        builder(
+            "QDS_cohort_info",
+            cohort_rows(2, 10, "informational", None),
+        )
+        for numerator, status in ((1, "fail_criterion"), (2, "pass")):
+            assert_raises_completeness(
+                lambda builder=builder, numerator=numerator, status=status: builder(
+                    "QDS_bad",
+                    cohort_rows(
+                        numerator,
+                        10,
+                        status,
+                        "conflict rate <= 10%",
+                    ),
+                ),
+                ["derived-coverage integrity", f"{numerator}/10", "pass_status"],
+                f"{label} accepted an inverted cohort threshold verdict",
+            )
+        assert_raises_completeness(
+            lambda builder=builder: builder(
+                "QDS_bad",
+                cohort_rows(
+                    1,
+                    10,
+                    "pass",
+                    "conflict rate <= 10% or <= 20%",
+                ),
+            ),
+            ["derived-coverage integrity", "unambiguous", "<= 10%"],
+            f"{label} accepted an ambiguous cohort threshold criterion",
+        )
+        assert_raises_completeness(
+            lambda builder=builder: builder(
+                "QDS_bad",
+                cohort_rows(
+                    1,
+                    10,
+                    "pass",
+                    "not conflict rate <= 10%",
+                ),
+            ),
+            ["derived-coverage integrity", "unambiguous", "<= 10%"],
+            f"{label} accepted a negated cohort threshold criterion",
+        )
+
+    generic = copy.deepcopy(annotated)
+    generic[2]["metric_definition_ref"] = "T14_h_added"
+    generic_coverage = qds_emit.build_cross_tool_coverage("QDS_generic", generic)
+    generic_row = next(
+        row
+        for row in generic_coverage["task_coverage"]
+        if row.get("metric_definition_ref") == "T14_h_added"
+    )
+    _check(
+        generic_row["gap_status"] == "open — cctbx only",
+        "uncontracted generic lineage laundered a cctbx row into dual-family coverage",
+    )
+    print("PASS  derived coverage inherits only validated, contracted source families")
+
+
+def test_contract_v2_replays_full_september_eval_and_preserves_v1() -> None:
+    """The real audit, not a reduced proxy, must traverse the retained contract."""
+    _check(
+        hashlib.sha256(Path(qds_emit_contract_v1.__file__).read_bytes()).hexdigest()
+        == "4f36031377783bc7e3859386f238b333c4615969f9bd6c77178b94f27234540d",
+        "frozen contract-1 source changed while adding contract 2",
+    )
+    _check(
+        qds_emit.QDS_EMITTER_CONTRACT_VERSION == "2"
+        and qds_emit.SUPPORTED_QDS_EMITTER_CONTRACT_VERSIONS == {"1", "2"},
+        "live emitter does not default to v2 while retaining explicit v1 dispatch",
+    )
+
+    subject = (
+        "artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#"
+        "data/1sar_final.pdb"
+    )
+    kwargs = {
+        "qds_id": "QDS_1sar_contract_v2_regression",
+        "structure_id": "1sar",
+        "subject_ref": subject,
+        "coverage_scope": "partial",
+        "scope_notes": "Full September audit contract-v2 regression.",
+        "issued_at": "2026-09-22T00:00:00+00:00",
+    }
+    live = qds_emit.emit_qds([EVAL_1SAR.parent / "EVAL_1sar_cdba2c07_2026-09-07.yaml"], **kwargs)
+    frozen = qds_emit_contract_v2.emit_qds(
+        [EVAL_1SAR.parent / "EVAL_1sar_cdba2c07_2026-09-07.yaml"], **kwargs
+    )
+    _check(live == frozen, "live contract 2 diverges from its retained replay module")
+    conflict = next(
+        row
+        for row in live["cross_tool_coverage"]["task_coverage"]
+        if row.get("metric_definition_ref")
+        == "T14_asn_gln_his_flip_set_conflicts"
+    )
+    _check(
+        conflict["cctbx_oracles"] == ["mmtbx.reduce2"]
+        and conflict["non_cctbx_oracles"]
+        == ["reduce (standalone, Richardson)"]
+        and conflict["gap_status"]
+        == "dual-family coverage — agreement not evaluated",
+        "full September emission did not preserve validated T14 composite coverage",
+    )
+    _check(
+        not any(
+            waiver.get("catalog_task_ref") == "T14"
+            for waiver in live.get("cross_tool_waivers", [])
+        ),
+        "full September emission still depends on a T14 trust waiver",
+    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "v1.yaml"
+        _write_eval(
+            path,
+            [
+                {
+                    "id": "EVAL_v1_stability",
+                    "structure_ref": "synth",
+                    "run_date": "2026-09-22",
+                    "catalog_tasks_applied": [],
+                    "measurements": [],
+                }
+            ],
+        )
+        v1_kwargs = {
+            "qds_id": "QDS_v1_stability",
+            "structure_id": "synth",
+            "coverage_scope": "cumulative",
+            "issued_at": "2026-09-22T00:00:00+00:00",
+        }
+        live_v1 = qds_emit.emit_qds(
+            [path], emitter_contract_version="1", **v1_kwargs
+        )
+        frozen_v1 = qds_emit_contract_v1.emit_qds([path], **v1_kwargs)
+    _check(
+        live_v1 == frozen_v1 and live_v1["emitter_contract_version"] == "1",
+        "explicit v1 dispatch no longer replays through the frozen v1 implementation",
+    )
+    print("PASS  full September eval replays through v2 and v1 remains frozen")
 
 
 def test_trust_invariant_waiver_mechanics() -> None:
@@ -2239,6 +2606,8 @@ def test_structure_identity_comes_from_pinned_eval_source() -> None:
 
 def main() -> int:
     test_coverage_never_claims_an_absent_family()
+    test_derived_coverage_uses_only_validated_source_families()
+    test_contract_v2_replays_full_september_eval_and_preserves_v1()
     test_1sar_geometry_slots_all_present()
     test_synth_local_blocks_present()
     test_negative_site_scope_without_site_decl_fails()

@@ -38,9 +38,11 @@ Each bullet is pass/fail; all must pass for green.
 
 1. **R-free tracks the deposition.** The agent's R-free is within **± 0.02** of the deposited value
    and of a REFMAC5 re-refinement. `[catalog — R-free vs deposited]`
-2. **Independent-code-path R offset.** `gemmi sfcalc` R-work runs **0.005–0.015 higher** than PHENIX
-   on the same data — expected (simpler bulk-solvent), not a discrepancy to fix. A *smaller* gap or a
-   PHENIX R-work below gemmi's is the red flag. `[template]`
+2. **Independent-code-path R-work offset.** With the same model, MTZ, work set and cctbx mask radii,
+   the directly summed `gemmi sfcalc` R-work must satisfy the registry's absolute agreement envelope.
+   The benchmark observed gemmi above PHENIX in 15/15 cases, so a non-positive offset is an
+   investigation flag, not an automatic failure. The benchmark does not govern R-free offsets or
+   `gemmi_rfactor.py`'s additional bin-rescaled estimator. `[benchmark — registry §3]`
 3. **R-free flags untouched.** Reflection count and R-free flag column match the input — regenerated
    flags silently break cross-validation. `[handbook — phenix.refine R-free flag set]`
 4. **Geometry did not degrade.** clashscore and Ramachandran favored stay within the refinement

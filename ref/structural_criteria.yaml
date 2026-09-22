@@ -407,9 +407,10 @@ criteria:
         interpretation: "Ordered core 74/76 residues; whole-chain mean 0.428 Å inflated by 2 flexible C-terminal residues (max 5.9 Å)."
 
   - id: T06_r_factor_offset
-    name: Independent-code-path R offset
+    name: Independent-code-path R-work offset
     category: data_quality
     catalog_task_refs:
+      - T03
       - T06
     unit: dimensionless
     is_gradeable: true
@@ -428,7 +429,7 @@ criteria:
         installed: true
         recipe: "phenix.model_vs_data model.pdb data.mtz  # r_work"
         recipe_language: bash
-        recipe_notes: "Refits k_iso / k_aniso / k_mask PER RESOLUTION BIN, so its R is systematically the lower of the two."
+        recipe_notes: "Refits k_iso / k_aniso / k_mask per resolution bin. It read lower in all 15 benchmark cases, but differing Fcalc/objective/outlier paths mean that observed sign is not a mathematical guarantee."
       - tool: gemmi sfcalc
         family: non_cctbx
         installed: true
@@ -439,11 +440,11 @@ criteria:
       normal:
         text: "R_work ~0.13-0.26 for the deposited entries benchmarked; the offset itself is ~0.007"
       anomalous:
-        text: "a NEGATIVE offset (gemmi below PHENIX) is off-distribution — gemmi read high in 15/15 — and indicates a configuration problem, most often a free-flag convention error"
+        text: "|offset| above 0.02 fails agreement; a non-positive offset is off the observed 15-entry distribution and prompts configuration review but is not by itself a failure"
     cross_tool_agreement:
-      tolerance: "|Δ R| ≤ 0.02"
+      tolerance: "|ΔR_work| ≤ 0.02, where ΔR_work = R_work(gemmi) − R_work(PHENIX)"
       tools: "gemmi sfcalc vs phenix.model_vs_data"
-      precondition: "same model, same MTZ, same work set, and matched mask radii (--radii-set=cctbx); the free-flag test value must be determined per file (two-valued flags = minority is the test set; CCP4 multi-bin flags = bin 0 is the test set) — inverting it computes R-free and calls it R-work, worth about +0.06"
+      precondition: "same model, same MTZ, same work set, matched mask radii (--radii-set=cctbx), and the benchmarked direct summation of globally scaled gemmi FC values (not gemmi_rfactor.py's extra bin-wise rescaling); the free-flag test value must be determined per file (two-valued flags = minority is the test set; CCP4 multi-bin flags = bin 0 is the test set) — inverting it computes R-free and calls it R-work, worth about +0.06. This criterion is R-work-only; no R-free-specific cross-tool offset band is registered."
       provenance:
         - benchmark
       citation: "ref/research/tolerance_benchmark_r_offset.md — 15 entries, 1.20-2.92 Å, median |Δ| 0.0069, p90 0.0116, max 0.0151 (scripts/bench_t06_r_offset.py)"
@@ -463,7 +464,7 @@ criteria:
         source: "scripts/bench_t06_r_offset.py (PHENIX 0.2331, gemmi 0.2482 at 2.38 Å; mask-convention effect +0.0140)"
         verdict: borderline
         interpretation: "Largest offset in the benchmark, and the one with the largest mask-convention sensitivity — nearly all of it disappears under a matched mask. CCP4 multi-bin free flags (bin 0 = test), verified against PHENIX's Nfree of 517."
-    notes: "The offset is one-sided by construction: per-bin scaling cannot fit worse than global scaling on the same data, so PHENIX's R is always the lower number. Neither value is 'the true R'."
+    notes: "Gemmi read high in 15/15 benchmark entries, but the paths also differ in Fcalc implementation, objectives and outlier rejection; sign is an investigation diagnostic, not a grade. Neither value is 'the true R'. Do not extrapolate this direct-summation R-work envelope to R-free or to a separately bin-rescaled estimator."
 
   - id: T05_bond_length_rmsd
     name: Bond-length RMSD

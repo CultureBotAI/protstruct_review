@@ -37,9 +37,11 @@ Each bullet is pass/fail; all must pass for green.
 
 1. **R tracks the deposition.** PHENIX R-work/R-free within **± 0.02** of the deposited values.
    `[catalog — R-free vs deposited]`
-2. **Independent-code-path R offset.** `gemmi sfcalc` R-work runs **0.005–0.015 higher** than PHENIX
-   on the same data — expected, not a defect. PHENIX R-work *below* gemmi's is the red flag.
-   `[template]`
+2. **Independent-code-path R-work offset.** With the same model, MTZ, work set and cctbx mask radii,
+   the directly summed `gemmi sfcalc` R-work must satisfy the registry's absolute agreement envelope.
+   The benchmark observed gemmi above PHENIX in 15/15 cases, so a non-positive offset is an
+   investigation flag, not an automatic failure. The benchmark does not govern R-free offsets or
+   `gemmi_rfactor.py`'s additional bin-rescaled estimator. `[benchmark — registry §3]`
 3. **Model treated as fixed.** T06 re-derives statistics from a fixed model — no refinement. If the
    reported R differs materially from a `phenix.model_vs_data` re-run, the number came from a
    refinement log, which is not the T06 metric. `[handbook — phenix.model_vs_data]`

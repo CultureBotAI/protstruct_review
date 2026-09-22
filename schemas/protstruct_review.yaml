@@ -291,6 +291,11 @@ enums:
         description: An NMR or prediction ensemble.
       assembly:
         description: Biological assembly or multimeric complex.
+      cohort:
+        description: >-
+          A preregistered collection of structures aggregated into one
+          measurement. Use scope_selector to name the exact cohort; do not use
+          this scope for a result computed on one structure.
 
 # ----------------------------------------------------------------------------
 # Slots — defined once, reused across classes
@@ -691,7 +696,9 @@ classes:
           of the canonical `scope` on the referenced MetricDefinition.
           When set, the `agent_claim` / `oracle_measure` may be a
           summary (mean+SD over a residue/chain/site array) — see
-          TypedMeasurementValue.mean / std_dev / count.
+          TypedMeasurementValue.mean / std_dev / count. `cohort` means
+          that the value aggregates an explicitly named preregistered
+          collection of structures rather than measuring one structure.
       scope_selector:
         description: >-
           When `scope` is `chain`, `site`, `residue`, `atom`, or
@@ -700,11 +707,13 @@ classes:
           "Asn A 39"). Site / residue selectors should also have a
           structured ResidueRef / Site reference where appropriate. For `site`
           and `ligand` scope this value is the exact declared Site or Ligand id;
-          put comparison qualifiers and human-readable detail in `notes`.
+          put comparison qualifiers and human-readable detail in `notes`. For
+          `cohort` scope it is required and names the exact preregistered cohort.
       subject_ref:
         range: string
         description: >-
-          Stable identifier for the concrete model, dataset, or assembly measured.
+          Stable identifier for the concrete model, dataset, assembly, or cohort
+          measured.
           This is distinct from scope_selector: the subject identifies the artefact,
           while the selector identifies a chain, interface mapping, site, or other
           subset within it. QDS emission uses an exact subject match ahead of legacy
@@ -726,7 +735,26 @@ classes:
         description: Value the independent oracle returned.
       delta:
         range: TypedMeasurementValue
-        description: Optional pre-computed difference (oracle − agent or post − pre).
+        description: >-
+          Optional pre-computed difference. Unless delta_from_measurement_ref is
+          present, this is oracle − agent or post − pre. When
+          delta_from_measurement_ref is present, this is this row's oracle_measure
+          minus the referenced MeasurementValue's oracle_measure.
+      delta_from_measurement_ref:
+        range: MeasurementValue
+        description: >-
+          Same-EvaluationRun comparison row used for an oracle-versus-oracle
+          delta. The two rows must share task, metric, stage, subject, reference
+          subject, scope, and selector; delta equals this row's oracle_measure
+          minus the referenced row's oracle_measure.
+      derived_from_measurement_refs:
+        range: MeasurementValue
+        multivalued: true
+        description: >-
+          Same-EvaluationRun source measurements used to compute a composite
+          measurement in the same subject, reference-subject, stage, scope, and
+          selector context. These typed lineage refs identify every contributing
+          row; they do not replace retained raw evidence.
       pass_criterion:
         description: Free-text pass criterion (e.g. "< 0.05", "match within 0.005").
       pass_status:
@@ -804,9 +832,9 @@ classes:
       count:
         range: integer
         description: >-
-          Number of values summarised by `mean`/`std_dev`. Required
-          when `mean` is set, so a downstream consumer can interpret
-          the summary statistics.
+          Number of observations underlying this value (for example, the eligible
+          denominator for a count or rate, or the values summarised by
+          `mean`/`std_dev`). Required when `mean` is set.
       source_measurement_ref:
         range: string
         description: MeasurementValue id from which this QDS scalar was selected.

@@ -393,11 +393,22 @@ catalog_tasks:
   - Schrödinger PrepWizard
   metric_definition_refs:
   - T14_h_added
+  - T14_asn_gln_his_flip_candidates_scored
   - T14_asn_gln_his_flips_proposed
+  - T14_asn_gln_his_flip_set_conflicts
   - T14_clashscore_delta_pre_vs_post
   - T14_hbond-network_consistency_vs_standalone_reduce
   inputs_description: model without hydrogens (or partial)
-  gold_standard: standalone reduce; neutron structure if available
+  gold_standard: >-
+    phenix.reduce versus standalone reduce is a same-binary dispatcher/defaults
+    check, not independent corroboration. Use standalone reduce versus
+    mmtbx.reduce2 for confident flip-set conflicts, counting only disagreements
+    where reduce made a confident F/K call and applying the <= 10% band only to
+    a preregistered cohort aggregate. H-count agreement is exact only for
+    protein-only models and void with non-water hetero components; the registered
+    clashscore comparison requires identical H-built coordinates and a matched H
+    convention, not pre/post deltas from distinct builders. A neutron structure is the
+    experimental tiebreaker where available.
   example_dataset: PDB 1HQ1; PDB 5E5V (neutron pair)
 - id: T15
   task_name: Structural/domain classification
@@ -1406,6 +1417,36 @@ metric_definitions:
   - T14
 - id: T14_asn_gln_his_flips_proposed
   name: Asn/Gln/His flips proposed
+  unit: count
+  applicable_task_refs:
+  - T14
+- id: T14_asn_gln_his_flip_candidates_scored
+  name: Asn/Gln/His flip candidates scored
+  unit: count
+  description: >-
+    Count of candidate Asn/Gln/His residues for which a hydrogen-placement tool
+    emitted a flip-related decision or mover record. This is an opportunity or
+    scoring-set count, not the count of residues whose deposited orientation the
+    tool actually proposed changing. Retain tool-specific decision records when
+    comparing candidate sets across implementations. This diagnostic is always
+    informational and carries no pass criterion, both on the MeasurementValue
+    and in any nested oracle_measure interpretation metadata.
+  applicable_task_refs:
+  - T14
+- id: T14_asn_gln_his_flip_set_conflicts
+  name: Asn/Gln/His confident flip conflicts
+  unit: count
+  description: >-
+    Count of shared flippable Asn/Gln/His residues for which standalone
+    Richardson reduce makes a confident F/K call and the distinct
+    mmtbx.reduce2 builder makes the opposite flip decision. reduce X/C calls
+    are excluded from the conflict numerator because they record that reduce
+    declined to commit, not a contradictory confident assignment. Report the
+    eligible shared-residue denominator with the count (in the typed value's
+    `count` field). Represent a preregistered cohort aggregate with MeasurementValue
+    `scope: cohort` and a `scope_selector` naming the exact cohort; only that scope
+    may apply the governed <= 10% band. Structure-scoped rows are informational and
+    carry no pass criterion.
   applicable_task_refs:
   - T14
 - id: T14_clashscore_delta_pre_vs_post

@@ -20,7 +20,9 @@ B-factor deltas, ligand centre-of-mass shifts, omega (cis/trans) flips, His prot
 
 ## What the agent must do
 
-1. Run `phenix.structure_comparison model_A.pdb model_B.pdb`.
+1. In an interactive PHENIX project, run `phenix.structure_comparison` on `model_A.pdb` and
+   `model_B.pdb`. In the measured PHENIX 2.0-5936 installation this launcher is GUI/project-bound,
+   not a usable headless command-line reporter (see Notes).
 2. Record the per-residue deltas above and flag hotspot residues.
 3. Expected artefacts: the comparison report + per-residue table.
 
@@ -47,3 +49,9 @@ Each bullet is pass/fail; all must pass for green.
 
 - T02 is per-residue T01: the agreement is checked residue-by-residue, so a whole-structure RMSD that
   matches while individual residues diverge still fails rule 1.
+- **PHENIX 2.0-5936 automation limit.** The installed `phenix.structure_comparison` launcher opens
+  the Structure Comparison GUI and requires a PHENIX project. A headless two-file invocation observed
+  during the 1SAR audit exited with status 1 and produced no comparison report. Do not interpret that
+  behavior as a missing installation, and do not make an unattended harness run depend on this
+  launcher. Retain an interactively exported PHENIX report when available; otherwise record the PHENIX
+  side as unmeasured and run the independent OpenStructure/ProSMART/gemmi/DSSP checks explicitly.

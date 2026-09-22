@@ -39,7 +39,7 @@ for r in d['tool_recommendations']:
 | **reduce** (Richardson lab) | 4.16.250520 | `$HOME/tools/reduce-src/build/reduce_src/reduce` | T14 (H-atom placement); T05 (input prep for clashscore) |
 | **Servalcat** | 0.4.131 | conda env `cryst-oracles` (`mamba activate cryst-oracles`) | T03 (`servalcat refine_xtal_norefmac`), T06 (`servalcat fsc`, `fofc`, `sigmaa`), T12 |
 | **OpenStructure (OST)** | 2.11.1 | conda env `cryst-oracles` (CLI `lddt`, Python `import ost`) | T01 (`lddt` — CASP15+ reference implementation, global + per-residue), T02 (per-residue Cα distance + structural comparison), T05 (Ramachandran φ/ψ extraction; outlier classification needs external Top8000 contour data), T07 (per-residue lDDT for predicted-vs-experimental) |
-| **CCP4 suite** (REFMAC5, ProSMART, aimless, ctruncate, pointless) | 9.0.015 | `/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/` (source `bin/ccp4.setup-sh` first) | T03 (REFMAC5 — independent refiner / R-factors), T05 (ProSMART — Procrustes per-residue geometry, non-cctbx Ramachandran-Z), T13 (ctruncate — Wilson B / twinning / anisotropy / tNCS / ice rings on merged data; aimless — canonical when unmerged intensities are available; pointless — space-group sanity) |
+| **CCP4 suite** (REFMAC5, ProSMART, aimless, ctruncate, pointless) | 9.0.015 | `/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/` (source `bin/ccp4.setup-sh` first) | T02/T05 (ProSMART — Procrustes per-residue geometry; non-cctbx Ramachandran-Z for T05), T03 (REFMAC5 — independent refiner / R-factors), T13 (ctruncate — Wilson B / twinning / anisotropy / tNCS / ice rings on merged data; aimless — canonical when unmerged intensities are available; pointless — space-group sanity) |
 | **DSSP** (`mkdssp`) | 4.6.1 | `/opt/homebrew/bin/mkdssp` (`brew install brewsci/bio/dssp`) | T15 (secondary-structure assignment; H-bond energetics half of the agreement metric) |
 | **biotite** | 1.7.1 | locked `benchmark` extra (`uv sync --locked --extra benchmark`) | T15 (P-SEA Cα-geometry secondary structure, `scripts/t15_ss_agreement.py`); T16 (Shrake-Rupley SASA buried surface area, `scripts/t16_interface_quality.py`); T17 (ensemble Cα-RMSF precision, `scripts/t17_nmr_ensemble.py`) |
 | **DockQ** | 2.1.3 | locked `benchmark` extra (`uv sync --locked --extra benchmark`; pins numpy < 2) | T16 (interface DockQ score + CAPRI class via `scripts/t16_interface_quality.py`) |
@@ -104,12 +104,13 @@ conda activate cryst-oracles && servalcat --version  # 0.4.131
 | Task | Primary PHENIX tool | Oracle (now installed) | Oracle (still missing) |
 |---|---|---|---|
 | T01 | `phenix.superpose_models` | TM-align, `gemmi align`, OpenStructure (`lddt`), CCP4 ProSMART | ChimeraX matchmaker, US-align |
+| T02 | `phenix.structure_comparison` (PHENIX 2.0-5936 launcher is GUI/project-bound; a headless two-file invocation exits without a report) | OpenStructure, CCP4 ProSMART, gemmi coordinate analysis, DSSP | — |
 | T03 | `phenix.refine` | `servalcat refine_xtal_norefmac`, CCP4 REFMAC5 (`NCYC=0` for in-place R-factors) | BUSTER |
 | T05 | `phenix.holton_geometry_validation` | `probe` + `reduce` (std MolProbity), `gemmi rmsz`, CCP4 ProSMART | wwPDB validation pipeline |
 | T06 | `phenix.model_vs_data` | `gemmi sfcalc`, `servalcat fsc`/`fofc`/`sigmaa`, CCP4 REFMAC5 | CCP4 sfcheck |
 | T12 | `phenix.mtriage` | `servalcat fsc`, `servalcat localcc` | RELION postprocess, ResMap |
 | T13 | `phenix.model_vs_data` (completeness, resolution range) | CCP4 ctruncate (Wilson B, L-test twinning, ΔB aniso, tNCS, ice rings); CCP4 aimless when unmerged intensities exist; wrapper `scripts/t13_data_quality.py` | (CC½ / ⟨I/σ⟩ / Rmerge require unmerged intensities — gap when artefact ships merged-only) |
-| T14 | `phenix.reduce` | standalone `reduce` (Richardson lab — same binary, different build) | propka3, OpenBabel |
+| T14 | `phenix.reduce`; `mmtbx.reduce2` | standalone Richardson `reduce`: same-binary dispatcher/distribution check against `phenix.reduce`, but a distinct-builder flip-conflict comparison against `mmtbx.reduce2` | propka3, OpenBabel; neutron evidence |
 | T15 | *(none — PHENIX has no fold/domain classifier)* | DSSP + biotite (`scripts/t15_ss_agreement.py`) | STRIDE (optional); CATH, SCOPe, ECOD (domain/fold) |
 | T16 | *(none — no PHENIX interface scorer)* | DockQ (interface score + CAPRI class), biotite SASA (buried surface area) | PISA/PDBePISA (deposition-grade BSA reference) |
 | T17 | *(none — no PHENIX NMR restraint validator)* | biotite ensemble precision (`scripts/t17_nmr_ensemble.py`); wwPDB report parser (`scripts/t17_restraint_summary.py`) | PROCHECK-NMR, RPF |
@@ -117,6 +118,16 @@ conda activate cryst-oracles && servalcat --version  # 0.4.131
 Runnable independent-oracle coverage now spans T01–T17. CCP4/REFMAC hardens T03/T06, while
 the metric-specific gaps listed below remain explicit rather than being filled by a cctbx-only
 substitute.
+
+**T14 independence is metric-specific.** In the measured installation, `phenix.reduce` and
+standalone `reduce` both dispatch Richardson `reduce.4.16.250520`; comparing them checks packaging,
+defaults, and distribution dictionaries, not independent H-placement reasoning. The registered
+confident flip-conflict comparison instead pairs standalone `reduce 4.16.250520` with the distinct
+`mmtbx.reduce2` builder from PHENIX 2.0-5936, using
+`approach=add add_flip_movers=True`. Its ≤ 10 % band governs only a preregistered cohort aggregate
+from that exact pipeline. A single structure or a different executable, version, or mover setting is
+informational pending a matched benchmark. Protonation-state corroboration still needs an
+algorithmically distinct source such as propka3 or, where available, neutron evidence.
 
 **T15 is now runnable** for its paired oracle-side check
 (`T15_secondary_structure_content` alongside `T15_secondary_structure_agreement`).

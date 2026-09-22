@@ -6,7 +6,7 @@
   <text x="80" y="128" font-size="22" font-weight="400" fill="#5a6071">Real progress — and the check none of it performed</text>
   <line x1="80" y1="1020" x2="1840" y2="1020" stroke="#e3e6ee" stroke-width="1"/>
   <text x="80" y="1050" font-size="16" fill="#5a6071">1SAR artefact audit · openscientist artefact cdba2c07 · 2026-09-07</text>
-  <text x="1840" y="1050" font-size="16" fill="#5a6071" text-anchor="end">protstruct_review · artefact audit 2026-09-07</text>
+  <text x="1840" y="1050" font-size="16" fill="#5a6071" text-anchor="end">protstruct_review · revised 2026-09-22</text>
 
   <rect x="80" y="210" width="6" height="73" fill="#1f4e8c"/>
   <text x="110" y="240" font-size="25" font-weight="700" fill="#1f4e8c">48-round tolerance series</text>
@@ -25,7 +25,7 @@
   <rect x="80" y="577" width="6" height="131" fill="#a8201a"/>
   <text x="110" y="607" font-size="25" font-weight="700" fill="#a8201a">What none of it checked</text>
   <text x="110" y="643" font-size="20" font-weight="400" fill="#1a1a2e">Whether the file under evaluation is the file the report describes. No guard ties an artefact's measured</text>
-  <text x="110" y="672" font-size="20" font-weight="400" fill="#1a1a2e">model to the model its provenance names as final — which is how a false accusation survived five</text>
-  <text x="110" y="701" font-size="20" font-weight="400" fill="#1a1a2e">adversarial review passes.</text>
+  <text x="110" y="672" font-size="20" font-weight="400" fill="#1a1a2e">model to the model its provenance names as final — which is how a categorically overstated accusation</text>
+  <text x="110" y="701" font-size="20" font-weight="400" fill="#1a1a2e">survived five adversarial review passes.</text>
 
 </svg>

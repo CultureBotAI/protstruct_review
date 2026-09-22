@@ -616,3 +616,91 @@ assumptions:
       requires a class reference; in practice this assumption applies
       to any percentile report. Use Container-level assumptions[] to
       attach to a non-tool host once that pattern is needed.
+
+  # Corrective dated revision: preserve the issued-sheet snapshot above while
+  # making the benchmarked scope and actual scaling model explicit going forward.
+  - id: ASSUM_gemmi_sfcalc_r_work_offset_scope_2026_09_22
+    as_of_date: '2026-09-22'
+    effective_at: '2026-09-22T09:00:00+00:00'
+    supersedes_assumption_ref: ASSUM_gemmi_sfcalc_simpler_bulk_solvent
+    kind: explicit
+    scope: tool
+    title: R-work offset governance is estimator-specific
+    description: >-
+      `gemmi sfcalc --scale-to` applies flat-mask bulk solvent with global
+      anisotropic and solvent scaling; `scripts/gemmi_rfactor.py` then applies
+      bin-wise isotropic scales fitted on work reflections. PHENIX has additional
+      per-resolution-bin fitting freedom. The registry's absolute R-work envelope
+      benchmarked direct summation of globally scaled `gemmi sfcalc` FC values, not
+      `gemmi_rfactor.py`'s extra bin-wise rescaling. The old template interval is not
+      a pass criterion, and no R-free-specific offset envelope has been benchmarked.
+    consequences: >-
+      Treating gemmi as categorically simpler misstates its scaling model, while
+      applying the R-work envelope to R-free creates an unsupported pass or
+      failure. Neither cross-tool number adjudicates a claim measured on another
+      model.
+    mitigation: >-
+      Grade only the exact direct-summation R-work estimator registered in §3.
+      Report bin-rescaled R-work and all R-free offsets informationally until matched
+      benchmarks are registered, and state the model, MTZ, work/test selection,
+      scaling estimator and mask-radii convention.
+    status: verified
+    tool_ref: gemmi sfcalc
+    evidence_refs:
+      - ref/research/tolerance_benchmark_r_offset.md
+
+  - id: ASSUM_phenix_refine_same_subject_r_factor_comparison_2026_09_22
+    as_of_date: '2026-09-22'
+    effective_at: '2026-09-22T09:00:00+00:00'
+    supersedes_assumption_ref: ASSUM_phenix_refine_in_run_r_factors_use_internal_scaling
+    kind: explicit
+    scope: tool
+    title: In-run versus fresh R-factor offsets require the identical model and data
+    description: >-
+      `phenix.refine` in-run R factors and a fresh `phenix.model_vs_data`
+      derivation can differ because the scaling state and calculation context differ,
+      but an offset can be attributed to that effect only when both values use the
+      exact same model, MTZ, reflection selection and flags. The earlier 1SAR
+      0.01-0.015 example crossed the agent's round-7 log and the packaged round-4
+      model and is withdrawn. On packaged round 4, the PDB header and fresh
+      model_vs_data values differ by only 0.0001 R-work and 0.0002 R-free.
+    consequences: >-
+      Cross-model comparisons can falsely be interpreted as a scaling convention,
+      reporting error or refinement trend. The unretained 1SAR round-7 coordinates
+      mean its logged R factors cannot be independently re-derived.
+    mitigation: >-
+      Bind each comparison to model and MTZ digests, preserve raw outputs and reject
+      a same-model interpretation when either subject differs or is unavailable.
+    status: verified
+    tool_ref: phenix.refine
+    evidence_refs:
+      - EVAL_1sar_cdba2c07_2026-09-07
+
+  - id: ASSUM_find_peaks_holes_same_subject_inventory_2026_09_22
+    as_of_date: '2026-09-22'
+    effective_at: '2026-09-22T09:00:00+00:00'
+    supersedes_assumption_ref: ASSUM_find_peaks_holes_cutoff_and_merging
+    kind: explicit
+    scope: tool
+    title: Peak-inventory comparisons require the identical model and map
+    description: >-
+      Sigma cutoff, peak-merging radius and atom-exclusion settings all affect a
+      `phenix.find_peaks_holes` inventory, but their effect can be inferred only
+      when both inventories use the exact same model, reflection data, map
+      coefficients and settings. The earlier 1SAR example crossed a nine-peak
+      report about the unretained round-7 model with a 23-positive plus 8-negative
+      inventory on the packaged round-4 model. That discrepancy cannot identify a
+      cutoff, merging, exclusion or reporting defect.
+    consequences: >-
+      Cross-subject count differences can be mistaken for a parameter effect or an
+      incomplete report, especially when only one subject's coordinates and maps
+      survive.
+    mitigation: >-
+      Bind every peak inventory to model and map-data digests, retain raw output and
+      exact flags, and compare counts only on a matched subject. If the claimed
+      subject is unavailable, report the inventory as unadjudicable rather than
+      reverse-engineering settings from another model.
+    status: verified
+    tool_ref: phenix.find_peaks_holes
+    evidence_refs:
+      - EVAL_1sar_cdba2c07_2026-09-07

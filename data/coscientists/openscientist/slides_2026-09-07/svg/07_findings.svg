@@ -6,7 +6,7 @@
   <text x="80" y="128" font-size="22" font-weight="400" fill="#5a6071">What this record withdraws, and why</text>
   <line x1="80" y1="1020" x2="1840" y2="1020" stroke="#e3e6ee" stroke-width="1"/>
   <text x="80" y="1050" font-size="16" fill="#5a6071">1SAR artefact audit · openscientist artefact cdba2c07 · 2026-09-07</text>
-  <text x="1840" y="1050" font-size="16" fill="#5a6071" text-anchor="end">protstruct_review · artefact audit 2026-09-07</text>
+  <text x="1840" y="1050" font-size="16" fill="#5a6071" text-anchor="end">protstruct_review · revised 2026-09-22</text>
 
   <rect x="80" y="190" width="1760" height="64" fill="#1f4e8c"/>
   <text x="94" y="228.66666666666666" font-size="20" font-weight="700" fill="#ffffff" text-anchor="start">Claim</text>
@@ -15,8 +15,8 @@
   <rect x="80" y="254" width="1760" height="64" fill="#ffffff"/>
   <text x="94" y="292.3333333333333" font-size="19" fill="#1a1a2e" text-anchor="start">“0.199 corresponds to no model the agent produced”</text>
   <rect x="780" y="254" width="320" height="64" fill="#f5d6d4"/>
-  <text x="940.0" y="292.3333333333333" font-size="19" fill="#a8201a" text-anchor="middle">withdrawn — false</text>
-  <text x="1114" y="292.3333333333333" font-size="19" fill="#5a6071" text-anchor="start">Round 7 produced 0.1989; it was never packaged</text>
+  <text x="940.0" y="292.3333333333333" font-size="19" fill="#a8201a" text-anchor="middle">withdrawn — overstated</text>
+  <text x="1114" y="292.3333333333333" font-size="19" fill="#5a6071" text-anchor="start">Log attributes 0.1989 to absent round-7 path; raw result absent</text>
   <rect x="80" y="318" width="1760" height="64" fill="#f7f8fb"/>
   <text x="94" y="356.3333333333333" font-size="19" fill="#1a1a2e" text-anchor="start">“The report describes the wrong protein” (agent's error)</text>
   <rect x="780" y="318" width="320" height="64" fill="#fbeecb"/>

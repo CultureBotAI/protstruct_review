@@ -6,7 +6,7 @@
   <text x="80" y="128" font-size="22" font-weight="400" fill="#5a6071">Every row below is from the artefact's own provenance</text>
   <line x1="80" y1="1020" x2="1840" y2="1020" stroke="#e3e6ee" stroke-width="1"/>
   <text x="80" y="1050" font-size="16" fill="#5a6071">1SAR artefact audit · openscientist artefact cdba2c07 · 2026-09-07</text>
-  <text x="1840" y="1050" font-size="16" fill="#5a6071" text-anchor="end">protstruct_review · artefact audit 2026-09-07</text>
+  <text x="1840" y="1050" font-size="16" fill="#5a6071" text-anchor="end">protstruct_review · revised 2026-09-22</text>
 
   <rect x="80" y="190" width="1660" height="58" fill="#1f4e8c"/>
   <text x="94" y="225.66666666666666" font-size="20" font-weight="700" fill="#ffffff" text-anchor="start">Model</text>
@@ -45,7 +45,7 @@
   <rect x="940" y="422" width="480" height="58" fill="#f5d6d4"/>
   <text x="954" y="457.3333333333333" font-size="19" fill="#a8201a" text-anchor="start">NO — coordinates absent</text>
   <rect x="1420" y="422" width="320" height="58" fill="#f5d6d4"/>
-  <text x="1434" y="457.3333333333333" font-size="19" fill="#a8201a" text-anchor="start">transcripts only</text>
+  <text x="1434" y="457.3333333333333" font-size="19" fill="#a8201a" text-anchor="start">retained log only</text>
   <rect x="80" y="190" width="1660" height="290" fill="none" stroke="#e3e6ee" stroke-width="1"/>
   <line x1="540" y1="190" x2="540" y2="480" stroke="#e3e6ee" stroke-width="1"/>
   <line x1="740" y1="190" x2="740" y2="480" stroke="#e3e6ee" stroke-width="1"/>
@@ -67,8 +67,8 @@
   <text x="114" y="740" font-size="19" fill="#1a1a2e">An ignore-independent search of every archive member finds no round-7 PDB or MTZ</text>
   <rect x="80" y="790" width="1760" height="140" rx="10" ry="10" fill="#dce6f4"/>
 
-  <text x="110" y="840" font-size="22" font-weight="700" fill="#1f4e8c">So 0.199 is not fabricated — it rounds from the agent's own round 7. The deliverable was simply</text>
-  <text x="110" y="872" font-size="22" font-weight="700" fill="#1f4e8c">never written into the archive, and a three-round-stale file was shipped under the name the report</text>
-  <text x="110" y="904" font-size="22" font-weight="700" fill="#1f4e8c">cites.</text>
+  <text x="110" y="840" font-size="22" font-weight="700" fill="#1f4e8c">The retained log attributes 0.1989 to the missing round-7 path, which rounds to 0.199. Without</text>
+  <text x="110" y="872" font-size="22" font-weight="700" fill="#1f4e8c">coordinates or raw output that value is traceable, not independently verified. The archive does</text>
+  <text x="110" y="904" font-size="22" font-weight="700" fill="#1f4e8c">establish that a three-round-stale file was shipped as the final model.</text>
 
 </svg>

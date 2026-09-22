@@ -704,6 +704,28 @@ check(
     _route_drift_violations,
     [],
 )
+check(
+    "referential routing registers both retained QDS contracts",
+    set(integrity.QDS_ROUTED_SCALAR_SLOTS_BY_CONTRACT),
+    {"1", "2"},
+)
+check(
+    "contract 2 explicitly owns new T14 metrics as coverage-only",
+    integrity.qds_emit_contract_v2.COVERAGE_ONLY_METRIC_IDS,
+    frozenset(
+        {
+            "T14_asn_gln_his_flip_candidates_scored",
+            "T14_asn_gln_his_flip_set_conflicts",
+        }
+    ),
+)
+check(
+    "contract-2 coverage-only T14 metrics are not silently scalar-routed",
+    integrity.qds_emit_contract_v2.COVERAGE_ONLY_METRIC_IDS.intersection(
+        integrity.qds_emit_contract_v2.METRIC_TO_QDS_SLOT
+    ),
+    frozenset(),
+)
 
 _drifted_row = _copy.deepcopy(_row_qds_doc)
 _drifted_row["quality_data_sheets"][0]["interface_quality_summary"][
@@ -945,6 +967,658 @@ check("duplicate replay-pin ids are diagnosed corpus-wide",
       any("duplicate QdsReplayPin id 'PIN_QDS_new'" in v
           for v in integrity.check_duplicate_ids(_duplicate_pin_index)), True)
 
+
+# --- #548/#577/#666: typed measurement lineage is semantic, not just a string -----
+def _measurement_relation_violations(*docs):
+    records = [
+        (Path(f"measurement-lineage-{index}.yaml"), doc)
+        for index, doc in enumerate(docs)
+    ]
+    return integrity.check_measurement_relations(
+        integrity.build_corpus_indices(records)
+    )
+
+
+_relation_context = {
+    "catalog_task_ref": "T03",
+    "stage": "final",
+    "scope": "complex",
+    "scope_selector": "packaged model",
+    "subject_ref": "artifact:example#model.pdb",
+    "metric_definition_ref": "T03_r-work",
+}
+_pair_baseline = {
+    "id": "PAIR_M_001",
+    **_relation_context,
+    "oracle_tool_ref": "phenix.model_vs_data",
+    "oracle_family": "cctbx",
+    "oracle_measure": {"value_numeric": 0.1564, "unit": "fraction"},
+}
+_pair_delta = {
+    "id": "PAIR_M_002",
+    **_relation_context,
+    "oracle_tool_ref": "gemmi sfcalc",
+    "oracle_family": "non_cctbx",
+    "oracle_measure": {"value_numeric": 0.1622, "unit": "fraction"},
+    "delta": {"value_numeric": 0.0058, "unit": "fraction"},
+    "delta_from_measurement_ref": "PAIR_M_001",
+}
+_pair_doc = {"evaluation_runs": [{
+    "id": "EVAL_pair",
+    "measurements": [_pair_baseline, _pair_delta],
+}]}
+check("a same-run, same-context pair delta with exact arithmetic is valid",
+      _measurement_relation_violations(_pair_doc), [])
+
+_bad_arithmetic = _copy.deepcopy(_pair_doc)
+_bad_arithmetic["evaluation_runs"][0]["measurements"][1]["delta"][
+    "value_numeric"
+] = 0.0057
+_violations = _measurement_relation_violations(_bad_arithmetic)
+check("0.1622 - 0.1564 cannot be reported as 0.0057",
+      any("does not equal" in violation and "0.0058" in violation
+          for violation in _violations), True)
+
+_trailing_zero_precision = _copy.deepcopy(_pair_doc)
+_trailing_zero_precision["evaluation_runs"][0]["measurements"][0][
+    "oracle_measure"
+]["value_numeric"] = 0.1598
+_trailing_zero_precision["evaluation_runs"][0]["measurements"][1]["delta"][
+    "value_numeric"
+] = 0.002  # yaml.safe_load("0.0020") has exactly this value (#667).
+check("a parsed 0.002 delta cannot hide an exact 0.0024 source difference",
+      any("does not equal" in violation and "0.0024" in violation
+          for violation in
+          _measurement_relation_violations(_trailing_zero_precision)), True)
+
+_dangling_pair = _copy.deepcopy(_pair_doc)
+_dangling_pair["evaluation_runs"][0]["measurements"][1][
+    "delta_from_measurement_ref"
+] = "PAIR_M_missing"
+check("a pair-delta source ref must resolve",
+      any("does not resolve" in violation for violation in
+          _measurement_relation_violations(_dangling_pair)), True)
+
+_ambiguous_pair_source = {"evaluation_runs": [{
+    "id": "EVAL_duplicate_pair_source",
+    "measurements": [_copy.deepcopy(_pair_baseline)],
+}]}
+check("a pair-delta source ref must resolve uniquely",
+      any("is ambiguous" in violation for violation in
+          _measurement_relation_violations(
+              _pair_doc, _ambiguous_pair_source)), True)
+
+_cross_run_pair = _copy.deepcopy(_pair_doc)
+_moved_baseline = _cross_run_pair["evaluation_runs"][0]["measurements"].pop(0)
+_cross_run_pair["evaluation_runs"].append({
+    "id": "EVAL_other_pair", "measurements": [_moved_baseline],
+})
+check("a pair-delta source must belong to the same EvaluationRun",
+      any("not owning EvaluationRun" in violation for violation in
+          _measurement_relation_violations(_cross_run_pair)), True)
+
+_self_pair = _copy.deepcopy(_pair_doc)
+_self_pair["evaluation_runs"][0]["measurements"][1][
+    "delta_from_measurement_ref"
+] = "PAIR_M_002"
+check("a pair delta cannot reference itself",
+      any("cannot reference its own" in violation for violation in
+          _measurement_relation_violations(_self_pair)), True)
+
+_cyclic_pair = _copy.deepcopy(_pair_doc)
+_cyclic_pair["evaluation_runs"][0]["measurements"][0].update({
+    "delta_from_measurement_ref": "PAIR_M_002",
+    "delta": {"value_numeric": -0.0058, "unit": "fraction"},
+})
+check("pair-delta lineage cannot form a cycle",
+      any("lineage forms a cycle" in violation for violation in
+          _measurement_relation_violations(_cyclic_pair)), True)
+
+for _field in integrity.DELTA_CONTEXT_FIELDS:
+    _mismatch = _copy.deepcopy(_pair_doc)
+    _mismatch["evaluation_runs"][0]["measurements"][0][_field] = (
+        f"different-{_field}"
+    )
+    check(f"  pair-delta source must match {_field}",
+          any(f"mismatched {_field}" in violation for violation in
+              _measurement_relation_violations(_mismatch)), True)
+
+for _row_index, _side in ((0, "source"), (1, "derived")):
+    _missing_subject = _copy.deepcopy(_pair_doc)
+    del _missing_subject["evaluation_runs"][0]["measurements"][_row_index][
+        "subject_ref"
+    ]
+    check(f"a pair delta rejects a missing {_side} subject_ref",
+          any("requires a non-empty subject_ref" in violation for violation in
+              _measurement_relation_violations(_missing_subject)), True)
+
+for _row_index, _carrier in ((0, "oracle_measure"),
+                             (1, "oracle_measure"),
+                             (1, "delta")):
+    _text_carrier = _copy.deepcopy(_pair_doc)
+    _text_carrier["evaluation_runs"][0]["measurements"][_row_index][
+        _carrier
+    ] = {"value_text": "not numeric", "unit": "fraction"}
+    check(f"  pair delta requires numeric row {_row_index} {_carrier}",
+          any("must carry one finite value_numeric" in violation for violation in
+              _measurement_relation_violations(_text_carrier)), True)
+
+_unit_mismatch = _copy.deepcopy(_pair_doc)
+_unit_mismatch["evaluation_runs"][0]["measurements"][1]["delta"]["unit"] = "count"
+check("pair-delta values must have compatible units",
+      any("incompatible numeric units" in violation for violation in
+          _measurement_relation_violations(_unit_mismatch)), True)
+
+_derived_context = {
+    "catalog_task_ref": "T14",
+    "stage": "final",
+    "scope": "complex",
+    "scope_selector": "packaged model",
+    "subject_ref": "artifact:example#model.pdb",
+}
+_derived_source_a = {
+    "id": "DERIVED_M_001",
+    **_derived_context,
+    "metric_definition_ref": "T14_asn_gln_his_flip_candidates_scored",
+    "oracle_tool_ref": "reduce (standalone, Richardson)",
+    "oracle_family": "non_cctbx",
+    "oracle_measure": {"value_numeric": 14, "unit": "count"},
+    "pass_status": "informational",
+}
+_derived_source_b = {
+    "id": "DERIVED_M_002",
+    **_derived_context,
+    "metric_definition_ref": "T14_asn_gln_his_flip_candidates_scored",
+    "oracle_tool_ref": "mmtbx.reduce2",
+    "oracle_family": "cctbx",
+    "oracle_measure": {"value_numeric": 18, "unit": "count"},
+    "pass_status": "informational",
+}
+_derived_composite = {
+    "id": "DERIVED_M_003",
+    **_derived_context,
+    "metric_definition_ref": "generic_comparison_metric",
+    "oracle_tool_ref": "mmtbx.reduce2",
+    "oracle_family": "cctbx",
+    "oracle_measure": {"value_numeric": 0, "unit": "count"},
+    "derived_from_measurement_refs": ["DERIVED_M_001", "DERIVED_M_002"],
+}
+_derived_doc = {"evaluation_runs": [{
+    "id": "EVAL_derived",
+    "measurements": [
+        _derived_source_a, _derived_source_b, _derived_composite,
+    ],
+}]}
+check("generic derived lineage permits a distinct composite metric",
+      _measurement_relation_violations(_derived_doc), [])
+
+_duplicate_derived_ref = _copy.deepcopy(_derived_doc)
+_duplicate_derived_ref["evaluation_runs"][0]["measurements"][2][
+    "derived_from_measurement_refs"
+] = ["DERIVED_M_001", "DERIVED_M_001"]
+check("generic derived lineage rejects duplicate source refs",
+      any("contains duplicate refs" in violation for violation in
+          _measurement_relation_violations(_duplicate_derived_ref)), True)
+
+_dangling_derived_ref = _copy.deepcopy(_derived_doc)
+_dangling_derived_ref["evaluation_runs"][0]["measurements"][2][
+    "derived_from_measurement_refs"
+][1] = "DERIVED_M_missing"
+check("each generic derived source ref must resolve",
+      any("does not resolve" in violation for violation in
+          _measurement_relation_violations(_dangling_derived_ref)), True)
+
+_ambiguous_derived_source = {"evaluation_runs": [{
+    "id": "EVAL_duplicate_derived_source",
+    "measurements": [_copy.deepcopy(_derived_source_a)],
+}]}
+check("each generic derived source ref must resolve uniquely",
+      any("is ambiguous" in violation for violation in
+          _measurement_relation_violations(
+              _derived_doc, _ambiguous_derived_source)), True)
+
+_self_derived_ref = _copy.deepcopy(_derived_doc)
+_self_derived_ref["evaluation_runs"][0]["measurements"][2][
+    "derived_from_measurement_refs"
+][1] = "DERIVED_M_003"
+check("generic derived lineage rejects a self reference",
+      any("cannot reference its own" in violation for violation in
+          _measurement_relation_violations(_self_derived_ref)), True)
+
+_cyclic_derived = _copy.deepcopy(_derived_doc)
+_cyclic_derived["evaluation_runs"][0]["measurements"][0][
+    "derived_from_measurement_refs"
+] = ["DERIVED_M_003"]
+check("generic derived lineage cannot form a cycle",
+      any("lineage forms a cycle" in violation for violation in
+          _measurement_relation_violations(_cyclic_derived)), True)
+
+_mixed_relation_cycle = _copy.deepcopy(_derived_doc)
+_mixed_source = _mixed_relation_cycle["evaluation_runs"][0]["measurements"][0]
+_mixed_source.update({
+    "metric_definition_ref": "generic_comparison_metric",
+    "delta_from_measurement_ref": "DERIVED_M_003",
+    "delta": {"value_numeric": 14, "unit": "count"},
+})
+check("mixed pair-delta and derived lineage cannot form a cycle",
+      any("lineage forms a cycle" in violation for violation in
+          _measurement_relation_violations(_mixed_relation_cycle)), True)
+
+_cross_run_derived = _copy.deepcopy(_derived_doc)
+_moved_derived_source = _cross_run_derived["evaluation_runs"][0][
+    "measurements"
+].pop(0)
+_cross_run_derived["evaluation_runs"].append({
+    "id": "EVAL_other_derived", "measurements": [_moved_derived_source],
+})
+check("generic derived sources must belong to the same EvaluationRun",
+      any("not owning EvaluationRun" in violation for violation in
+          _measurement_relation_violations(_cross_run_derived)), True)
+
+for _field in integrity.DERIVED_CONTEXT_FIELDS:
+    _derived_mismatch = _copy.deepcopy(_derived_doc)
+    _derived_mismatch["evaluation_runs"][0]["measurements"][0][_field] = (
+        f"different-{_field}"
+    )
+    check(f"  generic derived source must match {_field}",
+          any(f"mismatched {_field}" in violation for violation in
+              _measurement_relation_violations(_derived_mismatch)), True)
+
+_missing_derived_subject = _copy.deepcopy(_derived_doc)
+del _missing_derived_subject["evaluation_runs"][0]["measurements"][2][
+    "subject_ref"
+]
+check("generic derived lineage rejects a missing derived subject_ref",
+      any("requires a non-empty subject_ref" in violation for violation in
+          _measurement_relation_violations(_missing_derived_subject)), True)
+
+_missing_derived_source_subject = _copy.deepcopy(_derived_doc)
+del _missing_derived_source_subject["evaluation_runs"][0]["measurements"][0][
+    "subject_ref"
+]
+check("generic derived lineage rejects a missing source subject_ref",
+      any("requires a non-empty subject_ref" in violation for violation in
+          _measurement_relation_violations(_missing_derived_source_subject)), True)
+
+_t14_doc = _copy.deepcopy(_derived_doc)
+_t14_row = _t14_doc["evaluation_runs"][0]["measurements"][2]
+_t14_row["metric_definition_ref"] = "T14_asn_gln_his_flip_set_conflicts"
+_t14_row["oracle_measure"]["count"] = 14
+_t14_row["pass_status"] = "informational"
+check("T14 flip conflicts retain a denominator and both canonical families",
+      _measurement_relation_violations(_t14_doc), [])
+
+_integral_float_t14 = _copy.deepcopy(_t14_doc)
+_integral_float_rows = _integral_float_t14["evaluation_runs"][0]["measurements"]
+_integral_float_rows[0]["oracle_measure"]["value_numeric"] = 14.0
+_integral_float_rows[1]["oracle_measure"]["value_numeric"] = 18.0
+_integral_float_rows[2]["oracle_measure"].update({
+    "value_numeric": 0.0,
+    "count": 14.0,
+})
+check("T14 count carriers accept finite mathematically integral floats",
+      _measurement_relation_violations(_integral_float_t14), [])
+
+for _invalid_count in (
+    None, 0, 1.5, True, float("nan"), float("inf"), float("-inf"),
+):
+    _bad_t14_count = _copy.deepcopy(_t14_doc)
+    _bad_t14_count["evaluation_runs"][0]["measurements"][2][
+        "oracle_measure"
+    ]["count"] = _invalid_count
+    check(f"  T14 conflict denominator rejects {_invalid_count!r}",
+          any("positive integer oracle_measure.count" in violation
+              for violation in _measurement_relation_violations(_bad_t14_count)),
+          True)
+
+_one_family_t14 = _copy.deepcopy(_t14_doc)
+_one_family_t14["evaluation_runs"][0]["measurements"][1][
+    "oracle_tool_ref"
+] = "reduce (standalone, Richardson)"
+check("T14 conflict lineage must collectively span both canonical families",
+      any("both cctbx and non_cctbx are required" in violation
+          for violation in _measurement_relation_violations(_one_family_t14)),
+      True)
+
+_misclaimed_t14 = _copy.deepcopy(_t14_doc)
+_misclaimed_t14["evaluation_runs"][0]["measurements"][2][
+    "oracle_family"
+] = "non_cctbx"
+check("a cctbx-dependent T14 comparison cannot claim non_cctbx provenance",
+      any("must not claim oracle_family non_cctbx" in violation
+          for violation in _measurement_relation_violations(_misclaimed_t14)),
+      True)
+
+for _source_index, _wrong_family in ((0, "cctbx"), (1, "non_cctbx")):
+    _misclaimed_t14_source = _copy.deepcopy(_t14_doc)
+    _misclaimed_t14_source["evaluation_runs"][0]["measurements"][_source_index][
+        "oracle_family"
+    ] = _wrong_family
+    check(f"  T14 source {_source_index} must assert its catalog tool family",
+          any("asserts oracle_family" in violation and "canonical family" in violation
+              for violation in
+              _measurement_relation_violations(_misclaimed_t14_source)), True)
+
+_standalone_t14_candidate = {"evaluation_runs": [{
+    "id": "EVAL_standalone_t14_candidate",
+    "measurements": [_copy.deepcopy(_derived_source_a)],
+}]}
+check("a standalone informational T14 candidate count is valid",
+      _measurement_relation_violations(_standalone_t14_candidate), [])
+
+_graded_standalone_t14_candidate = _copy.deepcopy(_standalone_t14_candidate)
+_graded_standalone_t14_candidate["evaluation_runs"][0]["measurements"][0].update({
+    "pass_status": "pass",
+    "pass_criterion": "candidate count <= 10%",
+})
+_graded_candidate_violations = _measurement_relation_violations(
+    _graded_standalone_t14_candidate
+)
+check("a standalone T14 candidate count must remain informational",
+      any("candidate-count measurement" in violation
+          and "requires pass_status 'informational'" in violation
+          for violation in _graded_candidate_violations), True)
+check("a standalone T14 candidate count cannot carry a criterion",
+      any("candidate-count measurement" in violation
+          and "must not carry pass_criterion" in violation
+          for violation in _graded_candidate_violations), True)
+
+_nested_graded_t14_candidate = _copy.deepcopy(_standalone_t14_candidate)
+_nested_graded_t14_candidate["evaluation_runs"][0]["measurements"][0][
+    "oracle_measure"
+].update({
+    "pass_status": "pass",
+    "pass_criterion": "candidate count <= 10%",
+})
+_nested_candidate_violations = _measurement_relation_violations(
+    _nested_graded_t14_candidate
+)
+check("a T14 candidate count rejects a nested oracle verdict",
+      any("oracle_measure.pass_status" in violation
+          and "must remain informational" in violation
+          for violation in _nested_candidate_violations), True)
+check("a T14 candidate count rejects a nested oracle criterion",
+      any("oracle_measure" in violation
+          and "must not carry pass_criterion" in violation
+          for violation in _nested_candidate_violations), True)
+
+for _source_index in (0, 1):
+    _graded_t14_source = _copy.deepcopy(_t14_doc)
+    _graded_t14_source["evaluation_runs"][0]["measurements"][_source_index].update({
+        "pass_status": "pass",
+        "pass_criterion": "candidate count <= 10%",
+    })
+    _graded_source_violations = _measurement_relation_violations(
+        _graded_t14_source
+    )
+    check(f"  T14 source {_source_index} cannot assert a cohort pass",
+          any("candidate-count measurement" in violation
+              and "requires pass_status 'informational'" in violation
+              for violation in _graded_source_violations), True)
+    check(f"  T14 source {_source_index} cannot carry a threshold criterion",
+          any("candidate-count measurement" in violation
+              and "must not carry pass_criterion" in violation
+              for violation in _graded_source_violations), True)
+
+_graded_single_structure_t14 = _copy.deepcopy(_t14_doc)
+_graded_single_structure_t14["evaluation_runs"][0]["measurements"][2].update({
+    "pass_status": "pass",
+    "pass_criterion": "conflict rate <= 10%",
+})
+_graded_t14_violations = _measurement_relation_violations(
+    _graded_single_structure_t14
+)
+check("a single-structure T14 conflict row cannot assert a cohort pass",
+      any("requires pass_status 'informational'" in violation
+          for violation in _graded_t14_violations), True)
+check("a single-structure T14 conflict row cannot carry a threshold criterion",
+      any("must not carry pass_criterion" in violation
+          for violation in _graded_t14_violations), True)
+
+_nested_graded_single_structure_t14 = _copy.deepcopy(_t14_doc)
+_nested_graded_single_structure_t14["evaluation_runs"][0]["measurements"][2][
+    "oracle_measure"
+].update({
+    "pass_status": "pass",
+    "pass_criterion": "conflict rate <= 10%",
+})
+_nested_graded_t14_violations = _measurement_relation_violations(
+    _nested_graded_single_structure_t14
+)
+check("a single-structure T14 conflict row rejects a nested oracle verdict",
+      any("oracle_measure.pass_status" in violation
+          and "must remain informational" in violation
+          for violation in _nested_graded_t14_violations), True)
+check("a single-structure T14 conflict row rejects a nested oracle criterion",
+      any("oracle_measure" in violation
+          and "must not carry pass_criterion" in violation
+          for violation in _nested_graded_t14_violations), True)
+
+_graded_cohort_t14 = _copy.deepcopy(_t14_doc)
+for _cohort_row in _graded_cohort_t14["evaluation_runs"][0]["measurements"]:
+    _cohort_row.update({
+        "scope": "cohort",
+        "scope_selector": "round48 preregistered 41-entry cohort",
+        "subject_ref": "cohort:round48:41-protein-entries",
+    })
+_cohort_conflict = _graded_cohort_t14["evaluation_runs"][0]["measurements"][2]
+_cohort_conflict.update({
+    "pass_status": "pass",
+    "pass_criterion": "conflict rate <= 10%",
+})
+_cohort_conflict["oracle_measure"].update({
+    "pass_status": "pass",
+    "pass_criterion": "conflict rate <= 10%",
+})
+check("a cohort-scoped T14 conflict aggregate may apply the registered criterion",
+      _measurement_relation_violations(_graded_cohort_t14), [])
+
+
+def _cohort_verdict_doc(numerator, denominator, status, criterion):
+    doc = _copy.deepcopy(_graded_cohort_t14)
+    conflict = doc["evaluation_runs"][0]["measurements"][2]
+    conflict["oracle_measure"].update({
+        "value_numeric": numerator,
+        "count": denominator,
+        "pass_status": status,
+        "pass_criterion": criterion,
+    })
+    conflict.update({
+        "pass_status": status,
+        "pass_criterion": criterion,
+    })
+    return doc
+
+
+check("a T14 cohort rate exactly at 10% passes inclusively",
+      _measurement_relation_violations(
+          _cohort_verdict_doc(1, 10, "pass", "conflict rate <= 10%")), [])
+check("a T14 cohort rate below 10% may pass with a caveat",
+      _measurement_relation_violations(
+          _cohort_verdict_doc(
+              0, 10, "pass_with_caveat", "conflict rate ≤ 10 %")), [])
+check("a T14 cohort rate above 10% fails the criterion",
+      _measurement_relation_violations(
+          _cohort_verdict_doc(
+              2, 10, "fail_criterion", "conflict rate <= 10%")), [])
+
+for _numerator, _spoofed_status in ((1, "fail_criterion"), (2, "pass")):
+    _spoofed_cohort_verdict = _cohort_verdict_doc(
+        _numerator, 10, _spoofed_status, "conflict rate <= 10%"
+    )
+    check(f"a {_numerator}/10 T14 cohort cannot claim {_spoofed_status}",
+          any("inclusive 10% boundary" in violation
+              and "pass_status" in violation
+              for violation in _measurement_relation_violations(
+                  _spoofed_cohort_verdict)), True)
+
+_ambiguous_cohort_criterion = _cohort_verdict_doc(
+    1, 10, "pass", "conflict rate <= 10% or <= 20%"
+)
+check("a T14 cohort grade must name only the registered <=10% criterion",
+      any("unambiguous pass_criterion" in violation
+          for violation in _measurement_relation_violations(
+              _ambiguous_cohort_criterion)), True)
+
+_negated_cohort_criterion = _cohort_verdict_doc(
+    1, 10, "pass", "not conflict rate <= 10%"
+)
+check("a negated T14 cohort threshold is not the registered criterion",
+      any("unambiguous pass_criterion" in violation
+          for violation in _measurement_relation_violations(
+              _negated_cohort_criterion)), True)
+
+_nested_spoofed_cohort = _cohort_verdict_doc(
+    1, 10, "pass", "conflict rate <= 10%"
+)
+_nested_spoofed_cohort["evaluation_runs"][0]["measurements"][2][
+    "oracle_measure"
+]["pass_status"] = "fail_criterion"
+check("a nested T14 cohort verdict cannot invert the registered arithmetic",
+      any("oracle_measure" in violation and "inclusive 10% boundary" in violation
+          for violation in _measurement_relation_violations(
+              _nested_spoofed_cohort)), True)
+
+_informational_cohort = _cohort_verdict_doc(
+    2, 10, "informational", ""
+)
+check("an informational T14 cohort observation remains non-gradeable",
+      _measurement_relation_violations(_informational_cohort), [])
+
+_unnamed_cohort_t14 = _copy.deepcopy(_graded_cohort_t14)
+for _cohort_row in _unnamed_cohort_t14["evaluation_runs"][0]["measurements"]:
+    _cohort_row["scope_selector"] = ""
+check("a cohort-scoped T14 conflict aggregate must name its cohort",
+      any("requires scope_selector naming the preregistered cohort" in violation
+          for violation in _measurement_relation_violations(_unnamed_cohort_t14)),
+      True)
+
+_too_few_t14_refs = _copy.deepcopy(_t14_doc)
+_too_few_t14_refs["evaluation_runs"][0]["measurements"][2][
+    "derived_from_measurement_refs"
+] = ["DERIVED_M_001"]
+check("T14 conflict lineage requires two distinct source measurements",
+      any("exactly two distinct derived_from_measurement_refs" in violation
+          for violation in _measurement_relation_violations(_too_few_t14_refs)),
+      True)
+
+_wrong_t14_metric = _copy.deepcopy(_t14_doc)
+_wrong_t14_metric["evaluation_runs"][0]["measurements"][0][
+    "metric_definition_ref"
+] = "T03_r-work"
+check("T14 conflict sources must measure the candidate-count metric",
+      any("must measure 'T14_asn_gln_his_flip_candidates_scored'" in violation
+          for violation in _measurement_relation_violations(_wrong_t14_metric)),
+      True)
+
+_wrong_t14_task = _copy.deepcopy(_t14_doc)
+_wrong_t14_task["evaluation_runs"][0]["measurements"][2][
+    "catalog_task_ref"
+] = "T03"
+check("T14 conflict composite must remain a T14 measurement",
+      any("must have catalog_task_ref 'T14'" in violation
+          for violation in _measurement_relation_violations(_wrong_t14_task)),
+      True)
+
+_wrong_t14_tool = _copy.deepcopy(_t14_doc)
+_wrong_t14_tool["evaluation_runs"][0]["measurements"][0][
+    "oracle_tool_ref"
+] = "gemmi sfcalc"
+check("T14 conflict sources must use the canonical tool pair",
+      any("source tools are" in violation and "expected" in violation
+          for violation in _measurement_relation_violations(_wrong_t14_tool)),
+      True)
+
+for _invalid_numerator in (
+    -1, 1.5, True, float("nan"), float("inf"), float("-inf"),
+):
+    _bad_t14_numerator = _copy.deepcopy(_t14_doc)
+    _bad_t14_numerator["evaluation_runs"][0]["measurements"][2][
+        "oracle_measure"
+    ]["value_numeric"] = _invalid_numerator
+    check(f"  T14 conflict numerator rejects {_invalid_numerator!r}",
+          any("non-negative integer oracle_measure.value_numeric" in violation
+              for violation in
+              _measurement_relation_violations(_bad_t14_numerator)), True)
+
+for _extra_carrier in ({"value_text": "zero"},
+                       {"is_not_applicable": True}):
+    _contradictory_t14 = _copy.deepcopy(_t14_doc)
+    _contradictory_t14["evaluation_runs"][0]["measurements"][2][
+        "oracle_measure"
+    ].update(_extra_carrier)
+    check(f"  T14 conflict composite rejects {_extra_carrier!r}",
+          any("single non-negative integer" in violation
+              for violation in
+              _measurement_relation_violations(_contradictory_t14)), True)
+
+for _extra_carrier in ({"value_text": "fourteen"},
+                       {"is_not_applicable": True}):
+    _contradictory_t14_source = _copy.deepcopy(_t14_doc)
+    _contradictory_t14_source["evaluation_runs"][0]["measurements"][0][
+        "oracle_measure"
+    ].update(_extra_carrier)
+    check(f"  T14 candidate source rejects {_extra_carrier!r}",
+          any("integral oracle_measure.value_numeric candidate count" in violation
+              for violation in _measurement_relation_violations(
+                  _contradictory_t14_source)), True)
+
+_too_many_t14_conflicts = _copy.deepcopy(_t14_doc)
+_too_many_t14_conflicts["evaluation_runs"][0]["measurements"][2][
+    "oracle_measure"
+]["value_numeric"] = 15
+check("T14 conflict count cannot exceed its eligible denominator",
+      any("exceeds eligible denominator" in violation for violation in
+          _measurement_relation_violations(_too_many_t14_conflicts)), True)
+
+_wrong_t14_unit = _copy.deepcopy(_t14_doc)
+_wrong_t14_unit["evaluation_runs"][0]["measurements"][2][
+    "oracle_measure"
+]["unit"] = "percent"
+check("T14 conflict count requires count units",
+      any("requires oracle_measure.unit 'count'" in violation
+          for violation in _measurement_relation_violations(_wrong_t14_unit)),
+      True)
+
+_wrong_t14_source_unit = _copy.deepcopy(_t14_doc)
+_wrong_t14_source_unit["evaluation_runs"][0]["measurements"][0][
+    "oracle_measure"
+]["unit"] = "percent"
+check("T14 candidate source requires count units",
+      any("must use oracle_measure.unit 'count'" in violation
+          for violation in
+          _measurement_relation_violations(_wrong_t14_source_unit)), True)
+
+for _invalid_source_count in (
+    0, -1, 1.5, True, float("nan"), float("inf"), float("-inf"),
+):
+    _bad_t14_source_count = _copy.deepcopy(_t14_doc)
+    _bad_t14_source_count["evaluation_runs"][0]["measurements"][0][
+        "oracle_measure"
+    ]["value_numeric"] = _invalid_source_count
+    check(f"  T14 candidate source rejects {_invalid_source_count!r}",
+          any("integral oracle_measure.value_numeric candidate count" in violation
+              for violation in
+              _measurement_relation_violations(_bad_t14_source_count)), True)
+
+_inflated_t14_denominator = _copy.deepcopy(_t14_doc)
+_inflated_t14_denominator["evaluation_runs"][0]["measurements"][2][
+    "oracle_measure"
+]["count"] = 15
+check("T14 conflict denominator cannot exceed a source candidate count",
+      any("exceeds a source candidate count" in violation
+          for violation in
+          _measurement_relation_violations(_inflated_t14_denominator)), True)
+
+_wrong_t14_carrier = _copy.deepcopy(_t14_doc)
+_wrong_t14_carrier["evaluation_runs"][0]["measurements"][2][
+    "oracle_tool_ref"
+] = "phenix.model_vs_data"
+check("T14 conflict carrier must expose its cctbx dependency",
+      any("must conservatively identify its cctbx dependency" in violation
+          for violation in _measurement_relation_violations(_wrong_t14_carrier)),
+      True)
+
 # Exercise the actual corpus through the same API, including ignored files because
 # target_paths uses Path.rglob rather than a gitignore-aware search.
 import yaml as _yaml
@@ -953,6 +1627,8 @@ _live_records = [(_path, _yaml.safe_load(_path.read_text()))
 _live_index = integrity.build_corpus_indices(_live_records)
 check("the live corpus has no ambiguous run/QDS/measurement/assumption ids",
       integrity.check_duplicate_ids(_live_index), [])
+check("the live corpus satisfies typed measurement lineage",
+      integrity.check_measurement_relations(_live_index), [])
 _live_ref_violations = []
 for _path, _doc in _live_records:
     _live_ref_violations += integrity.check_corpus_refs(
@@ -962,6 +1638,9 @@ check("the live corpus satisfies all new cross-record references",
 
 # --- #608: every structured row selected by subject can carry that subject --------
 _schema = _yaml.safe_load((REPO / "schemas" / "protstruct_review.yaml").read_text())
+check("MeasurementScope explicitly represents preregistered cohorts",
+      "cohort" in _schema["enums"]["MeasurementScope"]["permissible_values"],
+      True)
 _subject_scoped_classes = (
     "SecondaryStructureAssignment", "DomainAssignment",
     "PredictionEnsembleQuality", "NmrEnsembleQuality", "PairwiseComparison",

@@ -5,8 +5,8 @@ Evaluation reports produced by the protstruct_review harness sit next to the art
 ## Format
 
 ```
+EVAL_<structure>_<artifact-short-id>_<YYYY-MM-DD>.yaml
 EVAL_<structure>_<artifact-short-id>_<YYYY-MM-DD>.md
-EVAL_<structure>_<artifact-short-id>_<YYYY-MM-DD>_metrics.tsv
 ```
 
 | Field | Definition | Example |
@@ -15,18 +15,25 @@ EVAL_<structure>_<artifact-short-id>_<YYYY-MM-DD>_metrics.tsv
 | `<artifact-short-id>` | First 8 hex characters of the agent run's UUID (or any other stable, short, unique tag for the agent run). Disambiguates multiple agent runs on the same structure. | `cdba2c07` |
 | `<YYYY-MM-DD>` | Date the evaluation was *run*, ISO 8601. Sorts chronologically when an artifact is re-evaluated (e.g. after a new oracle is added). | `2026-04-24` |
 
-The `_metrics.tsv` suffix marks the machine-loadable companion to the markdown report. They share the same stem so a single glob (`EVAL_1sar_cdba2c07_2026-04-24*`) returns the pair.
+The schema-validated YAML is the canonical machine-readable evaluation record. The Markdown file is
+its human-readable narrative when one is published. They share the same stem so a single glob
+(`EVAL_1sar_cdba2c07_2026-04-24*`) returns the record, narrative, and any optional exports. Historical
+narrative-only reissues may point to an earlier canonical YAML record; new structured re-runs should
+instead publish a date-matched YAML record so their measurements and scope are immutable.
 
-### Parallel `_<view>.tsv` companions
+### Optional parallel `_<view>.tsv` exports
 
-A single eval may emit more than one TSV view of the same underlying data. Add a `_<view>` suffix to disambiguate. Two suffixes are reserved:
+A single eval may export one or more denormalized TSV views of the canonical YAML. Add a `_<view>`
+suffix to disambiguate. These exports are optional; their absence does not make an otherwise complete
+YAML/Markdown evaluation incomplete. Two suffixes are reserved:
 
 | Suffix | Content | Row count |
 |---|---|---|
-| `_metrics.tsv` | One row per (catalog_task, metric, oracle_tool, stage) — the granular ground truth. Loadable into a long-format dataframe. | many (10s–100s) |
-| `_headline.tsv` | One row per top-level finding for the eval — the chat-summary / leaderboard view. Each row collapses one or more `_metrics.tsv` rows by picking the strongest oracle per metric. | few (5–10) |
+| `_metrics.tsv` | One row per (catalog_task, metric, oracle_tool, stage) — a denormalized long-format export. | many (10s–100s) |
+| `_headline.tsv` | One row per top-level finding for the eval — a chat-summary / leaderboard export. Each row collapses one or more measurement rows according to its export policy. | few (5–10) |
 
-Both share the same date-stamped stem so `EVAL_1sar_cdba2c07_2026-04-24*.tsv` returns both.
+When present, both share the same date-stamped stem so
+`EVAL_1sar_cdba2c07_2026-04-24*.tsv` returns both.
 
 If you add a new view (e.g. `_per_round.tsv`, `_per_residue.tsv`), keep the same stem and pick a noun-shaped suffix.
 
@@ -36,8 +43,9 @@ If you add a new view (e.g. `_per_round.tsv`, `_per_residue.tsv`), keep the same
 data/coscientists/openscientist/
 ├── cdba2c07-...-artifacts.zip                    # input artifact (UUID-named by agent)
 ├── cdba2c07-...-report.pdf                       # input artifact
+├── EVAL_1sar_cdba2c07_2026-04-24.yaml            # canonical, schema-validated record
 ├── EVAL_1sar_cdba2c07_2026-04-24.md              # human-readable eval report
-├── EVAL_1sar_cdba2c07_2026-04-24_metrics.tsv     # machine-loadable metrics
+├── EVAL_1sar_cdba2c07_2026-04-24_metrics.tsv     # optional denormalized export
 └── gemmi_rfactor.py                              # eval helper script (not date-stamped — reused)
 ```
 
@@ -52,7 +60,7 @@ data/coscientists/openscientist/
 Re-run produces a new file (don't overwrite) if:
 
 - A new oracle was added to the catalog and re-running closes a previously-open gap.
-- The agent re-ran and produced a new artifact (different `<artifact-short-id>` — separate file pair, no collision).
+- The agent re-ran and produced a new artifact (different `<artifact-short-id>` — separate record bundle, no collision).
 - A bug in an oracle invocation was fixed.
 
 Re-run **may overwrite the same date** if:
@@ -65,15 +73,14 @@ Re-run **may overwrite the same date** if:
 - `EVAL_metrics.tsv` aggregated across many runs (e.g. a leaderboard) → use a separate name like `LEADERBOARD_*.tsv` or put it in a top-level `results/` directory. Don't reuse the `EVAL_` prefix for cross-run summaries.
 - Catalog-level documents (`tasks_and_evaluations.md`, `oracle_tools.md`) → `ref/`, no date stamp; they evolve under git history.
 
-## Loading by glob
+## Loading canonical records by glob
 
 ```python
 from pathlib import Path
-import pandas as pd
+import yaml
 
-for tsv in Path("data").rglob("EVAL_*_metrics.tsv"):
-    df = pd.read_csv(tsv, sep="\t")
-    structure, run_id, run_date = tsv.stem.replace("_metrics", "").split("_")[1:]
-    df["structure"], df["run_id"], df["run_date"] = structure, run_id, run_date
-    # ... aggregate / leaderboard ...
+for record_path in Path("data").rglob("EVAL_*.yaml"):
+    record = yaml.safe_load(record_path.read_text())
+    structure, run_id, run_date = record_path.stem.split("_")[1:]
+    # ... validate or aggregate record["evaluation_runs"] ...
 ```

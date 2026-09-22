@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """Compute the T15 secondary-structure agreement metric from two independent assigners.
 
-The gradeable T15 metric (`T15_secondary_structure_agreement`) is the fraction of
+The T15 oracle-pair metric (`T15_secondary_structure_agreement`) is the fraction of
 residues that two *independent* secondary-structure assigners place in the same
-three-state class (H / E / C). Grading agreement rather than a single label is the
-trust model applied to categorical data — see CODING_STANDARDS.md rule 9.
+three-state class (H / E / C). It is reported informationally alongside DSSP H+E
+content. The provisional 0.20 content precondition only indicates whether the
+agreement has useful interpretive range; neither value grades model quality. The
+historical 0.65 expectation is likewise non-gradeable until the benchmark is rerun
+under the current exact-denominator rule.
 
 Assigner A: **DSSP** (`mkdssp`) — Kabsch & Sander H-bond energetics.
 Assigner B: **biotite** `annotate_sse` — Labesse P-SEA, a Cα-geometry method.
@@ -13,20 +16,29 @@ The two are genuinely different algorithm families (H-bond vs Cα geometry), so
 agreement is informative rather than tautological, and both are non-cctbx —
 satisfying the trust model without either being PHENIX.
 
-Emits a pasteable EvaluationMeasurement-shaped YAML row (the scalar agreement
-metric) plus per-residue three-state labels.
+Emits pasteable EvaluationMeasurement-shaped YAML rows for the scalar agreement
+and the DSSP H+E interpretability diagnostic, plus optional per-residue three-state
+labels. Every run requires an explicit repository-local ``--evidence-out`` path.
+The no-overwrite JSON bundle retains the exact normalized input and raw DSSP bytes,
+both per-residue assignments, input hashes, and measured tool versions; both rows
+cite it through ``evidence_refs``.
 
-Degrades loudly: if `mkdssp` is not on PATH, or biotite is not importable, exits
-non-zero with a clear message rather than fabricating a number.
+Degrades loudly: if `mkdssp` cannot be resolved through `PROTSTRUCT_DSSP` or
+PATH, or biotite is not importable, exits non-zero with a clear message rather
+than fabricating a number.
 
 Usage:
-    python3 scripts/t15_ss_agreement.py data/pdb_mtz/1sar_deposited.pdb --eval-id EVAL_1sar_...
+    python3 scripts/t15_ss_agreement.py data/pdb_mtz/1sar_deposited.pdb \
+      --eval-id EVAL_1sar_... --evidence-out data/evidence/EVIDENCE_1sar_t15.json
 """
 from __future__ import annotations
 
 import argparse
-import shutil
-import subprocess
+import base64
+import hashlib
+import importlib.metadata
+import json
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -36,7 +48,7 @@ import yaml
 
 if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-from toolchain import gemmi_executable  # noqa: E402
+from toolchain import dssp_executable, gemmi_executable, run_capture  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -58,18 +70,71 @@ def _fail(msg: str) -> None:
 ResKey = tuple[str, str, str]
 
 
-def run_dssp(model: Path) -> dict[ResKey, str]:
-    """Return {(chain, resnum, icode): HEC} from DSSP. Requires `mkdssp` on PATH."""
-    exe = shutil.which("mkdssp")
-    if exe is None:
-        _fail("mkdssp not found on PATH — install DSSP (e.g. `brew install brewsci/bio/dssp`).")
+_BUNDLE_RESULT_FIELDS = (
+    "n_dssp",
+    "n_biotite",
+    "n_scored",
+    "n_dropped",
+    "n_agree",
+    "fraction",
+    "dssp_h",
+    "dssp_e",
+    "dssp_c",
+    "dssp_ss_content",
+)
+
+
+def content_bound_bundle_ref(
+    result: dict[str, Any],
+    eval_id: str,
+    input_sha256: str,
+    normalized_sha256: str,
+    gemmi_version: str,
+    dssp_version: str,
+    biotite_version: str,
+    subject_ref: str | None = None,
+) -> str:
+    """Identify the coupled agreement/content result, not merely its EvalRun.
+
+    An EvalRun id is routinely reused for more than one input (for example a
+    candidate and deposited baseline).  Deriving the bundle id from that id
+    alone lets rows from separate wrapper invocations look coupled.  Bind it to
+    the input-file digest, every aggregate needed to reproduce both emitted
+    measurements, and the concrete subject when supplied.  The digest is a
+    required API input so non-CLI callers cannot silently fall back to an
+    EvalRun-only identity.
+    """
+    payload = {
+        "subject_ref": subject_ref,
+        "input_sha256": input_sha256,
+        "normalization_mode": "gemmi convert",
+        "normalized_sha256": normalized_sha256,
+        "gemmi_version": gemmi_version,
+        "dssp_version": dssp_version,
+        "biotite_version": biotite_version,
+        **{field: result.get(field) for field in _BUNDLE_RESULT_FIELDS},
+    }
+    encoded = yaml.safe_dump(
+        payload, sort_keys=True, allow_unicode=True
+    ).encode("utf-8")
+    digest = hashlib.sha256(encoded).hexdigest()[:16]
+    return f"{eval_id}_T15_SS_{digest}"
+
+
+def run_dssp_with_raw(
+    model: Path, *, normalized_model: Path | None = None
+) -> tuple[dict[ResKey, str], bytes]:
+    """Return collapsed assignments and the exact raw DSSP output bytes."""
+    try:
+        exe = dssp_executable()
+    except FileNotFoundError as exc:
+        _fail(str(exc))
     with tempfile.NamedTemporaryFile(suffix=".dssp", delete=False) as tmp:
         out_path = Path(tmp.name)
-    normalised = _normalise_for_dssp(model)
+    normalised = normalized_model or _normalise_for_dssp(model)
     try:
-        proc = subprocess.run(
+        proc = run_capture(
             [exe, "--output-format", "dssp", str(normalised), str(out_path)],
-            capture_output=True, text=True,
         )
         # `or`, not `and`. The two conditions are independent failures and neither
         # excuses the other: mkdssp can exit non-zero *after* writing a partial
@@ -80,11 +145,69 @@ def run_dssp(model: Path) -> dict[ResKey, str]:
             _fail(f"mkdssp failed (exit {proc.returncode}, "
                   f"{out_path.stat().st_size} bytes written): "
                   f"{proc.stderr.strip() or proc.stdout.strip()}")
-        return _parse_dssp(out_path.read_text())
+        raw_output = out_path.read_bytes()
+        try:
+            text = raw_output.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            _fail(f"mkdssp output is not UTF-8 text: {exc}")
+        return _parse_dssp(text), raw_output
     finally:
         out_path.unlink(missing_ok=True)
-        if normalised != model:
+        if normalized_model is None and normalised != model:
             normalised.unlink(missing_ok=True)
+
+
+def run_dssp(
+    model: Path, *, normalized_model: Path | None = None
+) -> dict[ResKey, str]:
+    """Return {(chain, resnum, icode): HEC} from configured DSSP."""
+    assignments, _raw_output = run_dssp_with_raw(
+        model, normalized_model=normalized_model
+    )
+    return assignments
+
+
+def measured_dssp_version() -> str:
+    """Return version text measured from the configured DSSP executable."""
+    try:
+        exe = dssp_executable()
+    except FileNotFoundError as exc:
+        _fail(str(exc))
+    proc = run_capture([exe, "--version"])
+    lines = (proc.stdout + "\n" + proc.stderr).strip().splitlines()
+    version = " | ".join(lines[:3])[:500]
+    if proc.returncode != 0 or not version:
+        _fail(
+            f"mkdssp version probe failed (exit {proc.returncode}): "
+            f"{version or 'no version output'}"
+        )
+    return version
+
+
+def measured_gemmi_version() -> str:
+    """Return version text measured from the configured normalization binary."""
+    try:
+        exe = gemmi_executable()
+    except FileNotFoundError as exc:
+        _fail(str(exc))
+    assert exe is not None
+    proc = run_capture([exe, "--version"])
+    lines = (proc.stdout + "\n" + proc.stderr).strip().splitlines()
+    version = " | ".join(lines[:3])[:500]
+    if proc.returncode != 0 or not version:
+        _fail(
+            f"gemmi version probe failed (exit {proc.returncode}): "
+            f"{version or 'no version output'}"
+        )
+    return version
+
+
+def measured_biotite_version() -> str:
+    """Return the installed biotite distribution version used by P-SEA."""
+    try:
+        return importlib.metadata.version("biotite")
+    except importlib.metadata.PackageNotFoundError:
+        _fail("biotite distribution metadata unavailable — install biotite")
 
 
 def _normalise_for_dssp(model: Path) -> Path:
@@ -98,19 +221,24 @@ def _normalise_for_dssp(model: Path) -> Path:
     `gemmi convert` are accepted. This script previously only ever ran on a
     PHENIX-written file in `data/`, which is why the failure went unnoticed.
 
-    Falls back to the original path when gemmi is unavailable, so the failure mode
-    is mkdssp's own error rather than a missing-tool error from here.
+    Normalization is load-bearing for the reported denominator and assignment.
+    Fail closed when gemmi is unavailable or conversion fails; silently switching
+    to raw input would make otherwise identical wrapper invocations incomparable.
     """
-    gemmi = gemmi_executable(required=False)
-    if gemmi is None:
-        return model
+    try:
+        gemmi = gemmi_executable()
+    except FileNotFoundError as exc:
+        _fail(str(exc))
+    assert gemmi is not None
     with tempfile.NamedTemporaryFile(suffix=".pdb", delete=False) as tmp:
         converted = Path(tmp.name)
-    proc = subprocess.run([str(gemmi), "convert", str(model), str(converted)],
-                          capture_output=True, text=True)
+    proc = run_capture([gemmi, "convert", model, converted])
     if proc.returncode != 0 or not converted.stat().st_size:
         converted.unlink(missing_ok=True)
-        return model
+        _fail(
+            f"gemmi convert failed (exit {proc.returncode}): "
+            f"{proc.stderr.strip() or proc.stdout.strip() or 'no output'}"
+        )
     return converted
 
 
@@ -154,7 +282,11 @@ def run_biotite(model: Path) -> dict[ResKey, str]:
         sse = struc.annotate_sse(chain)  # one 'a'/'b'/'c' per residue, in order
         starts = struc.get_residue_starts(chain)  # first-atom index per residue, in order
         if len(sse) != len(starts):
-            continue  # assignment/residue mismatch on this chain; skip rather than misalign
+            _fail(
+                "biotite assignment/residue mismatch on chain "
+                f"{chain_id!r}: {len(sse)} assignments for {len(starts)} residues; "
+                "refusing to drop the chain from the agreement denominator."
+            )
         for idx, code in zip(starts, sse):
             resnum = str(chain.res_id[idx])
             icode = str(chain.ins_code[idx]).strip() if has_icode else ""
@@ -163,66 +295,338 @@ def run_biotite(model: Path) -> dict[ResKey, str]:
 
 
 def agreement(a: dict[ResKey, str], b: dict[ResKey, str]) -> dict[str, Any]:
-    """Three-state agreement fraction over residues both assigners scored."""
+    """Three-state agreement over one exactly matched residue-key set.
+
+    Scoring an intersection is unsafe here: dropping coil-rich or otherwise
+    difficult residues can simultaneously inflate agreement and leave the DSSP
+    content diagnostic on a different denominator.  The wrapper therefore treats any
+    key-set mismatch as an unevaluable run rather than silently shortening it.
+    """
     shared = sorted(set(a) & set(b))
     if not shared:
         _fail("no residues in common between the two assigners — cannot compute agreement.")
+    dssp_only = sorted(set(a) - set(b))
+    biotite_only = sorted(set(b) - set(a))
+    if dssp_only or biotite_only:
+        _fail(
+            "assigners scored different residue sets: "
+            f"DSSP-only={len(dssp_only)}, biotite-only={len(biotite_only)}; "
+            "T15 agreement and its DSSP H+E interpretability diagnostic require "
+            "the same denominator."
+        )
     matches = sum(1 for k in shared if a[k] == b[k])
     per_residue = [
         {"chain": c, "resnum": r, "icode": i, "dssp": a[k], "biotite": b[k], "agree": a[k] == b[k]}
         for k in shared
         for (c, r, i) in [k]
     ]
+    dssp_counts = {state: sum(1 for value in a.values() if value == state) for state in "HEC"}
     return {
         "n_dssp": len(a),
         "n_biotite": len(b),
         "n_scored": len(shared),
-        "n_dropped": len(set(a) ^ set(b)),  # residues assigned by only one tool
+        "n_dropped": 0,
         "n_agree": matches,
         "fraction": round(matches / len(shared), 4),
+        "dssp_h": dssp_counts["H"],
+        "dssp_e": dssp_counts["E"],
+        "dssp_c": dssp_counts["C"],
+        "dssp_ss_content": round((dssp_counts["H"] + dssp_counts["E"]) / len(a), 4),
         "per_residue": per_residue,
     }
 
 
-def render_yaml(result: dict[str, Any], eval_id: str, model: Path) -> str:
-    """Emit a pasteable EvaluationMeasurement row for T15_secondary_structure_agreement."""
-    measurement = {
-        "id": f"{eval_id}_M_T15_ss_agreement",
+def evidence_ref_for_path(destination: Path) -> tuple[Path, str]:
+    """Resolve a new repository-local evidence path and its portable reference."""
+    resolved = destination.resolve()
+    try:
+        relative = resolved.relative_to(REPO.resolve())
+    except ValueError:
+        _fail(
+            "--evidence-out must be inside the repository so emitted evidence_refs "
+            f"remain portable: {resolved}"
+        )
+    if resolved.exists() or resolved.is_symlink():
+        _fail(f"evidence already exists; refusing to overwrite: {resolved}")
+    if resolved.suffix.casefold() != ".json":
+        _fail(f"--evidence-out must name a .json file: {resolved}")
+    return resolved, relative.as_posix()
+
+
+def build_evidence_bundle(
+    *,
+    bundle_ref: str,
+    subject_ref: str | None,
+    source_sha256: str,
+    normalized_bytes: bytes,
+    raw_dssp_bytes: bytes,
+    dssp_assignments: dict[ResKey, str],
+    biotite_assignments: dict[ResKey, str],
+    result: dict[str, Any],
+    gemmi_version: str,
+    dssp_version: str,
+    biotite_version: str,
+) -> dict[str, Any]:
+    """Build a self-contained, byte-replayable T15 evidence document."""
+    normalized_sha256 = hashlib.sha256(normalized_bytes).hexdigest()
+    raw_dssp_sha256 = hashlib.sha256(raw_dssp_bytes).hexdigest()
+    keys = sorted(set(dssp_assignments) | set(biotite_assignments))
+    assignments = [
+        {
+            "chain": chain,
+            "resnum": resnum,
+            "icode": icode,
+            "dssp": dssp_assignments.get((chain, resnum, icode)),
+            "biotite_psea": biotite_assignments.get((chain, resnum, icode)),
+        }
+        for chain, resnum, icode in keys
+    ]
+    aggregate = {
+        field: result[field]
+        for field in _BUNDLE_RESULT_FIELDS
+    }
+    return {
+        "evidence_format": "protstruct-review-t15-v1",
+        "bundle_ref": bundle_ref,
+        "subject_ref": subject_ref,
+        "metric_definition_refs": [
+            "T15_secondary_structure_agreement",
+            "T15_secondary_structure_content",
+        ],
+        "source_sha256": source_sha256,
+        "normalization": {
+            "tool": "gemmi convert",
+            "tool_version": gemmi_version,
+            "sha256": normalized_sha256,
+            "size_bytes": len(normalized_bytes),
+            "encoding": "base64",
+            "bytes_base64": base64.b64encode(normalized_bytes).decode("ascii"),
+        },
+        "dssp": {
+            "tool": "DSSP",
+            "tool_version": dssp_version,
+            "raw_output_sha256": raw_dssp_sha256,
+            "raw_output_size_bytes": len(raw_dssp_bytes),
+            "raw_output_encoding": "base64",
+            "raw_output_base64": base64.b64encode(raw_dssp_bytes).decode("ascii"),
+        },
+        "biotite_psea": {
+            "tool": "biotite P-SEA",
+            "tool_version": biotite_version,
+        },
+        "per_residue_assignments": assignments,
+        "aggregate": aggregate,
+    }
+
+
+def write_evidence_bundle_no_overwrite(
+    destination: Path, payload: dict[str, Any]
+) -> None:
+    """Publish one JSON evidence bundle atomically without replacing any file."""
+    if destination.exists() or destination.is_symlink():
+        _fail(f"evidence already exists; refusing to overwrite: {destination}")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    encoded = (json.dumps(payload, sort_keys=True, indent=2) + "\n").encode("utf-8")
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            dir=destination.parent,
+            prefix=f".{destination.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temporary = Path(handle.name)
+            handle.write(encoded)
+            handle.flush()
+            os.fsync(handle.fileno())
+        # A hard link is an atomic publish that fails if a concurrent writer won
+        # the destination; Path.replace() would silently destroy retained evidence.
+        os.link(temporary, destination)
+    except FileExistsError:
+        _fail(f"evidence already exists; refusing to overwrite: {destination}")
+    except OSError as exc:
+        _fail(f"could not publish evidence bundle {destination}: {exc}")
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+def render_yaml(
+    result: dict[str, Any],
+    eval_id: str,
+    subject_ref: str | None = None,
+    *,
+    input_sha256: str,
+    normalized_sha256: str,
+    dssp_version: str,
+    gemmi_version: str,
+    biotite_version: str,
+    evidence_ref: str,
+) -> str:
+    """Emit pasteable agreement and DSSP-content EvaluationMeasurement rows."""
+    bundle_ref = content_bound_bundle_ref(
+        result,
+        eval_id,
+        input_sha256,
+        normalized_sha256,
+        gemmi_version,
+        dssp_version,
+        biotite_version,
+        subject_ref,
+    )
+    clears_content_precondition = result["dssp_ss_content"] >= 0.20
+    if clears_content_precondition:
+        interpretation_note = (
+            "DSSP H+E content clears the provisional 0.20 interpretability "
+            "precondition, so the paired agreement has useful interpretive range; "
+            "this is not a model-quality verdict."
+        )
+    else:
+        interpretation_note = (
+            "DSSP H+E content falls below the provisional 0.20 interpretability "
+            "precondition, so coil/coil agreement may dominate and the paired "
+            "agreement is weakly interpretable; this is not a model-quality verdict."
+        )
+    agreement_measurement = {
+        "id": f"{bundle_ref}_M_agreement",
         "catalog_task_ref": "T15",
         "stage": "final",
         "scope": "complex",
-        "scope_selector": model.stem,
         "metric_definition_ref": "T15_secondary_structure_agreement",
         "oracle_tool_ref": "DSSP + biotite P-SEA",
         "oracle_family": "non_cctbx",
-        "oracle_measure": {"value_numeric": result["fraction"]},
+        "bundle_ref": bundle_ref,
+        "evidence_refs": [evidence_ref],
+        "oracle_measure": {"value_numeric": result["fraction"], "unit": "fraction"},
         "pass_status": "informational",
         "notes": (
             f"three-state (H/E/C) agreement between two independent non-cctbx assigners, "
             f"DSSP (H-bond) and biotite P-SEA (Cα geometry): "
+            f"configured DSSP reported {dssp_version}; "
+            f"biotite reported {biotite_version}; "
+            f"DSSP input was normalized with gemmi convert ({gemmi_version}), "
+            f"normalized SHA-256 {normalized_sha256}; source SHA-256 {input_sha256}; "
             f"{result['n_agree']}/{result['n_scored']} concordant over residues scored by both "
             f"(DSSP {result['n_dssp']}, biotite {result['n_biotite']}, "
-            f"{result['n_dropped']} scored by only one and excluded)."
+            f"{result['n_dropped']} scored by only one and excluded). "
+            f"{interpretation_note}"
         ),
     }
-    return yaml.safe_dump([measurement], sort_keys=False, allow_unicode=True, width=100)
+    content_measurement = {
+        "id": f"{bundle_ref}_M_content",
+        "catalog_task_ref": "T15",
+        "stage": "final",
+        "scope": "complex",
+        "metric_definition_ref": "T15_secondary_structure_content",
+        "oracle_tool_ref": "DSSP",
+        "oracle_family": "non_cctbx",
+        "bundle_ref": bundle_ref,
+        "evidence_refs": [evidence_ref],
+        "oracle_measure": {
+            "value_numeric": result["dssp_ss_content"],
+            "unit": "fraction",
+        },
+        "pass_status": "informational",
+        "notes": (
+            f"DSSP H+E content over all DSSP-scored residues: "
+            f"({result['dssp_h']} H + {result['dssp_e']} E) / {result['n_dssp']} = "
+            f"{result['dssp_ss_content']:.4f}; {result['dssp_c']} residues are coil. "
+            f"Configured DSSP reported {dssp_version}. "
+            f"Biotite reported {biotite_version}. "
+            f"DSSP input was normalized with gemmi convert ({gemmi_version}), "
+            f"normalized SHA-256 {normalized_sha256}; source SHA-256 {input_sha256}. "
+            f"{interpretation_note}"
+        ),
+    }
+    if subject_ref is not None:
+        agreement_measurement["subject_ref"] = subject_ref
+        content_measurement["subject_ref"] = subject_ref
+    return yaml.safe_dump(
+        [agreement_measurement, content_measurement],
+        sort_keys=False,
+        allow_unicode=True,
+        width=100,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("model", type=Path, help="protein model (PDB)")
     ap.add_argument("--eval-id", default="EVAL_T15", help="eval id prefix for the emitted row")
+    ap.add_argument("--subject-ref", default=None,
+                    help="stable identifier for the concrete model being measured")
+    ap.add_argument(
+        "--evidence-out",
+        type=Path,
+        required=True,
+        help=(
+            "new repository-local .json path for retained normalized input, raw DSSP "
+            "output, assignments, hashes, and tool versions (never overwritten)"
+        ),
+    )
     ap.add_argument("--per-residue", action="store_true", help="also print the per-residue table")
     args = ap.parse_args(argv)
 
     if not args.model.exists():
         _fail(f"model not found: {args.model}")
+    evidence_path, evidence_ref = evidence_ref_for_path(args.evidence_out)
+    source_bytes_before = args.model.read_bytes()
+    input_sha256 = hashlib.sha256(source_bytes_before).hexdigest()
 
-    dssp = run_dssp(args.model)
+    dssp_version = measured_dssp_version()
+    gemmi_version = measured_gemmi_version()
+    biotite_version = measured_biotite_version()
+    normalized_model = _normalise_for_dssp(args.model)
+    try:
+        normalized_bytes = normalized_model.read_bytes()
+        normalized_sha256 = hashlib.sha256(normalized_bytes).hexdigest()
+        dssp, raw_dssp_bytes = run_dssp_with_raw(
+            args.model, normalized_model=normalized_model
+        )
+    finally:
+        if normalized_model != args.model:
+            normalized_model.unlink(missing_ok=True)
     bio = run_biotite(args.model)
+    if args.model.read_bytes() != source_bytes_before:
+        _fail(f"model changed while T15 was running; refusing to emit: {args.model}")
     result = agreement(dssp, bio)
 
-    print(render_yaml(result, args.eval_id, args.model))
+    bundle_ref = content_bound_bundle_ref(
+        result,
+        args.eval_id,
+        input_sha256,
+        normalized_sha256,
+        gemmi_version,
+        dssp_version,
+        biotite_version,
+        args.subject_ref,
+    )
+    rendered = render_yaml(
+        result,
+        args.eval_id,
+        args.subject_ref,
+        input_sha256=input_sha256,
+        normalized_sha256=normalized_sha256,
+        dssp_version=dssp_version,
+        gemmi_version=gemmi_version,
+        biotite_version=biotite_version,
+        evidence_ref=evidence_ref,
+    )
+    evidence = build_evidence_bundle(
+        bundle_ref=bundle_ref,
+        subject_ref=args.subject_ref,
+        source_sha256=input_sha256,
+        normalized_bytes=normalized_bytes,
+        raw_dssp_bytes=raw_dssp_bytes,
+        dssp_assignments=dssp,
+        biotite_assignments=bio,
+        result=result,
+        gemmi_version=gemmi_version,
+        dssp_version=dssp_version,
+        biotite_version=biotite_version,
+    )
+    write_evidence_bundle_no_overwrite(evidence_path, evidence)
+    sys.stdout.write(rendered)
     if args.per_residue:
         print("# chain resnum icode dssp biotite agree")
         for r in result["per_residue"]:

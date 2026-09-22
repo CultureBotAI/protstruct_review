@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Emit a QualityDataSheet YAML from one or more EvaluationRun YAMLs.
+"""Frozen QualityDataSheet emitter contract version 1.
+
+This module is retained for deterministic replay of immutable contract-1 sheets.
+Do not change output behavior in place: add a new contract module/version instead.
+
+Emit a QualityDataSheet YAML from one or more EvaluationRun YAMLs.
 
 A QDS is the citable, dated, immutable snapshot of cross-tool findings for one
 structure. It joins headline-level facts (R-factors, geometry, map quality)
@@ -3076,9 +3081,8 @@ def emit_qds(
 
     Contract versions are append-only. A future output-affecting change adds a
     new implementation and dispatch branch; it must not repurpose contract 1.
-    Committed-sheet validation uses a retained contract module plus source-owned
-    registry snapshots and canonical byte pin rather than asking the latest
-    emitter or live registries to reinterpret an earlier contract.
+    Committed-sheet validation uses the source-owned canonical byte pin rather
+    than asking the latest emitter to reinterpret an earlier contract.
     """
     if emitter_contract_version == "1":
         return _emit_qds_contract_1(

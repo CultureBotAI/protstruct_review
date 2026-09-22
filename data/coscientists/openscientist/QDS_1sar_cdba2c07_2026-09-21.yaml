@@ -1,0 +1,241 @@
+quality_data_sheets:
+- id: QDS_1sar_cdba2c07_2026-09-21
+  structure_ref: 1sar
+  derived_from_evaluation_run_refs:
+  - EVAL_1sar_cdba2c07_2026-09-21
+  issued_at: '2026-09-22T09:14:00+00:00'
+  emitter_contract_version: '1'
+  identity_block:
+    id: QDS_1sar_cdba2c07_2026-09-21_identity
+    pdb_id: 1sar
+    method: xray
+    description: Ribonuclease Sa packaged round-4 model; partial T16 follow-up.
+  subject_ref: artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb
+  coverage_scope: partial
+  scope_notes: Partial update limited to T16 interface BSA/DockQ/CAPRI on the packaged
+    round-4 model. No T01/T03/T05/T06/T10/T13/T15 measurements are carried forward
+    or re-measured; consult earlier dated records separately. Draft T15 values were
+    retracted because their normalized/raw evidence was not retained. This is not
+    a cumulative quality sheet.
+  interface_quality_summary:
+    id: QDS_1sar_cdba2c07_2026-09-21_interface_quality
+    interface_dockq_score:
+      value_numeric: 0.9445273046764164
+      source_measurement_ref: EVAL_1sar_cdba2c07_2026-09-21_M_006
+      source_evaluation_run_ref: EVAL_1sar_cdba2c07_2026-09-21
+      metric_definition_ref: T16_interface_dockq_score
+      oracle_tool_ref: DockQ
+      oracle_family: non_cctbx
+      pass_status: informational
+      subject_ref: artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb
+      reference_subject_ref: repo:data/pdb_mtz/1sar_deposited.pdb#sha256=e60e5db6c7eb554a3ac4e184bdf7cbb7d69b682e287579bdcf5f8bf279d51f86
+      evidence_refs:
+      - data/coscientists/openscientist/EVIDENCE_1sar_cdba2c07_2026-09-21_dockq_AB_AB.json
+      - data/coscientists/openscientist/EVIDENCE_1sar_cdba2c07_2026-09-21_chain_mapping_rmsd.json
+      stage: final
+      scope: interface
+      scope_selector: EVAL_1sar_cdba2c07_2026-09-21_IFACE_AB_IDENTITY
+      notes: 'DockQ 2.1.3 against data/pdb_mtz/1sar_deposited.pdb with mapping AB:AB.
+        The alternative same-sequence mapping AB:BA was also measured and scores 0.006321
+        (Incorrect); both structured results are retained in interface_qualities.
+        Identity is selected independently of the larger DockQ score: chainwise Kabsch
+        Cα RMSD is 0.191/0.180 Å for A→A/B→B versus 0.421/0.410 Å for A→B/B→A. The
+        contact is crystallographic, so this score does not certify a biological assembly.'
+    capri_interface_quality_class:
+      value_text: High
+      source_measurement_ref: EVAL_1sar_cdba2c07_2026-09-21_M_007
+      source_evaluation_run_ref: EVAL_1sar_cdba2c07_2026-09-21
+      metric_definition_ref: T16_capri_interface_quality_class
+      oracle_tool_ref: DockQ
+      oracle_family: non_cctbx
+      pass_status: informational
+      subject_ref: artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb
+      reference_subject_ref: repo:data/pdb_mtz/1sar_deposited.pdb#sha256=e60e5db6c7eb554a3ac4e184bdf7cbb7d69b682e287579bdcf5f8bf279d51f86
+      evidence_refs:
+      - data/coscientists/openscientist/EVIDENCE_1sar_cdba2c07_2026-09-21_dockq_AB_AB.json
+      - data/coscientists/openscientist/EVIDENCE_1sar_cdba2c07_2026-09-21_chain_mapping_rmsd.json
+      stage: final
+      scope: interface
+      scope_selector: EVAL_1sar_cdba2c07_2026-09-21_IFACE_AB_IDENTITY
+      notes: CAPRI class derived from DockQ 0.944527 under the standard bands. It
+        carries the same mapping and crystallographic-contact caveats as M_006.
+    interface_buried_surface_area:
+      value_numeric: 437.8
+      unit: Å²
+      source_measurement_ref: EVAL_1sar_cdba2c07_2026-09-21_M_005
+      source_evaluation_run_ref: EVAL_1sar_cdba2c07_2026-09-21
+      metric_definition_ref: T16_interface_buried_surface_area
+      oracle_tool_ref: biotite SASA
+      oracle_family: non_cctbx
+      pass_status: informational
+      subject_ref: artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb
+      evidence_refs:
+      - data/coscientists/openscientist/EVIDENCE_1sar_cdba2c07_2026-09-21_bsa.json
+      stage: final
+      scope: interface
+      scope_selector: EVAL_1sar_cdba2c07_2026-09-21_IFACE_AB_IDENTITY
+      notes: Protein-only Shrake-Rupley total burial for packaged round-4 chains A/B.
+        The retained evidence binds the exact candidate bytes, Biotite version, chain
+        selection, probe/quadrature parameters, raw complex and separated SASAs, and
+        the derived 437.8 Å² value. The small contact is crystallographic and the
+        number is informational.
+    interface_qualities:
+    - id: EVAL_1sar_cdba2c07_2026-09-21_IFACE_AB_IDENTITY
+      structure_ref: 1sar
+      subject_ref: artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb
+      reference_subject_ref: repo:data/pdb_mtz/1sar_deposited.pdb#sha256=e60e5db6c7eb554a3ac4e184bdf7cbb7d69b682e287579bdcf5f8bf279d51f86
+      interface_label: packaged round-4 A/B crystallographic contact, identity mapping
+      chain_id_1: A
+      chain_id_2: B
+      model_to_native_chain_mapping: AB:AB
+      buried_surface_area:
+        value_numeric: 437.8
+        unit: Å²
+      dockq_score:
+        value_numeric: 0.9445273046764164
+      capri_quality_class:
+        value_text: High
+      evidence_refs:
+      - data/coscientists/openscientist/EVIDENCE_1sar_cdba2c07_2026-09-21_dockq_AB_AB.json
+      - data/coscientists/openscientist/EVIDENCE_1sar_cdba2c07_2026-09-21_chain_mapping_rmsd.json
+      - data/coscientists/openscientist/EVIDENCE_1sar_cdba2c07_2026-09-21_bsa.json
+      notes: DockQ against data/pdb_mtz/1sar_deposited.pdb. This is the mapping selected
+        for the headline scalar because independent chainwise Cα fits favor the identity
+        pairs (A→A 0.191 Å, B→B 0.180 Å) over the crossed pairs (A→B 0.421 Å, B→A
+        0.410 Å). The contact is crystallographic, not a certified biological assembly.
+      source_evaluation_run_ref: EVAL_1sar_cdba2c07_2026-09-21
+      source_row_ref: EVAL_1sar_cdba2c07_2026-09-21_IFACE_AB_IDENTITY
+    - id: EVAL_1sar_cdba2c07_2026-09-21_IFACE_AB_SWAPPED
+      structure_ref: 1sar
+      subject_ref: artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb
+      reference_subject_ref: repo:data/pdb_mtz/1sar_deposited.pdb#sha256=e60e5db6c7eb554a3ac4e184bdf7cbb7d69b682e287579bdcf5f8bf279d51f86
+      interface_label: packaged round-4 A/B crystallographic contact, swapped mapping
+        control
+      chain_id_1: A
+      chain_id_2: B
+      model_to_native_chain_mapping: AB:BA
+      dockq_score:
+        value_numeric: 0.006320910841818854
+      capri_quality_class:
+        value_text: Incorrect
+      evidence_refs:
+      - data/coscientists/openscientist/EVIDENCE_1sar_cdba2c07_2026-09-21_dockq_AB_BA.json
+      - data/coscientists/openscientist/EVIDENCE_1sar_cdba2c07_2026-09-21_chain_mapping_rmsd.json
+      notes: Required same-sequence crystallographic-contact mapping control. The
+        0.938206 spread relative to AB:AB demonstrates that the disclosed mapping
+        is load-bearing; a high score alone would not establish the mapping. This
+        remains an exercise-path result on a crystallographic contact, not biological-assembly
+        validation.
+      source_evaluation_run_ref: EVAL_1sar_cdba2c07_2026-09-21
+      source_row_ref: EVAL_1sar_cdba2c07_2026-09-21_IFACE_AB_SWAPPED
+  cross_tool_coverage:
+    id: QDS_1sar_cdba2c07_2026-09-21_coverage
+    task_coverage:
+    - id: QDS_1sar_cdba2c07_2026-09-21_coverage_T16_T16_capri_interface_quality_class_706843e67938
+      catalog_task_ref: T16
+      cctbx_oracles: []
+      non_cctbx_oracles: []
+      gap_status: 'informational — non-numeric measurement (not counted as coverage:
+        DockQ)'
+      metric_definition_ref: T16_capri_interface_quality_class
+      subject_ref: artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb
+      reference_subject_ref: repo:data/pdb_mtz/1sar_deposited.pdb#sha256=e60e5db6c7eb554a3ac4e184bdf7cbb7d69b682e287579bdcf5f8bf279d51f86
+      stage: final
+      scope: interface
+      scope_selector: EVAL_1sar_cdba2c07_2026-09-21_IFACE_AB_IDENTITY
+    - id: QDS_1sar_cdba2c07_2026-09-21_coverage_T16_T16_interface_buried_surface_area_4cd136661e08
+      catalog_task_ref: T16
+      cctbx_oracles: []
+      non_cctbx_oracles:
+      - biotite SASA
+      gap_status: non-cctbx only
+      metric_definition_ref: T16_interface_buried_surface_area
+      subject_ref: artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb
+      stage: final
+      scope: interface
+      scope_selector: EVAL_1sar_cdba2c07_2026-09-21_IFACE_AB_IDENTITY
+    - id: QDS_1sar_cdba2c07_2026-09-21_coverage_T16_T16_interface_dockq_score_9bd13cbf2a9d
+      catalog_task_ref: T16
+      cctbx_oracles: []
+      non_cctbx_oracles:
+      - DockQ
+      gap_status: non-cctbx only
+      metric_definition_ref: T16_interface_dockq_score
+      subject_ref: artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb
+      reference_subject_ref: repo:data/pdb_mtz/1sar_deposited.pdb#sha256=e60e5db6c7eb554a3ac4e184bdf7cbb7d69b682e287579bdcf5f8bf279d51f86
+      stage: final
+      scope: interface
+      scope_selector: EVAL_1sar_cdba2c07_2026-09-21_IFACE_AB_IDENTITY
+  tool_recommendations_applied:
+  - id: REC_T16_interface_dockq_score_top_considered
+    metric_definition_ref: T16_interface_dockq_score
+    tool_ref: DockQ
+    role: top_considered
+    rank: 1
+    justification: DockQ is the community-standard continuous interface-quality score
+      and the basis of the CAPRI quality classes; CAPRI class is recorded alongside
+      it as the ordinal label.
+    as_of_date: '2026-07-20'
+    effective_at: '2026-07-20T00:00:00+00:00'
+  - id: REC_T16_interface_dockq_score_top_performing
+    metric_definition_ref: T16_interface_dockq_score
+    tool_ref: DockQ
+    role: top_performing
+    rank: 1
+    justification: 'Installed and runnable now (scripts/t16_interface_quality.py,
+      DockQ 2.1.3): scores a model complex against the deposited reference and derives
+      the CAPRI class. Identity calibration on 1sar A/B -> 1.000.'
+    as_of_date: '2026-07-22'
+    effective_at: '2026-07-22T00:00:00+00:00'
+  - id: REC_T16_interface_buried_surface_area_top_considered_2026_09_22
+    metric_definition_ref: T16_interface_buried_surface_area
+    tool_ref: PISA/PDBePISA
+    role: top_considered
+    rank: 1
+    justification: 'PDBePISA is the reference service for interface area and biological-assembly
+      inference, and is the source the deposited assembly is judged against. Its interface_area
+      is per side, so double it before comparing with the harness total two-sided
+      BSA; require agreement within max(3% of the mean, 30 Å²) with a matched 1.4
+      Å probe and the benchmarked asymmetric selections: biotite protein-only versus
+      PISA''s API assembly-molecule surface, which may include ligand/hetero atoms.'
+    evidence_refs:
+    - ref/research/tolerance_benchmark_interface_bsa.md
+    as_of_date: '2026-09-22'
+    effective_at: '2026-09-22T09:00:00+00:00'
+    supersedes_recommendation_ref: REC_T16_interface_buried_surface_area_top_considered
+  - id: REC_T16_interface_buried_surface_area_top_performing_2026_09_22
+    metric_definition_ref: T16_interface_buried_surface_area
+    tool_ref: biotite SASA
+    role: top_performing
+    rank: 1
+    justification: 'Installed and runnable now (scripts/t16_interface_quality.py):
+      Shrake-Rupley SASA via biotite gives total two-sided buried area from the model
+      alone — ΣSASA(chains) − SASA(complex) — an installable stand-in for the PISA
+      web service. The artifact''s tutorial starting model 1sar.pdb A/B → 437.2 Å²
+      total; the separately downloaded RCSB deposition → 442.1 Å² total. PISA''s per-side
+      interface_area is doubled before applying the max(3% of the mean, 30 Å²) comparison
+      tolerance.'
+    evidence_refs:
+    - ref/research/tolerance_benchmark_interface_bsa.md
+    - ref/structural_criteria.yaml
+    as_of_date: '2026-09-22'
+    effective_at: '2026-09-22T09:00:00+00:00'
+    supersedes_recommendation_ref: REC_T16_interface_buried_surface_area_top_performing
+  - id: REC_T16_capri_interface_quality_class_top_considered
+    metric_definition_ref: T16_capri_interface_quality_class
+    tool_ref: DockQ
+    role: top_considered
+    rank: 1
+    justification: Community-standard continuous interface-quality score.
+    as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
+  headline_verdict: 'This partial T16 follow-up adds the same-sequence crystallographic-contact
+    mapping control on the packaged round-4 model; it does not re-measure or carry
+    forward any other task. Draft T15 measurements were retracted because the load-bearing
+    Gemmi-normalized input and raw assignments were not retained, so they could not
+    satisfy this record''s evidence standard without a new scientific rerun, which
+    was outside this update''s scope and was not performed. T16 is strongly mapping-dependent
+    (AB:AB 0.944527/High; AB:BA 0.006321/Incorrect) and remains informational because
+    A/B is a crystallographic contact. These additions do not change the September
+    audit''s central finding: the archive packages round 4 while the report describes
+    an absent round-7 model.'

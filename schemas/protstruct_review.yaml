@@ -68,6 +68,7 @@ enums:
     description: Outcome of a measurement against its declared pass criterion.
     permissible_values:
       pass: { description: Meets the criterion }
+      fail_criterion: { description: Fails a declared criterion without asserting disagreement with an agent claim }
       fail_by_oracle: { description: Independent oracle disagrees with agent claim and criterion fails }
       pass_with_caveat: { description: Criterion passes but a related claim is wrong }
       pass_criterion_fail_headline: { description: Criterion passes but headline number is inaccurate }
@@ -81,6 +82,14 @@ enums:
       cryo_em:
       predicted_model:
       nmr:
+
+  QdsCoverageScope:
+    description: Whether a QDS is a cumulative sheet or an explicitly bounded partial update.
+    permissible_values:
+      cumulative:
+        description: Combines all evaluation runs named in derived_from_evaluation_run_refs.
+      partial:
+        description: Covers only the tasks or measurements declared in scope_notes.
 
   StructureIdKind:
     description: Which database scheme the structure id follows.
@@ -360,6 +369,15 @@ classes:
         range: QualityDataSheet
         multivalued: true
         inlined_as_list: true
+      qds_replay_pins:
+        range: QdsReplayPin
+        multivalued: true
+        inlined_as_list: true
+        description: >-
+          Source-owned content pins for immutable QDS artifacts. Validation
+          replays a retained emitter contract against source-owned snapshots and
+          compares the result with a stable canonical byte projection, without
+          reading the current emitter, catalog, or registries.
       tool_recommendations:
         range: ToolRecommendation
         multivalued: true
@@ -428,6 +446,17 @@ classes:
         range: ToolFamily
         required: true
       notes:
+
+  SourceRowLineage:
+    mixin: true
+    description: Exact EvaluationRun row copied into a nonlegacy QDS.
+    attributes:
+      source_evaluation_run_ref:
+        range: EvaluationRun
+        description: EvaluationRun that owns source_row_ref.
+      source_row_ref:
+        range: string
+        description: Id of the structured source row copied into the QDS.
 
   # -------------------------------------------------------------- catalog
 
@@ -672,6 +701,19 @@ classes:
           structured ResidueRef / Site reference where appropriate. For `site`
           and `ligand` scope this value is the exact declared Site or Ligand id;
           put comparison qualifiers and human-readable detail in `notes`.
+      subject_ref:
+        range: string
+        description: >-
+          Stable identifier for the concrete model, dataset, or assembly measured.
+          This is distinct from scope_selector: the subject identifies the artefact,
+          while the selector identifies a chain, interface mapping, site, or other
+          subset within it. QDS emission uses an exact subject match ahead of legacy
+          rows where this field is absent and excludes explicit non-matches.
+      reference_subject_ref:
+        range: string
+        description: >-
+          Stable identifier for the native/reference artefact used by a comparative
+          measurement. Required by the T16 wrapper whenever DockQ is reported.
       metric_definition_ref:
       oracle_tool_ref:
       oracle_family:
@@ -692,6 +734,16 @@ classes:
       notes:
       provenance_ref:
         range: MeasurementProvenance
+      bundle_ref:
+        range: string
+        description: >-
+          Stable invocation/bundle id shared by coupled measurements that must
+          be selected and interpreted together.
+      evidence_refs:
+        range: string
+        multivalued: true
+        description: >-
+          Retained raw outputs or EvaluationRun ids supporting this measurement.
       assumptions:
         range: Assumption
         multivalued: true
@@ -755,6 +807,49 @@ classes:
           Number of values summarised by `mean`/`std_dev`. Required
           when `mean` is set, so a downstream consumer can interpret
           the summary statistics.
+      source_measurement_ref:
+        range: string
+        description: MeasurementValue id from which this QDS scalar was selected.
+      source_evaluation_run_ref:
+        range: string
+        description: EvaluationRun id containing source_measurement_ref.
+      metric_definition_ref:
+        range: MetricDefinition
+        description: Canonical metric carried through when a QDS wraps a measurement.
+      oracle_tool_ref:
+        range: Tool
+        description: Tool that produced the selected QDS scalar.
+      oracle_family:
+        range: ToolFamily
+        description: Independent-family classification of oracle_tool_ref.
+      pass_status:
+        range: PassStatus
+        description: Interpretation assigned by the source measurement.
+      pass_criterion:
+        description: Criterion applied by the source measurement, when any.
+      subject_ref:
+        range: string
+        description: Concrete measured subject carried through from the source row.
+      reference_subject_ref:
+        range: string
+        description: Native/reference subject carried through from the source row.
+      stage:
+        range: Stage
+        description: Measurement stage carried through from the source row.
+      scope:
+        range: MeasurementScope
+        description: Measurement scope carried through from the source row.
+      scope_selector:
+        description: Subset or comparison selector carried through from the source row.
+      evidence_refs:
+        range: string
+        multivalued: true
+        description: Retained raw outputs or EvaluationRun ids carried from the source row.
+      bundle_ref:
+        range: string
+        description: Coupled source-measurement bundle id carried through verbatim.
+      notes:
+        description: Source caveats and interpretation carried through verbatim.
 
   HeadlineFinding:
     description: >-
@@ -824,9 +919,10 @@ classes:
         multivalued: true
         inlined_as_list: true
         description: >-
-          Per-task exceptions to the no-cctbx-only invariant (#315),
-          declared here so the admission travels with the evidence it
-          excuses.
+          Claim-scoped exceptions to the no-cctbx-only invariant (#315),
+          declared here so the admission travels with the evidence it excuses.
+          A task-only legacy waiver is unambiguous only when exactly one claim
+          for that task is gated.
       headline_findings:
         range: HeadlineFinding
         multivalued: true
@@ -945,10 +1041,53 @@ classes:
           (e.g. "R-factors read from refine in-run log, not
           re-derived"). The QDS surfaces these alongside tool and
           measurement assumptions in assumptions_report[].
+      superseded_assumption_refs:
+        range: string
+        multivalued: true
+        description: >-
+          Assumption ids from earlier input EvaluationRuns that this run explicitly
+          withdraws. The QDS emitter omits those ids from a cumulative assumptions_report;
+          the superseding run's own evidence and headline must explain why.
       headline_verdict:
         description: One-paragraph human summary of the eval outcome.
 
   # ---------------------------------------------------- quality data sheet
+
+  QdsReplayPin:
+    description: >-
+      Content-addressed replay boundary stored with the source EvaluationRun.
+      The output hash is authoritative for canonical bytes. The remaining
+      hashes bind the retained emitter implementation and source-owned Tool,
+      recommendation, and assumption snapshots used for deterministic replay;
+      live registries and the live catalog are deliberately excluded.
+    attributes:
+      id:
+        identifier: true
+        required: true
+      qds_ref:
+        range: QualityDataSheet
+        required: true
+      source_evaluation_run_refs:
+        range: EvaluationRun
+        multivalued: true
+        required: true
+      emitter_contract_version:
+        required: true
+      canonical_qds_sha256:
+        required: true
+        pattern: '^[0-9a-f]{64}$'
+      emitter_source_sha256:
+        required: true
+        pattern: '^[0-9a-f]{64}$'
+      source_tools_sha256:
+        required: true
+        pattern: '^[0-9a-f]{64}$'
+      source_tool_recommendations_sha256:
+        required: true
+        pattern: '^[0-9a-f]{64}$'
+      source_tool_assumptions_sha256:
+        required: true
+        pattern: '^[0-9a-f]{64}$'
 
   QualityDataSheet:
     description: >-
@@ -964,13 +1103,26 @@ classes:
       structure_ref:
         range: Structure
         required: true
+      subject_ref:
+        range: string
+        description: Concrete model or artefact summarized by the selected scalar values.
       derived_from_evaluation_run_refs:
         range: EvaluationRun
         multivalued: true
         required: true
+      coverage_scope:
+        range: QdsCoverageScope
+        description: Cumulative sheet or explicitly bounded partial update.
+      scope_notes:
+        description: Human-readable boundary or carry-forward statement for coverage_scope.
       issued_at:
         range: datetime
         required: true
+      emitter_contract_version:
+        description: >-
+          Versioned qds_emit selection/routing contract used to build this
+          immutable sheet. Modern committed sheets must declare a supported
+          version so later emitter changes cannot silently redefine replay.
       identity_block:
         range: IdentityBlock
         inlined: true
@@ -1040,8 +1192,8 @@ classes:
         multivalued: true
         inlined_as_list: true
         description: >-
-          Waivers inherited from the source evals (#315), surfaced so a
-          QDS reader sees the admission next to the coverage row it
+          Claim-scoped waivers inherited from the source evals (#315), surfaced
+          so a QDS reader sees each admission next to the one coverage row it
           excuses.
       cross_tool_coverage:
         range: CrossToolCoverage
@@ -1238,7 +1390,7 @@ classes:
 
   CrossToolCoverage:
     description: >-
-      Per-task summary of which tool families confirmed each measurement.
+      Per-metric/context summary of which tool families confirmed each claim.
       The point of the QDS is to make it obvious where the trust model is
       strong (cctbx + non-cctbx agree) vs weak (cctbx only).
     attributes:
@@ -1251,7 +1403,9 @@ classes:
         inlined_as_list: true
 
   TaskCoverage:
-    description: One row in CrossToolCoverage — which oracles ran for this catalog task.
+    description: >-
+      One claim-level row in CrossToolCoverage. Coverage is keyed by metric and
+      comparison context; an unrelated oracle on the same task cannot close it.
     attributes:
       id:
         identifier: true
@@ -1259,6 +1413,21 @@ classes:
       catalog_task_ref:
         range: CatalogTaskId
         required: true
+      metric_definition_ref:
+        range: MetricDefinition
+        description: Metric whose claim-level oracle coverage is summarized.
+      subject_ref:
+        range: string
+        description: Concrete subject whose coverage is summarized.
+      reference_subject_ref:
+        range: string
+        description: Native/reference subject whose comparison coverage is summarized.
+      stage:
+        range: Stage
+      scope:
+        range: MeasurementScope
+      scope_selector:
+        description: Comparison subset whose coverage is summarized.
       cctbx_oracles:
         range: Tool
         multivalued: true
@@ -1272,12 +1441,13 @@ classes:
 
   CrossToolWaiver:
     description: >-
-      A machine-readable, per-task exception to the trust-model invariant
+      A machine-readable, claim-scoped exception to the trust-model invariant
       that no gradeable applied task may rest on cctbx-only evidence
       (#315). Declared on the EvaluationRun and surfaced verbatim in the
       QDS; the emitter fails hard on a cctbx-only or unclassifiable
-      coverage row with no matching waiver. A waiver is a named,
-      dated admission — not a pass.
+      coverage row with no unambiguous matching waiver. Legacy task-only
+      waivers are accepted only when the task has one gated claim. A waiver
+      is a named, dated admission — not a pass.
     attributes:
       id:
         identifier: true
@@ -1285,6 +1455,19 @@ classes:
       catalog_task_ref:
         range: CatalogTaskId
         required: true
+      metric_definition_ref:
+        range: MetricDefinition
+        description: Metric waived; required when a task has multiple gated claims.
+      subject_ref:
+        range: string
+      reference_subject_ref:
+        range: string
+      stage:
+        range: Stage
+      scope:
+        range: MeasurementScope
+      scope_selector:
+        description: Comparison subset waived.
       reason:
         required: true
         description: >-
@@ -1393,7 +1576,12 @@ classes:
         required: true
       secondary_structure_agreement:
         description: Fraction of residues on which two independent secondary-structure
-          assigners agree (three-state). The gradeable T15 metric.
+          assigners agree (three-state). Currently informational for the oracle pair
+          pending exact-denominator recalibration.
+        range: TypedMeasurementValue
+        inlined: true
+      secondary_structure_content:
+        description: Fraction of DSSP-scored residues assigned helix or strand (H+E).
         range: TypedMeasurementValue
         inlined: true
       secondary_structure_assignment:
@@ -1472,10 +1660,18 @@ classes:
       mandatory pair (CASP15+ consensus, Mariani et al. 2013); CA RMSD
       is reported additionally for legibility but is not the basis of
       the verdict on its own.
+    mixins:
+      - SourceRowLineage
     attributes:
       id:
         identifier: true
         required: true
+      subject_ref:
+        range: string
+        description: Concrete candidate artefact compared by this row.
+      reference_subject_ref:
+        range: string
+        description: Concrete reference artefact used by this comparison.
       candidate_ref:
         range: Structure
         required: true
@@ -1570,6 +1766,17 @@ classes:
           EvaluationRun ids that support this recommendation.
       as_of_date:
         range: date
+      effective_at:
+        range: datetime
+        description: >-
+          Exact timezone-qualified activation instant used for immutable QDS
+          time slicing. Required for canonical registry rows.
+      supersedes_recommendation_ref:
+        range: ToolRecommendation
+        description: >-
+          Earlier dated recommendation revision retired by this row. Keep the
+          predecessor in the registry so older immutable QDS snapshots remain
+          reproducible; emission selects the newest active lineage member.
       notes:
 
   # ---------------------------------------- residue / site / ligand v2
@@ -1605,10 +1812,15 @@ classes:
       multiple ResidueOutlier rows (e.g. both a Ramachandran and a
       rotamer outlier). The bare existence of this row is the
       assertion; the numeric magnitude lives on `metric_value`.
+    mixins:
+      - SourceRowLineage
     attributes:
       id:
         identifier: true
         required: true
+      subject_ref:
+        range: string
+        description: Concrete model or artefact on which this outlier was measured.
       residue_ref:
         range: ResidueRef
         required: true
@@ -1635,10 +1847,15 @@ classes:
       modelled atoms. Positive peaks = unmodelled mass; negative peaks
       = modelled atoms with no density support. The driving example
       includes peaks > 4σ as a critical eval signal.
+    mixins:
+      - SourceRowLineage
     attributes:
       id:
         identifier: true
         required: true
+      subject_ref:
+        range: string
+        description: Concrete model or map artefact in which this peak was measured.
       sigma_level:
         range: float
         required: true
@@ -1665,10 +1882,15 @@ classes:
       A contiguous stretch of residues with an issue (disordered loop,
       poor-density region, dense clash region, ...). Useful when the
       problem is a region rather than a single residue.
+    mixins:
+      - SourceRowLineage
     attributes:
       id:
         identifier: true
         required: true
+      subject_ref:
+        range: string
+        description: Concrete model or artefact containing this flagged region.
       structure_ref:
         range: Structure
         required: true
@@ -1694,10 +1916,15 @@ classes:
       `metric_definition_ref` is required so the QDS emitter can route
       each value to the correct per-residue array (lDDT vs displacement
       vs RSRZ vs Ramachandran-Z) without substring heuristics.
+    mixins:
+      - SourceRowLineage
     attributes:
       id:
         identifier: true
         required: true
+      subject_ref:
+        range: string
+        description: Concrete model or artefact on which this value was measured.
       residue_ref:
         range: ResidueRef
         required: true
@@ -1779,10 +2006,15 @@ classes:
 
   SecondaryStructureAssignment:
     description: DSSP/STRIDE-style assignment for a residue range.
+    mixins:
+      - SourceRowLineage
     attributes:
       id:
         identifier: true
         required: true
+      subject_ref:
+        range: string
+        description: Concrete model or artefact receiving this assignment.
       structure_ref:
         range: Structure
         required: true
@@ -1806,10 +2038,15 @@ classes:
 
   DomainAssignment:
     description: Structural domain and fold-classification assignment.
+    mixins:
+      - SourceRowLineage
     attributes:
       id:
         identifier: true
         required: true
+      subject_ref:
+        range: string
+        description: Concrete model or artefact receiving this domain assignment.
       structure_ref:
         range: Structure
         required: true
@@ -1836,6 +2073,8 @@ classes:
 
   InterfaceQuality:
     description: Structured quality record for one interface or assembly contact.
+    mixins:
+      - SourceRowLineage
     attributes:
       id:
         identifier: true
@@ -1843,12 +2082,20 @@ classes:
       structure_ref:
         range: Structure
         required: true
+      subject_ref:
+        range: string
+        description: Concrete model or assembly on which this interface was measured.
+      reference_subject_ref:
+        range: string
+        description: Concrete native/reference model against which DockQ was measured.
       interface_label:
         description: Stable local label for the interface.
       chain_id_1:
         description: First partner chain or component selector.
       chain_id_2:
         description: Second partner chain or component selector.
+      model_to_native_chain_mapping:
+        description: Explicit DockQ mapping in MODELCHAINS:NATIVECHAINS form.
       partner_1_selector:
         description: Free-text selector for partner 1 when a chain id is insufficient.
       partner_2_selector:
@@ -1864,14 +2111,23 @@ classes:
         inlined: true
       tool_ref:
         range: Tool
+      evidence_refs:
+        range: string
+        multivalued: true
+        description: Retained raw outputs supporting the interface scores and mapping.
       notes:
 
   NmrEnsembleQuality:
     description: Structured NMR ensemble/restraint validation record.
+    mixins:
+      - SourceRowLineage
     attributes:
       id:
         identifier: true
         required: true
+      subject_ref:
+        range: string
+        description: Concrete NMR ensemble artefact summarized by this row.
       structure_ref:
         range: Structure
         required: true
@@ -1890,10 +2146,15 @@ classes:
 
   PredictionEnsembleQuality:
     description: Structured predicted-model ensemble convergence record.
+    mixins:
+      - SourceRowLineage
     attributes:
       id:
         identifier: true
         required: true
+      subject_ref:
+        range: string
+        description: Concrete prediction-ensemble artefact summarized by this row.
       structure_ref:
         range: Structure
         required: true
@@ -1922,6 +2183,9 @@ classes:
         identifier: true
         required: true
         description: e.g. "1sar:A:Ca33" (structure:chain:CCD+resnum).
+      subject_ref:
+        range: string
+        description: Concrete model or artefact containing this ligand.
       structure_ref:
         range: Structure
         required: true
@@ -2018,6 +2282,24 @@ classes:
       id:
         identifier: true
         required: true
+      as_of_date:
+        range: date
+        description: >-
+          Date this registry assumption became active. Required for rows in
+          ref/tool_assumptions.yaml so immutable QDS emission can exclude
+          assumptions introduced after the sheet was issued; embedded
+          measurement/run assumptions are already pinned by their source EVAL.
+      effective_at:
+        range: datetime
+        description: >-
+          Exact timezone-qualified activation instant for rows in
+          ref/tool_assumptions.yaml. Embedded EVAL assumptions do not need it.
+      supersedes_assumption_ref:
+        range: Assumption
+        description: >-
+          Earlier dated registry assumption revision retired by this row. The
+          predecessor remains available to QDS snapshots issued before this
+          row became active.
       kind:
         range: AssumptionKind
         required: true
@@ -2094,6 +2376,9 @@ classes:
       id:
         identifier: true
         required: true
+      subject_ref:
+        range: string
+        description: Concrete model or artefact containing this site.
       structure_ref:
         range: Structure
         required: true

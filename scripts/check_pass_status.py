@@ -12,7 +12,7 @@ fields are.
 
 Rules, each read straight off the enum's own description:
 
-  R1  A status that references its criterion — pass, fail_by_oracle,
+  R1  A status that references its criterion — pass, fail_criterion, fail_by_oracle,
       pass_with_caveat, pass_criterion_fail_headline, fail_by_oracle_within_cctbx
       — requires a non-empty `pass_criterion`.
   R2  `informational` is "Reported without a declared criterion", so it must NOT
@@ -42,6 +42,7 @@ CUTOVER = "2026-09-07"  # the date these semantics became enforceable
 # Statuses whose enum description refers to the measurement's criterion.
 CRITERION_BEARING = frozenset({
     "pass",
+    "fail_criterion",
     "fail_by_oracle",
     "pass_with_caveat",
     "pass_criterion_fail_headline",

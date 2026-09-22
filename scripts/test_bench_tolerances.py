@@ -285,10 +285,44 @@ check("model_vs_data completeness parsed",
 t15b = load("bench_t15_ss_agreement")
 t16map = load("bench_t16_dockq_mapping")
 
-check("t15 agreement value parsed", float(t15b._AGREEMENT.search("    value_numeric: 0.7500"
-                                                                 ).group(1)), 0.75)
+t15_rows = t15b._rows_by_metric("""
+- metric_definition_ref: T15_secondary_structure_content
+  oracle_measure:
+    value_numeric: 0.4000
+- metric_definition_ref: T15_secondary_structure_agreement
+  oracle_measure:
+    value_numeric: 0.7500
+""")
+check("t15 agreement value parsed by metric id",
+      t15_rows["T15_secondary_structure_agreement"]["oracle_measure"]["value_numeric"],
+      0.75)
+check("t15 content value parsed by metric id",
+      t15_rows["T15_secondary_structure_content"]["oracle_measure"]["value_numeric"],
+      0.40)
 check("t15 concordant counts parsed",
       t15b._COUNTS.search("57/76 concordant over residues").groups(), ("57", "76"))
+check("t15 exact-denominator counts parsed",
+      t15b._ASSIGNER_COUNTS.search(
+          "DSSP 76, biotite 76, 0 scored by only one and excluded"
+      ).groups(), ("76", "76", "0"))
+t15_summary = t15b.summarize([
+    {
+        "pdb_id": "LOW",
+        "agreement": 1.0,
+        "clears_provisional_content_precondition": False,
+        "meets_provisional_0_65_expectation": False,
+    },
+    {
+        "pdb_id": "ADEQUATE",
+        "agreement": 0.75,
+        "clears_provisional_content_precondition": True,
+        "meets_provisional_0_65_expectation": True,
+    },
+])
+check("t15 low content is tracked as below a provisional precondition",
+      t15_summary["below_provisional_content_precondition"], ["LOW"])
+check("t15 benchmark summary does not emit a model-quality failure count",
+      "n_failures" in t15_summary or "failed" in t15_summary, False)
 
 # Only same-sequence chains may be swapped: a different sequence is an error, not
 # ambiguity, and scoring it would inflate the measured mapping cost.

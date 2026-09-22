@@ -1,0 +1,24 @@
+{
+  "id": "EVIDENCE_1sar_cdba2c07_2026-09-21_bsa",
+  "subject_ref": "artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb",
+  "source_archive": "data/coscientists/openscientist/cdba2c07-daff-4f60-ae96-12452b3a5fbb_artifacts.zip",
+  "source_member": "data/1sar_final.pdb",
+  "input_sha256": "8cbc1650f8be5a3833f98833fa514ec7d490c2c3bb9aa930413abac05e2a510b",
+  "tool": "biotite SASA",
+  "tool_version": "1.7.1",
+  "algorithm": "Shrake-Rupley",
+  "parameters": {
+    "chains": [
+      "A",
+      "B"
+    ],
+    "selection": "protein atoms only",
+    "probe_radius_a": 1.4,
+    "point_number": 1000
+  },
+  "complex_sasa_a2": 10766.39453125,
+  "separated_sasa_a2": 11204.16796875,
+  "buried_surface_area_a2_unrounded": 437.7734375,
+  "buried_surface_area_a2_reported": 437.8,
+  "formula": "separated_sasa_a2 - complex_sasa_a2"
+}

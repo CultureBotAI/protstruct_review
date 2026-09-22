@@ -8,9 +8,11 @@
 # the recommendation against MeasurementValue.oracle_tool_ref to flag evals
 # that used a non-recommended tool.
 #
-# Recommendations evolve. Bump `as_of_date` when a recommendation changes;
-# don't mutate in place. The QualityDataSheet snapshots the recommendations
-# active at its `issued_at` via `tool_recommendations_applied`.
+# Recommendations evolve. Do not mutate a row already snapshotted by an issued
+# QDS: add a new id with `as_of_date`, exact timezone-qualified `effective_at`,
+# and `supersedes_recommendation_ref` pointing at its predecessor. The
+# QualityDataSheet time-slices those version lineages at its exact `issued_at`
+# via `tool_recommendations_applied`.
 #
 # Schema: schemas/protstruct_review.yaml — class ToolRecommendation.
 
@@ -29,6 +31,7 @@ tool_recommendations:
     evidence_refs:
       - Zhang2004
     as_of_date: '2026-04-25'
+    effective_at: '2026-04-25T00:00:00+00:00'
 
   - id: REC_T01_ca_rmsd_top_performing
     metric_definition_ref: T01_ca_rmsd_å
@@ -41,6 +44,7 @@ tool_recommendations:
     evidence_refs:
       - EVAL_1sar_cdba2c07_2026-04-24
     as_of_date: '2026-04-25'
+    effective_at: '2026-04-25T00:00:00+00:00'
 
   - id: REC_T01_ca_rmsd_alternative
     metric_definition_ref: T01_ca_rmsd_å
@@ -51,6 +55,7 @@ tool_recommendations:
       Lightweight, scriptable second oracle. Use when TM-align is
       unavailable or when a non-Zhang-lab implementation is needed.
     as_of_date: '2026-04-25'
+    effective_at: '2026-04-25T00:00:00+00:00'
 
   - id: REC_T01_tm_score_top_considered
     metric_definition_ref: T01_tm-score
@@ -62,6 +67,7 @@ tool_recommendations:
     evidence_refs:
       - Zhang2004
     as_of_date: '2026-04-25'
+    effective_at: '2026-04-25T00:00:00+00:00'
 
   # ----- T03: Reciprocal-space refinement (X-ray) ------------------------
   # The catalog T06 oracle (phenix.model_vs_data) is what produces R-factors
@@ -81,6 +87,7 @@ tool_recommendations:
       - Brünger1992
       - EvansMurshudov2013
     as_of_date: '2026-04-25'
+    effective_at: '2026-04-25T00:00:00+00:00'
 
   - id: REC_T03_r_work_top_performing
     metric_definition_ref: T03_r-work
@@ -106,6 +113,7 @@ tool_recommendations:
       - EVAL_1sar_cdba2c07_2026-04-24
       - EVAL_1sar_cdba2c07_2026-09-07
     as_of_date: '2026-09-09'
+    effective_at: '2026-09-09T00:00:00+00:00'
 
   - id: REC_T03_r_work_alternative_servalcat
     metric_definition_ref: T03_r-work
@@ -118,6 +126,7 @@ tool_recommendations:
     evidence_refs:
       - Yamashita2021
     as_of_date: '2026-04-25'
+    effective_at: '2026-04-25T00:00:00+00:00'
 
   - id: REC_T03_r_free_top_considered
     metric_definition_ref: T03_r-free
@@ -128,6 +137,7 @@ tool_recommendations:
     evidence_refs:
       - Brünger1992
     as_of_date: '2026-04-25'
+    effective_at: '2026-04-25T00:00:00+00:00'
 
   - id: REC_T03_r_free_top_performing
     metric_definition_ref: T03_r-free
@@ -146,6 +156,7 @@ tool_recommendations:
       - EVAL_1sar_cdba2c07_2026-04-24
       - EVAL_1sar_cdba2c07_2026-09-07
     as_of_date: '2026-09-09'
+    effective_at: '2026-09-09T00:00:00+00:00'
 
   - id: REC_T03_gap_top_considered
     metric_definition_ref: T03_r-free_r-work_gap
@@ -156,6 +167,7 @@ tool_recommendations:
       The gap is computed from the same R-work / R-free pair, so the
       strongest tool for those is also the strongest for the gap.
     as_of_date: '2026-04-25'
+    effective_at: '2026-04-25T00:00:00+00:00'
 
   # ----- T05: Geometry validation ---------------------------------------
   # The catalog gold-standard oracle for T05 is standalone MolProbity,
@@ -175,6 +187,7 @@ tool_recommendations:
       - Davis2007
       - Williams2018
     as_of_date: '2026-04-25'
+    effective_at: '2026-04-25T00:00:00+00:00'
 
   - id: REC_T05_clashscore_top_performing
     metric_definition_ref: T05_clashscore
@@ -188,6 +201,7 @@ tool_recommendations:
     evidence_refs:
       - EVAL_1sar_cdba2c07_2026-04-24
     as_of_date: '2026-04-25'
+    effective_at: '2026-04-25T00:00:00+00:00'
 
   - id: REC_T05_clashscore_alternative_phenix
     metric_definition_ref: T05_clashscore
@@ -199,6 +213,7 @@ tool_recommendations:
       the trust model on its own (PHENIX-grading-PHENIX). Use with the
       Richardson-lab standalone pipeline alongside.
     as_of_date: '2026-04-25'
+    effective_at: '2026-04-25T00:00:00+00:00'
 
   - id: REC_T05_rama_outlier_top_considered
     metric_definition_ref: T05_ramachandran_outlier
@@ -211,6 +226,7 @@ tool_recommendations:
     evidence_refs:
       - Williams2018
     as_of_date: '2026-04-25'
+    effective_at: '2026-04-25T00:00:00+00:00'
 
   - id: REC_T05_rama_favored_top_considered
     metric_definition_ref: T05_ramachandran_favored
@@ -221,6 +237,7 @@ tool_recommendations:
     evidence_refs:
       - Williams2018
     as_of_date: '2026-04-25'
+    effective_at: '2026-04-25T00:00:00+00:00'
 
   - id: REC_T05_rotamer_outlier_top_considered
     metric_definition_ref: T05_rotamer_outlier
@@ -234,6 +251,7 @@ tool_recommendations:
     evidence_refs:
       - Williams2018
     as_of_date: '2026-04-25'
+    effective_at: '2026-04-25T00:00:00+00:00'
 
   - id: REC_T05_molprobity_score_top_considered
     metric_definition_ref: T05_molprobity_composite
@@ -246,6 +264,7 @@ tool_recommendations:
     evidence_refs:
       - Davis2007
     as_of_date: '2026-04-25'
+    effective_at: '2026-04-25T00:00:00+00:00'
 
   # ----- T06: Model-vs-data statistics ----------------------------------
 
@@ -256,6 +275,7 @@ tool_recommendations:
     rank: 1
     justification: Catalog-defined oracle for T06.
     as_of_date: '2026-04-25'
+    effective_at: '2026-04-25T00:00:00+00:00'
 
   - id: REC_T06_r_free_top_considered
     metric_definition_ref: T06_r-free
@@ -264,6 +284,7 @@ tool_recommendations:
     rank: 1
     justification: Catalog-defined oracle for T06.
     as_of_date: '2026-04-25'
+    effective_at: '2026-04-25T00:00:00+00:00'
 
   - id: REC_T06_d_fsc_model_top_considered
     metric_definition_ref: T06_d_fsc_model
@@ -277,6 +298,7 @@ tool_recommendations:
       - Yamashita2021
       - Brink2021
     as_of_date: '2026-04-25'
+    effective_at: '2026-04-25T00:00:00+00:00'
 
   # ----- Per-residue / per-site / per-ligand metrics (v2 schema) ---------
 
@@ -293,6 +315,7 @@ tool_recommendations:
       - Davis2007
       - Williams2018
     as_of_date: '2026-04-26'
+    effective_at: '2026-04-26T00:00:00+00:00'
 
   - id: REC_T05_holton_geom_energy_top_considered
     metric_definition_ref: T05_holton_geom_energy_ratio_sigma
@@ -304,6 +327,7 @@ tool_recommendations:
       no external implementation exists. Cross-check the inputs
       (clashscore, Ramachandran, rotamer) against MolProbity standalone.
     as_of_date: '2026-04-26'
+    effective_at: '2026-04-26T00:00:00+00:00'
 
   - id: REC_T13_completeness_overall_top_considered
     metric_definition_ref: T13_completeness_overall_outer
@@ -316,6 +340,7 @@ tool_recommendations:
     evidence_refs:
       - EvansMurshudov2013
     as_of_date: '2026-04-26'
+    effective_at: '2026-04-26T00:00:00+00:00'
 
   # ----- Geometry RMSZ (over-refinement detector) ----------------------
 
@@ -329,6 +354,7 @@ tool_recommendations:
       REFMAC also reports geometry RMSZ; until REFMAC is installed,
       Holton is the available oracle.
     as_of_date: '2026-04-26'
+    effective_at: '2026-04-26T00:00:00+00:00'
 
   - id: REC_T05_bond_angle_rmsz_top_considered
     metric_definition_ref: T05_bond-angle_rmsz
@@ -337,6 +363,7 @@ tool_recommendations:
     rank: 1
     justification: Same as bond-length RMSZ.
     as_of_date: '2026-04-26'
+    effective_at: '2026-04-26T00:00:00+00:00'
 
   # ----- Cryo-EM map quality additions ---------------------------------
 
@@ -351,6 +378,7 @@ tool_recommendations:
     evidence_refs:
       - Afonine2018
     as_of_date: '2026-04-26'
+    effective_at: '2026-04-26T00:00:00+00:00'
 
   - id: REC_T12_cc_volume_top_considered
     metric_definition_ref: T12_cc_volume
@@ -361,6 +389,7 @@ tool_recommendations:
     evidence_refs:
       - Afonine2018
     as_of_date: '2026-04-26'
+    effective_at: '2026-04-26T00:00:00+00:00'
 
   - id: REC_T12_emringer_top_considered
     metric_definition_ref: T12_emringer
@@ -374,6 +403,7 @@ tool_recommendations:
     evidence_refs:
       - Barad2015
     as_of_date: '2026-04-26'
+    effective_at: '2026-04-26T00:00:00+00:00'
 
   - id: REC_T12_q_score_top_considered
     metric_definition_ref: T12_q_score
@@ -386,6 +416,7 @@ tool_recommendations:
     evidence_refs:
       - Pintilie2020
     as_of_date: '2026-04-26'
+    effective_at: '2026-04-26T00:00:00+00:00'
 
   - id: REC_T12_global_fsc_top_considered
     metric_definition_ref: T12_global_fsc_0143
@@ -399,6 +430,7 @@ tool_recommendations:
       - Yamashita2021
       - Brink2021
     as_of_date: '2026-04-26'
+    effective_at: '2026-04-26T00:00:00+00:00'
 
   # ----- OpenStructure (closes the cctbx-only gap on lDDT) ------------
 
@@ -414,6 +446,7 @@ tool_recommendations:
     evidence_refs:
       - Mariani2013
     as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
 
   - id: REC_T01_lddt_global_top_performing
     metric_definition_ref: T01_lddt_global
@@ -428,6 +461,7 @@ tool_recommendations:
     evidence_refs:
       - EVAL_1sar_cdba2c07_2026-04-24
     as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
 
   - id: REC_T01_per_residue_lddt_top_considered
     metric_definition_ref: T01_per_residue_lddt
@@ -440,6 +474,7 @@ tool_recommendations:
     evidence_refs:
       - Mariani2013
     as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
 
   # ----- CCP4 / REFMAC5 / ProSMART (closes cctbx-only gap on
   # ----- MolProbity composite and adds T03 refinement second-opinion).
@@ -460,6 +495,7 @@ tool_recommendations:
       a well-refined model; > 0.5 σ disagreement indicates the
       restraint libraries differ on which atoms are involved.
     as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
 
   - id: REC_T05_bond_angle_rmsz_top_performing
     metric_definition_ref: T05_bond-angle_rmsz
@@ -468,6 +504,7 @@ tool_recommendations:
     rank: 1
     justification: Same as bond-length RMSZ — REFMAC5 internal restraint library.
     as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
 
   - id: REC_T03_r_work_top_performing_refmac
     metric_definition_ref: T03_r-work
@@ -484,6 +521,7 @@ tool_recommendations:
     evidence_refs:
       - Joosten2012
     as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
 
   - id: REC_T13_completeness_outer_top_performing
     metric_definition_ref: T13_completeness_overall_outer
@@ -495,11 +533,11 @@ tool_recommendations:
       completeness, ⟨I/σ⟩, and CC½ statistics. Catalog T13 oracle
       (catalog notes name it explicitly).
     as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
 
   # --- T15-T17 (oracle-only tasks; no PHENIX implementation exists) ---------
-  # None of these oracles are installed locally yet (see ref/oracle_tools.md
-  # "Not installed"), so these are consensus recommendations, not empirical
-  # top_performing results within this harness.
+  # See ref/oracle_tools.md for the installed DSSP/biotite/DockQ paths and for
+  # the remaining web-service or optional-tool limitations.
 
   - id: REC_T15_secondary_structure_agreement_top_considered
     metric_definition_ref: T15_secondary_structure_agreement
@@ -508,10 +546,30 @@ tool_recommendations:
     rank: 1
     justification: >-
       DSSP is the reference implementation for secondary-structure
-      assignment. The gradeable T15 metric is three-state agreement
-      between two independent assigners, so DSSP is paired with STRIDE
-      rather than used alone.
+      assignment. The gradeable T15 metric is three-state agreement between
+      two independent assigners, so DSSP is paired with STRIDE rather than
+      used alone.
     as_of_date: '2026-07-20'
+    effective_at: '2026-07-20T00:00:00+00:00'
+
+  - id: REC_T15_secondary_structure_agreement_top_considered_2026_09_22
+    metric_definition_ref: T15_secondary_structure_agreement
+    tool_ref: DSSP
+    role: top_considered
+    rank: 1
+    justification: >-
+      DSSP is the reference implementation for secondary-structure
+      assignment. For the oracle-side T15 result, report its H+E content with
+      three-state agreement from an independent second assigner. Content ≥0.20
+      is only a provisional, informational precondition on how much weight to
+      give the agreement; it is not a model-quality threshold. The historical
+      0.65 value is provisional and non-gradeable until exact-denominator recalibration.
+      The separate agent-vs-DSSP clause is ≥0.85 when agent labels exist.
+    evidence_refs:
+      - ref/research/tolerance_benchmark_ss_agreement.md
+    as_of_date: '2026-09-22'
+    effective_at: '2026-09-22T09:00:00+00:00'
+    supersedes_recommendation_ref: REC_T15_secondary_structure_agreement_top_considered
 
   - id: REC_T15_secondary_structure_agreement_alternative
     metric_definition_ref: T15_secondary_structure_agreement
@@ -524,6 +582,40 @@ tool_recommendations:
       differently from DSSP — which is what makes the agreement
       informative rather than tautological.
     as_of_date: '2026-07-20'
+    effective_at: '2026-07-20T00:00:00+00:00'
+
+  - id: REC_T15_secondary_structure_agreement_alternative_2026_09_22
+    metric_definition_ref: T15_secondary_structure_agreement
+    tool_ref: STRIDE
+    role: alternative
+    rank: 2
+    justification: >-
+      STRIDE is the independent second assigner in the agreement pair.
+      It uses hydrogen-bond energy plus dihedral criteria, so it fails
+      differently from DSSP — which is what makes the agreement informative
+      rather than tautological. Report DSSP H+E content alongside it; content
+      below the provisional 0.20 precondition warns that coil/coil calls may dominate.
+    evidence_refs:
+      - ref/research/tolerance_benchmark_ss_agreement.md
+    as_of_date: '2026-09-22'
+    effective_at: '2026-09-22T09:00:00+00:00'
+    supersedes_recommendation_ref: REC_T15_secondary_structure_agreement_alternative
+
+  - id: REC_T15_secondary_structure_content_top_considered
+    metric_definition_ref: T15_secondary_structure_content
+    tool_ref: DSSP
+    role: top_considered
+    rank: 1
+    justification: >-
+      DSSP H+E content is an informational diagnostic for the two-assigner
+      agreement metric. Its provisional ≥0.20 precondition indicates whether
+      coil/coil calls may dominate; it is not a model-quality threshold.
+      scripts/t15_ss_agreement.py emits it from the same normalized DSSP
+      assignment used in the agreement calculation.
+    evidence_refs:
+      - ref/research/tolerance_benchmark_ss_agreement.md
+    as_of_date: '2026-09-22'
+    effective_at: '2026-09-22T09:00:00+00:00'
 
   - id: REC_T15_fold_classification_top_considered
     metric_definition_ref: T15_fold_classification
@@ -535,6 +627,7 @@ tool_recommendations:
       entries. Informational rather than gradeable — record the label,
       and treat CATH/SCOPe/ECOD disagreement as the signal.
     as_of_date: '2026-07-20'
+    effective_at: '2026-07-20T00:00:00+00:00'
 
   - id: REC_T16_interface_dockq_score_top_considered
     metric_definition_ref: T16_interface_dockq_score
@@ -546,6 +639,7 @@ tool_recommendations:
       score and the basis of the CAPRI quality classes; CAPRI class is
       recorded alongside it as the ordinal label.
     as_of_date: '2026-07-20'
+    effective_at: '2026-07-20T00:00:00+00:00'
 
   - id: REC_T16_interface_dockq_score_top_performing
     metric_definition_ref: T16_interface_dockq_score
@@ -557,6 +651,7 @@ tool_recommendations:
       2.1.3): scores a model complex against the deposited reference and
       derives the CAPRI class. Identity calibration on 1sar A/B -> 1.000.
     as_of_date: '2026-07-22'
+    effective_at: '2026-07-22T00:00:00+00:00'
 
   - id: REC_T16_interface_buried_surface_area_top_considered
     metric_definition_ref: T16_interface_buried_surface_area
@@ -568,6 +663,26 @@ tool_recommendations:
       biological-assembly inference, and is the source the deposited
       assembly is judged against.
     as_of_date: '2026-07-20'
+    effective_at: '2026-07-20T00:00:00+00:00'
+
+  - id: REC_T16_interface_buried_surface_area_top_considered_2026_09_22
+    metric_definition_ref: T16_interface_buried_surface_area
+    tool_ref: PISA/PDBePISA
+    role: top_considered
+    rank: 1
+    justification: >-
+      PDBePISA is the reference service for interface area and
+      biological-assembly inference, and is the source the deposited
+      assembly is judged against. Its interface_area is per side, so double
+      it before comparing with the harness total two-sided BSA; require
+      agreement within max(3% of the mean, 30 Å²) with a matched 1.4 Å probe
+      and the benchmarked asymmetric selections: biotite protein-only versus
+      PISA's API assembly-molecule surface, which may include ligand/hetero atoms.
+    evidence_refs:
+      - ref/research/tolerance_benchmark_interface_bsa.md
+    as_of_date: '2026-09-22'
+    effective_at: '2026-09-22T09:00:00+00:00'
+    supersedes_recommendation_ref: REC_T16_interface_buried_surface_area_top_considered
 
   - id: REC_T16_interface_buried_surface_area_top_performing
     metric_definition_ref: T16_interface_buried_surface_area
@@ -580,6 +695,27 @@ tool_recommendations:
       alone — ΣSASA(chains) − SASA(complex) — an installable stand-in for
       the PISA web service. 1sar A/B → 437.2 Å².
     as_of_date: '2026-07-22'
+    effective_at: '2026-07-22T00:00:00+00:00'
+
+  - id: REC_T16_interface_buried_surface_area_top_performing_2026_09_22
+    metric_definition_ref: T16_interface_buried_surface_area
+    tool_ref: biotite SASA
+    role: top_performing
+    rank: 1
+    justification: >-
+      Installed and runnable now (scripts/t16_interface_quality.py):
+      Shrake-Rupley SASA via biotite gives total two-sided buried area from
+      the model alone — ΣSASA(chains) − SASA(complex) — an installable
+      stand-in for the PISA web service. The artifact's tutorial starting
+      model 1sar.pdb A/B → 437.2 Å² total; the separately downloaded RCSB
+      deposition → 442.1 Å² total. PISA's per-side interface_area is doubled
+      before applying the max(3% of the mean, 30 Å²) comparison tolerance.
+    evidence_refs:
+      - ref/research/tolerance_benchmark_interface_bsa.md
+      - ref/structural_criteria.yaml
+    as_of_date: '2026-09-22'
+    effective_at: '2026-09-22T09:00:00+00:00'
+    supersedes_recommendation_ref: REC_T16_interface_buried_surface_area_top_performing
 
   - id: REC_T17_nmr_ensemble_precision_rmsd_top_considered
     metric_definition_ref: T17_nmr_ensemble_precision_rmsd
@@ -591,6 +727,7 @@ tool_recommendations:
       for ensemble precision and restraint-violation statistics, and is
       the gold standard named in the T17 catalog entry.
     as_of_date: '2026-07-20'
+    effective_at: '2026-07-20T00:00:00+00:00'
 
   - id: REC_T17_nmr_ensemble_precision_rmsd_top_performing
     metric_definition_ref: T17_nmr_ensemble_precision_rmsd
@@ -603,6 +740,7 @@ tool_recommendations:
       multi-model PDB alone via biotite — no restraints or wwPDB report
       needed. Reports the ordered-core mean (tool-comparable) alongside the whole-chain mean — 1d3z (ubiquitin, 10 models): core 0.316 Å, whole-chain 0.428 Å.
     as_of_date: '2026-07-22'
+    effective_at: '2026-07-22T00:00:00+00:00'
 
   - id: REC_T15_secondary_structure_agreement_top_performing
     metric_definition_ref: T15_secondary_structure_agreement
@@ -615,6 +753,30 @@ tool_recommendations:
       a different algorithm family from DSSP's H-bond energetics, so the
       agreement is informative rather than tautological. Stands in for
       STRIDE, which is not currently installable via Homebrew.
+    as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
+
+  - id: REC_T15_secondary_structure_agreement_top_performing_2026_09_22
+    metric_definition_ref: T15_secondary_structure_agreement
+    tool_ref: biotite P-SEA
+    role: top_performing
+    rank: 1
+    justification: >-
+      Installed and runnable now (scripts/t15_ss_agreement.py): DSSP vs
+      biotite P-SEA three-state agreement. biotite's Cα-geometry P-SEA is
+      a different algorithm family from DSSP's H-bond energetics, so the
+      agreement is informative rather than tautological. Report agreement and
+      DSSP H+E content informationally; content ≥0.20 is a provisional
+      interpretability precondition, not a quality verdict. The historical 0.65
+      value is provisional and non-gradeable until exact-denominator recalibration.
+      Stands in for STRIDE, which is not currently installable via Homebrew.
+      This is distinct from the agent-vs-DSSP ≥0.85 clause, which is
+      unevaluable without agent labels.
+    evidence_refs:
+      - ref/research/tolerance_benchmark_ss_agreement.md
+    as_of_date: '2026-09-22'
+    effective_at: '2026-09-22T09:00:00+00:00'
+    supersedes_recommendation_ref: REC_T15_secondary_structure_agreement_top_performing
   # --- Coverage completion (issue #4), corrected per the Codex domain review of PR #7.
   # Per-metric, capability-aware: each metric is assigned the tool that actually computes
   # THAT quantity and is genuinely independent of PHENIX/cctbx (not merely its task default).
@@ -631,6 +793,7 @@ tool_recommendations:
     rank: 1
     justification: All-atom structural superposition; independent all-atom RMSD not restricted to Cα.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T01_aligned_residues_top_considered
     metric_definition_ref: T01_aligned_residues
     tool_ref: TM-align
@@ -639,6 +802,7 @@ tool_recommendations:
     justification: Sequence-independent Cα superposition; community reference for RMSD/TM-score and aligned
       length.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T01_gdt-ts_top_considered
     metric_definition_ref: T01_gdt-ts
     tool_ref: OpenStructure
@@ -646,6 +810,7 @@ tool_recommendations:
     rank: 1
     justification: CASP-grade lDDT/TMScore/GDT-TS reference implementation, independent of cctbx.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T01_per-residue_δca_top_considered
     metric_definition_ref: T01_per-residue_δca
     tool_ref: gemmi script
@@ -654,6 +819,7 @@ tool_recommendations:
     justification: Independent coordinate/B-factor parser for per-residue displacement, B-factor deltas,
       ligand geometry.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T02_per-residue_ramachandran_rotamer_outlier_diffs_top_considered
     metric_definition_ref: T02_per-residue_ramachandran_rotamer_outlier_diffs
     tool_ref: MolProbity (gold)
@@ -662,6 +828,7 @@ tool_recommendations:
     justification: 'Richardson-lab MolProbity: gold standard for clash/Ramachandran/rotamer/Cβ, probe-based
       contacts and H-bonds.'
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T02_ss_agreement_top_considered
     metric_definition_ref: T02_ss_agreement
     tool_ref: DSSP
@@ -669,6 +836,7 @@ tool_recommendations:
     rank: 1
     justification: DSSP secondary-structure assignment for the SS-agreement metric.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T02_b-factor_deltas_top_considered
     metric_definition_ref: T02_b-factor_deltas
     tool_ref: gemmi script
@@ -677,6 +845,7 @@ tool_recommendations:
     justification: Independent coordinate/B-factor parser for per-residue displacement, B-factor deltas,
       ligand geometry.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T02_ligand_com_distance_top_considered
     metric_definition_ref: T02_ligand_com_distance
     tool_ref: gemmi script
@@ -685,6 +854,7 @@ tool_recommendations:
     justification: Independent coordinate/B-factor parser for per-residue displacement, B-factor deltas,
       ligand geometry.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T02_omega_cis_trans_flips_top_considered
     metric_definition_ref: T02_omega_cis_trans_flips
     tool_ref: gemmi validate
@@ -692,6 +862,7 @@ tool_recommendations:
     rank: 1
     justification: Independent covalent-geometry parser (bond/angle/planarity/chirality/omega), non-cctbx.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T02_his_protonation_diffs_top_considered
     metric_definition_ref: T02_his_protonation_diffs
     tool_ref: reduce (standalone, Richardson)
@@ -699,6 +870,7 @@ tool_recommendations:
     rank: 1
     justification: Richardson-lab standalone reduce; independent H-placement / protonation / flip oracle.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T03_δr-free_vs_input_top_considered
     metric_definition_ref: T03_δr-free_vs_input
     tool_ref: REFMAC5 (CCP4)
@@ -706,6 +878,7 @@ tool_recommendations:
     rank: 1
     justification: Independent ML refiner; post-MR R-free and reciprocal-space refinement statistics.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T03_bond_angle_rmsd_top_considered
     metric_definition_ref: T03_bond_angle_rmsd
     tool_ref: gemmi validate
@@ -713,6 +886,7 @@ tool_recommendations:
     rank: 1
     justification: Independent covalent-geometry parser (bond/angle/planarity/chirality/omega), non-cctbx.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T03_molprobity_score_top_considered
     metric_definition_ref: T03_molprobity_score
     tool_ref: MolProbity (gold)
@@ -721,6 +895,7 @@ tool_recommendations:
     justification: 'Richardson-lab MolProbity: gold standard for clash/Ramachandran/rotamer/Cβ, probe-based
       contacts and H-bonds.'
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T03_clashscore_top_considered
     metric_definition_ref: T03_clashscore
     tool_ref: MolProbity (gold)
@@ -729,6 +904,7 @@ tool_recommendations:
     justification: 'Richardson-lab MolProbity: gold standard for clash/Ramachandran/rotamer/Cβ, probe-based
       contacts and H-bonds.'
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T03_ramachandran_favored_top_considered
     metric_definition_ref: T03_ramachandran_favored
     tool_ref: MolProbity (gold)
@@ -737,6 +913,7 @@ tool_recommendations:
     justification: 'Richardson-lab MolProbity: gold standard for clash/Ramachandran/rotamer/Cβ, probe-based
       contacts and H-bonds.'
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T04_cc_mask_top_considered
     metric_definition_ref: T04_cc_mask
     tool_ref: Servalcat
@@ -744,6 +921,7 @@ tool_recommendations:
     rank: 1
     justification: Independent refinement / FSC / sigma-A oracle (installed); map and refinement metrics.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T04_cc_box_top_considered
     metric_definition_ref: T04_cc_box
     tool_ref: Servalcat
@@ -751,6 +929,7 @@ tool_recommendations:
     rank: 1
     justification: Independent refinement / FSC / sigma-A oracle (installed); map and refinement metrics.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T04_cc_peaks_top_considered
     metric_definition_ref: T04_cc_peaks
     tool_ref: Servalcat
@@ -758,6 +937,7 @@ tool_recommendations:
     rank: 1
     justification: Independent refinement / FSC / sigma-A oracle (installed); map and refinement metrics.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T04_cc_volume_top_considered
     metric_definition_ref: T04_cc_volume
     tool_ref: Servalcat
@@ -765,6 +945,7 @@ tool_recommendations:
     rank: 1
     justification: Independent refinement / FSC / sigma-A oracle (installed); map and refinement metrics.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T04_d_fsc_model_top_considered
     metric_definition_ref: T04_d_fsc_model
     tool_ref: Servalcat
@@ -772,6 +953,7 @@ tool_recommendations:
     rank: 1
     justification: Independent refinement / FSC / sigma-A oracle (installed); map and refinement metrics.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T04_δcc_vs_input_top_considered
     metric_definition_ref: T04_δcc_vs_input
     tool_ref: Servalcat
@@ -779,6 +961,7 @@ tool_recommendations:
     rank: 1
     justification: Independent refinement / FSC / sigma-A oracle (installed); map and refinement metrics.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T04_clashscore_top_considered
     metric_definition_ref: T04_clashscore
     tool_ref: MolProbity (gold)
@@ -787,6 +970,7 @@ tool_recommendations:
     justification: 'Richardson-lab MolProbity: gold standard for clash/Ramachandran/rotamer/Cβ, probe-based
       contacts and H-bonds.'
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T04_ramachandran_favored_top_considered
     metric_definition_ref: T04_ramachandran_favored
     tool_ref: MolProbity (gold)
@@ -795,6 +979,7 @@ tool_recommendations:
     justification: 'Richardson-lab MolProbity: gold standard for clash/Ramachandran/rotamer/Cβ, probe-based
       contacts and H-bonds.'
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T05_cbeta_outliers_top_considered
     metric_definition_ref: T05_cbeta_outliers
     tool_ref: MolProbity (gold)
@@ -803,6 +988,7 @@ tool_recommendations:
     justification: 'Richardson-lab MolProbity: gold standard for clash/Ramachandran/rotamer/Cβ, probe-based
       contacts and H-bonds.'
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T05_bond-length_rmsd_top_considered
     metric_definition_ref: T05_bond-length_rmsd
     tool_ref: gemmi validate
@@ -810,6 +996,7 @@ tool_recommendations:
     rank: 1
     justification: Independent covalent-geometry parser (bond/angle/planarity/chirality/omega), non-cctbx.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T05_bond-angle_rmsd_top_considered
     metric_definition_ref: T05_bond-angle_rmsd
     tool_ref: gemmi validate
@@ -817,6 +1004,7 @@ tool_recommendations:
     rank: 1
     justification: Independent covalent-geometry parser (bond/angle/planarity/chirality/omega), non-cctbx.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T05_planarity_rmsd_top_considered
     metric_definition_ref: T05_planarity_rmsd
     tool_ref: gemmi validate
@@ -824,6 +1012,7 @@ tool_recommendations:
     rank: 1
     justification: Independent covalent-geometry parser (bond/angle/planarity/chirality/omega), non-cctbx.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T05_chirality_outliers_top_considered
     metric_definition_ref: T05_chirality_outliers
     tool_ref: gemmi validate
@@ -831,6 +1020,7 @@ tool_recommendations:
     rank: 1
     justification: Independent covalent-geometry parser (bond/angle/planarity/chirality/omega), non-cctbx.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T05_cablam_outliers_top_considered
     metric_definition_ref: T05_cablam_outliers
     tool_ref: MolProbity (gold)
@@ -839,6 +1029,7 @@ tool_recommendations:
     justification: 'Richardson-lab MolProbity: gold standard for clash/Ramachandran/rotamer/Cβ, probe-based
       contacts and H-bonds.'
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T06_cc_work_top_considered
     metric_definition_ref: T06_cc_work
     tool_ref: gemmi sfcalc
@@ -846,6 +1037,7 @@ tool_recommendations:
     rank: 1
     justification: Independent structure-factor calculation for correlation coefficients.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T06_cc_free_top_considered
     metric_definition_ref: T06_cc_free
     tool_ref: gemmi sfcalc
@@ -853,6 +1045,7 @@ tool_recommendations:
     rank: 1
     justification: Independent structure-factor calculation for correlation coefficients.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T06_cc_top_considered
     metric_definition_ref: T06_cc
     tool_ref: gemmi sfcalc
@@ -860,6 +1053,7 @@ tool_recommendations:
     rank: 1
     justification: Independent structure-factor calculation for correlation coefficients.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T06_map-model_fsc_global_per-shell_top_considered
     metric_definition_ref: T06_map-model_fsc_global_per-shell
     tool_ref: Servalcat
@@ -867,6 +1061,7 @@ tool_recommendations:
     rank: 1
     justification: Independent refinement / FSC / sigma-A oracle (installed); map and refinement metrics.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T06_overall_b_top_considered
     metric_definition_ref: T06_overall_b
     tool_ref: gemmi validate
@@ -874,6 +1069,7 @@ tool_recommendations:
     rank: 1
     justification: Independent covalent-geometry parser (bond/angle/planarity/chirality/omega), non-cctbx.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T06_wilson_b_top_considered
     metric_definition_ref: T06_wilson_b
     tool_ref: ctruncate
@@ -882,6 +1078,7 @@ tool_recommendations:
     justification: CCP4 ctruncate recovers Wilson B, L-test twinning, anisotropy, tNCS, ice rings from merged
       amplitudes.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T07_fraction_residues_retained_after_trim_top_considered
     metric_definition_ref: T07_fraction_residues_retained_after_trim
     tool_ref: biotite AF parsers
@@ -890,6 +1087,7 @@ tool_recommendations:
     justification: Independent AlphaFold-output parser for pLDDT, pTM/ipTM confidence fields, and derived
       correlations.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T07_mean_plddt_pre_post_top_considered
     metric_definition_ref: T07_mean_plddt_pre_post
     tool_ref: biotite AF parsers
@@ -898,6 +1096,7 @@ tool_recommendations:
     justification: Independent AlphaFold-output parser for pLDDT, pTM/ipTM confidence fields, and derived
       correlations.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T07_b-factor_1_plddt²_correlation_top_considered
     metric_definition_ref: T07_b-factor_1_plddt²_correlation
     tool_ref: biotite AF parsers
@@ -906,6 +1105,7 @@ tool_recommendations:
     justification: Independent AlphaFold-output parser for pLDDT, pTM/ipTM confidence fields, and derived
       correlations.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T07_domain_count_vs_pae_oracle_top_considered
     metric_definition_ref: T07_domain_count_vs_pae_oracle
     tool_ref: pae_to_domains.py (Croll/Tronrud)
@@ -913,6 +1113,7 @@ tool_recommendations:
     rank: 1
     justification: PAE-matrix domain clustering; independent oracle for predicted-model domain count.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T07_rmsd_of_processed_model_vs_reference_experimental_top_considered
     metric_definition_ref: T07_rmsd_of_processed_model_vs_reference_experimental
     tool_ref: TM-align
@@ -921,6 +1122,7 @@ tool_recommendations:
     justification: Sequence-independent Cα superposition; community reference for RMSD/TM-score and aligned
       length.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T08_placement_cc_top_considered
     metric_definition_ref: T08_placement_cc
     tool_ref: ChimeraX fitmap
@@ -928,6 +1130,7 @@ tool_recommendations:
     rank: 1
     justification: Independent rigid-body map fitting; placement CC and delta-vs-random.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T08_δcc_vs_random_top_considered
     metric_definition_ref: T08_δcc_vs_random
     tool_ref: ChimeraX fitmap
@@ -935,6 +1138,7 @@ tool_recommendations:
     rank: 1
     justification: Independent rigid-body map fitting; placement CC and delta-vs-random.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T08_rmsd_to_deposited_position_top_considered
     metric_definition_ref: T08_rmsd_to_deposited_position
     tool_ref: gemmi align
@@ -943,6 +1147,7 @@ tool_recommendations:
     justification: Independent superposition to a reference/deposited pose for RMSD and translation/rotation
       error.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T08_translation_rotation_error_top_considered
     metric_definition_ref: T08_translation_rotation_error
     tool_ref: gemmi align
@@ -951,6 +1156,7 @@ tool_recommendations:
     justification: Independent superposition to a reference/deposited pose for RMSD and translation/rotation
       error.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T09_translation_rotation_top_considered
     metric_definition_ref: T09_translation_rotation
     tool_ref: gemmi align
@@ -959,6 +1165,7 @@ tool_recommendations:
     justification: Independent superposition to a reference/deposited pose for RMSD and translation/rotation
       error.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T09_post-mr_r-free_top_considered
     metric_definition_ref: T09_post-mr_r-free
     tool_ref: REFMAC5 (CCP4)
@@ -966,6 +1173,7 @@ tool_recommendations:
     rank: 1
     justification: Independent ML refiner; post-MR R-free and reciprocal-space refinement statistics.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T10_ligand_rscc_top_considered
     metric_definition_ref: T10_ligand_rscc
     tool_ref: edstats
@@ -974,6 +1182,7 @@ tool_recommendations:
     justification: 'CCP4 edstats: per-residue/per-ligand real-space correlation (RSCC) and RSR, independent
       of PHENIX.'
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T10_ligand_rsr_top_considered
     metric_definition_ref: T10_ligand_rsr
     tool_ref: edstats
@@ -982,6 +1191,7 @@ tool_recommendations:
     justification: 'CCP4 edstats: per-residue/per-ligand real-space correlation (RSCC) and RSR, independent
       of PHENIX.'
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T10_ligand_b_vs_surroundings_top_considered
     metric_definition_ref: T10_ligand_b_vs_surroundings
     tool_ref: gemmi script
@@ -990,6 +1200,7 @@ tool_recommendations:
     justification: Independent coordinate/B-factor parser for per-residue displacement, B-factor deltas,
       ligand geometry.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T10_protein-ligand_hbond_count_top_considered
     metric_definition_ref: T10_protein-ligand_hbond_count
     tool_ref: MolProbity (gold)
@@ -998,6 +1209,7 @@ tool_recommendations:
     justification: 'Richardson-lab MolProbity: gold standard for clash/Ramachandran/rotamer/Cβ, probe-based
       contacts and H-bonds.'
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T10_rmsd_to_deposited_ligand_pose_top_considered
     metric_definition_ref: T10_rmsd_to_deposited_ligand_pose
     tool_ref: gemmi align
@@ -1006,6 +1218,7 @@ tool_recommendations:
     justification: Independent superposition to a reference/deposited pose for RMSD and translation/rotation
       error.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T10_ligand_element_identity_z_top_considered
     metric_definition_ref: T10_ligand_element_identity_z
     tool_ref: CheckMyMetal
@@ -1013,6 +1226,7 @@ tool_recommendations:
     rank: 1
     justification: Independent coordination-geometry comparison against candidate-element reference distributions.
     as_of_date: '2026-08-20'
+    effective_at: '2026-08-20T00:00:00+00:00'
   - id: REC_T10_ligand_element_identity_top_considered
     metric_definition_ref: T10_ligand_element_identity
     tool_ref: CheckMyMetal
@@ -1020,6 +1234,7 @@ tool_recommendations:
     rank: 1
     justification: Independent ligand-element assessment from coordination geometry when anomalous evidence is unavailable.
     as_of_date: '2026-08-20'
+    effective_at: '2026-08-20T00:00:00+00:00'
   - id: REC_T11_loop_rscc_top_considered
     metric_definition_ref: T11_loop_rscc
     tool_ref: edstats
@@ -1028,6 +1243,7 @@ tool_recommendations:
     justification: 'CCP4 edstats: per-residue/per-ligand real-space correlation (RSCC) and RSR, independent
       of PHENIX.'
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T11_ramachandran_favored_within_loop_top_considered
     metric_definition_ref: T11_ramachandran_favored_within_loop
     tool_ref: MolProbity (gold)
@@ -1036,6 +1252,7 @@ tool_recommendations:
     justification: 'Richardson-lab MolProbity: gold standard for clash/Ramachandran/rotamer/Cβ, probe-based
       contacts and H-bonds.'
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T11_rmsd_rebuilt_vs_reference_loop_top_considered
     metric_definition_ref: T11_rmsd_rebuilt_vs_reference_loop
     tool_ref: gemmi align
@@ -1044,6 +1261,7 @@ tool_recommendations:
     justification: Independent superposition to a reference/deposited pose for RMSD and translation/rotation
       error.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T11_new_outliers_top_considered
     metric_definition_ref: T11_new_outliers
     tool_ref: MolProbity (gold)
@@ -1052,6 +1270,7 @@ tool_recommendations:
     justification: 'Richardson-lab MolProbity: gold standard for clash/Ramachandran/rotamer/Cβ, probe-based
       contacts and H-bonds.'
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T12_global_fsc_resolution_at_0.143_masked_unmasked_top_considered
     metric_definition_ref: T12_global_fsc_resolution_at_0.143_masked_unmasked
     tool_ref: RELION postprocess
@@ -1059,6 +1278,7 @@ tool_recommendations:
     rank: 1
     justification: 'RELION postprocess: community reference for masked/unmasked global FSC resolution.'
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T12_local_resolution_distribution_mean_stdev_10th_90th_top_considered
     metric_definition_ref: T12_local_resolution_distribution_mean_stdev_10th_90th
     tool_ref: ResMap
@@ -1066,6 +1286,7 @@ tool_recommendations:
     rank: 1
     justification: Local-resolution estimation independent of PHENIX.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T12_d_fsc_model_if_model_top_considered
     metric_definition_ref: T12_d_fsc_model_if_model
     tool_ref: RELION postprocess
@@ -1073,6 +1294,7 @@ tool_recommendations:
     rank: 1
     justification: 'RELION postprocess: community reference for masked/unmasked global FSC resolution.'
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T12_b-factor_sharpening_estimate_top_considered
     metric_definition_ref: T12_b-factor_sharpening_estimate
     tool_ref: RELION postprocess
@@ -1080,6 +1302,7 @@ tool_recommendations:
     rank: 1
     justification: 'RELION postprocess: community reference for masked/unmasked global FSC resolution.'
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T13_i_σ_i_top_considered
     metric_definition_ref: T13_i_σ_i
     tool_ref: CCP4 aimless
@@ -1087,6 +1310,7 @@ tool_recommendations:
     rank: 1
     justification: 'CCP4 aimless: canonical CC-half / mean I-over-sigma / R-merge from unmerged intensities.'
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T13_r-merge_r-meas_top_considered
     metric_definition_ref: T13_r-merge_r-meas
     tool_ref: CCP4 aimless
@@ -1094,6 +1318,7 @@ tool_recommendations:
     rank: 1
     justification: 'CCP4 aimless: canonical CC-half / mean I-over-sigma / R-merge from unmerged intensities.'
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T13_cc½_top_considered
     metric_definition_ref: T13_cc½
     tool_ref: CCP4 aimless
@@ -1101,6 +1326,7 @@ tool_recommendations:
     rank: 1
     justification: 'CCP4 aimless: canonical CC-half / mean I-over-sigma / R-merge from unmerged intensities.'
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T13_l-test_twinning_top_considered
     metric_definition_ref: T13_l-test_twinning
     tool_ref: ctruncate
@@ -1109,6 +1335,7 @@ tool_recommendations:
     justification: CCP4 ctruncate recovers Wilson B, L-test twinning, anisotropy, tNCS, ice rings from merged
       amplitudes.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T13_anisotropy_δb_aniso_top_considered
     metric_definition_ref: T13_anisotropy_δb_aniso
     tool_ref: ctruncate
@@ -1117,6 +1344,7 @@ tool_recommendations:
     justification: CCP4 ctruncate recovers Wilson B, L-test twinning, anisotropy, tNCS, ice rings from merged
       amplitudes.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T13_wilson_b_top_considered
     metric_definition_ref: T13_wilson_b
     tool_ref: ctruncate
@@ -1125,6 +1353,7 @@ tool_recommendations:
     justification: CCP4 ctruncate recovers Wilson B, L-test twinning, anisotropy, tNCS, ice rings from merged
       amplitudes.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T13_tncs_flag_top_considered
     metric_definition_ref: T13_tncs_flag
     tool_ref: ctruncate
@@ -1133,6 +1362,7 @@ tool_recommendations:
     justification: CCP4 ctruncate recovers Wilson B, L-test twinning, anisotropy, tNCS, ice rings from merged
       amplitudes.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T13_ice-ring_flags_top_considered
     metric_definition_ref: T13_ice-ring_flags
     tool_ref: ctruncate
@@ -1141,6 +1371,7 @@ tool_recommendations:
     justification: CCP4 ctruncate recovers Wilson B, L-test twinning, anisotropy, tNCS, ice rings from merged
       amplitudes.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T13_aimless_status_top_considered
     metric_definition_ref: T13_aimless_status
     tool_ref: CCP4 aimless
@@ -1148,6 +1379,7 @@ tool_recommendations:
     rank: 1
     justification: 'CCP4 aimless: canonical CC-half / mean I-over-sigma / R-merge from unmerged intensities.'
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T14_h_added_top_considered
     metric_definition_ref: T14_h_added
     tool_ref: reduce (standalone, Richardson)
@@ -1155,6 +1387,7 @@ tool_recommendations:
     rank: 1
     justification: Richardson-lab standalone reduce; independent H-placement / protonation / flip oracle.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T14_asn_gln_his_flips_proposed_top_considered
     metric_definition_ref: T14_asn_gln_his_flips_proposed
     tool_ref: reduce (standalone, Richardson)
@@ -1162,6 +1395,7 @@ tool_recommendations:
     rank: 1
     justification: Richardson-lab standalone reduce; independent H-placement / protonation / flip oracle.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T14_clashscore_delta_pre_vs_post_top_considered
     metric_definition_ref: T14_clashscore_delta_pre_vs_post
     tool_ref: reduce (standalone, Richardson)
@@ -1169,6 +1403,7 @@ tool_recommendations:
     rank: 1
     justification: Richardson-lab standalone reduce; independent H-placement / protonation / flip oracle.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T14_hbond-network_consistency_vs_standalone_reduce_top_considered
     metric_definition_ref: T14_hbond-network_consistency_vs_standalone_reduce
     tool_ref: reduce (standalone, Richardson)
@@ -1176,6 +1411,7 @@ tool_recommendations:
     rank: 1
     justification: Richardson-lab standalone reduce; independent H-placement / protonation / flip oracle.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T03_overall_r_per_shell_weighted_top_considered
     metric_definition_ref: T03_overall_r_per_shell_weighted
     tool_ref: REFMAC5 (CCP4)
@@ -1183,6 +1419,7 @@ tool_recommendations:
     rank: 1
     justification: Independent ML refiner; post-MR R-free and reciprocal-space refinement statistics.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T05_ramachandran_outliers_count_top_considered
     metric_definition_ref: T05_ramachandran_outliers_count
     tool_ref: MolProbity (gold)
@@ -1191,6 +1428,7 @@ tool_recommendations:
     justification: 'Richardson-lab MolProbity: gold standard for clash/Ramachandran/rotamer/Cβ, probe-based
       contacts and H-bonds.'
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T05_atoms_used_in_clashscore_calc_top_considered
     metric_definition_ref: T05_atoms_used_in_clashscore_calc
     tool_ref: MolProbity (gold)
@@ -1199,6 +1437,7 @@ tool_recommendations:
     justification: 'Richardson-lab MolProbity: gold standard for clash/Ramachandran/rotamer/Cβ, probe-based
       contacts and H-bonds.'
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T06_resolution_range_top_considered
     metric_definition_ref: T06_resolution_range
     tool_ref: Servalcat
@@ -1206,6 +1445,7 @@ tool_recommendations:
     rank: 1
     justification: Independent refinement / FSC / sigma-A oracle (installed); map and refinement metrics.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T06_reflections_input_mtz_top_considered
     metric_definition_ref: T06_reflections_input_mtz
     tool_ref: Servalcat
@@ -1213,6 +1453,7 @@ tool_recommendations:
     rank: 1
     justification: Independent refinement / FSC / sigma-A oracle (installed); map and refinement metrics.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T06_reflections_final_mtz_top_considered
     metric_definition_ref: T06_reflections_final_mtz
     tool_ref: Servalcat
@@ -1220,6 +1461,7 @@ tool_recommendations:
     rank: 1
     justification: Independent refinement / FSC / sigma-A oracle (installed); map and refinement metrics.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T12_local_resolution_mean_top_considered
     metric_definition_ref: T12_local_resolution_mean
     tool_ref: ResMap
@@ -1227,6 +1469,7 @@ tool_recommendations:
     rank: 1
     justification: Local-resolution estimation independent of PHENIX.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T12_local_resolution_std_top_considered
     metric_definition_ref: T12_local_resolution_std
     tool_ref: ResMap
@@ -1234,6 +1477,7 @@ tool_recommendations:
     rank: 1
     justification: Local-resolution estimation independent of PHENIX.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T01_per_residue_displacement_top_considered
     metric_definition_ref: T01_per_residue_displacement
     tool_ref: gemmi script
@@ -1242,6 +1486,7 @@ tool_recommendations:
     justification: Independent coordinate/B-factor parser for per-residue displacement, B-factor deltas,
       ligand geometry.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T05_per_residue_rsrz_top_considered
     metric_definition_ref: T05_per_residue_rsrz
     tool_ref: wwPDB validation pipeline
@@ -1249,6 +1494,7 @@ tool_recommendations:
     rank: 1
     justification: Deposition-grade source for RSRZ, Ramachandran-Z, and B-factor-outlier statistics.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T05_overall_b_mean_top_considered
     metric_definition_ref: T05_overall_b_mean
     tool_ref: gemmi validators
@@ -1256,6 +1502,7 @@ tool_recommendations:
     rank: 1
     justification: Independent structure parser for atom/water counts and B-factor statistics.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T05_overall_b_factor_distribution_min_top_considered
     metric_definition_ref: T05_overall_b_factor_distribution_min
     tool_ref: gemmi validators
@@ -1263,6 +1510,7 @@ tool_recommendations:
     rank: 1
     justification: Independent structure parser for atom/water counts and B-factor statistics.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T05_overall_b_factor_distribution_max_top_considered
     metric_definition_ref: T05_overall_b_factor_distribution_max
     tool_ref: gemmi validators
@@ -1270,6 +1518,7 @@ tool_recommendations:
     rank: 1
     justification: Independent structure parser for atom/water counts and B-factor statistics.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T03_coordinate_error_ml_top_considered
     metric_definition_ref: T03_coordinate_error_ml
     tool_ref: REFMAC5 (CCP4)
@@ -1277,6 +1526,7 @@ tool_recommendations:
     rank: 1
     justification: Independent ML refiner; post-MR R-free and reciprocal-space refinement statistics.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T03_data_to_parameter_ratio_nominal_top_considered
     metric_definition_ref: T03_data_to_parameter_ratio_nominal
     tool_ref: REFMAC5 (CCP4)
@@ -1284,6 +1534,7 @@ tool_recommendations:
     rank: 1
     justification: Independent ML refiner; post-MR R-free and reciprocal-space refinement statistics.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T03_data_to_parameter_ratio_effective_top_considered
     metric_definition_ref: T03_data_to_parameter_ratio_effective
     tool_ref: REFMAC5 (CCP4)
@@ -1291,6 +1542,7 @@ tool_recommendations:
     rank: 1
     justification: Independent ML refiner; post-MR R-free and reciprocal-space refinement statistics.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T03_ncs_torsion_restraints_count_top_considered
     metric_definition_ref: T03_ncs_torsion_restraints_count
     tool_ref: REFMAC5 (CCP4)
@@ -1298,6 +1550,7 @@ tool_recommendations:
     rank: 1
     justification: Independent ML refiner; post-MR R-free and reciprocal-space refinement statistics.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T05_total_atoms_top_considered
     metric_definition_ref: T05_total_atoms
     tool_ref: gemmi validators
@@ -1305,6 +1558,7 @@ tool_recommendations:
     rank: 1
     justification: Independent structure parser for atom/water counts and B-factor statistics.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T05_waters_count_top_considered
     metric_definition_ref: T05_waters_count
     tool_ref: gemmi validators
@@ -1312,6 +1566,7 @@ tool_recommendations:
     rank: 1
     justification: Independent structure parser for atom/water counts and B-factor statistics.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T05_rama_z_score_top_considered
     metric_definition_ref: T05_rama_z_score
     tool_ref: wwPDB validation pipeline
@@ -1319,6 +1574,7 @@ tool_recommendations:
     rank: 1
     justification: Deposition-grade source for RSRZ, Ramachandran-Z, and B-factor-outlier statistics.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T05_rama_z_score_top_performing
     metric_definition_ref: T05_rama_z_score
     tool_ref: ProSMART
@@ -1333,6 +1589,7 @@ tool_recommendations:
     evidence_refs:
       - Nicholls2014
     as_of_date: '2026-07-22'
+    effective_at: '2026-07-22T00:00:00+00:00'
   - id: REC_T10_ligand_b_factor_mean_top_considered
     metric_definition_ref: T10_ligand_b_factor_mean
     tool_ref: gemmi script
@@ -1341,6 +1598,7 @@ tool_recommendations:
     justification: Independent coordinate/B-factor parser for per-residue displacement, B-factor deltas,
       ligand geometry.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T05_packing_z_score_top_considered
     metric_definition_ref: T05_packing_z_score
     tool_ref: RosettaHoles2
@@ -1348,6 +1606,7 @@ tool_recommendations:
     rank: 1
     justification: Rosetta cavity/packing analysis; independent packing Z-score.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T05_unsatisfied_buried_hbond_count_top_considered
     metric_definition_ref: T05_unsatisfied_buried_hbond_count
     tool_ref: MolProbity (gold)
@@ -1356,6 +1615,7 @@ tool_recommendations:
     justification: 'Richardson-lab MolProbity: gold standard for clash/Ramachandran/rotamer/Cβ, probe-based
       contacts and H-bonds.'
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T05_b_factor_outlier_z_top_considered
     metric_definition_ref: T05_b_factor_outlier_z
     tool_ref: wwPDB validation pipeline
@@ -1363,6 +1623,7 @@ tool_recommendations:
     rank: 1
     justification: Deposition-grade source for RSRZ, Ramachandran-Z, and B-factor-outlier statistics.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T06_residue_rscc_top_considered
     metric_definition_ref: T06_residue_rscc
     tool_ref: edstats
@@ -1371,6 +1632,7 @@ tool_recommendations:
     justification: 'CCP4 edstats: per-residue/per-ligand real-space correlation (RSCC) and RSR, independent
       of PHENIX.'
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T06_rscc_outlier_fraction_top_considered
     metric_definition_ref: T06_rscc_outlier_fraction
     tool_ref: edstats
@@ -1379,6 +1641,7 @@ tool_recommendations:
     justification: 'CCP4 edstats: per-residue/per-ligand real-space correlation (RSCC) and RSR, independent
       of PHENIX.'
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T06_diffraction_precision_index_top_considered
     metric_definition_ref: T06_diffraction_precision_index
     tool_ref: PDB-REDO
@@ -1386,6 +1649,7 @@ tool_recommendations:
     rank: 1
     justification: Re-refinement pipeline reporting the diffraction-precision index.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T07_predicted_tm_score_top_considered
     metric_definition_ref: T07_predicted_tm_score
     tool_ref: biotite AF parsers
@@ -1394,6 +1658,7 @@ tool_recommendations:
     justification: Independent AlphaFold-output parser for pLDDT, pTM/ipTM confidence fields, and derived
       correlations.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T07_interface_predicted_tm_score_top_considered
     metric_definition_ref: T07_interface_predicted_tm_score
     tool_ref: biotite AF parsers
@@ -1402,6 +1667,7 @@ tool_recommendations:
     justification: Independent AlphaFold-output parser for pLDDT, pTM/ipTM confidence fields, and derived
       correlations.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T07_prediction_ensemble_convergence_top_considered
     metric_definition_ref: T07_prediction_ensemble_convergence
     tool_ref: OpenStructure
@@ -1409,6 +1675,7 @@ tool_recommendations:
     rank: 1
     justification: CASP-grade lDDT/TMScore/GDT-TS reference implementation, independent of cctbx.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T12_directional_resolution_anisotropy_top_considered
     metric_definition_ref: T12_directional_resolution_anisotropy
     tool_ref: 3DFSC
@@ -1416,6 +1683,7 @@ tool_recommendations:
     rank: 1
     justification: Directional FSC; canonical resolution-anisotropy measure.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T12_local_model_map_fsc_q_top_considered
     metric_definition_ref: T12_local_model_map_fsc_q
     tool_ref: FSC-Q
@@ -1423,6 +1691,7 @@ tool_recommendations:
     rank: 1
     justification: Per-residue model-to-map agreement independent of PHENIX.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T15_secondary_structure_assignment_top_considered
     metric_definition_ref: T15_secondary_structure_assignment
     tool_ref: DSSP
@@ -1430,6 +1699,7 @@ tool_recommendations:
     rank: 1
     justification: DSSP secondary-structure assignment for the SS-agreement metric.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T15_structural_domain_assignment_top_considered
     metric_definition_ref: T15_structural_domain_assignment
     tool_ref: CATH
@@ -1437,6 +1707,7 @@ tool_recommendations:
     rank: 1
     justification: Curated, versioned domain and fold assignments for deposited entries.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T16_capri_interface_quality_class_top_considered
     metric_definition_ref: T16_capri_interface_quality_class
     tool_ref: DockQ
@@ -1444,6 +1715,7 @@ tool_recommendations:
     rank: 1
     justification: Community-standard continuous interface-quality score.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
   - id: REC_T17_nmr_restraint_violation_summary_top_considered
     metric_definition_ref: T17_nmr_restraint_violation_summary
     tool_ref: wwPDB NMR validation
@@ -1451,6 +1723,7 @@ tool_recommendations:
     rank: 1
     justification: Deposition-grade source for NMR restraint-violation and ensemble statistics.
     as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
 
   - id: REC_T17_nmr_restraint_violation_summary_top_performing
     metric_definition_ref: T17_nmr_restraint_violation_summary
@@ -1463,3 +1736,4 @@ tool_recommendations:
       whose report carries restraint data (e.g. 2N54: 1301 distance + 108
       dihedral restraints); older entries (1D3Z) predate it and the tool says so.
     as_of_date: '2026-07-22'
+    effective_at: '2026-07-22T00:00:00+00:00'

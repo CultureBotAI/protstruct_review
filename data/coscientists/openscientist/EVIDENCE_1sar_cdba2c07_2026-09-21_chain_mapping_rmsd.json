@@ -1,0 +1,51 @@
+{
+  "format_version": 1,
+  "method": "unweighted reflection-free Kabsch fit of residue-matched C-alpha atoms",
+  "matching_key": [
+    "PDB residue sequence number",
+    "insertion code",
+    "residue name"
+  ],
+  "atom_selection": "ATOM records named CA; blank altloc preferred, otherwise A",
+  "software": {
+    "script": "scripts/t16_chain_mapping_rmsd.py",
+    "numpy_version": "1.26.4",
+    "python_version": "3.12"
+  },
+  "command": ".venv/bin/python scripts/t16_chain_mapping_rmsd.py --candidate-zip data/coscientists/openscientist/cdba2c07-daff-4f60-ae96-12452b3a5fbb_artifacts.zip --candidate-member data/1sar_final.pdb --reference data/pdb_mtz/1sar_deposited.pdb --pair A:A --pair B:B --pair A:B --pair B:A",
+  "candidate": {
+    "archive": "data/coscientists/openscientist/cdba2c07-daff-4f60-ae96-12452b3a5fbb_artifacts.zip",
+    "member": "data/1sar_final.pdb",
+    "sha256": "8cbc1650f8be5a3833f98833fa514ec7d490c2c3bb9aa930413abac05e2a510b"
+  },
+  "reference": {
+    "path": "data/pdb_mtz/1sar_deposited.pdb",
+    "sha256": "e60e5db6c7eb554a3ac4e184bdf7cbb7d69b682e287579bdcf5f8bf279d51f86"
+  },
+  "comparisons": [
+    {
+      "model_chain": "A",
+      "native_chain": "A",
+      "matched_ca_count": 96,
+      "rmsd_a": 0.191422
+    },
+    {
+      "model_chain": "B",
+      "native_chain": "B",
+      "matched_ca_count": 96,
+      "rmsd_a": 0.179568
+    },
+    {
+      "model_chain": "A",
+      "native_chain": "B",
+      "matched_ca_count": 96,
+      "rmsd_a": 0.420775
+    },
+    {
+      "model_chain": "B",
+      "native_chain": "A",
+      "matched_ca_count": 96,
+      "rmsd_a": 0.409745
+    }
+  ]
+}

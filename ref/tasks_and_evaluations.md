@@ -152,7 +152,7 @@ terms. TSV form with the same rows: `ref/tasks_and_evaluations.tsv`.
 
 ### T14 — Hydrogen placement / protonation
 
-- **PHENIX tool(s):** `phenix.reduce`, `phenix.ready_set`
+- **PHENIX tool(s):** `phenix.reduce`, `phenix.ready_set`, `mmtbx.reduce2`
 - **Doc paths:** `reference/hydrogens.html`, `reference/ready_set.html`
 - **Independent oracle(s):** `reduce` (standalone, Richardson lab), `propka3` (pKa), OpenBabel `--addh`, `pdb2pqr`, Schrödinger `PrepWizard`
 - **Typical inputs:** model without hydrogens (or partial H)
@@ -166,8 +166,8 @@ terms. TSV form with the same rows: `ref/tasks_and_evaluations.tsv`.
 - **Doc paths:** none
 - **Independent oracle(s):** DSSP, STRIDE, biotite P-SEA (secondary structure); CATH, SCOPe, ECOD (domain and fold classification)
 - **Typical inputs:** model (PDB/mmCIF)
-- **Metrics:** secondary-structure assignment agreement (three-state DSSP vs an independent second assigner — STRIDE preferred, biotite P-SEA the runnable fallback — complex scope, the gradeable metric); secondary-structure assignment (per-residue labels, informational); structural domain assignment (per-domain boundaries, informational); fold classification (per-domain, informational)
-- **Gold standard:** CATH/SCOPe/ECOD consensus where available; three-state agreement between DSSP and an independent second assigner (STRIDE preferred, biotite P-SEA the runnable fallback)
+- **Metrics:** secondary-structure assignment agreement (complex scope: DSSP vs an independent second assigner is informational pending recalibration; agent-vs-DSSP is gradeable when agent labels exist); DSSP H+E secondary-structure content (complex scope, informational interpretability diagnostic); secondary-structure assignment (per-residue labels, informational); structural domain assignment (per-domain boundaries, informational); fold classification (per-domain, informational)
+- **Gold standard:** CATH/SCOPe/ECOD consensus where available. For the oracle-side secondary-structure result, report DSSP H+E content and exact-denominator DSSP-vs-second-assigner agreement informationally. Content **≥ 0.20** is a provisional interpretability precondition, not a model-quality threshold; the historical 0.65 agreement expectation is non-gradeable until recalibration. The agent-vs-DSSP **≥ 0.85** clause is separate and is unevaluable without an agent-supplied per-residue assignment.
 - **Example dataset:** PDB `1AKE` (multi-domain, CATH-classified); PDB `2LYZ` (single-domain control)
 
 ### T16 — Interface and assembly quality
@@ -176,8 +176,8 @@ terms. TSV form with the same rows: `ref/tasks_and_evaluations.tsv`.
 - **Doc paths:** none
 - **Independent oracle(s):** PISA/PDBePISA (buried surface area, assembly prediction), biotite SASA (buried surface area, installable Shrake-Rupley stand-in), DockQ (interface model quality)
 - **Typical inputs:** complex or assembly model (PDB/mmCIF)
-- **Metrics:** interface buried surface area (Å², per interface), interface DockQ score (per interface), CAPRI interface quality class (per interface, informational — the ordinal class label behind the DockQ score)
-- **Gold standard:** deposited biological assembly and CAPRI/DockQ class where available
+- **Metrics:** interface buried surface area (Å², **total two-sided** per interface: `ΣSASA(separated chains) − SASA(complex)`), interface DockQ score (per interface), CAPRI interface quality class (per interface, informational — the ordinal class label behind the DockQ score)
+- **Gold standard:** deposited biological assembly and CAPRI/DockQ class where available. PISA `interface_area` is per side and must be doubled before comparison with the harness total. The BSA tolerance is **max(3% of the mean, 30 Å²)** with a matched 1.4 Å probe and the selections actually benchmarked: biotite protein-only versus PISA's API assembly-molecule surface, which may include ligand/hetero atoms. This is not a matched-protein-only PISA comparison.
 - **Example dataset:** PDB `1BRS` (barnase–barstar); PDB `2SIC` (subtilisin–SSI)
 
 ### T17 — NMR ensemble/restraint validation

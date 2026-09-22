@@ -10,13 +10,19 @@
 # Companion prose: .claude/skills/protstruct-eval.md, "Tool assumptions"
 # section.
 #
-# Convention: id = ASSUM_<tool-slug>_<assumption-slug>.
+# Convention: id = ASSUM_<tool-slug>_<assumption-slug>. Every row carries the
+# human date and exact timezone-qualified activation instant so an immutable
+# QDS can select only assumptions that existed when it was issued. Add a new
+# version id plus `supersedes_assumption_ref` for a substantive revision; do
+# not rewrite a row already snapshotted by an issued QDS.
 
 assumptions:
 
   # ---------- MolProbity / probe / reduce -------------------------------
 
   - id: ASSUM_molprobity_top8000_reference
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
     kind: implicit
     scope: tool
     title: Top8000 reference distribution is high-resolution
@@ -41,6 +47,8 @@ assumptions:
       - Williams2018
 
   - id: ASSUM_molprobity_h_atom_placement
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
     kind: implicit
     scope: tool
     title: H-atom placement governs clashscore
@@ -62,6 +70,8 @@ assumptions:
       - EVAL_1sar_cdba2c07_2026-04-24
 
   - id: ASSUM_molprobity_water_altloc
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
     kind: implicit
     scope: tool
     title: probe water + altloc filter (`ogt33`)
@@ -77,6 +87,8 @@ assumptions:
     tool_ref: MolProbity (gold)
 
   - id: ASSUM_molprobity_rotamer_library_discreteness
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
     kind: implicit
     scope: tool
     title: Discrete rotamer library
@@ -94,6 +106,8 @@ assumptions:
   # ---------- phenix.refine in-run R-factors -------------------------
 
   - id: ASSUM_phenix_refine_in_run_r_factors_use_internal_scaling
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
     kind: explicit
     scope: tool
     title: In-run R-factors use a particular bulk-solvent + scaling
@@ -116,6 +130,8 @@ assumptions:
       - EVAL_1sar_cdba2c07_2026-04-24
 
   - id: ASSUM_phenix_refine_rfree_flags_fixed
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
     kind: explicit
     scope: tool
     title: R-free flag set is fixed across rounds
@@ -131,6 +147,8 @@ assumptions:
   # ---------- phenix.model_vs_data -----------------------------------
 
   - id: ASSUM_phenix_mvd_treats_model_as_fixed
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
     kind: explicit
     scope: tool
     title: Model is fixed; not a refinement
@@ -149,6 +167,8 @@ assumptions:
   # ---------- gemmi sfcalc + custom R calc ---------------------------
 
   - id: ASSUM_gemmi_sfcalc_simpler_bulk_solvent
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
     kind: explicit
     scope: tool
     title: Flat-bulk solvent, no anisotropic scaling
@@ -172,6 +192,8 @@ assumptions:
     tool_ref: gemmi sfcalc
 
   - id: ASSUM_gemmi_sfcalc_linear_resolution_shells
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
     kind: implicit
     scope: tool
     title: Linearly-binned resolution shells
@@ -186,6 +208,8 @@ assumptions:
   # ---------- TM-align ---------------------------------------------------
 
   - id: ASSUM_tmalign_tm_score_normaliser
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
     kind: implicit
     scope: tool
     title: TM-score is normalised by the FIRST input length
@@ -203,6 +227,8 @@ assumptions:
     tool_ref: TM-align
 
   - id: ASSUM_tmalign_optimal_alignment_drops_residues
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
     kind: explicit
     scope: tool
     title: Sequence-independent — optimal Cα subset
@@ -224,6 +250,8 @@ assumptions:
   # ---------- Servalcat -------------------------------------------------
 
   - id: ASSUM_servalcat_sigmaa_per_shell_only
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
     kind: explicit
     scope: tool
     title: per-shell sigma-A R, not work/free split by default
@@ -243,6 +271,8 @@ assumptions:
     tool_ref: Servalcat
 
   - id: ASSUM_servalcat_refine_xtal_actually_refines
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
     kind: explicit
     scope: tool
     title: refine_xtal_norefmac re-refines the model
@@ -261,6 +291,8 @@ assumptions:
   # ---------- phenix.holton_geometry_validation -----------------------
 
   - id: ASSUM_holton_rmsz_not_rmsd
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
     kind: explicit
     scope: tool
     title: Reports RMSZ against PHENIX restraint targets
@@ -279,6 +311,8 @@ assumptions:
   # ---------- phenix.find_peaks_holes ----------------------------------
 
   - id: ASSUM_find_peaks_holes_cutoff_and_merging
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
     kind: explicit
     scope: tool
     title: σ cutoff, merging radius, atom exclusion all change peak counts
@@ -302,6 +336,8 @@ assumptions:
   # ---------- CCP4 / REFMAC5 / ProSMART -----------------------------
 
   - id: ASSUM_refmac_restraint_library
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
     kind: explicit
     scope: tool
     title: REFMAC5 uses the CCP4 monomer library
@@ -321,6 +357,8 @@ assumptions:
     tool_ref: REFMAC5
 
   - id: ASSUM_refmac_solvent_modelling
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
     kind: explicit
     scope: tool
     title: REFMAC5 uses Babinet-style bulk solvent
@@ -342,6 +380,8 @@ assumptions:
     tool_ref: REFMAC5
 
   - id: ASSUM_prosmart_reference_dependent
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
     kind: explicit
     scope: tool
     title: ProSMART analysis is reference-dependent
@@ -363,6 +403,8 @@ assumptions:
     tool_ref: ProSMART
 
   - id: ASSUM_prosmart_no_top8000_default
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
     kind: implicit
     scope: tool
     title: ProSMART needs an explicit reference; no Top8000 default
@@ -380,6 +422,8 @@ assumptions:
   # ---------- CheckMyMetal (web service) -----------------------------
 
   - id: ASSUM_checkmymetal_geometry_based
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
     kind: explicit
     scope: tool
     title: Heuristic geometry classification — not anomalous Fourier
@@ -411,6 +455,8 @@ assumptions:
   # ---------- CCP4 edstats -------------------------------------------
 
   - id: ASSUM_edstats_needs_2fofc_dfofc_in_mtz
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
     kind: explicit
     scope: tool
     title: edstats requires both 2mFo-DFc AND mFo-DFc in the input MTZ
@@ -436,6 +482,8 @@ assumptions:
   # ---------- gemmi blobs --------------------------------------------
 
   - id: ASSUM_gemmi_blobs_diff_flag_quirks
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
     kind: implicit
     scope: tool
     title: gemmi blobs --diff flag handling quirks in 0.7.5
@@ -457,6 +505,8 @@ assumptions:
   # ---------- OpenStructure (OST) ---------------------------------------
 
   - id: ASSUM_ost_lddt_inclusion_radius
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
     kind: explicit
     scope: tool
     title: lDDT inclusion radius (default 15 Å)
@@ -477,6 +527,8 @@ assumptions:
       - Mariani2013
 
   - id: ASSUM_ost_lddt_thresholds
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
     kind: explicit
     scope: tool
     title: lDDT cutoff thresholds (0.5, 1, 2, 4 Å)
@@ -497,6 +549,8 @@ assumptions:
       - Mariani2013
 
   - id: ASSUM_ost_lddt_cα_only_mode
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
     kind: explicit
     scope: tool
     title: -c flag computes Cα-only lDDT
@@ -517,6 +571,8 @@ assumptions:
       - EVAL_1sar_cdba2c07_2026-04-24
 
   - id: ASSUM_ost_no_built_in_rama_contour
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
     kind: implicit
     scope: tool
     title: No built-in Top8000 Ramachandran contour
@@ -540,6 +596,8 @@ assumptions:
   # ---------- wwPDB validation report --------------------------------
 
   - id: ASSUM_wwpdb_percentile_source
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
     kind: explicit
     scope: tool
     title: Percentile rank — whole archive vs resolution-binned

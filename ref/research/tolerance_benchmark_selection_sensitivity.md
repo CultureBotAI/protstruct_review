@@ -4,7 +4,7 @@ Two tolerances in `ref/thresholds_and_standards.md` carry a precondition rather 
 number, because no second implementation of either tool is installed:
 
 - **DockQ score** `|Δ| ≤ 0.01` *after fixing/verifying the chain mapping*, with chain-mapping
-  ambiguity named as the **presumed (not proven)** main variance source.
+  ambiguity treated as a measurable variance source.
 - **NMR ensemble precision** `|Δ| ≤ 0.05 Å` *only on a matched ordered-core selection*, because
   "precision is dominated by the superposition selection".
 
@@ -35,14 +35,26 @@ ambiguity.
 Spread: **0.785 median, 0.788 max** — against a ±0.01 tolerance, i.e. **~79×**. 1VFB, 3HFM and 2SIC
 have no equivalent chains and so no ambiguity to measure.
 
+That **0.788 maximum belongs to this five-entry self-comparison benchmark**; it is not a universal
+upper bound. A later 1SAR control compares the packaged model with the deposited reference and
+retains both same-sequence mappings in
+`data/coscientists/openscientist/EVAL_1sar_cdba2c07_2026-09-21.yaml`: `AB:AB` scores 0.9445 and
+`AB:BA` scores 0.0063, a spread of **0.9382** (~94× the tolerance). The underlying DockQ outputs
+are retained as `EVIDENCE_1sar_cdba2c07_2026-09-21_dockq_AB_AB.json` and
+`EVIDENCE_1sar_cdba2c07_2026-09-21_dockq_AB_BA.json` in the same directory. The A/B pair is a
+**crystallographic contact**, not a certified biological assembly, so this follow-up extends the
+observed mapping-sensitivity category without becoming another biological-assembly benchmark row.
+
 **Findings.** The presumption is now proven, with a magnitude: a plausible mis-mapping moves DockQ
 from 1.00 to 0.21 — the difference between CAPRI class *High* and *Incorrect*. Note 4HHB's
 `CDAB` mapping still scores 0.98: swapping the two αβ half-tetramers maps each chain onto its
 pseudo-symmetric equivalent, so the ambiguity is harmless there. Swapping only one pair (`ADCB`,
 `CBAD`) collapses the score. So "chain-mapping ambiguity" is not one risk but two: symmetric swaps
 that cost nothing, and partial swaps that cost everything — and only the second is detectable from
-the score alone. Ambiguity exists **only for homo-oligomers**: every hetero-complex tested had a
-unique sequence per chain and therefore exactly one plausible mapping.
+the score alone. The original hetero-complexes each had a unique sequence per chain and therefore
+one plausible mapping, but the 1SAR follow-up shows that the underlying condition is broader than
+biological homo-oligomer status: ambiguity exists whenever the selected reference interface offers
+sequence-equivalent chains, including a nonbiological crystallographic contact.
 
 ## NMR ensemble precision — ordered-core selection
 
@@ -76,10 +88,13 @@ ensemble (2JZ4) failed loudly — "no residues below the ordered-core cutoff —
 ## Applied
 
 > **DockQ |Δ| ≤ 0.01 stands, and its chain-mapping precondition is now a hard gate, not a caveat.**
-> Plausible mis-mappings move the score by up to **0.79** (~79× the tolerance) on homo-oligomers.
+> The original controlled benchmark observed a maximum spread of **0.788** (~79× the tolerance),
+> and the later 1SAR crystallographic-contact control extends the observed spread to **0.9382**
+> (~94×).
 > Record the mapping with any DockQ score. Symmetric whole-subunit swaps may cost almost nothing
 > (4HHB `CDAB` → 0.98) while partial swaps collapse the score, so a high score does not prove the
-> mapping is right. Hetero-complexes with unique sequences have no ambiguity.
+> mapping is right. The gate applies whenever sequence-equivalent reference chains admit more than
+> one mapping, whether or not the pair is a biological homo-oligomer.
 >
 > **NMR precision |Δ| ≤ 0.05 Å stands, and requires the ordered-core *cutoff* to match, not merely
 > the intent to use one.** The cutoff alone is worth up to 0.84 Å; whole-chain vs ordered-core is
@@ -87,11 +102,14 @@ ensemble (2JZ4) failed loudly — "no residues below the ordered-core cutoff —
 
 ## Scope limits
 
-- Both are **self-comparisons**, not cross-tool measurements: they bound what the precondition is
-  worth, not the tool-vs-tool noise floor, which remains unmeasured for lack of a second
-  implementation of either.
-- DockQ: 2 complexes with genuine ambiguity out of 5 attempted, and mapping enumeration is capped at
-  8 per complex. Sequence identity is judged by exact one-letter match from CA records, so
+- Both original benchmarks are **self-comparisons**, not cross-tool measurements: they bound what
+  the precondition is worth, not the tool-vs-tool noise floor, which remains unmeasured for lack of
+  a second implementation of either. The later 1SAR mapping control is explicitly a separate
+  model-to-reference observation.
+- DockQ's controlled self-comparison benchmark: 2 complexes with genuine ambiguity out of 5
+  attempted, and mapping enumeration is capped at 8 per complex. The later 1SAR result is a
+  separately retained model-to-reference crystallographic-contact control, not a sixth row in that
+  benchmark. Sequence identity is judged by exact one-letter match from CA records, so
   near-identical chains (point mutants, differing disorder) are treated as distinct and their
   ambiguity is missed.
 - NMR: 5 ensembles, 76–143 residues. The cutoff grid is 6 fixed values, not the actual OLDERADO or

@@ -12,11 +12,11 @@ Reproduce with:
 python3 scripts/bench_t16_bsa_vs_pisa.py --cache <dir> --json <out.json>
 ```
 
-## Configuration (matched, per the tolerance's own precondition)
+## Configuration (matched probe radius, benchmarked asymmetric selections)
 
 | | biotite | PDBePISA |
 |---|---|---|
-| Algorithm | Shrake–Rupley (numerical, 100 points/atom) | Lee & Richards (analytical rolling-sphere) |
+| Algorithm | Shrake–Rupley (numerical, 1000 points/atom) | Lee & Richards (analytical rolling-sphere) |
 | Probe radius | 1.4 Å | 1.4 Å |
 | Radii set | ProtOr (biotite default; H excluded) | PISA internal |
 | Atom selection | `struc.filter_amino_acids` — protein only, no waters, no hetero | assembly molecules incl. ligand/hetero atoms |
@@ -92,7 +92,7 @@ median 15.1 Å², max 53.2 Å².
 **1. The disagreement is one-sided, not scatter.** biotite is larger than 2 × PISA in **25 of 25**
 interfaces — there is not one negative Δ. This is a systematic offset, not noise: a signed median of
 +1.15 % with zero sign changes. The likely contributors are the radii set (ProtOr vs PISA's internal
-radii), Shrake–Rupley's 100-point quadrature vs an analytical Lee–Richards surface, and PISA
+radii), Shrake–Rupley's 1000-point quadrature vs an analytical Lee–Richards surface, and PISA
 counting ligand/hetero atoms in the molecule surface where the harness recipe counts protein atoms
 only. Because the offset is one-directional, a symmetric ± tolerance is the wrong shape in
 principle; it is kept only because the offset is small enough that a symmetric bound is not
@@ -116,8 +116,9 @@ alone, still too tight to be safe on small ones. A single percentage cannot expr
 ## Applied tolerance
 
 > **|Δ| ≤ 3 % of the mean, or 30 Å², whichever is larger** — biotite SASA vs PISA, matched probe
-> radius (1.4 Å), protein-only atom selection, and the PISA per-side area doubled. Expect biotite to
-> read **high**; a negative Δ is off-distribution and worth investigating.
+> radius (1.4 Å), with the **selection actually benchmarked**: biotite protein-only versus PISA's
+> assembly-molecule surface (which may include ligand/hetero atoms), and the PISA per-side area
+> doubled. Expect biotite to read **high**; a negative Δ is off-distribution and worth investigating.
 
 This envelope covers 25/25 measured interfaces. The tightest envelope that still covers all 25 is
 max(2.5 %, 30 Å²); the relative term is rounded up to 3 % for margin, since with n = 25 and a
@@ -140,8 +141,10 @@ that the 30 Å² floor binds, which is what makes small-interface comparisons su
 - Measures the **tool-definition noise floor on identical deposited coordinates**. It does not
   bound how much BSA moves when the *model* changes (refinement, agent edits) — that is a different
   quantity and is not benchmarked here.
-- All 25 interfaces are protein–protein. Nucleic-acid and protein–ligand interfaces are unmeasured;
-  the protein-only atom selection makes them out of scope for this tolerance as written.
+- All 25 interfaces are protein–protein. Nucleic-acid and protein–ligand interfaces are unmeasured.
+  The biotite leg is protein-only, while the PISA API leg uses its assembly-molecule surface; that
+  controlled selection mismatch is baked into the empirical envelope and must not be rewritten as
+  a matched protein-only PISA comparison.
 - The fragment guard keys on `SSBOND` records. A cleaved molecule whose fragments are held together
   by something other than a disulfide, or an entry that omits `SSBOND` records, would not be caught.
   Entries where chain fragmentation is expected should be checked by hand, as 1CHO was.

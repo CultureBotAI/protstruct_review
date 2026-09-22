@@ -48,7 +48,7 @@ def write_schema(root: Path, statuses) -> None:
     (root / SCHEMA_REL).write_text(yaml.safe_dump(doc, sort_keys=False))
 
 
-REAL_STATUSES = ("pass", "fail_by_oracle", "pass_with_caveat",
+REAL_STATUSES = ("pass", "fail_criterion", "fail_by_oracle", "pass_with_caveat",
                  "pass_criterion_fail_headline", "fail_by_oracle_within_cctbx",
                  "informational")
 
@@ -75,7 +75,7 @@ def main() -> int:
 
     # R1 — every criterion-bearing status, both sides of the cutover. Table-driven
     # so that dropping any one status from CRITERION_BEARING fails a test.
-    for status in ("pass", "fail_by_oracle", "pass_with_caveat",
+    for status in ("pass", "fail_criterion", "fail_by_oracle", "pass_with_caveat",
                    "pass_criterion_fail_headline", "fail_by_oracle_within_cctbx"):
         row = {"pass_status": status, "oracle_family": "cctbx", "agent_claim": claim}
         for date, label in ((POST, "post"), (PRE, "pre")):
@@ -113,6 +113,11 @@ def main() -> int:
     rc, _ = verdict(POST, {"pass_status": "fail_by_oracle",
                            "pass_criterion": "match within 0.005", "agent_claim": claim})
     check("R3: with a claim, passes", rc, 0)
+    rc, _ = verdict(POST, {
+        "pass_status": "fail_criterion",
+        "pass_criterion": "DSSP H+E content >= 0.20",
+    })
+    check("R3: generic criterion failure does not invent an agent claim", rc, 0)
 
     # R4 — the within-cctbx status must be a cctbx row. Always enforced.
     rc, _ = verdict(PRE, {"pass_status": "fail_by_oracle_within_cctbx",

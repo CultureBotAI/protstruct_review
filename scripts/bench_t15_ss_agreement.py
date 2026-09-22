@@ -28,6 +28,8 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 from toolchain import run_logged
@@ -36,7 +38,6 @@ RCSB_PDB = "https://files.rcsb.org/download/{pdb_id}.pdb"
 REPO = Path(__file__).resolve().parent.parent
 T15 = REPO / "scripts" / "t15_ss_agreement.py"
 
-_AGREEMENT = re.compile(r"value_numeric:\s*([\d.]+)")
 _COUNTS = re.compile(r"(\d+)/(\d+)\s+concordant")
 
 # Minimum fraction of residues DSSP assigns to H or E for the agreement number to
@@ -65,32 +66,27 @@ def fetch(pdb_id: str, cache: Path) -> Path | None:
     return dest
 
 
-def ss_content(model: Path) -> float | None:
-    """Fraction of residues DSSP assigns to H or E.
-
-    Three-state agreement is degenerate when neither assigner finds any secondary
-    structure: both label everything C and the metric reads 1.0. A destroyed model
-    therefore scores HIGHER than a good one, so the agreement number is only
-    interpretable alongside how much structure there was to agree about.
-    """
-    import importlib.util
-
-    spec = importlib.util.spec_from_file_location("t15", T15)
-    t15 = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(t15)
+def _rows_by_metric(text: str) -> dict[str, dict[str, Any]]:
+    """Parse the wrapper's YAML by metric id; row order is not semantic."""
     try:
-        labels = t15.run_dssp(model)
-    except SystemExit:
-        return None
-    if not labels:
-        return None
-    return round(sum(1 for v in labels.values() if v in ("H", "E")) / len(labels), 4)
+        rows = yaml.safe_load(text) or []
+    except yaml.YAMLError:
+        return {}
+    if not isinstance(rows, list):
+        return {}
+    return {
+        row["metric_definition_ref"]: row
+        for row in rows
+        if isinstance(row, dict) and row.get("metric_definition_ref")
+    }
 
 
 def run_t15(model: Path, cache: Path) -> dict[str, Any] | None:
-    """Run the harness's own T15 script and read back its agreement value."""
+    """Run the harness and read agreement plus content from its typed YAML rows."""
     log = cache / f"t15_{model.stem}.log"
-    if not log.exists() or not _AGREEMENT.search(log.read_text(errors="ignore")):
+    rows = _rows_by_metric(log.read_text(errors="ignore")) if log.exists() else {}
+    required = {"T15_secondary_structure_agreement", "T15_secondary_structure_content"}
+    if not required.issubset(rows):
         run_logged(
             [sys.executable, T15, model, "--eval-id", "EVAL_BENCH"],
             log,
@@ -99,12 +95,17 @@ def run_t15(model: Path, cache: Path) -> dict[str, Any] | None:
     if not log.exists():
         return None
     text = log.read_text(errors="ignore")
-    agreement = _AGREEMENT.search(text)
-    if not agreement:
+    rows = _rows_by_metric(text)
+    if not required.issubset(rows):
+        return None
+    agreement = rows["T15_secondary_structure_agreement"].get("oracle_measure") or {}
+    content = rows["T15_secondary_structure_content"].get("oracle_measure") or {}
+    if agreement.get("value_numeric") is None or content.get("value_numeric") is None:
         return None
     counts = _COUNTS.search(text)
     return {
-        "agreement": float(agreement.group(1)),
+        "agreement": float(agreement["value_numeric"]),
+        "ss_content": float(content["value_numeric"]),
         "n_concordant": int(counts.group(1)) if counts else None,
         "n_scored": int(counts.group(2)) if counts else None,
     }
@@ -125,7 +126,7 @@ def collect(pdb_ids: list[str], cache: Path) -> tuple[list[dict], list[dict]]:
             print("  ! t15_ss_agreement failed", file=sys.stderr)
             skipped.append({"pdb_id": pdb_id, "reason": "t15_ss_agreement failed"})
             continue
-        content = ss_content(model)
+        content = result.pop("ss_content")
         rows.append({"pdb_id": pdb_id, **result,
                      "ss_content": content,
                      "interpretable": content is not None and content >= MIN_SS_CONTENT,

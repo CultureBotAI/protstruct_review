@@ -285,8 +285,20 @@ check("model_vs_data completeness parsed",
 t15b = load("bench_t15_ss_agreement")
 t16map = load("bench_t16_dockq_mapping")
 
-check("t15 agreement value parsed", float(t15b._AGREEMENT.search("    value_numeric: 0.7500"
-                                                                 ).group(1)), 0.75)
+t15_rows = t15b._rows_by_metric("""
+- metric_definition_ref: T15_secondary_structure_content
+  oracle_measure:
+    value_numeric: 0.4000
+- metric_definition_ref: T15_secondary_structure_agreement
+  oracle_measure:
+    value_numeric: 0.7500
+""")
+check("t15 agreement value parsed by metric id",
+      t15_rows["T15_secondary_structure_agreement"]["oracle_measure"]["value_numeric"],
+      0.75)
+check("t15 content value parsed by metric id",
+      t15_rows["T15_secondary_structure_content"]["oracle_measure"]["value_numeric"],
+      0.40)
 check("t15 concordant counts parsed",
       t15b._COUNTS.search("57/76 concordant over residues").groups(), ("57", "76"))
 

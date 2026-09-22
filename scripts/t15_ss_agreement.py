@@ -13,11 +13,12 @@ The two are genuinely different algorithm families (H-bond vs Cα geometry), so
 agreement is informative rather than tautological, and both are non-cctbx —
 satisfying the trust model without either being PHENIX.
 
-Emits a pasteable EvaluationMeasurement-shaped YAML row (the scalar agreement
-metric) plus per-residue three-state labels.
+Emits pasteable EvaluationMeasurement-shaped YAML rows for the scalar agreement
+and the DSSP H+E content gate, plus optional per-residue three-state labels.
 
-Degrades loudly: if `mkdssp` is not on PATH, or biotite is not importable, exits
-non-zero with a clear message rather than fabricating a number.
+Degrades loudly: if `mkdssp` cannot be resolved through `PROTSTRUCT_DSSP` or
+PATH, or biotite is not importable, exits non-zero with a clear message rather
+than fabricating a number.
 
 Usage:
     python3 scripts/t15_ss_agreement.py data/pdb_mtz/1sar_deposited.pdb --eval-id EVAL_1sar_...
@@ -25,8 +26,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import shutil
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -36,7 +35,7 @@ import yaml
 
 if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-from toolchain import gemmi_executable  # noqa: E402
+from toolchain import dssp_executable, gemmi_executable, run_capture  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -59,17 +58,17 @@ ResKey = tuple[str, str, str]
 
 
 def run_dssp(model: Path) -> dict[ResKey, str]:
-    """Return {(chain, resnum, icode): HEC} from DSSP. Requires `mkdssp` on PATH."""
-    exe = shutil.which("mkdssp")
-    if exe is None:
-        _fail("mkdssp not found on PATH — install DSSP (e.g. `brew install brewsci/bio/dssp`).")
+    """Return {(chain, resnum, icode): HEC} from configured DSSP."""
+    try:
+        exe = dssp_executable()
+    except FileNotFoundError as exc:
+        _fail(str(exc))
     with tempfile.NamedTemporaryFile(suffix=".dssp", delete=False) as tmp:
         out_path = Path(tmp.name)
     normalised = _normalise_for_dssp(model)
     try:
-        proc = subprocess.run(
+        proc = run_capture(
             [exe, "--output-format", "dssp", str(normalised), str(out_path)],
-            capture_output=True, text=True,
         )
         # `or`, not `and`. The two conditions are independent failures and neither
         # excuses the other: mkdssp can exit non-zero *after* writing a partial
@@ -106,8 +105,7 @@ def _normalise_for_dssp(model: Path) -> Path:
         return model
     with tempfile.NamedTemporaryFile(suffix=".pdb", delete=False) as tmp:
         converted = Path(tmp.name)
-    proc = subprocess.run([str(gemmi), "convert", str(model), str(converted)],
-                          capture_output=True, text=True)
+    proc = run_capture([gemmi, "convert", model, converted])
     if proc.returncode != 0 or not converted.stat().st_size:
         converted.unlink(missing_ok=True)
         return model
@@ -173,6 +171,7 @@ def agreement(a: dict[ResKey, str], b: dict[ResKey, str]) -> dict[str, Any]:
         for k in shared
         for (c, r, i) in [k]
     ]
+    dssp_counts = {state: sum(1 for value in a.values() if value == state) for state in "HEC"}
     return {
         "n_dssp": len(a),
         "n_biotite": len(b),
@@ -180,22 +179,27 @@ def agreement(a: dict[ResKey, str], b: dict[ResKey, str]) -> dict[str, Any]:
         "n_dropped": len(set(a) ^ set(b)),  # residues assigned by only one tool
         "n_agree": matches,
         "fraction": round(matches / len(shared), 4),
+        "dssp_h": dssp_counts["H"],
+        "dssp_e": dssp_counts["E"],
+        "dssp_c": dssp_counts["C"],
+        "dssp_ss_content": round((dssp_counts["H"] + dssp_counts["E"]) / len(a), 4),
         "per_residue": per_residue,
     }
 
 
-def render_yaml(result: dict[str, Any], eval_id: str, model: Path) -> str:
-    """Emit a pasteable EvaluationMeasurement row for T15_secondary_structure_agreement."""
-    measurement = {
+def render_yaml(
+    result: dict[str, Any], eval_id: str, subject_ref: str | None = None
+) -> str:
+    """Emit pasteable agreement and DSSP-content EvaluationMeasurement rows."""
+    agreement_measurement = {
         "id": f"{eval_id}_M_T15_ss_agreement",
         "catalog_task_ref": "T15",
         "stage": "final",
         "scope": "complex",
-        "scope_selector": model.stem,
         "metric_definition_ref": "T15_secondary_structure_agreement",
         "oracle_tool_ref": "DSSP + biotite P-SEA",
         "oracle_family": "non_cctbx",
-        "oracle_measure": {"value_numeric": result["fraction"]},
+        "oracle_measure": {"value_numeric": result["fraction"], "unit": "fraction"},
         "pass_status": "informational",
         "notes": (
             f"three-state (H/E/C) agreement between two independent non-cctbx assigners, "
@@ -205,13 +209,44 @@ def render_yaml(result: dict[str, Any], eval_id: str, model: Path) -> str:
             f"{result['n_dropped']} scored by only one and excluded)."
         ),
     }
-    return yaml.safe_dump([measurement], sort_keys=False, allow_unicode=True, width=100)
+    content_measurement = {
+        "id": f"{eval_id}_M_T15_ss_content",
+        "catalog_task_ref": "T15",
+        "stage": "final",
+        "scope": "complex",
+        "metric_definition_ref": "T15_secondary_structure_content",
+        "oracle_tool_ref": "DSSP",
+        "oracle_family": "non_cctbx",
+        "oracle_measure": {
+            "value_numeric": result["dssp_ss_content"],
+            "unit": "fraction",
+        },
+        "pass_status": "informational",
+        "notes": (
+            f"DSSP H+E content over all DSSP-scored residues: "
+            f"({result['dssp_h']} H + {result['dssp_e']} E) / {result['n_dssp']} = "
+            f"{result['dssp_ss_content']:.4f}; {result['dssp_c']} residues are coil. "
+            "This is the load-bearing content gate for interpreting the paired "
+            "DSSP/biotite agreement value."
+        ),
+    }
+    if subject_ref is not None:
+        agreement_measurement["subject_ref"] = subject_ref
+        content_measurement["subject_ref"] = subject_ref
+    return yaml.safe_dump(
+        [agreement_measurement, content_measurement],
+        sort_keys=False,
+        allow_unicode=True,
+        width=100,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("model", type=Path, help="protein model (PDB)")
     ap.add_argument("--eval-id", default="EVAL_T15", help="eval id prefix for the emitted row")
+    ap.add_argument("--subject-ref", default=None,
+                    help="stable identifier for the concrete model being measured")
     ap.add_argument("--per-residue", action="store_true", help="also print the per-residue table")
     args = ap.parse_args(argv)
 
@@ -222,7 +257,7 @@ def main(argv: list[str] | None = None) -> int:
     bio = run_biotite(args.model)
     result = agreement(dssp, bio)
 
-    print(render_yaml(result, args.eval_id, args.model))
+    print(render_yaml(result, args.eval_id, args.subject_ref))
     if args.per_residue:
         print("# chain resnum icode dssp biotite agree")
         for r in result["per_residue"]:

@@ -333,7 +333,10 @@ _families = {
 }
 check("every class declaring oracle_family constrains it to ToolFamily",
       sorted(k for k, v in _families.items() if v != "ToolFamily"), [])
-check("and all three classes that declare it are covered", len(_families), 3)
+check("all oracle_family-bearing classes are covered",
+      sorted(_families),
+      ["Finding.oracle_family", "HeadlineFinding.oracle_family",
+       "MeasurementValue.oracle_family", "TypedMeasurementValue.oracle_family"])
 check("the enum itself still admits exactly the two families",
       sorted(_schema["enums"]["ToolFamily"]["permissible_values"]), ["cctbx", "non_cctbx"])
 
@@ -428,6 +431,157 @@ check("no pull-request number appears in the findings record",
       sorted(_record_ids & _prs_in_range), [])
 check("while issues bracketing them do", 
       {"127", "130"} <= _record_ids, True)
+
+
+# --- #605: cross-document provenance refs resolve to one concrete object ----------
+# LinkML checks that these slots are strings, but not that the named run/measurement/
+# assumption exists. The guard must build one corpus index: resolving each file in
+# isolation is exactly how a dangling QDS source reference used to pass.
+
+_old_doc = {"evaluation_runs": [{
+    "id": "EVAL_old", "run_date": "2026-01-01",
+    "measurements": [{
+        "id": "EVAL_old_M_001",
+        "assumptions": [{"id": "ASSUM_old"}],
+    }],
+}]}
+_new_doc = {"evaluation_runs": [{
+    "id": "EVAL_new", "run_date": "2026-02-01",
+    "superseded_assumption_refs": ["ASSUM_old"],
+    "measurements": [{"id": "EVAL_new_M_001"}],
+}]}
+_qds_doc = {"quality_data_sheets": [{
+    "id": "QDS_new",
+    "derived_from_evaluation_run_refs": ["EVAL_old", "EVAL_new"],
+    "value": {
+        "source_measurement_ref": "EVAL_new_M_001",
+        "source_evaluation_run_ref": "EVAL_new",
+    },
+    "evidence_refs": ["EVAL_old", "PaperCitation", "data/raw-output.json"],
+}]}
+_cross_records = [
+    (Path("old.yaml"), _old_doc),
+    (Path("new.yaml"), _new_doc),
+    (Path("qds.yaml"), _qds_doc),
+]
+_cross_index = integrity.build_corpus_indices(_cross_records)
+check("unique cross-record ids produce no duplicate diagnostics",
+      integrity.check_duplicate_ids(_cross_index), [])
+for _path, _doc in _cross_records:
+    check(f"  cross-record fixture resolves: {_path}",
+          integrity.check_corpus_refs(_doc, _path, _cross_index), [])
+
+_dangling_run = _copy.deepcopy(_qds_doc)
+_dangling_run["quality_data_sheets"][0]["derived_from_evaluation_run_refs"][0] = "EVAL_gone"
+_violations = integrity.check_corpus_refs(
+    _dangling_run, Path("dangling-run.yaml"), _cross_index)
+check("a dangling QDS input run is rejected",
+      any("EVAL_gone" in v and "EvaluationRun" in v for v in _violations), True)
+
+_dangling_source_run = _copy.deepcopy(_qds_doc)
+_dangling_source_run["quality_data_sheets"][0]["value"][
+    "source_evaluation_run_ref"] = "EVAL_gone"
+_violations = integrity.check_corpus_refs(
+    _dangling_source_run, Path("dangling-source-run.yaml"), _cross_index)
+check("a dangling source_evaluation_run_ref is rejected",
+      any("source_evaluation_run_ref" in v and "EVAL_gone" in v for v in _violations), True)
+
+_dangling_measurement = _copy.deepcopy(_qds_doc)
+_dangling_measurement["quality_data_sheets"][0]["value"][
+    "source_measurement_ref"] = "EVAL_new_M_missing"
+_violations = integrity.check_corpus_refs(
+    _dangling_measurement, Path("dangling-measurement.yaml"), _cross_index)
+check("a dangling source_measurement_ref is rejected",
+      any("source_measurement_ref" in v and "EVAL_new_M_missing" in v
+          for v in _violations), True)
+
+_wrong_owner = _copy.deepcopy(_qds_doc)
+_wrong_owner["quality_data_sheets"][0]["value"][
+    "source_evaluation_run_ref"] = "EVAL_old"
+_violations = integrity.check_corpus_refs(
+    _wrong_owner, Path("wrong-owner.yaml"), _cross_index)
+check("paired source refs must name the measurement's actual owning run",
+      any("belongs to 'EVAL_new', not paired" in v for v in _violations), True)
+
+_evidence = {"evidence_refs": ["PaperCitation", "data/raw-output.json", "EVAL_old"]}
+check("citation keys, paths, and a resolving EVAL evidence ref are allowed",
+      integrity.check_corpus_refs(_evidence, Path("evidence.yaml"), _cross_index), [])
+_evidence["evidence_refs"].append("EVAL_missing")
+_violations = integrity.check_corpus_refs(_evidence, Path("evidence.yaml"), _cross_index)
+check("an EVAL_* evidence token is reserved and must resolve",
+      any("evidence_refs[3]" in v and "EVAL_missing" in v for v in _violations), True)
+
+_missing_assumption = _copy.deepcopy(_new_doc)
+_missing_assumption["evaluation_runs"][0]["superseded_assumption_refs"] = ["ASSUM_gone"]
+_violations = integrity.check_corpus_refs(
+    _missing_assumption, Path("missing-assumption.yaml"), _cross_index)
+check("a dangling superseded assumption is rejected",
+      any("ASSUM_gone" in v and "Assumption" in v for v in _violations), True)
+
+_self_doc = {"evaluation_runs": [{
+    "id": "EVAL_self", "run_date": "2026-03-01",
+    "assumptions": [{"id": "ASSUM_self"}],
+    "superseded_assumption_refs": ["ASSUM_self"],
+}]}
+_self_index = integrity.build_corpus_indices([(Path("self.yaml"), _self_doc)])
+_violations = integrity.check_corpus_refs(_self_doc, Path("self.yaml"), _self_index)
+check("a run cannot supersede its own assumption",
+      any("same EvaluationRun" in v for v in _violations), True)
+
+_future_old = {"evaluation_runs": [{
+    "id": "EVAL_before", "run_date": "2026-01-01",
+    "superseded_assumption_refs": ["ASSUM_future"],
+}]}
+_future_new = {"evaluation_runs": [{
+    "id": "EVAL_after", "run_date": "2026-02-01",
+    "assumptions": [{"id": "ASSUM_future"}],
+}]}
+_future_index = integrity.build_corpus_indices([
+    (Path("before.yaml"), _future_old), (Path("after.yaml"), _future_new)])
+_violations = integrity.check_corpus_refs(
+    _future_old, Path("before.yaml"), _future_index)
+check("a run cannot supersede an assumption from a future run",
+      any("not a run earlier" in v for v in _violations), True)
+
+_reversed_qds = _copy.deepcopy(_qds_doc)
+_reversed_qds["quality_data_sheets"][0]["derived_from_evaluation_run_refs"] = [
+    "EVAL_new", "EVAL_old"]
+_violations = integrity.check_corpus_refs(
+    _reversed_qds, Path("reversed-qds.yaml"), _cross_index)
+check("the superseded assumption's owner must be an earlier QDS input",
+      any("not an earlier input to this QDS" in v for v in _violations), True)
+
+_duplicate_doc = {"evaluation_runs": [{
+    "id": "EVAL_old", "run_date": "2026-01-02",
+    "measurements": [{
+        "id": "EVAL_old_M_001", "assumptions": [{"id": "ASSUM_old"}],
+    }],
+}]}
+_duplicate_index = integrity.build_corpus_indices(
+    _cross_records + [(Path("duplicate.yaml"), _duplicate_doc)])
+_duplicate_messages = integrity.check_duplicate_ids(_duplicate_index)
+check("duplicate run, measurement, and assumption ids are all diagnosed",
+      sorted(label for label in ("EvaluationRun", "MeasurementValue", "Assumption")
+             if any(label in v for v in _duplicate_messages)),
+      ["Assumption", "EvaluationRun", "MeasurementValue"])
+_violations = integrity.check_corpus_refs(_qds_doc, Path("qds.yaml"), _duplicate_index)
+check("a ref to a duplicate id is explicitly ambiguous",
+      any("is ambiguous" in v for v in _violations), True)
+
+# Exercise the actual corpus through the same API, including ignored files because
+# target_paths uses Path.rglob rather than a gitignore-aware search.
+import yaml as _yaml
+_live_records = [(_path, _yaml.safe_load(_path.read_text()))
+                 for _path in integrity.target_paths()]
+_live_index = integrity.build_corpus_indices(_live_records)
+check("the live corpus has no ambiguous run/measurement/assumption ids",
+      integrity.check_duplicate_ids(_live_index), [])
+_live_ref_violations = []
+for _path, _doc in _live_records:
+    _live_ref_violations += integrity.check_corpus_refs(
+        _doc, _path.relative_to(REPO), _live_index)
+check("the live corpus satisfies all new cross-record references",
+      _live_ref_violations, [])
 
 
 print(f"\nall guard unit tests passed ({PASSED} checks)")

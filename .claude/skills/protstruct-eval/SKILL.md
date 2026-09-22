@@ -207,9 +207,9 @@ domain reviewer can audit it. The T15/T16/T17 drivers correspond to the runnable
 | T17 | NMR ensemble/restraint validation (oracle-only — no PHENIX tool) |
 
 T15–T17 deliberately have **no PHENIX implementation**, but their gradeable metrics are runnable
-through independent oracle paths: DSSP + biotite for T15, DockQ + biotite for T16, and biotite plus
-deposited wwPDB validation reports for T17. See `ref/oracle_tools.md` for versions, limitations, and
-the exact wrappers.
+through independent oracle paths: DSSP H+E content followed by DSSP + biotite agreement for T15,
+DockQ + biotite for T16, and biotite plus deposited wwPDB validation reports for T17. See
+`ref/oracle_tools.md` for versions, limitations, thresholds, and the exact wrappers.
 
 ## Driving-example convention
 
@@ -238,10 +238,13 @@ Note the canonical order in the template: **compare baseline → refine → re-c
    only when it is *descriptive content* rather than the thing being graded. Such rows must carry
    `pass_status: informational`, and the task must still have a numeric metric alongside them.
    The usual move is to grade the *agreement* between two independent labellers rather than the
-   label: `T15_secondary_structure_agreement` (three-state DSSP vs an independent second assigner —
-   STRIDE preferred, biotite P-SEA the runnable fallback via `scripts/t15_ss_agreement.py`) is the
-   gradeable metric for T15, while the per-residue labels ride along as informational content. That is
-   the trust model applied to categorical data — cross-tool agreement, expressed as a number.
+   label. T15 adds an essential precondition: first require
+   `T15_secondary_structure_content` (DSSP H+E) **≥ 0.20**, then require
+   `T15_secondary_structure_agreement` (three-state DSSP vs an independent second assigner —
+   STRIDE preferred, biotite P-SEA the runnable fallback via `scripts/t15_ss_agreement.py`)
+   **≥ 0.65**. High agreement below the content gate is a failure signal, not a pass. The separate
+   agent-vs-DSSP **≥ 0.85** clause is unevaluable when no agent assignment exists. Per-residue
+   labels ride along as informational content.
 
 5. Add the metric definition(s) to `ref/catalog.yaml` and reference them from the task's
    `metric_definition_refs`. Regenerate the TSV (step 4 of "Catalog schema" above).
@@ -307,8 +310,8 @@ The QDS holds these summary blocks (use only the ones the modality needs):
 | `per_residue_quality` | `PerResidueQuality` | populate when local/per-residue measurements exist (per-residue lDDT, displacement, RSRZ; outlier residue list; difference-density peaks; flagged regions) |
 | `site_qualities[]` | `SiteQuality` | one per active site / binding site / interface / metal site. Required when a functional site or bound ligand is present |
 | `packing_summary` | `PackingSummary` | when packing / B-factor-outlier indicators were measured (packing Z-score, unsatisfied buried H-bonds, per-residue B-factor outlier Z) |
-| `classification_summary` | `ClassificationSummary` | T15 — secondary-structure agreement (gradeable) plus SS / domain / fold labels (informational) |
-| `interface_quality_summary` | `InterfaceQualitySummary` | T16 — buried surface area, DockQ, CAPRI class. Required when any `scope=interface` measurement exists |
+| `classification_summary` | `ClassificationSummary` | T15 — DSSP H+E content gate followed by secondary-structure agreement (gradeable) plus SS / domain / fold labels (informational) |
+| `interface_quality_summary` | `InterfaceQualitySummary` | T16 — total two-sided buried surface area (`ΣSASA(chains) − SASA(complex)`), DockQ, CAPRI class. Double PISA's per-side `interface_area` before comparison; BSA tolerance is `max(3% of mean, 30 Å²)`. Required when any `scope=interface` measurement exists |
 | `prediction_ensemble_summary` | `PredictionEnsembleSummary` | T07/T17 — ensemble convergence across predicted models. Required when any `scope=ensemble` measurement exists |
 | `nmr_validation_summary` | `NmrValidationSummary` | T17 — restraint violations, ensemble precision RMSD |
 | `assumptions_report` | assumption records | when a measurement's validity depends on a tool assumption that could change the verdict (schema v5) |
@@ -394,7 +397,7 @@ For waters specifically: do NOT declare every HOH as a Ligand (146 records would
 
 ## QDS emitter contract (schema v5)
 
-`scripts/qds_emit.py` follows two hard rules:
+`scripts/qds_emit.py` follows these hard rules:
 
 1. **Routing is by canonical metric id, not substring.** A single `METRIC_TO_QDS_SLOT` table at the top of the file maps every metric id to its destination. The table is validated against `ref/catalog.yaml` at startup; a typo is a hard error. Adding a new metric → add a new row in the table. Do NOT extend with substring matching, and do NOT add a second table.
 
@@ -409,9 +412,20 @@ For waters specifically: do NOT declare every HOH as a Ligand (146 records would
    - `scope=ensemble` measurement → `PredictionEnsembleSummary` or `NmrValidationSummary` rows required
    - `pairwise_comparisons[]` on the eval → must surface in QDS
 
-3. **Fail-hard on cctbx-only coverage (#315).** A gradeable applied task whose cross-tool coverage is cctbx-only or unclassifiable refuses to emit unless the eval declares a matching `CrossToolWaiver` (task ref, reason, `as_of_date`); the waiver is surfaced on the QDS and annotates the coverage row it excuses (`… — WAIVED <date>: <reason>`). Non-cctbx-only coverage is deliberately not gated — the trust model forbids self-grading, not independent-only evidence. Committed QDS files are separately checked by `scripts/check_qds_trust_invariant.py` (validate step 3c); pre-2026-08-13 history is grandfathered by name on every run.
+3. **Fail-hard on cctbx-only coverage (#315).** Coverage is computed per metric and comparison context, never by task-level union: an unrelated or failed oracle attempt cannot close a claim. A cctbx-only or unclassifiable claim refuses to emit unless the eval declares a matching `CrossToolWaiver` (task plus metric/context qualifiers, reason, `as_of_date`). A legacy task-only waiver is accepted only when one claim for that task is gated. The waiver is surfaced on the QDS and annotates only the row it excuses (`… — WAIVED <date>: <reason>`). Non-cctbx-only coverage is deliberately not gated — the trust model forbids self-grading, not independent-only evidence. Committed QDS files are separately checked by `scripts/check_qds_trust_invariant.py` (validate step 3c); pre-2026-08-13 history is grandfathered by name on every run.
 
 4. **A verdict must name its criterion (#567).** Any `pass_status` that asserts an outcome requires a non-empty `pass_criterion`; `informational` means "reported without a declared criterion" and must not carry one; `fail_by_oracle` / `fail_by_oracle_within_cctbx` require the `agent_claim` they disagree with, and the latter requires `oracle_family: cctbx`. Reasoning a verdict out in `notes` while leaving `pass_criterion` empty is the defect this rule exists to stop — it is what let one 1SAR row ship marked `pass` with no criterion, and two identical rows be graded on opposite conclusions from the same premise. Committed records are checked by `scripts/check_pass_status.py` (validate step 3c-bis). The criterion and cctbx-family rules apply to every record; the two that pre-existing history violates are enforced from 2026-09-07, with older rows grandfathered by name. A `PassStatus` value the guard does not classify — or a schema it cannot read — is a hard failure, so the rules cannot silently fall out of step with the enum.
+
+5. **Selection is subject-aware and provenance-preserving.** Put a stable `subject_ref` on every
+   measurement when an eval contains more than one concrete model, dataset, or assembly. The QDS
+   names its subject too. Exact-subject measurements outrank legacy rows with no subject; explicit
+   non-matches are excluded. Every wrapped QDS scalar keeps its source run/measurement ids, metric,
+   stage, scope/selector, tool/family, status, criterion, and notes. `scope_selector` remains a terse
+   machine selector; provenance prose belongs in `notes` or first-class fields.
+
+6. **Coupled values stay on one code path.** R-work, R-free, and the gap are one bundle, selected
+   from the same run, subject, tool, and oracle family. If no coherent bundle covers the available
+   slots, the emitter fails instead of manufacturing a mixed-family or mixed-tool triple.
 
 Regression tests at `scripts/test_qds_emit.py` enforce that the 1SAR example has every expected geometry slot populated, the synthetic active-site eval (`data/examples/eval/EVAL_synth_active_site_*.yaml`) populates per_residue_quality / site_qualities / ligand_quality / pairwise_comparisons / tool_recommendations_applied, and the negative test confirms the fail-hard behaviour. `scripts/validate.sh` runs all of this in sequence.
 

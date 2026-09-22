@@ -149,6 +149,18 @@ def gemmi_executable(required: bool = True) -> Path | None:
     return executable.resolve()
 
 
+def dssp_executable(required: bool = True) -> Path | None:
+    """Resolve mkdssp from the configured PROTSTRUCT_DSSP path or PATH."""
+    executable = _discover_executable(DSSP, ("mkdssp",))
+    if executable is None:
+        if required:
+            raise FileNotFoundError(
+                "mkdssp not found; install DSSP or set PROTSTRUCT_DSSP"
+            )
+        return None
+    return executable.resolve()
+
+
 def _version_output(executable: Path, arguments: tuple[str, ...]) -> str | None:
     try:
         process = subprocess.run(

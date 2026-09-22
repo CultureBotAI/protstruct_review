@@ -66,9 +66,11 @@ Where this file and the handbook overlap, they must agree; if they drift, that i
 13. **Fail-hard on implied content.** If an eval carries content that implies a QDS block, the
     emitter must emit that block or raise `QdsCompletenessError` (which subclasses `SystemExit` by
     design — preserve that). Adding a metric at a new `scope` means adding its implied-block rule.
-13b. **Fail-hard on cctbx-only coverage (#315).** A gradeable applied task whose cross-tool
-    coverage is cctbx-only or unclassifiable refuses to emit unless the eval declares a matching
-    `CrossToolWaiver` (task ref, reason, date); the waiver annotates the coverage row it excuses.
+13b. **Fail-hard on cctbx-only coverage (#315).** Each gradeable metric/context claim whose
+    cross-tool coverage is cctbx-only or unclassifiable refuses to emit unless the eval declares a
+    matching `CrossToolWaiver` (task + metric/context qualifiers, reason, date); a legacy task-only
+    waiver is accepted only when exactly one claim for that task is gated. The waiver annotates
+    only the coverage row it excuses.
     Non-cctbx-only coverage is deliberately NOT gated — the rule forbids self-grading, not
     independent-only evidence. Committed QDS files are checked by
     `scripts/check_qds_trust_invariant.py` (validate step 3c) with pre-2026-08-13 history
@@ -86,6 +88,16 @@ Where this file and the handbook overlap, they must agree; if they drift, that i
     are enforced on every record; the two that pre-existing history violates are enforced from
     2026-09-07 with older rows grandfathered by name, and any status the guard does not
     classify — or a schema it cannot read — is a hard failure.
+13d. **A QDS scalar keeps its measurement context.** Newly emitted summary values carry the source
+    EvaluationRun and MeasurementValue ids, canonical metric, subject, stage/scope/selector,
+    oracle tool and family, `pass_status`, criterion, and notes. `subject_ref` identifies the
+    concrete model or dataset; do not overload `scope_selector` with provenance prose. When a QDS
+    names a subject, explicit non-matching measurements are ineligible and legacy unlabelled rows
+    are fallback-only. A multi-subject input without an explicit QDS subject fails hard.
+13e. **Coupled summary values come from one code path.** In particular, R-work, R-free, and their
+    gap must be selected as a coherent bundle from one evaluation run, subject, tool, and oracle
+    family. Never choose those slots independently or synthesize a triple across Gemmi, REFMAC,
+    Servalcat, or cctbx results. If no coherent bundle covers the available slots, emission fails.
 14. **Behaviour-preserving refactors must be proven so.** After touching the emitter, regenerate a
     committed QDS and diff it: only `issued_at` may differ.
 

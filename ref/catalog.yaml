@@ -412,11 +412,17 @@ catalog_tasks:
   - ECOD
   metric_definition_refs:
   - T15_secondary_structure_agreement
+  - T15_secondary_structure_content
   - T15_secondary_structure_assignment
   - T15_structural_domain_assignment
   - T15_fold_classification
   inputs_description: model (PDB/mmCIF)
-  gold_standard: CATH/SCOPe/ECOD consensus where available; three-state agreement between DSSP and an independent second assigner (STRIDE preferred, biotite P-SEA the runnable fallback)
+  gold_standard: >-
+    CATH/SCOPe/ECOD consensus where available; for the oracle-side secondary-structure
+    check, first require DSSP H+E content >= 0.20, then require three-state agreement
+    >= 0.65 between DSSP and an independent second assigner (STRIDE preferred,
+    biotite P-SEA the runnable fallback). Agent-vs-DSSP >= 0.85 is a separate clause
+    and is unevaluable when the agent supplies no per-residue assignment.
   example_dataset: PDB 1AKE (multi-domain, CATH-classified); PDB 2LYZ (single-domain control)
 - id: T16
   task_name: Interface and assembly quality
@@ -431,7 +437,11 @@ catalog_tasks:
   - T16_interface_dockq_score
   - T16_capri_interface_quality_class
   inputs_description: complex or assembly model (PDB/mmCIF)
-  gold_standard: deposited biological assembly and CAPRI/DockQ class where available
+  gold_standard: >-
+    Deposited biological assembly and CAPRI/DockQ class where available. BSA is stored
+    as total two-sided ΣSASA(separated chains) - SASA(complex); double PISA's per-side
+    interface_area before comparison and require agreement within max(3% of the mean,
+    30 Å²) under matched 1.4 Å probe and protein-only selection.
   example_dataset: PDB 1BRS (barnase-barstar); PDB 2SIC (subtilisin-SSI)
 - id: T17
   task_name: NMR ensemble/restraint validation
@@ -1727,8 +1737,23 @@ metric_definitions:
   description: Fraction of residues assigned the same secondary-structure state by two
     independent assigners — DSSP paired with a second assigner (STRIDE preferred,
     biotite P-SEA the runnable fallback) — collapsed to the three-state H/E/C
-    alphabet. The gradeable cross-tool metric for T15; the per-residue labels themselves
+    alphabet. For the oracle-side result, first require DSSP H+E content >= 0.20,
+    then require agreement >= 0.65. Agent-vs-DSSP >= 0.85 is a separate comparison
+    that is unevaluable without an agent assignment. Per-residue labels themselves
     are carried by T15_secondary_structure_assignment as informational content.
+  applicable_task_refs:
+  - T15
+  scope: complex
+
+- id: T15_secondary_structure_content
+  name: DSSP secondary-structure content
+  unit: fraction
+  description: >-
+    Fraction of DSSP-scored residues assigned helix or strand after the same
+    H/E/C collapse used for T15_secondary_structure_agreement. This is the
+    load-bearing >= 0.20 content gate that prevents high coil/coil agreement from
+    being mistaken for a sound secondary-structure result; apply it before the
+    >= 0.65 two-assigner agreement floor.
   applicable_task_refs:
   - T15
   scope: complex
@@ -1756,7 +1781,11 @@ metric_definitions:
 
 - id: T16_interface_buried_surface_area
   name: interface buried surface area
-  description: Buried surface area for a chain-chain or assembly interface.
+  description: >-
+    Total two-sided buried surface area for a chain-chain or assembly interface,
+    ΣSASA(separated chains) - SASA(complex). PISA interface_area is per side and
+    must be doubled before comparison. With matched 1.4 Å probe and protein-only
+    selection, require agreement within max(3% of the two totals' mean, 30 Å²).
   applicable_task_refs:
   - T16
   scope: interface

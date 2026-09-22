@@ -118,29 +118,40 @@ Runnable independent-oracle coverage now spans T01–T17. CCP4/REFMAC hardens T0
 the metric-specific gaps listed below remain explicit rather than being filled by a cctbx-only
 substitute.
 
-**T15 is now runnable** for its gradeable metric (`T15_secondary_structure_agreement`).
+**T15 is now runnable** for its paired oracle-side check
+(`T15_secondary_structure_content`, then `T15_secondary_structure_agreement`).
 `scripts/t15_ss_agreement.py` runs two independent, non-cctbx secondary-structure assigners on a
-model and reports the three-state (H/E/C) agreement fraction:
+model and reports DSSP H+E content plus the three-state (H/E/C) agreement fraction:
 
 - **DSSP** (`mkdssp` 4.6.1, `brew install brewsci/bio/dssp`) — Kabsch & Sander H-bond energetics.
 - **biotite P-SEA** (`pip install biotite`, 1.7.1) — Labesse Cα-geometry method; a different
   algorithm family, so agreement is informative rather than tautological. Stands in for STRIDE,
   which Homebrew no longer ships. Demonstrated: DSSP vs biotite on the verified archive download
-  `data/pdb_mtz/1sar_deposited.pdb` → 0.8646 agreement over 192 residues.
+  `data/pdb_mtz/1sar_deposited.pdb` → **166/192 = 0.8646** agreement, with DSSP H+E content
+  **75/192 = 0.3906**. Interpret the oracle-side result in order: content must be ≥ 0.20, then
+  agreement must be ≥ 0.65. The separate agent-vs-DSSP ≥ 0.85 clause is unevaluable unless an
+  agent supplies a per-residue assignment.
 
 **T16 is fully runnable.** `scripts/t16_interface_quality.py` emits all three metrics:
 
 - `T16_interface_buried_surface_area` — always, from the model alone, via **biotite** Shrake-Rupley
-  SASA (ΣSASA(chains) − SASA(complex); an installable stand-in for the PISA web service).
-  Demonstrated: deposited `1sar` A/B → 442.1 Å².
+  SASA (ΣSASA(chains) − SASA(complex); an installable stand-in for the PISA web service). This is
+  the **total two-sided** BSA. Demonstrated: deposited `1sar` A/B → 442.1 Å² total (221.05 Å² per
+  side).
 - `T16_interface_dockq_score` + `T16_capri_interface_quality_class` — when a `--native` reference is
   given, via **DockQ** (2.1.3), CAPRI class derived from the score (Basu & Wallner 2016 bands).
-  Identity calibration on deposited `1sar` A/B → DockQ 1.000, class High.
+  Identity calibration on deposited `1sar` A/B → DockQ 1.000, class High. DockQ runs require
+  typed candidate and native subjects plus one repeated mapping/interface-id/raw-JSON triple per
+  mapping; homo-oligomer controls are explicit and every raw JSON output is retained. The wrapper
+  currently accepts PDB input only.
 
 PISA/PDBePISA stays the `top_considered` oracle for buried surface area (the deposition-grade
-reference); biotite SASA is the installed `top_performing` stand-in. The two have now been
-benchmarked head-to-head over 26 interfaces — biotite runs **1.3 % high (median), one-sided in
-26/26** — so the stand-in is quantified, not assumed: `ref/research/tolerance_benchmark_interface_bsa.md`.
+reference); its `interface_area` is per side and must be doubled before comparison with the
+harness's total two-sided value. Biotite SASA is the installed `top_performing` stand-in. The two
+have now been benchmarked head-to-head over 25 interfaces — biotite runs **1.2 % high (median),
+one-sided in 25/25** — with agreement required within **max(3 % of the mean, 30 Å²)** under matched
+1.4 Å probe and protein-only selection:
+`ref/research/tolerance_benchmark_interface_bsa.md`.
 
 > **numpy pin:** DockQ requires `numpy < 2` and pip downgraded the base env to numpy 1.26.4. If a
 > future oracle needs numpy ≥ 2, isolate DockQ in its own venv/conda env rather than sharing base.

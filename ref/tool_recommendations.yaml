@@ -497,9 +497,8 @@ tool_recommendations:
     as_of_date: '2026-04-30'
 
   # --- T15-T17 (oracle-only tasks; no PHENIX implementation exists) ---------
-  # None of these oracles are installed locally yet (see ref/oracle_tools.md
-  # "Not installed"), so these are consensus recommendations, not empirical
-  # top_performing results within this harness.
+  # See ref/oracle_tools.md for the installed DSSP/biotite/DockQ paths and for
+  # the remaining web-service or optional-tool limitations.
 
   - id: REC_T15_secondary_structure_agreement_top_considered
     metric_definition_ref: T15_secondary_structure_agreement
@@ -508,9 +507,10 @@ tool_recommendations:
     rank: 1
     justification: >-
       DSSP is the reference implementation for secondary-structure
-      assignment. The gradeable T15 metric is three-state agreement
-      between two independent assigners, so DSSP is paired with STRIDE
-      rather than used alone.
+      assignment. For the oracle-side T15 result, its H+E content must first
+      pass the 0.20 interpretability gate; only then is three-state agreement
+      with an independent second assigner compared with the 0.65 floor.
+      The separate agent-vs-DSSP clause is ≥0.85 when agent labels exist.
     as_of_date: '2026-07-20'
 
   - id: REC_T15_secondary_structure_agreement_alternative
@@ -522,8 +522,22 @@ tool_recommendations:
       STRIDE is the independent second assigner in the agreement pair.
       It uses hydrogen-bond energy plus dihedral criteria, so it fails
       differently from DSSP — which is what makes the agreement
-      informative rather than tautological.
+      informative rather than tautological after the DSSP H+E content gate
+      has passed.
     as_of_date: '2026-07-20'
+
+  - id: REC_T15_secondary_structure_content_top_considered
+    metric_definition_ref: T15_secondary_structure_content
+    tool_ref: DSSP
+    role: top_considered
+    rank: 1
+    justification: >-
+      DSSP H+E content ≥0.20 is the registered interpretability gate for the
+      two-assigner agreement metric. scripts/t15_ss_agreement.py emits it from
+      the same normalized DSSP assignment used in the agreement calculation.
+    evidence_refs:
+    - ref/research/tolerance_benchmark_ss_agreement.md
+    as_of_date: '2026-09-21'
 
   - id: REC_T15_fold_classification_top_considered
     metric_definition_ref: T15_fold_classification
@@ -566,7 +580,9 @@ tool_recommendations:
     justification: >-
       PDBePISA is the reference service for interface area and
       biological-assembly inference, and is the source the deposited
-      assembly is judged against.
+      assembly is judged against. Its interface_area is per side, so double
+      it before comparing with the harness total two-sided BSA; require
+      agreement within max(3% of the mean, 30 Å²) under matched conditions.
     as_of_date: '2026-07-20'
 
   - id: REC_T16_interface_buried_surface_area_top_performing
@@ -576,10 +592,13 @@ tool_recommendations:
     rank: 1
     justification: >-
       Installed and runnable now (scripts/t16_interface_quality.py):
-      Shrake-Rupley SASA via biotite gives the buried area from the model
-      alone — ΣSASA(chains) − SASA(complex) — an installable stand-in for
-      the PISA web service. 1sar A/B → 437.2 Å².
-    as_of_date: '2026-07-22'
+      Shrake-Rupley SASA via biotite gives total two-sided buried area from
+      the model alone — ΣSASA(chains) − SASA(complex) — an installable
+      stand-in for the PISA web service. The artifact's tutorial starting
+      model 1sar.pdb A/B → 437.2 Å² total; the separately downloaded RCSB
+      deposition → 442.1 Å² total. PISA's per-side interface_area is doubled
+      before applying the max(3% of the mean, 30 Å²) comparison tolerance.
+    as_of_date: '2026-09-21'
 
   - id: REC_T17_nmr_ensemble_precision_rmsd_top_considered
     metric_definition_ref: T17_nmr_ensemble_precision_rmsd
@@ -613,8 +632,10 @@ tool_recommendations:
       Installed and runnable now (scripts/t15_ss_agreement.py): DSSP vs
       biotite P-SEA three-state agreement. biotite's Cα-geometry P-SEA is
       a different algorithm family from DSSP's H-bond energetics, so the
-      agreement is informative rather than tautological. Stands in for
-      STRIDE, which is not currently installable via Homebrew.
+      agreement is informative rather than tautological once DSSP H+E content
+      passes 0.20; agreement must then be ≥0.65. Stands in for STRIDE, which
+      is not currently installable via Homebrew. This is distinct from the
+      agent-vs-DSSP ≥0.85 clause, which is unevaluable without agent labels.
   # --- Coverage completion (issue #4), corrected per the Codex domain review of PR #7.
   # Per-metric, capability-aware: each metric is assigned the tool that actually computes
   # THAT quantity and is genuinely independent of PHENIX/cctbx (not merely its task default).

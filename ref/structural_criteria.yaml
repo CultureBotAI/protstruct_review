@@ -83,8 +83,10 @@ criteria:
     is_gradeable: true
     definition: >-
       Fraction of residues assigned the same three-state (H/E/C) secondary-structure
-      label by two independent assigners. The gradeable T15 metric; the per-residue
-      labels themselves are informational.
+      label by two independent assigners. For the oracle-side T15 result this value is
+      interpretable only after DSSP H+E content passes its 0.20 gate; the per-residue
+      labels themselves are informational. Agent-vs-DSSP agreement is a separate
+      comparison with a 0.85 threshold when an agent assignment exists.
     definition_refs:
       - ref: Kabsch1983
         full: "Kabsch W, Sander C. DSSP. Biopolymers 1983; 22:2577-2637."
@@ -102,17 +104,16 @@ criteria:
         installed: true
         recipe: "python: struc.annotate_sse(chain)  # Labesse P-SEA, Cα geometry; a/b/c -> H/E/C"
         recipe_language: python
-        recipe_notes: "Cα-geometry method; a different algorithm family from DSSP, so agreement is non-tautological. scripts/t15_ss_agreement.py."
+        recipe_notes: "Cα-geometry method; a different algorithm family from DSSP. Agreement is non-tautological only after the DSSP H+E content gate passes. scripts/t15_ss_agreement.py."
     value_ranges:
       normal:
-        min_value: 0.80
-        text: "≥ 0.80 two-assigner agreement on a well-ordered model"
+        min_value: 0.65
+        text: "Given DSSP H+E content ≥ 0.20, DSSP-vs-biotite agreement ≥ 0.65 passes the oracle-side floor"
       anomalous:
-        max_value: 0.70
-        text: "< 0.70 indicates an unusually disordered model (or a bug)"
-      resolution_dependence: "Disagreement concentrates at helix/strand ends; DSSP-vs-STRIDE agree ~94.7% on well-ordered structure."
+        text: "DSSP H+E content < 0.20 makes even high agreement a failure signal; with adequate content, agreement < 0.65 flags cross-tool disagreement"
+      resolution_dependence: "Disagreement concentrates at helix/strand ends and is fold-class dependent: expect α-rich ~0.80-0.85 and β-rich ~0.68-0.72 for DSSP vs biotite P-SEA."
     cross_tool_agreement:
-      tolerance: "agent-vs-DSSP ≥ 0.85; two-assigner: DSSP H+E content ≥ 0.20 AND agreement ≥ 0.65"
+      tolerance: "oracle-side, in order: DSSP H+E content ≥ 0.20, then DSSP-vs-biotite agreement ≥ 0.65; separate agent-vs-DSSP clause ≥ 0.85 when an agent assignment exists, otherwise unevaluable"
       tools: "DSSP vs biotite P-SEA (t15_ss_agreement.py)"
       precondition: "disclose which assigner was used. GATE ON SS CONTENT, NOT AGREEMENT: three-state agreement is degenerate at the bad end — a model with no secondary structure scores 1.0 because both assigners label everything coil, so perturbing 1UBQ raises its agreement from 0.75 to 1.00 at 2 Å noise. High agreement with low SS content is a FAILURE signal. Given adequate content the agreement floor is fold-class dependent — expect α-rich ~0.80-0.85 and β-rich ~0.68-0.72, because P-SEA infers strands from Cα geometry and DSSP from backbone H-bonds"
       provenance:
@@ -121,12 +122,12 @@ criteria:
       provisional: false
     example_measurements:
       - structure_id: 1sar
-        value_numeric: 0.86
+        value_numeric: 0.8646
         unit: fraction
         tool: DSSP + biotite P-SEA
-        source: "scripts/t15_ss_agreement.py run (0.8646 after the gemmi-convert input fix)"
+        source: "scripts/t15_ss_agreement.py run on data/pdb_mtz/1sar_deposited.pdb (166/192 = 0.8646 after normalized-input fixes)"
         verdict: normal
-        interpretation: "165/191 residues concordant; DSSP 191 vs biotite 192 (1 residue scored by only one). NOT typical: 1SAR scores higher than every one of the 16 well-ordered structures in the benchmark, and the retired 0.80 floor was generalised from this single value."
+        interpretation: "166/192 residues concordant on the common normalized residue set; DSSP H+E content is 75/192 = 0.3906, so the content gate passes. NOT typical: 1SAR scores higher than every one of the 16 well-ordered structures in the benchmark, and the retired 0.80 floor was generalised from this single value."
       - structure_id: 3est
         value_numeric: 0.6792
         unit: fraction
@@ -157,9 +158,10 @@ criteria:
     unit: "Å²"
     is_gradeable: true
     definition: >-
-      Total solvent-accessible surface area buried on complex formation,
-      ΣSASA(separated chains) − SASA(complex). A property of the model complex,
-      needing no reference.
+      Total two-sided solvent-accessible surface area buried on complex formation,
+      ΣSASA(separated chains) − SASA(complex). This registered value counts both
+      interface sides; a per-side value is half the total. A property of the model
+      complex, needing no reference.
     definition_refs:
       - ref: Krissinel2007
         full: "Krissinel E, Henrick K. PISA. J. Mol. Biol. 2007; 372:774-797."
@@ -180,12 +182,12 @@ criteria:
         recipe_notes: "`interface_area` is the area buried on ONE side; the harness metric is both sides, so compare against 2 × interface_area. PISA also uses a Lee & Richards surface and counts ligand/hetero atoms in the molecule surface. Symmetry-mate interfaces cannot be reproduced from ASU coordinates alone."
     value_ranges:
       normal:
-        text: "transient interfaces ~400-800 Å²; obligate/large interfaces > 1500 Å²"
+        text: "Literature size heuristics are commonly per side: transient interfaces ~400-800 Å² per side (~800-1600 Å² total two-sided); obligate/large interfaces >1500 Å² per side (>3000 Å² total two-sided). These are interpretation heuristics, not cross-tool tolerances."
       anomalous:
-        max_value: 200.0
-        text: "< ~200 Å² is a crystal-packing contact, not a biological interface"
+        max_value: 400.0
+        text: "< ~400 Å² total two-sided (< ~200 Å² per side) suggests a crystal-packing contact rather than a biological interface"
     cross_tool_agreement:
-      tolerance: "|Δ| ≤ 3 % of the mean, or 30 Å², whichever is larger"
+      tolerance: "|Δ| ≤ max(3 % of the two total two-sided values' mean, 30 Å²)"
       tools: "biotite SASA vs PISA (PDBe API)"
       precondition: "matched probe radius (1.4 Å), protein-only atom selection, and PISA's per-side interface_area doubled; chain pairs that are fragments of one molecule must be excluded first (they are not interfaces); one-sided — biotite read high in 25/25 benchmark interfaces, so a negative Δ is off-distribution"
       provenance:
@@ -197,9 +199,9 @@ criteria:
         value_numeric: 437.2
         unit: "Å²"
         tool: biotite SASA
-        source: "scripts/t16_interface_quality.py run (chains A/B)"
+        source: "scripts/t16_interface_quality.py run on the artifact tutorial starting model data/1sar.pdb (chains A/B); not the later RCSB download"
         verdict: informational
-        interpretation: "Small A/B interface (218.6 Å² per side) — 1SAR's crystallographic dimer, a demonstration not a biological assembly."
+        interpretation: "Small A/B interface (437.2 Å² total two-sided; 218.6 Å² per side) in the artifact starting model — 1SAR's crystallographic dimer, a demonstration not a biological assembly. The RCSB deposited file separately measures 442.1 Å² total two-sided."
       - structure_id: 1brs
         value_numeric: 1569.1
         unit: "Å²"

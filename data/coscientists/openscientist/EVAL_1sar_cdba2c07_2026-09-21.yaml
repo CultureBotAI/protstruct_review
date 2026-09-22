@@ -1,0 +1,202 @@
+evaluation_runs:
+- id: EVAL_1sar_cdba2c07_2026-09-21
+  eval_filename_stem: EVAL_1sar_cdba2c07_2026-09-21
+  structure_ref: 1sar
+  artifact_ref: cdba2c07-daff-4f60-ae96-12452b3a5fbb
+  run_date: '2026-09-21'
+  catalog_tasks_applied:
+  - T15
+  - T16
+  interface_qualities:
+  - id: EVAL_1sar_cdba2c07_2026-09-21_IFACE_AB_IDENTITY
+    structure_ref: 1sar
+    subject_ref: artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb
+    reference_subject_ref: repo:data/pdb_mtz/1sar_deposited.pdb#sha256=e60e5db6c7eb554a3ac4e184bdf7cbb7d69b682e287579bdcf5f8bf279d51f86
+    interface_label: packaged round-4 A/B crystallographic contact, identity mapping
+    chain_id_1: A
+    chain_id_2: B
+    model_to_native_chain_mapping: AB:AB
+    buried_surface_area:
+      value_numeric: 437.8
+      unit: Å²
+    dockq_score:
+      value_numeric: 0.9445
+    capri_quality_class:
+      value_text: High
+    evidence_refs:
+    - data/coscientists/openscientist/EVIDENCE_1sar_cdba2c07_2026-09-21_dockq_AB_AB.json
+    notes: >-
+      DockQ against data/pdb_mtz/1sar_deposited.pdb. This is the mapping selected
+      for the headline scalar because independent chainwise Cα fits favor the
+      identity pairs (A→A 0.191 Å, B→B 0.180 Å) over the crossed pairs (A→B
+      0.421 Å, B→A 0.410 Å). The contact is crystallographic, not a certified
+      biological assembly.
+  - id: EVAL_1sar_cdba2c07_2026-09-21_IFACE_AB_SWAPPED
+    structure_ref: 1sar
+    subject_ref: artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb
+    reference_subject_ref: repo:data/pdb_mtz/1sar_deposited.pdb#sha256=e60e5db6c7eb554a3ac4e184bdf7cbb7d69b682e287579bdcf5f8bf279d51f86
+    interface_label: packaged round-4 A/B crystallographic contact, swapped mapping control
+    chain_id_1: A
+    chain_id_2: B
+    model_to_native_chain_mapping: AB:BA
+    dockq_score:
+      value_numeric: 0.0063
+    capri_quality_class:
+      value_text: Incorrect
+    evidence_refs:
+    - data/coscientists/openscientist/EVIDENCE_1sar_cdba2c07_2026-09-21_dockq_AB_BA.json
+    notes: >-
+      Required homo-oligomer mapping control. The 0.9382 spread relative to AB:AB
+      demonstrates that the disclosed mapping is load-bearing; a high score alone
+      would not establish the mapping. This remains an exercise-path result on a
+      crystallographic contact, not biological-assembly validation.
+  measurements:
+  - id: EVAL_1sar_cdba2c07_2026-09-21_M_001
+    catalog_task_ref: T15
+    stage: final
+    scope: complex
+    subject_ref: artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb
+    metric_definition_ref: T15_secondary_structure_agreement
+    oracle_tool_ref: DSSP + biotite P-SEA
+    oracle_family: non_cctbx
+    oracle_measure:
+      value_numeric: 0.8802
+      unit: fraction
+    pass_criterion: DSSP H+E content >= 0.20 and three-state agreement >= 0.65
+    pass_status: pass
+    notes: >-
+      Re-measured on the packaged file extracted from the source ZIP (SHA-256
+      8cbc1650f8be5a3833f98833fa514ec7d490c2c3bb9aa930413abac05e2a510b):
+      169/192 DSSP-versus-biotite H/E/C assignments agree. M_002 supplies the
+      required content gate, so the paired-oracle sanity check is interpretable.
+      This is not evidence that the packaged model improved: agreement rises by
+      0.0156 relative to the deposited baseline while H+E content falls by 0.0156,
+      the known degeneracy direction. The agent report supplied no
+      secondary-structure assignment, so the agent-versus-DSSP rubric clause remains
+      unevaluable.
+  - id: EVAL_1sar_cdba2c07_2026-09-21_M_002
+    catalog_task_ref: T15
+    stage: final
+    scope: complex
+    subject_ref: artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb
+    metric_definition_ref: T15_secondary_structure_content
+    oracle_tool_ref: DSSP
+    oracle_family: non_cctbx
+    oracle_measure:
+      value_numeric: 0.375
+      unit: fraction
+    pass_criterion: DSSP H+E content >= 0.20
+    pass_status: pass
+    notes: >-
+      DSSP assigns 29 H, 43 E and 120 C residues: (29 + 43) / 192 = 0.3750.
+      This clears the registry's interpretability gate but sits below the
+      benchmark's 0.458-0.784 range for its 16 well-ordered structures and near
+      its disordered-NMR control (0.371). It therefore licenses interpretation
+      of the agreement calculation, not a claim of improved structural quality.
+  - id: EVAL_1sar_cdba2c07_2026-09-21_M_003
+    catalog_task_ref: T15
+    stage: final
+    scope: complex
+    subject_ref: pdb:1sar
+    metric_definition_ref: T15_secondary_structure_agreement
+    oracle_tool_ref: DSSP + biotite P-SEA
+    oracle_family: non_cctbx
+    oracle_measure:
+      value_numeric: 0.8646
+      unit: fraction
+    pass_criterion: DSSP H+E content >= 0.20 and three-state agreement >= 0.65
+    pass_status: pass
+    notes: >-
+      Re-measured on data/pdb_mtz/1sar_deposited.pdb (SHA-256
+      e60e5db6c7eb554a3ac4e184bdf7cbb7d69b682e287579bdcf5f8bf279d51f86):
+      166/192 assignments agree, exactly reproducing the normalized calibration.
+      This is a comparison baseline, not the QDS subject.
+  - id: EVAL_1sar_cdba2c07_2026-09-21_M_004
+    catalog_task_ref: T15
+    stage: final
+    scope: complex
+    subject_ref: pdb:1sar
+    metric_definition_ref: T15_secondary_structure_content
+    oracle_tool_ref: DSSP
+    oracle_family: non_cctbx
+    oracle_measure:
+      value_numeric: 0.3906
+      unit: fraction
+    pass_criterion: DSSP H+E content >= 0.20
+    pass_status: pass
+    notes: >-
+      DSSP assigns 29 H, 46 E and 117 C residues: (29 + 46) / 192 = 0.3906.
+      This is the deposited comparison baseline, not the QDS subject.
+  - id: EVAL_1sar_cdba2c07_2026-09-21_M_005
+    catalog_task_ref: T16
+    stage: final
+    scope: interface
+    scope_selector: EVAL_1sar_cdba2c07_2026-09-21_IFACE_AB_IDENTITY
+    subject_ref: artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb
+    metric_definition_ref: T16_interface_buried_surface_area
+    oracle_tool_ref: biotite SASA
+    oracle_family: non_cctbx
+    oracle_measure:
+      value_numeric: 437.8
+      unit: Å²
+    pass_status: informational
+    notes: >-
+      Protein-only Shrake-Rupley total burial for packaged chains A/B. The two
+      earlier calibration values are not conflicting repeats of one subject:
+      437.2 Å² is the artifact's tutorial starting model data/1sar.pdb, while
+      442.1 Å² is the current RCSB deposited file data/pdb_mtz/1sar_deposited.pdb.
+      This 437.8 Å² value belongs to the packaged round-4 output. All three were
+      independently reproduced with the current wrapper. The small contact is
+      crystallographic and the number is informational.
+  - id: EVAL_1sar_cdba2c07_2026-09-21_M_006
+    catalog_task_ref: T16
+    stage: final
+    scope: interface
+    scope_selector: EVAL_1sar_cdba2c07_2026-09-21_IFACE_AB_IDENTITY
+    subject_ref: artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb
+    reference_subject_ref: repo:data/pdb_mtz/1sar_deposited.pdb#sha256=e60e5db6c7eb554a3ac4e184bdf7cbb7d69b682e287579bdcf5f8bf279d51f86
+    metric_definition_ref: T16_interface_dockq_score
+    oracle_tool_ref: DockQ
+    oracle_family: non_cctbx
+    oracle_measure:
+      value_numeric: 0.9445
+    pass_status: informational
+    evidence_refs:
+    - data/coscientists/openscientist/EVIDENCE_1sar_cdba2c07_2026-09-21_dockq_AB_AB.json
+    notes: >-
+      DockQ 2.1.3 against data/pdb_mtz/1sar_deposited.pdb with mapping AB:AB.
+      The alternative same-sequence mapping AB:BA was also measured and scores
+      0.0063 (Incorrect); both structured results are retained in
+      interface_qualities. Identity is selected independently of the larger
+      DockQ score: chainwise Kabsch Cα RMSD is 0.191/0.180 Å for A→A/B→B versus
+      0.421/0.410 Å for A→B/B→A. The contact is crystallographic, so this score
+      does not certify a biological assembly.
+  - id: EVAL_1sar_cdba2c07_2026-09-21_M_007
+    catalog_task_ref: T16
+    stage: final
+    scope: interface
+    scope_selector: EVAL_1sar_cdba2c07_2026-09-21_IFACE_AB_IDENTITY
+    subject_ref: artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb
+    reference_subject_ref: repo:data/pdb_mtz/1sar_deposited.pdb#sha256=e60e5db6c7eb554a3ac4e184bdf7cbb7d69b682e287579bdcf5f8bf279d51f86
+    metric_definition_ref: T16_capri_interface_quality_class
+    oracle_tool_ref: DockQ
+    oracle_family: non_cctbx
+    oracle_measure:
+      value_text: High
+    pass_status: informational
+    evidence_refs:
+    - data/coscientists/openscientist/EVIDENCE_1sar_cdba2c07_2026-09-21_dockq_AB_AB.json
+    notes: >-
+      CAPRI class derived from DockQ 0.9445 under the standard bands. It carries
+      the same mapping and crystallographic-contact caveats as M_006.
+  headline_verdict: >-
+    This partial T15/T16 follow-up closes the missing oracle-side T15 content
+    gate and T16 homo-oligomer mapping control on the packaged round-4 model; it
+    does not re-measure or carry forward any other task. T15's
+    paired-oracle calculation is interpretable (content 0.3750; agreement 0.8802) but
+    does not establish improvement, and the agent-versus-DSSP clause remains
+    unevaluable because the report contains no assignment. T16 is strongly
+    mapping-dependent (AB:AB 0.9445/High; AB:BA 0.0063/Incorrect) and remains
+    informational because A/B is a crystallographic contact. These additions do
+    not change the September audit's central finding: the archive packages round
+    4 while the report describes an absent round-7 model.

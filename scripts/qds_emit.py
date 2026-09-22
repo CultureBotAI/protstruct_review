@@ -9,8 +9,9 @@ tool-recommendations blocks when the source eval carries that content.
 
 Routing is driven by a single explicit `METRIC_TO_QDS_SLOT` table keyed on
 the canonical metric ids declared in `ref/catalog.yaml`. Substring matching
-is not used. Strongest-oracle picking (prefer non_cctbx; prefer numeric over
-text) is the tie-breaker when multiple measurements share a metric id.
+is not used. Selection is subject-aware and deterministic: explicit subject,
+independent family, numeric value, source date, and stable ids are considered
+in that order. Coupled R-work/R-free/gap values remain on one code path.
 
 After building, a fail-hard consistency pass rejects QDS that would hide
 load-bearing local content: a scope=site measurement implies a
@@ -27,9 +28,13 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import copy
 import datetime as dt
+import hashlib
+import re
 import statistics
 import sys
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -117,6 +122,7 @@ METRIC_TO_QDS_SLOT: dict[str, QdsSlot | list[QdsSlot]] = {
 
     # Structured optional summary blocks
     "T15_secondary_structure_agreement": ("classification_summary", "secondary_structure_agreement"),
+    "T15_secondary_structure_content": ("classification_summary", "secondary_structure_content"),
     "T15_secondary_structure_assignment": ("classification_summary", "secondary_structure_assignment"),
     "T15_structural_domain_assignment": ("classification_summary", "structural_domain_assignment"),
     "T15_fold_classification":     ("classification_summary", "fold_classification"),
@@ -164,27 +170,207 @@ def _validate_routing_table() -> None:
 
 
 def _final_or_all_measurements(eval_run: dict[str, Any]) -> list[dict[str, Any]]:
-    return [m for m in eval_run.get("measurements", []) if m.get("stage") in ("final", "all")]
+    """Return final/dataset rows annotated with their source run.
+
+    The private keys never leave the emitter. They make recency a deterministic
+    tie-breaker and let a wrapped QDS scalar name the EvaluationRun that actually
+    supplied it, rather than merely listing every input run at sheet level.
+    """
+    out: list[dict[str, Any]] = []
+    for measurement in eval_run.get("measurements", []):
+        if measurement.get("stage") not in ("final", "all"):
+            continue
+        annotated = dict(measurement)
+        annotated["_source_evaluation_run_ref"] = eval_run.get("id")
+        annotated["_source_run_date"] = str(eval_run.get("run_date") or "")
+        out.append(annotated)
+    return out
 
 
-def _strongest(measurements: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """Pick the strongest measurement: prefer non_cctbx, then numeric > text."""
-    if not measurements:
+SUBJECT_ROW_KEYS = (
+    "secondary_structure_assignments",
+    "domain_assignments",
+    "interface_qualities",
+    "prediction_ensemble_qualities",
+    "nmr_ensemble_qualities",
+)
+
+
+def _annotated_runs(
+    runs: list[dict[str, Any]], subject_ref: str | None
+) -> list[dict[str, Any]]:
+    """Return one copied evidence view shared by every QDS builder.
+
+    Explicit non-matching measurements/structured rows are removed. Legacy rows
+    without a subject remain available as fallback evidence; scalar selection
+    still makes an exact subject win within its metric/context. A run containing
+    subject-labelled evidence for only other subjects is omitted entirely so its
+    headline, assumptions, recommendations, and waivers cannot leak into the QDS.
+    """
+    out: list[dict[str, Any]] = []
+    for source in runs:
+        run = copy.deepcopy(source)
+        measurements = run.get("measurements", []) or []
+        labelled_measurements = [m for m in measurements if m.get("subject_ref")]
+        exact_measurements = [m for m in labelled_measurements if m.get("subject_ref") == subject_ref]
+        legacy_measurements = [m for m in measurements if not m.get("subject_ref")]
+
+        if subject_ref is None:
+            kept_measurements = measurements
+        else:
+            kept_measurements = exact_measurements + legacy_measurements
+
+        annotated: list[dict[str, Any]] = []
+        for measurement in kept_measurements:
+            row = dict(measurement)
+            row["_source_evaluation_run_ref"] = run.get("id")
+            row["_source_run_date"] = str(run.get("run_date") or "")
+            annotated.append(row)
+        run["measurements"] = annotated
+
+        exact_structured = False
+        labelled_structured = False
+        for key in SUBJECT_ROW_KEYS:
+            rows = run.get(key, []) or []
+            if subject_ref is None:
+                continue
+            exact = [row for row in rows if row.get("subject_ref") == subject_ref]
+            legacy = [row for row in rows if not row.get("subject_ref")]
+            labelled_structured = labelled_structured or any(row.get("subject_ref") for row in rows)
+            exact_structured = exact_structured or bool(exact)
+            run[key] = exact or legacy
+
+        has_labelled = bool(labelled_measurements) or labelled_structured
+        has_exact = bool(exact_measurements) or exact_structured
+        # Once a run names a different concrete subject, its unlabelled rows and
+        # run-level prose are not a safe fallback for this QDS.  Legacy-only runs
+        # remain usable, but a mixed explicit/legacy run cannot lend its headline,
+        # waiver, assumptions, or auxiliary rows to a subject it did not measure.
+        if subject_ref is not None and has_labelled and not has_exact:
+            continue
+        out.append(run)
+    return out
+
+
+def _explicit_subjects(runs: list[dict[str, Any]]) -> set[str]:
+    """Collect subjects from scalar measurements and structured summary rows."""
+    subjects: set[str] = set()
+    for run in runs:
+        for measurement in run.get("measurements", []) or []:
+            if measurement.get("subject_ref"):
+                subjects.add(str(measurement["subject_ref"]))
+        for key in SUBJECT_ROW_KEYS:
+            for row in run.get(key, []) or []:
+                if row.get("subject_ref"):
+                    subjects.add(str(row["subject_ref"]))
+    return subjects
+
+
+def _eligible_for_subject(
+    measurements: list[dict[str, Any]], subject_ref: str | None
+) -> list[dict[str, Any]]:
+    """Exclude explicit non-matches while retaining legacy unlabelled rows."""
+    if subject_ref is None:
+        return list(measurements)
+    return [
+        m for m in measurements
+        if m.get("subject_ref") in (None, "", subject_ref)
+    ]
+
+
+def _candidate_priority(m: dict[str, Any], subject_ref: str | None) -> tuple[Any, ...]:
+    """Only policy-backed preferences; scientific context is not a tie-breaker."""
+    explicit_subject = m.get("subject_ref")
+    subject_score = 0 if subject_ref is not None and explicit_subject == subject_ref else 1
+    fam_score = {"non_cctbx": 0, "cctbx": 1}.get(m.get("oracle_family"), 2)
+    oracle = m.get("oracle_measure") or {}
+    type_score = 0 if oracle.get("value_numeric") is not None else 1
+    run_date = str(m.get("_source_run_date") or "").replace("-", "")
+    recency_score = -int(run_date) if run_date.isdigit() else 0
+    return (subject_score, fam_score, type_score, recency_score)
+
+
+def _scientific_payload(m: dict[str, Any]) -> str:
+    """Canonical scientific payload used to distinguish duplicates from conflicts.
+
+    Notes and agent claims do not decide which oracle value wins.  Status,
+    criterion, metric/context, tool family, and provenance do: silently choosing
+    between equal-priority rows that differ in any of those fields would change
+    the scientific meaning of the emitted scalar.
+    """
+    semantic_fields = (
+        "catalog_task_ref",
+        "metric_definition_ref",
+        "subject_ref",
+        "reference_subject_ref",
+        "stage",
+        "scope",
+        "scope_selector",
+        "oracle_tool_ref",
+        "oracle_family",
+        "oracle_measure",
+        "pass_status",
+        "pass_criterion",
+        "provenance_ref",
+        "evidence_refs",
+        "_source_evaluation_run_ref",
+    )
+    return yaml.safe_dump(
+        {key: m.get(key) for key in semantic_fields if m.get(key) not in (None, "")},
+        sort_keys=True,
+        allow_unicode=True,
+    )
+
+
+def _strongest(
+    measurements: list[dict[str, Any]], subject_ref: str | None = None
+) -> dict[str, Any] | None:
+    """Pick deterministically by subject, family, value type, date, then id."""
+    eligible = _eligible_for_subject(measurements, subject_ref)
+    if not eligible:
         return None
-
-    def rank(m: dict[str, Any]) -> tuple[int, int]:
-        fam_score = 0 if m.get("oracle_family") == "non_cctbx" else 1
-        oracle = m.get("oracle_measure") or {}
-        type_score = 0 if oracle.get("value_numeric") is not None else 1
-        return (fam_score, type_score)
-
-    return sorted(measurements, key=rank)[0]
+    ordered = sorted(
+        eligible,
+        key=lambda m: (_candidate_priority(m, subject_ref), str(m.get("id") or "")),
+    )
+    winner = ordered[0]
+    priority = _candidate_priority(winner, subject_ref)
+    tied = [m for m in ordered if _candidate_priority(m, subject_ref) == priority]
+    distinct_payloads = {_scientific_payload(m) for m in tied}
+    if len(distinct_payloads) > 1:
+        ids = ", ".join(str(m.get("id") or "<missing id>") for m in tied)
+        raise QdsCompletenessError(
+            "QDS selection is scientifically ambiguous: equally ranked measurements "
+            f"differ in value, tool, status, criterion, or context ({ids}). "
+            "Name the QDS subject or make the comparison context explicit."
+        )
+    return winner
 
 
 def _wrap_value(m: dict[str, Any] | None) -> dict[str, Any] | None:
     if m is None:
         return None
     v = dict(m.get("oracle_measure") or {})
+    provenance_fields = {
+        "source_measurement_ref": "id",
+        "source_evaluation_run_ref": "_source_evaluation_run_ref",
+        "metric_definition_ref": "metric_definition_ref",
+        "oracle_tool_ref": "oracle_tool_ref",
+        "oracle_family": "oracle_family",
+        "pass_status": "pass_status",
+        "pass_criterion": "pass_criterion",
+        "subject_ref": "subject_ref",
+        "reference_subject_ref": "reference_subject_ref",
+        "evidence_refs": "evidence_refs",
+        "stage": "stage",
+        "scope": "scope",
+        "scope_selector": "scope_selector",
+        "notes": "notes",
+    }
+    for output_key, source_key in provenance_fields.items():
+        value = m.get(source_key)
+        if value not in (None, ""):
+            v[output_key] = value
     return v or None
 
 
@@ -199,7 +385,9 @@ def _slots_for(metric_id: str) -> list[QdsSlot]:
     return [entry] if isinstance(entry, tuple) else list(entry)
 
 
-def _route_measurements(measurements: list[dict[str, Any]]) -> dict[str, dict[str, dict[str, Any]]]:
+def _route_measurements(
+    measurements: list[dict[str, Any]], subject_ref: str | None = None
+) -> dict[str, dict[str, dict[str, Any]]]:
     """Return {block_name: {slot_name: <strongest measurement>}}.
 
     The strongest measurement for a (block, slot) pair is the one
@@ -208,6 +396,11 @@ def _route_measurements(measurements: list[dict[str, Any]]) -> dict[str, dict[st
     """
     by_slot: dict[QdsSlot, list[dict[str, Any]]] = {}
     for m in measurements:
+        # Local rows have dedicated SiteQuality/LigandQuality/per-residue
+        # builders.  Letting one compete for a global headline scalar either
+        # hides the local regression or makes unlike contexts ambiguous.
+        if m.get("scope") in {"site", "ligand", "atom"}:
+            continue
         mid = m.get("metric_definition_ref")
         if mid not in METRIC_TO_QDS_SLOT:
             continue
@@ -216,11 +409,215 @@ def _route_measurements(measurements: list[dict[str, Any]]) -> dict[str, dict[st
 
     out: dict[str, dict[str, dict[str, Any]]] = {}
     for (block, slot), candidates in by_slot.items():
-        winner = _strongest(candidates)
+        if block == "refinement_summary" and slot in REFINEMENT_SLOTS:
+            # Coupled below as a single provenance/context bundle; selecting a
+            # scalar first can raise or, worse, mix otherwise coherent triples.
+            continue
+        winner = _strongest(candidates, subject_ref)
         if winner is None:
             continue
         out.setdefault(block, {})[slot] = winner
+
+    _enforce_coherent_refinement_bundle(out, by_slot, subject_ref)
     return out
+
+
+REFINEMENT_SLOTS = ("r_work", "r_free", "r_free_gap")
+REFINEMENT_BUNDLE_FIELDS = (
+    "_source_evaluation_run_ref",
+    "catalog_task_ref",
+    "stage",
+    "scope",
+    "scope_selector",
+    "subject_ref",
+    "reference_subject_ref",
+    "oracle_tool_ref",
+    "oracle_family",
+    "provenance_ref",
+    "evidence_refs",
+)
+
+
+def _context_token(value: Any) -> str:
+    """Stable token for possibly structured provenance/context fields."""
+    dumped = yaml.safe_dump(value, sort_keys=True, allow_unicode=True)
+    if dumped.endswith("...\n"):
+        dumped = dumped[:-4]
+    return dumped.strip()
+
+
+def _measurement_bundle_key(m: dict[str, Any]) -> tuple[str, ...]:
+    """Full scientific code path required for a coherent refinement bundle."""
+    return tuple(_context_token(m.get(field)) for field in REFINEMENT_BUNDLE_FIELDS)
+
+
+def _refinement_bundle_payload(selected: dict[str, dict[str, Any]]) -> str:
+    return yaml.safe_dump(
+        {slot: _scientific_payload(row) for slot, row in sorted(selected.items())},
+        sort_keys=True,
+        allow_unicode=True,
+    )
+
+
+def _r_unit(unit: Any) -> str:
+    normalized = str(unit or "").strip().casefold()
+    if normalized in {"", "1", "fraction", "unitless", "dimensionless"}:
+        return "fraction"
+    if normalized in {"%", "percent", "percentage"}:
+        return "percent"
+    return normalized
+
+
+def _rounding_increment(value: float) -> float:
+    exponent = Decimal(str(value)).as_tuple().exponent
+    return float(Decimal(10) ** exponent) if exponent < 0 else 1.0
+
+
+def _validate_refinement_arithmetic(selected: dict[str, dict[str, Any]]) -> None:
+    """Validate R-free − R-work against the recorded gap and its units."""
+    if not all(slot in selected for slot in REFINEMENT_SLOTS):
+        return
+    measures = {
+        slot: selected[slot].get("oracle_measure") or {} for slot in REFINEMENT_SLOTS
+    }
+    values = {slot: measures[slot].get("value_numeric") for slot in REFINEMENT_SLOTS}
+    if any(
+        not isinstance(value, (int, float)) or isinstance(value, bool)
+        for value in values.values()
+    ):
+        raise QdsCompletenessError(
+            "QDS refinement-summary arithmetic failed: R-work, R-free, and "
+            "R-free gap must all be numeric"
+        )
+    units = {slot: _r_unit(measures[slot].get("unit")) for slot in REFINEMENT_SLOTS}
+    if len(set(units.values())) != 1:
+        raise QdsCompletenessError(
+            "QDS refinement-summary arithmetic failed: incompatible R-factor "
+            f"units {units}"
+        )
+    expected = float(values["r_free"]) - float(values["r_work"])
+    observed = float(values["r_free_gap"])
+    tolerance = sum(
+        0.5 * _rounding_increment(float(value)) for value in values.values()
+    ) + 1e-12
+    if abs(expected - observed) > tolerance:
+        raise QdsCompletenessError(
+            "QDS refinement-summary arithmetic failed: recorded R-free gap "
+            f"{observed:g} does not equal R-free {float(values['r_free']):g} minus "
+            f"R-work {float(values['r_work']):g} within rounding tolerance "
+            f"{tolerance:g}"
+        )
+
+
+def _enforce_coherent_refinement_bundle(
+    routed: dict[str, dict[str, dict[str, Any]]],
+    by_slot: dict[QdsSlot, list[dict[str, Any]]],
+    subject_ref: str | None,
+) -> None:
+    """Keep R-work, R-free, and their gap on one run/tool/family code path.
+
+    Selecting the three slots independently can create an arithmetically plausible
+    but scientifically fictitious triple. When at least two refinement slots are
+    available, choose one bundle covering all available slots. If no such bundle
+    exists and the independent winners disagree on provenance, fail loudly.
+    """
+    block = "refinement_summary"
+    all_candidates = {
+        slot: _eligible_for_subject(by_slot.get((block, slot), []), subject_ref)
+        for slot in REFINEMENT_SLOTS
+    }
+
+    # An explicit match makes every legacy refinement row ineligible for this
+    # *bundle*, not merely for whichever individual slots it happens to cover.
+    # Otherwise a partial exact-subject result could be silently completed with
+    # R values from an unlabelled/different artefact.
+    exact_exists = subject_ref is not None and any(
+        row.get("subject_ref") == subject_ref
+        for rows in all_candidates.values()
+        for row in rows
+    )
+    if exact_exists:
+        all_candidates = {
+            slot: [row for row in rows if row.get("subject_ref") == subject_ref]
+            for slot, rows in all_candidates.items()
+        }
+
+    present = [slot for slot in REFINEMENT_SLOTS if all_candidates[slot]]
+    for slot in REFINEMENT_SLOTS:
+        (routed.get(block) or {}).pop(slot, None)
+    if not (routed.get(block) or {}):
+        routed.pop(block, None)
+    if len(present) < 2:
+        for slot in present:
+            winner = _strongest(all_candidates[slot], subject_ref)
+            if winner is not None:
+                routed.setdefault(block, {})[slot] = winner
+        return
+
+    bundles: dict[tuple[str, ...], dict[str, list[dict[str, Any]]]] = {}
+    for slot in present:
+        for measurement in all_candidates[slot]:
+            bundles.setdefault(_measurement_bundle_key(measurement), {}).setdefault(
+                slot, []
+            ).append(measurement)
+
+    complete: list[tuple[tuple[Any, ...], dict[str, dict[str, Any]]]] = []
+    for candidates_by_slot in bundles.values():
+        if any(slot not in candidates_by_slot for slot in present):
+            continue
+        selected = {
+            slot: _strongest(candidates_by_slot[slot], subject_ref)
+            for slot in present
+        }
+        if any(value is None for value in selected.values()):
+            continue
+        rows = [value for value in selected.values() if value is not None]
+        # A bundle is only as strong as its weakest member.  No tool name,
+        # measurement id, or other lexical property is a scientific preference.
+        complete.append((max(_candidate_priority(row, subject_ref) for row in rows), selected))
+
+    if complete:
+        best_priority = min(priority for priority, _ in complete)
+        tied = [selected for priority, selected in complete if priority == best_priority]
+        payloads = {_refinement_bundle_payload(selected) for selected in tied}
+        if len(payloads) > 1:
+            ids = "; ".join(
+                ",".join(str(row.get("id") or "<missing id>") for row in selected.values())
+                for selected in tied
+            )
+            raise QdsCompletenessError(
+                "QDS refinement-summary selection is scientifically ambiguous: "
+                f"equally ranked coherent bundles differ in value, status, or context ({ids})."
+            )
+        # Payloads are identical; ids merely make duplicate selection reproducible.
+        selected = min(
+            tied,
+            key=lambda bundle: tuple(
+                str(bundle[slot].get("id") or "") for slot in sorted(bundle)
+            ),
+        )
+        _validate_refinement_arithmetic(selected)
+        routed.setdefault(block, {}).update(selected)
+        return
+
+    winners = {
+        slot: winner
+        for slot in present
+        if (winner := _strongest(all_candidates[slot], subject_ref)) is not None
+    }
+    winner_keys = {
+        _measurement_bundle_key(winners[slot])
+        for slot in present if slot in winners
+    }
+    detail = ", ".join(
+        f"{slot}={winners[slot].get('id')}" for slot in present if slot in winners
+    )
+    raise QdsCompletenessError(
+        "QDS refinement-summary coherence failed: no single evaluation run/tool/"
+        "family/subject/task/stage/scope/selector/provenance/reference supplies "
+        f"{', '.join(present)}; independent winners were {detail}; "
+        f"distinct code paths={len(winner_keys)}."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -246,7 +643,14 @@ def _build_block_from_routed(qds_id: str, slot: str, routed: dict[str, dict[str,
 # ---------------------------------------------------------------------------
 
 
-def build_identity_block(qds_id: str, structure_id: str) -> dict[str, Any]:
+def build_identity_block(
+    qds_id: str,
+    structure_id: str,
+    structure_method: str | None = None,
+    resolution_a: float | None = None,
+    space_group: str | None = None,
+    description: str | None = None,
+) -> dict[str, Any]:
     block: dict[str, Any] = {"id": f"{qds_id}_identity"}
     sid = structure_id.lower()
     if sid.startswith("emdb"):
@@ -255,52 +659,125 @@ def build_identity_block(qds_id: str, structure_id: str) -> dict[str, Any]:
         block["alphafold_id"] = structure_id
     else:
         block["pdb_id"] = structure_id
+    if structure_method is not None:
+        block["method"] = structure_method
+    if resolution_a is not None:
+        block["resolution_a"] = resolution_a
+    if space_group is not None:
+        block["space_group"] = space_group
+    if description is not None:
+        block["description"] = description
     return block
 
 
-def build_cross_tool_coverage(qds_id: str, measurements: list[dict[str, Any]]) -> dict[str, Any]:
-    by_task: dict[str, dict[str, set[str]]] = {}
-    for m in measurements:
-        t = m.get("catalog_task_ref")
-        if not t:
+COVERAGE_CONTEXT_FIELDS = (
+    "catalog_task_ref",
+    "metric_definition_ref",
+    "stage",
+    "scope",
+    "scope_selector",
+    "reference_subject_ref",
+)
+
+
+def _coverage_context_key(measurement: dict[str, Any]) -> tuple[str, ...]:
+    """Claim context excluding subject, which is resolved within each group."""
+    return tuple(_context_token(measurement.get(field)) for field in COVERAGE_CONTEXT_FIELDS)
+
+
+def _has_numeric_oracle_value(measurement: dict[str, Any]) -> bool:
+    value = (measurement.get("oracle_measure") or {}).get("value_numeric")
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _coverage_id(qds_id: str, context: tuple[str, ...]) -> str:
+    task = re.sub(r"[^A-Za-z0-9]+", "_", context[0]).strip("_") or "task"
+    metric = re.sub(r"[^A-Za-z0-9]+", "_", context[1]).strip("_") or "metric"
+    digest = hashlib.sha256("\x1f".join(context).encode()).hexdigest()[:12]
+    return f"{qds_id}_coverage_{task}_{metric}_{digest}"
+
+
+def build_cross_tool_coverage(
+    qds_id: str,
+    measurements: list[dict[str, Any]],
+    subject_ref: str | None = None,
+) -> dict[str, Any]:
+    """Report independent-family coverage per metric and comparison context.
+
+    A task-level union is scientifically unsafe: a non-cctbx oracle for one
+    metric cannot validate a cctbx-only claim about another.  Text-only attempts
+    (including an aborted tool invocation) are retained as informational context
+    but never close quantitative coverage.
+    """
+    grouped: dict[tuple[str, ...], list[dict[str, Any]]] = {}
+    for measurement in measurements:
+        if not measurement.get("catalog_task_ref"):
             continue
-        bucket = by_task.setdefault(t, {"cctbx": set(), "non_cctbx": set(),
-                                        "unclassified": set()})
-        fam = m.get("oracle_family") or ""
-        tool = m.get("oracle_tool_ref") or ""
-        if fam == "cctbx":
-            bucket["cctbx"].add(tool)
-        elif fam == "non_cctbx":
-            bucket["non_cctbx"].add(tool)
-        else:
-            # A blank or unrecognised family used to fall through both branches and
-            # land on the "open — cctbx only" default, so a task with NO classified
-            # oracle at all was labelled as having cctbx coverage while
-            # `cctbx_oracles` was empty -- a claim about the one thing this repo
-            # grades on, contradicted by the row carrying it (#125). The schema makes
-            # the field required, but this emitter runs on hand-edited drafts before
-            # `linkml-validate` sees them.
-            bucket["unclassified"].add(tool or "<unnamed oracle>")
-    rows = []
-    for t in sorted(by_task):
-        cctbx = sorted(x for x in by_task[t]["cctbx"] if x)
-        non_cctbx = sorted(x for x in by_task[t]["non_cctbx"] if x)
-        unclassified = sorted(by_task[t]["unclassified"])
-        if non_cctbx:
+        grouped.setdefault(_coverage_context_key(measurement), []).append(measurement)
+
+    rows: list[dict[str, Any]] = []
+    for context in sorted(grouped):
+        candidates = _eligible_for_subject(grouped[context], subject_ref)
+        exact = [row for row in candidates if row.get("subject_ref") == subject_ref]
+        if subject_ref is not None and exact:
+            candidates = exact
+
+        numeric = [row for row in candidates if _has_numeric_oracle_value(row)]
+        text_only = [row for row in candidates if not _has_numeric_oracle_value(row)]
+        buckets: dict[str, set[str]] = {
+            "cctbx": set(),
+            "non_cctbx": set(),
+            "unclassified": set(),
+        }
+        for measurement in numeric:
+            family = measurement.get("oracle_family") or ""
+            tool = str(measurement.get("oracle_tool_ref") or "<unnamed oracle>")
+            if family in ("cctbx", "non_cctbx"):
+                buckets[family].add(tool)
+            else:
+                buckets["unclassified"].add(tool)
+
+        cctbx = sorted(buckets["cctbx"])
+        non_cctbx = sorted(buckets["non_cctbx"])
+        unclassified = sorted(buckets["unclassified"])
+        attempts = sorted(
+            {str(row.get("oracle_tool_ref") or "<unnamed oracle>") for row in text_only}
+        )
+        if not numeric:
+            gap = "informational — non-numeric measurement"
+            if attempts:
+                gap += f" (not counted as coverage: {', '.join(attempts)})"
+        elif non_cctbx:
             gap = "closed" if cctbx else "non-cctbx only"
         elif cctbx:
             gap = "open — cctbx only"
         else:
-            gap = "unknown — no oracle_family on any measurement"
+            gap = "unknown — no oracle_family on numeric measurement"
         if unclassified:
-            gap += (f" (oracle_family missing on: {', '.join(unclassified)})")
-        rows.append({
-            "id": f"{qds_id}_coverage_{t}",
-            "catalog_task_ref": t,
+            gap += f" (oracle_family missing on: {', '.join(unclassified)})"
+        if numeric and attempts:
+            gap += f" (non-numeric attempts excluded: {', '.join(attempts)})"
+
+        first = candidates[0]
+        row: dict[str, Any] = {
+            "id": _coverage_id(qds_id, context),
+            "catalog_task_ref": first["catalog_task_ref"],
             "cctbx_oracles": cctbx,
             "non_cctbx_oracles": non_cctbx,
             "gap_status": gap,
-        })
+        }
+        for field in (
+            "metric_definition_ref",
+            "subject_ref",
+            "reference_subject_ref",
+            "stage",
+            "scope",
+            "scope_selector",
+        ):
+            value = first.get(field)
+            if value not in (None, ""):
+                row[field] = value
+        rows.append(row)
     return {"id": f"{qds_id}_coverage", "task_coverage": rows}
 
 
@@ -391,6 +868,7 @@ def build_per_residue_quality(qds_id: str, eval_runs: list[dict[str, Any]]) -> d
 def build_site_qualities(
     qds_id: str,
     eval_runs: list[dict[str, Any]],
+    subject_ref: str | None = None,
 ) -> list[dict[str, Any]]:
     """For each Site declared on any eval run, build a SiteQuality.
 
@@ -455,6 +933,8 @@ def build_site_qualities(
     ligand_measurements: dict[str, list[dict[str, Any]]] = {}
     for r in eval_runs:
         for m in r.get("measurements", []) or []:
+            if m.get("stage") not in ("final", "all"):
+                continue
             scope = m.get("scope")
             if scope not in ("site", "ligand"):
                 continue
@@ -508,18 +988,21 @@ def build_site_qualities(
             "site_ref": site["id"],
         }
         # Site-scoped measurements.
-        for m in site_measurements.get(site["id"], []):
-            mid = m.get("metric_definition_ref") or ""
-            slot = site_metric_to_slot.get(mid)
+        site_by_slot: dict[str, list[dict[str, Any]]] = {}
+        for measurement in site_measurements.get(site["id"], []):
+            slot = site_metric_to_slot.get(measurement.get("metric_definition_ref") or "")
             if slot:
-                v = _wrap_value(m)
-                if v:
-                    sq[slot] = v
-                else:
-                    raise QdsCompletenessError(
-                        f"QDS scoped-measurement integrity failed: site measurement "
-                        f"{m.get('id')!r} has no value to emit"
-                    )
+                site_by_slot.setdefault(slot, []).append(measurement)
+        for slot, candidates in site_by_slot.items():
+            winner = _strongest(candidates, subject_ref)
+            value = _wrap_value(winner)
+            if value:
+                sq[slot] = value
+            else:
+                raise QdsCompletenessError(
+                    "QDS scoped-measurement integrity failed: selected site "
+                    f"measurement for {site['id']!r}/{slot!r} has no value to emit"
+                )
 
         # Ligand quality (when the site has a bound ligand).
         lig_ref = site.get("ligand_ref")
@@ -528,18 +1011,23 @@ def build_site_qualities(
                 "id": f"{qds_id}_ligand_quality_{lig_ref}",
                 "ligand_ref": lig_ref,
             }
-            for m in ligand_measurements[lig_ref]:
-                mid = m.get("metric_definition_ref") or ""
-                slot = ligand_metric_to_slot.get(mid)
+            ligand_by_slot: dict[str, list[dict[str, Any]]] = {}
+            for measurement in ligand_measurements[lig_ref]:
+                slot = ligand_metric_to_slot.get(
+                    measurement.get("metric_definition_ref") or ""
+                )
                 if slot:
-                    v = _wrap_value(m)
-                    if v:
-                        lq[slot] = v
-                    else:
-                        raise QdsCompletenessError(
-                            f"QDS scoped-measurement integrity failed: ligand measurement "
-                            f"{m.get('id')!r} has no value to emit"
-                        )
+                    ligand_by_slot.setdefault(slot, []).append(measurement)
+            for slot, candidates in ligand_by_slot.items():
+                winner = _strongest(candidates, subject_ref)
+                value = _wrap_value(winner)
+                if value:
+                    lq[slot] = value
+                else:
+                    raise QdsCompletenessError(
+                        "QDS scoped-measurement integrity failed: selected ligand "
+                        f"measurement for {lig_ref!r}/{slot!r} has no value to emit"
+                    )
             if len(lq) > 2:  # more than just id + ligand_ref
                 sq["ligand_quality"] = lq
 
@@ -556,6 +1044,7 @@ def build_predicted_confidence_summary(
     qds_id: str,
     eval_runs: list[dict[str, Any]],
     structure_method: str | None = None,
+    subject_ref: str | None = None,
 ) -> dict[str, Any] | None:
     """Emit when method is `predicted_model` or pLDDT/PAE metrics appear.
 
@@ -573,7 +1062,9 @@ def build_predicted_confidence_summary(
     has_predicted_metrics = bool(measurements)
     if structure_method != "predicted_model" and not has_predicted_metrics:
         return None
-    routed = _route_measurements(measurements).get("predicted_confidence_summary")
+    routed = _route_measurements(measurements, subject_ref).get(
+        "predicted_confidence_summary"
+    )
     block = _build_block_from_routed(qds_id, "predicted_confidence", routed)
     if block:
         return block
@@ -615,6 +1106,7 @@ def build_row_bearing_summary(
     routed: dict[str, dict[str, Any]] | None,
     eval_runs: list[dict[str, Any]],
     row_keys: tuple[str, ...],
+    subject_ref: str | None = None,
 ) -> dict[str, Any] | None:
     """Build one optional summary block: routed scalar slots plus row lists.
 
@@ -627,9 +1119,63 @@ def build_row_bearing_summary(
     }
     for key in row_keys:
         rows = [x for r in eval_runs for x in (r.get(key) or [])]
+        if subject_ref is not None:
+            exact = [row for row in rows if row.get("subject_ref") == subject_ref]
+            rows = exact or [row for row in rows if not row.get("subject_ref")]
         if rows:
             block[key] = rows
     return block if len(block) > 1 else None
+
+
+def _input_assumptions(run: dict[str, Any]) -> list[dict[str, Any]]:
+    assumptions = list(run.get("assumptions", []) or [])
+    for measurement in run.get("measurements", []) or []:
+        assumptions.extend(measurement.get("assumptions", []) or [])
+    return assumptions
+
+
+def _validate_assumption_supersessions(eval_runs: list[dict[str, Any]]) -> None:
+    """Require every supersession to resolve to an earlier input assumption."""
+    occurrences: dict[str, list[int]] = {}
+    for index, run in enumerate(eval_runs):
+        for assumption in _input_assumptions(run):
+            assumption_id = assumption.get("id")
+            if assumption_id:
+                occurrences.setdefault(str(assumption_id), []).append(index)
+
+    errors: list[str] = []
+    for index, run in enumerate(eval_runs):
+        refs = run.get("superseded_assumption_refs", []) or []
+        run_id = str(run.get("id") or f"input run {index + 1}")
+        duplicate_refs = sorted(
+            {str(ref) for ref in refs if refs.count(ref) > 1}
+        )
+        for ref in duplicate_refs:
+            errors.append(f"{run_id}: duplicate superseded assumption ref {ref!r}")
+        for ref_value in dict.fromkeys(refs):
+            ref = str(ref_value)
+            positions = occurrences.get(ref, [])
+            if any(position < index for position in positions):
+                continue
+            if index in positions:
+                errors.append(
+                    f"{run_id}: superseded assumption ref {ref!r} is self-referential; "
+                    "only assumptions from earlier input runs may be withdrawn"
+                )
+            elif positions:
+                errors.append(
+                    f"{run_id}: superseded assumption ref {ref!r} points to a future "
+                    "input run"
+                )
+            else:
+                errors.append(
+                    f"{run_id}: superseded assumption ref {ref!r} is dangling"
+                )
+    if errors:
+        raise QdsCompletenessError(
+            "QDS assumption-supersession integrity failed:\n  - "
+            + "\n  - ".join(errors)
+        )
 
 
 def build_assumptions_report(eval_runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -647,8 +1193,17 @@ def build_assumptions_report(eval_runs: list[dict[str, Any]]) -> list[dict[str, 
     Duplicate assumption ids are dropped on the second-and-later occurrence
     so the QDS doesn't repeat a tool-level assumption per measurement.
     """
+    _validate_assumption_supersessions(eval_runs)
     out: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
+    superseded_ids = {
+        assumption_id
+        for run in eval_runs
+        for assumption_id in (run.get("superseded_assumption_refs") or [])
+    }
+
+    def keep(assumption: dict[str, Any]) -> bool:
+        return assumption.get("id") not in superseded_ids
 
     # Load tool_assumptions.yaml once and index by tool_ref.
     tool_assumptions_by_tool: dict[str, list[dict[str, Any]]] = {}
@@ -670,6 +1225,8 @@ def build_assumptions_report(eval_runs: list[dict[str, Any]]) -> list[dict[str, 
                 distinct_tools.append(t)
     for t in distinct_tools:
         for a in tool_assumptions_by_tool.get(t, []):
+            if not keep(a):
+                continue
             if a["id"] in seen_ids:
                 continue
             seen_ids.add(a["id"])
@@ -679,6 +1236,8 @@ def build_assumptions_report(eval_runs: list[dict[str, Any]]) -> list[dict[str, 
     for r in eval_runs:
         for m in r.get("measurements", []) or []:
             for a in m.get("assumptions", []) or []:
+                if not keep(a):
+                    continue
                 if a["id"] in seen_ids:
                     continue
                 seen_ids.add(a["id"])
@@ -687,6 +1246,8 @@ def build_assumptions_report(eval_runs: list[dict[str, Any]]) -> list[dict[str, 
     # 3. Run-level (agent-framework) assumptions.
     for r in eval_runs:
         for a in r.get("assumptions", []) or []:
+            if not keep(a):
+                continue
             if a["id"] in seen_ids:
                 continue
             seen_ids.add(a["id"])
@@ -758,8 +1319,13 @@ def _check_implied_blocks(qds: dict[str, Any], eval_runs: list[dict[str, Any]]) 
     errors: list[str] = []
 
     for r in eval_runs:
+        published_measurements = [
+            m
+            for m in (r.get("measurements") or [])
+            if m.get("stage") in ("final", "all")
+        ]
         # scope=site implies SiteQuality.
-        site_scope_ms = [m for m in (r.get("measurements") or []) if m.get("scope") == "site"]
+        site_scope_ms = [m for m in published_measurements if m.get("scope") == "site"]
         if site_scope_ms and not qds.get("site_qualities"):
             errors.append(
                 f"eval {r['id']}: {len(site_scope_ms)} measurement(s) have scope=site "
@@ -767,7 +1333,7 @@ def _check_implied_blocks(qds: dict[str, Any], eval_runs: list[dict[str, Any]]) 
                 f"correct the scope."
             )
         # scope=ligand implies LigandQuality nested inside a SiteQuality.
-        ligand_scope_ms = [m for m in (r.get("measurements") or []) if m.get("scope") == "ligand"]
+        ligand_scope_ms = [m for m in published_measurements if m.get("scope") == "ligand"]
         ligand_qualities_present = any(
             sq.get("ligand_quality") for sq in qds.get("site_qualities", []) or []
         )
@@ -778,7 +1344,7 @@ def _check_implied_blocks(qds: dict[str, Any], eval_runs: list[dict[str, Any]]) 
                 f"on the eval and bind them to a Site."
             )
         # scope=residue implies PerResidueQuality.
-        residue_scope_ms = [m for m in (r.get("measurements") or []) if m.get("scope") == "residue"]
+        residue_scope_ms = [m for m in published_measurements if m.get("scope") == "residue"]
         if residue_scope_ms and not qds.get("per_residue_quality"):
             errors.append(
                 f"eval {r['id']}: {len(residue_scope_ms)} measurement(s) have scope=residue "
@@ -786,7 +1352,7 @@ def _check_implied_blocks(qds: dict[str, Any], eval_runs: list[dict[str, Any]]) 
             )
         # A scope implies the matching rows list on the matching QDS block.
         for scope, block, rows_key, row_class in SCOPE_IMPLIED_ROWS:
-            scoped_ms = [m for m in (r.get("measurements") or []) if m.get("scope") == scope]
+            scoped_ms = [m for m in published_measurements if m.get("scope") == scope]
             if scoped_ms and not _rows_present(qds, block, rows_key):
                 errors.append(
                     f"eval {r['id']}: {len(scoped_ms)} measurement(s) have scope={scope} "
@@ -794,7 +1360,9 @@ def _check_implied_blocks(qds: dict[str, Any], eval_runs: list[dict[str, Any]]) 
                     f"{row_class} rows or correct the scope."
                 )
         # scope=ensemble implies an NMR or prediction ensemble row.
-        ensemble_scope_ms = [m for m in (r.get("measurements") or []) if m.get("scope") == "ensemble"]
+        ensemble_scope_ms = [
+            m for m in published_measurements if m.get("scope") == "ensemble"
+        ]
         prediction_ensemble_ms = [
             m for m in ensemble_scope_ms if m.get("catalog_task_ref") == "T07"
         ]
@@ -872,21 +1440,72 @@ def _check_trust_invariant(qds: dict[str, Any], waivers: list[dict[str, Any]]) -
     distrust), so only cctbx-only and unknown-family rows are gated. A waiver
     annotates the row it excuses so the QDS reads honestly.
     """
-    waived = {w.get("catalog_task_ref"): w for w in waivers}
-    errors = []
-    for row in qds.get("cross_tool_coverage", {}).get("task_coverage", []):
-        gap = row.get("gap_status", "")
-        if not (gap.startswith("open — cctbx only")
-                or gap.startswith("unknown")):
-            continue
-        task = row.get("catalog_task_ref")
-        waiver = waived.get(task)
-        if waiver is None:
+    coverage_rows = qds.get("cross_tool_coverage", {}).get("task_coverage", [])
+    gated_rows = [
+        row
+        for row in coverage_rows
+        if str(row.get("gap_status", "")).startswith(
+            ("open — cctbx only", "unknown")
+        )
+    ]
+    qualifiers = (
+        "metric_definition_ref",
+        "subject_ref",
+        "reference_subject_ref",
+        "stage",
+        "scope",
+        "scope_selector",
+    )
+    matching_waivers: dict[str, list[dict[str, Any]]] = {
+        str(row.get("id")): [] for row in gated_rows
+    }
+    errors: list[str] = []
+    for waiver in waivers:
+        task_rows = [
+            row
+            for row in gated_rows
+            if row.get("catalog_task_ref") == waiver.get("catalog_task_ref")
+        ]
+        specified = [field for field in qualifiers if waiver.get(field) not in (None, "")]
+        matches = [
+            row
+            for row in task_rows
+            if all(row.get(field) == waiver.get(field) for field in specified)
+        ]
+        if not specified and len(task_rows) > 1:
             errors.append(
-                f"task {task}: {gap!r} with no cross_tool_waiver — add a "
+                f"waiver {waiver.get('id')!r} is task-only but task "
+                f"{waiver.get('catalog_task_ref')} has {len(task_rows)} gated claims; "
+                "add metric/context qualifiers"
+            )
+            continue
+        if specified and len(matches) > 1:
+            errors.append(
+                f"waiver {waiver.get('id')!r} ambiguously matches {len(matches)} "
+                "gated claims; add enough metric/context qualifiers"
+            )
+            continue
+        if len(matches) == 1:
+            matching_waivers[str(matches[0].get("id"))].append(waiver)
+
+    for row in gated_rows:
+        gap = row.get("gap_status", "")
+        task = row.get("catalog_task_ref")
+        row_waivers = matching_waivers[str(row.get("id"))]
+        if not row_waivers:
+            errors.append(
+                f"task {task}, metric {row.get('metric_definition_ref')}, context "
+                f"{row.get('scope_selector')!r}: {gap!r} with no unambiguous "
+                "cross_tool_waiver — add a "
                 f"non-cctbx oracle or declare a waiver naming what is "
                 f"missing (#315)")
+        elif len(row_waivers) > 1:
+            errors.append(
+                f"task {task}, metric {row.get('metric_definition_ref')}: multiple "
+                f"waivers match ({', '.join(str(w.get('id')) for w in row_waivers)})"
+            )
         else:
+            waiver = row_waivers[0]
             row["gap_status"] = (f"{gap} — WAIVED {waiver.get('as_of_date')}: "
                                  f"{waiver.get('reason')}")
     if errors:
@@ -899,36 +1518,126 @@ def _check_trust_invariant(qds: dict[str, Any], waivers: list[dict[str, Any]]) -
 # ---------------------------------------------------------------------------
 
 
+def _write_immutable_output(path: Path, content: str) -> bool:
+    """Create a QDS once; permit byte-identical reruns, reject mutation.
+
+    Returns True when a new file was written and False for an identical no-op.
+    """
+    encoded = content.encode("utf-8")
+    if path.exists():
+        if path.read_bytes() == encoded:
+            return False
+        raise QdsCompletenessError(
+            f"QDS output {path} already exists with different content; "
+            "quality data sheets are immutable, so choose a new id/output path"
+        )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(encoded)
+    return True
+
+
+def _validate_cli_emission_contract(
+    *, coverage_scope: str | None, scope_notes: str | None,
+    output: Path | None, issued_at: str | None,
+) -> None:
+    """Require enough pinned scope/time metadata for a file artifact."""
+    errors: list[str] = []
+    if coverage_scope is None:
+        errors.append("--coverage-scope is required for QDS emission")
+    if coverage_scope == "partial" and not str(scope_notes or "").strip():
+        errors.append("--coverage-scope partial requires non-empty --scope-notes")
+    if output is not None and not issued_at:
+        errors.append("--issued-at is required when --output is used")
+    if errors:
+        raise QdsCompletenessError(
+            "QDS emission contract failed:\n  - " + "\n  - ".join(errors)
+        )
+
+
 def emit_qds(
     eval_paths: list[Path],
     qds_id: str,
     structure_id: str,
     structure_method: str | None = None,
+    subject_ref: str | None = None,
+    coverage_scope: str | None = None,
+    scope_notes: str | None = None,
+    resolution_a: float | None = None,
+    space_group: str | None = None,
+    issued_at: str | None = None,
+    structure_description: str | None = None,
 ) -> dict[str, Any]:
     _validate_routing_table()
+    if coverage_scope == "partial" and not str(scope_notes or "").strip():
+        raise QdsCompletenessError(
+            "QDS emission contract failed: coverage_scope=partial requires "
+            "non-empty scope_notes"
+        )
 
-    runs: list[dict[str, Any]] = []
+    source_runs: list[dict[str, Any]] = []
     for path in eval_paths:
         doc = yaml.safe_load(path.read_text())
         for r in doc.get("evaluation_runs", []):
-            runs.append(r)
+            source_runs.append(r)
+    source_runs.sort(
+        key=lambda run: (str(run.get("run_date") or ""), str(run.get("id") or ""))
+    )
+
+    explicit_subjects = _explicit_subjects(source_runs)
+    effective_subject = subject_ref
+    if effective_subject is None and len(explicit_subjects) == 1:
+        effective_subject = next(iter(explicit_subjects))
+    elif effective_subject is None and len(explicit_subjects) > 1:
+        raise QdsCompletenessError(
+            "QDS inputs contain multiple explicit measurement or structured-row subjects "
+            f"({', '.join(sorted(explicit_subjects))}); pass --subject-ref."
+        )
+    elif (
+        effective_subject is not None
+        and explicit_subjects
+        and effective_subject not in explicit_subjects
+    ):
+        raise QdsCompletenessError(
+            f"QDS subject {effective_subject!r} has no exact evidence in the inputs; "
+            "explicit evidence exists only for "
+            f"{', '.join(sorted(explicit_subjects))}. Refusing legacy fallback."
+        )
+
+    # Every downstream builder consumes this one copied, annotated view.  This
+    # prevents a wrong-subject run from re-entering through structured rows,
+    # waivers, recommendations, assumptions, or headline prose after scalar
+    # routing has correctly filtered it.
+    runs = _annotated_runs(source_runs, effective_subject)
+    if not runs:
+        raise QdsCompletenessError(
+            f"QDS subject {effective_subject!r} left no applicable evaluation runs"
+        )
 
     qds_measurements = [m for r in runs for m in _final_or_all_measurements(r)]
     final_only = [m for m in qds_measurements if m.get("stage") == "final"]
     all_only = [m for m in qds_measurements if m.get("stage") == "all"]
 
     # Route every measurement once via METRIC_TO_QDS_SLOT.
-    routed_final = _route_measurements(final_only)
-    routed_all = _route_measurements(all_only)
-    routed_qds = _route_measurements(qds_measurements)
+    routed_final = _route_measurements(final_only, effective_subject)
+    routed_all = _route_measurements(all_only, effective_subject)
+    routed_qds = _route_measurements(qds_measurements, effective_subject)
 
     qds: dict[str, Any] = {
         "id": qds_id,
         "structure_ref": structure_id,
         "derived_from_evaluation_run_refs": [r["id"] for r in runs],
-        "issued_at": dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat(),
-        "identity_block": build_identity_block(qds_id, structure_id),
+        "issued_at": issued_at or dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat(),
+        "identity_block": build_identity_block(
+            qds_id, structure_id, structure_method, resolution_a, space_group,
+            structure_description,
+        ),
     }
+    if effective_subject is not None:
+        qds["subject_ref"] = effective_subject
+    if coverage_scope is not None:
+        qds["coverage_scope"] = coverage_scope
+    if scope_notes is not None:
+        qds["scope_notes"] = scope_notes
 
     # Routed blocks — final-stage measurements.
     geom = _build_block_from_routed(qds_id, "geometry", routed_final.get("geometry_summary"))
@@ -947,7 +1656,12 @@ def emit_qds(
 
     for block_name, id_suffix, row_keys in ROW_BEARING_SUMMARY_BLOCKS:
         block = build_row_bearing_summary(
-            qds_id, id_suffix, routed_qds.get(block_name), runs, row_keys
+            qds_id,
+            id_suffix,
+            routed_qds.get(block_name),
+            runs,
+            row_keys,
+            effective_subject,
         )
         if block:
             qds[block_name] = block
@@ -968,25 +1682,34 @@ def emit_qds(
         qds["per_residue_quality"] = prq
 
     # Site qualities.
-    sqs = build_site_qualities(qds_id, runs)
+    sqs = build_site_qualities(qds_id, runs, effective_subject)
     if sqs:
         qds["site_qualities"] = sqs
 
     # Predicted-confidence summary.
-    pcs_block = build_predicted_confidence_summary(qds_id, runs, structure_method)
+    pcs_block = build_predicted_confidence_summary(
+        qds_id, runs, structure_method, effective_subject
+    )
     if pcs_block:
         qds["predicted_confidence_summary"] = pcs_block
 
     # Cross-tool coverage uses every measurement that informed the QDS.
-    qds["cross_tool_coverage"] = build_cross_tool_coverage(qds_id, qds_measurements)
+    qds["cross_tool_coverage"] = build_cross_tool_coverage(
+        qds_id, qds_measurements, effective_subject
+    )
 
     # Waivers travel from the evals to the QDS verbatim (#315), and the trust
     # invariant is enforced against the coverage just built: a cctbx-only or
     # unclassifiable task with no waiver is a hard error, not a labeled gap.
     waivers = []
     seen_waiver_ids = set()
+    measured_tasks = {
+        measurement.get("catalog_task_ref") for measurement in qds_measurements
+    }
     for r in runs:
         for w in r.get("cross_tool_waivers", []) or []:
+            if w.get("catalog_task_ref") not in measured_tasks:
+                continue
             if w.get("id") not in seen_waiver_ids:
                 seen_waiver_ids.add(w.get("id"))
                 waivers.append(w)
@@ -1026,18 +1749,56 @@ def main() -> int:
         default=None,
         help="Set the structure's method to enable modality-specific block emission.",
     )
+    p.add_argument(
+        "--subject-ref",
+        default=None,
+        help="Concrete model/artefact to prefer; explicit non-matching rows are excluded.",
+    )
+    p.add_argument(
+        "--coverage-scope",
+        choices=["cumulative", "partial"],
+        default=None,
+        help="Declare whether the emitted sheet is cumulative or a bounded partial update.",
+    )
+    p.add_argument("--scope-notes", default=None, help="Coverage boundary or carry-forward note.")
+    p.add_argument("--resolution-a", type=float, default=None)
+    p.add_argument("--space-group", default=None)
+    p.add_argument("--structure-description", default=None)
+    p.add_argument(
+        "--issued-at",
+        default=None,
+        help="Pinned ISO-8601 issue timestamp for reproducible immutable output.",
+    )
     p.add_argument("-o", "--output", type=Path)
     args = p.parse_args()
 
+    _validate_cli_emission_contract(
+        coverage_scope=args.coverage_scope,
+        scope_notes=args.scope_notes,
+        output=args.output,
+        issued_at=args.issued_at,
+    )
+
     qds = emit_qds(
-        args.eval_yaml, args.qds_id, args.structure_id, args.structure_method
+        args.eval_yaml,
+        args.qds_id,
+        args.structure_id,
+        args.structure_method,
+        args.subject_ref,
+        args.coverage_scope,
+        args.scope_notes,
+        args.resolution_a,
+        args.space_group,
+        args.issued_at,
+        args.structure_description,
     )
     container = {"quality_data_sheets": [qds]}
     out_text = yaml_dump(container)
     if args.output:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(out_text)
-        sys.stderr.write(f"wrote {args.output}\n")
+        if _write_immutable_output(args.output, out_text):
+            sys.stderr.write(f"wrote {args.output}\n")
+        else:
+            sys.stderr.write(f"unchanged {args.output}\n")
     else:
         sys.stdout.write(out_text)
     return 0

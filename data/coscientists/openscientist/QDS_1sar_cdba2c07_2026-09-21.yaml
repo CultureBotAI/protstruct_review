@@ -1,0 +1,319 @@
+quality_data_sheets:
+- id: QDS_1sar_cdba2c07_2026-09-21
+  structure_ref: 1sar
+  derived_from_evaluation_run_refs:
+  - EVAL_1sar_cdba2c07_2026-09-21
+  issued_at: '2026-09-22T00:18:11-07:00'
+  identity_block:
+    id: QDS_1sar_cdba2c07_2026-09-21_identity
+    pdb_id: 1sar
+    method: xray
+    description: Ribonuclease Sa packaged round-4 model; partial T15/T16 follow-up.
+  subject_ref: artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb
+  coverage_scope: partial
+  scope_notes: Partial update limited to T15 secondary-structure content/agreement
+    and T16 interface BSA/DockQ/CAPRI on the packaged round-4 model. No T01/T03/T05/T06/T10/T13
+    measurements are carried forward or re-measured; consult earlier dated records
+    separately. This is not a cumulative quality sheet.
+  classification_summary:
+    id: QDS_1sar_cdba2c07_2026-09-21_classification
+    secondary_structure_agreement:
+      value_numeric: 0.8802
+      unit: fraction
+      source_measurement_ref: EVAL_1sar_cdba2c07_2026-09-21_M_001
+      source_evaluation_run_ref: EVAL_1sar_cdba2c07_2026-09-21
+      metric_definition_ref: T15_secondary_structure_agreement
+      oracle_tool_ref: DSSP + biotite P-SEA
+      oracle_family: non_cctbx
+      pass_status: pass
+      pass_criterion: DSSP H+E content >= 0.20 and three-state agreement >= 0.65
+      subject_ref: artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb
+      stage: final
+      scope: complex
+      notes: 'Re-measured on the packaged file extracted from the source ZIP (SHA-256
+        8cbc1650f8be5a3833f98833fa514ec7d490c2c3bb9aa930413abac05e2a510b): 169/192
+        DSSP-versus-biotite H/E/C assignments agree. M_002 supplies the required content
+        gate, so the paired-oracle sanity check is interpretable. This is not evidence
+        that the packaged model improved: agreement rises by 0.0156 relative to the
+        deposited baseline while H+E content falls by 0.0156, the known degeneracy
+        direction. The agent report supplied no secondary-structure assignment, so
+        the agent-versus-DSSP rubric clause remains unevaluable.'
+    secondary_structure_content:
+      value_numeric: 0.375
+      unit: fraction
+      source_measurement_ref: EVAL_1sar_cdba2c07_2026-09-21_M_002
+      source_evaluation_run_ref: EVAL_1sar_cdba2c07_2026-09-21
+      metric_definition_ref: T15_secondary_structure_content
+      oracle_tool_ref: DSSP
+      oracle_family: non_cctbx
+      pass_status: pass
+      pass_criterion: DSSP H+E content >= 0.20
+      subject_ref: artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb
+      stage: final
+      scope: complex
+      notes: 'DSSP assigns 29 H, 43 E and 120 C residues: (29 + 43) / 192 = 0.3750.
+        This clears the registry''s interpretability gate but sits below the benchmark''s
+        0.458-0.784 range for its 16 well-ordered structures and near its disordered-NMR
+        control (0.371). It therefore licenses interpretation of the agreement calculation,
+        not a claim of improved structural quality.'
+  interface_quality_summary:
+    id: QDS_1sar_cdba2c07_2026-09-21_interface_quality
+    interface_buried_surface_area:
+      value_numeric: 437.8
+      unit: Å²
+      source_measurement_ref: EVAL_1sar_cdba2c07_2026-09-21_M_005
+      source_evaluation_run_ref: EVAL_1sar_cdba2c07_2026-09-21
+      metric_definition_ref: T16_interface_buried_surface_area
+      oracle_tool_ref: biotite SASA
+      oracle_family: non_cctbx
+      pass_status: informational
+      subject_ref: artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb
+      stage: final
+      scope: interface
+      scope_selector: EVAL_1sar_cdba2c07_2026-09-21_IFACE_AB_IDENTITY
+      notes: 'Protein-only Shrake-Rupley total burial for packaged chains A/B. The
+        two earlier calibration values are not conflicting repeats of one subject:
+        437.2 Å² is the artifact''s tutorial starting model data/1sar.pdb, while 442.1
+        Å² is the current RCSB deposited file data/pdb_mtz/1sar_deposited.pdb. This
+        437.8 Å² value belongs to the packaged round-4 output. All three were independently
+        reproduced with the current wrapper. The small contact is crystallographic
+        and the number is informational.'
+    interface_dockq_score:
+      value_numeric: 0.9445
+      source_measurement_ref: EVAL_1sar_cdba2c07_2026-09-21_M_006
+      source_evaluation_run_ref: EVAL_1sar_cdba2c07_2026-09-21
+      metric_definition_ref: T16_interface_dockq_score
+      oracle_tool_ref: DockQ
+      oracle_family: non_cctbx
+      pass_status: informational
+      subject_ref: artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb
+      reference_subject_ref: repo:data/pdb_mtz/1sar_deposited.pdb#sha256=e60e5db6c7eb554a3ac4e184bdf7cbb7d69b682e287579bdcf5f8bf279d51f86
+      evidence_refs:
+      - data/coscientists/openscientist/EVIDENCE_1sar_cdba2c07_2026-09-21_dockq_AB_AB.json
+      stage: final
+      scope: interface
+      scope_selector: EVAL_1sar_cdba2c07_2026-09-21_IFACE_AB_IDENTITY
+      notes: 'DockQ 2.1.3 against data/pdb_mtz/1sar_deposited.pdb with mapping AB:AB.
+        The alternative same-sequence mapping AB:BA was also measured and scores 0.0063
+        (Incorrect); both structured results are retained in interface_qualities.
+        Identity is selected independently of the larger DockQ score: chainwise Kabsch
+        Cα RMSD is 0.191/0.180 Å for A→A/B→B versus 0.421/0.410 Å for A→B/B→A. The
+        contact is crystallographic, so this score does not certify a biological assembly.'
+    capri_interface_quality_class:
+      value_text: High
+      source_measurement_ref: EVAL_1sar_cdba2c07_2026-09-21_M_007
+      source_evaluation_run_ref: EVAL_1sar_cdba2c07_2026-09-21
+      metric_definition_ref: T16_capri_interface_quality_class
+      oracle_tool_ref: DockQ
+      oracle_family: non_cctbx
+      pass_status: informational
+      subject_ref: artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb
+      reference_subject_ref: repo:data/pdb_mtz/1sar_deposited.pdb#sha256=e60e5db6c7eb554a3ac4e184bdf7cbb7d69b682e287579bdcf5f8bf279d51f86
+      evidence_refs:
+      - data/coscientists/openscientist/EVIDENCE_1sar_cdba2c07_2026-09-21_dockq_AB_AB.json
+      stage: final
+      scope: interface
+      scope_selector: EVAL_1sar_cdba2c07_2026-09-21_IFACE_AB_IDENTITY
+      notes: CAPRI class derived from DockQ 0.9445 under the standard bands. It carries
+        the same mapping and crystallographic-contact caveats as M_006.
+    interface_qualities:
+    - id: EVAL_1sar_cdba2c07_2026-09-21_IFACE_AB_IDENTITY
+      structure_ref: 1sar
+      subject_ref: artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb
+      reference_subject_ref: repo:data/pdb_mtz/1sar_deposited.pdb#sha256=e60e5db6c7eb554a3ac4e184bdf7cbb7d69b682e287579bdcf5f8bf279d51f86
+      interface_label: packaged round-4 A/B crystallographic contact, identity mapping
+      chain_id_1: A
+      chain_id_2: B
+      model_to_native_chain_mapping: AB:AB
+      buried_surface_area:
+        value_numeric: 437.8
+        unit: Å²
+      dockq_score:
+        value_numeric: 0.9445
+      capri_quality_class:
+        value_text: High
+      evidence_refs:
+      - data/coscientists/openscientist/EVIDENCE_1sar_cdba2c07_2026-09-21_dockq_AB_AB.json
+      notes: DockQ against data/pdb_mtz/1sar_deposited.pdb. This is the mapping selected
+        for the headline scalar because independent chainwise Cα fits favor the identity
+        pairs (A→A 0.191 Å, B→B 0.180 Å) over the crossed pairs (A→B 0.421 Å, B→A
+        0.410 Å). The contact is crystallographic, not a certified biological assembly.
+    - id: EVAL_1sar_cdba2c07_2026-09-21_IFACE_AB_SWAPPED
+      structure_ref: 1sar
+      subject_ref: artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb
+      reference_subject_ref: repo:data/pdb_mtz/1sar_deposited.pdb#sha256=e60e5db6c7eb554a3ac4e184bdf7cbb7d69b682e287579bdcf5f8bf279d51f86
+      interface_label: packaged round-4 A/B crystallographic contact, swapped mapping
+        control
+      chain_id_1: A
+      chain_id_2: B
+      model_to_native_chain_mapping: AB:BA
+      dockq_score:
+        value_numeric: 0.0063
+      capri_quality_class:
+        value_text: Incorrect
+      evidence_refs:
+      - data/coscientists/openscientist/EVIDENCE_1sar_cdba2c07_2026-09-21_dockq_AB_BA.json
+      notes: Required homo-oligomer mapping control. The 0.9382 spread relative to
+        AB:AB demonstrates that the disclosed mapping is load-bearing; a high score
+        alone would not establish the mapping. This remains an exercise-path result
+        on a crystallographic contact, not biological-assembly validation.
+  cross_tool_coverage:
+    id: QDS_1sar_cdba2c07_2026-09-21_coverage
+    task_coverage:
+    - id: QDS_1sar_cdba2c07_2026-09-21_coverage_T15_T15_secondary_structure_agreement_820b14a84f6d
+      catalog_task_ref: T15
+      cctbx_oracles: []
+      non_cctbx_oracles:
+      - DSSP + biotite P-SEA
+      gap_status: non-cctbx only
+      metric_definition_ref: T15_secondary_structure_agreement
+      subject_ref: artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb
+      stage: final
+      scope: complex
+    - id: QDS_1sar_cdba2c07_2026-09-21_coverage_T15_T15_secondary_structure_content_3b6a19ab37f5
+      catalog_task_ref: T15
+      cctbx_oracles: []
+      non_cctbx_oracles:
+      - DSSP
+      gap_status: non-cctbx only
+      metric_definition_ref: T15_secondary_structure_content
+      subject_ref: artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb
+      stage: final
+      scope: complex
+    - id: QDS_1sar_cdba2c07_2026-09-21_coverage_T16_T16_capri_interface_quality_class_706843e67938
+      catalog_task_ref: T16
+      cctbx_oracles: []
+      non_cctbx_oracles: []
+      gap_status: 'informational — non-numeric measurement (not counted as coverage:
+        DockQ)'
+      metric_definition_ref: T16_capri_interface_quality_class
+      subject_ref: artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb
+      reference_subject_ref: repo:data/pdb_mtz/1sar_deposited.pdb#sha256=e60e5db6c7eb554a3ac4e184bdf7cbb7d69b682e287579bdcf5f8bf279d51f86
+      stage: final
+      scope: interface
+      scope_selector: EVAL_1sar_cdba2c07_2026-09-21_IFACE_AB_IDENTITY
+    - id: QDS_1sar_cdba2c07_2026-09-21_coverage_T16_T16_interface_buried_surface_area_4cd136661e08
+      catalog_task_ref: T16
+      cctbx_oracles: []
+      non_cctbx_oracles:
+      - biotite SASA
+      gap_status: non-cctbx only
+      metric_definition_ref: T16_interface_buried_surface_area
+      subject_ref: artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb
+      stage: final
+      scope: interface
+      scope_selector: EVAL_1sar_cdba2c07_2026-09-21_IFACE_AB_IDENTITY
+    - id: QDS_1sar_cdba2c07_2026-09-21_coverage_T16_T16_interface_dockq_score_9bd13cbf2a9d
+      catalog_task_ref: T16
+      cctbx_oracles: []
+      non_cctbx_oracles:
+      - DockQ
+      gap_status: non-cctbx only
+      metric_definition_ref: T16_interface_dockq_score
+      subject_ref: artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb
+      reference_subject_ref: repo:data/pdb_mtz/1sar_deposited.pdb#sha256=e60e5db6c7eb554a3ac4e184bdf7cbb7d69b682e287579bdcf5f8bf279d51f86
+      stage: final
+      scope: interface
+      scope_selector: EVAL_1sar_cdba2c07_2026-09-21_IFACE_AB_IDENTITY
+  tool_recommendations_applied:
+  - id: REC_T15_secondary_structure_agreement_top_considered
+    metric_definition_ref: T15_secondary_structure_agreement
+    tool_ref: DSSP
+    role: top_considered
+    rank: 1
+    justification: DSSP is the reference implementation for secondary-structure assignment.
+      For the oracle-side T15 result, its H+E content must first pass the 0.20 interpretability
+      gate; only then is three-state agreement with an independent second assigner
+      compared with the 0.65 floor. The separate agent-vs-DSSP clause is ≥0.85 when
+      agent labels exist.
+    as_of_date: '2026-07-20'
+  - id: REC_T15_secondary_structure_agreement_alternative
+    metric_definition_ref: T15_secondary_structure_agreement
+    tool_ref: STRIDE
+    role: alternative
+    rank: 2
+    justification: STRIDE is the independent second assigner in the agreement pair.
+      It uses hydrogen-bond energy plus dihedral criteria, so it fails differently
+      from DSSP — which is what makes the agreement informative rather than tautological
+      after the DSSP H+E content gate has passed.
+    as_of_date: '2026-07-20'
+  - id: REC_T15_secondary_structure_content_top_considered
+    metric_definition_ref: T15_secondary_structure_content
+    tool_ref: DSSP
+    role: top_considered
+    rank: 1
+    justification: DSSP H+E content ≥0.20 is the registered interpretability gate
+      for the two-assigner agreement metric. scripts/t15_ss_agreement.py emits it
+      from the same normalized DSSP assignment used in the agreement calculation.
+    evidence_refs:
+    - ref/research/tolerance_benchmark_ss_agreement.md
+    as_of_date: '2026-09-21'
+  - id: REC_T16_interface_dockq_score_top_considered
+    metric_definition_ref: T16_interface_dockq_score
+    tool_ref: DockQ
+    role: top_considered
+    rank: 1
+    justification: DockQ is the community-standard continuous interface-quality score
+      and the basis of the CAPRI quality classes; CAPRI class is recorded alongside
+      it as the ordinal label.
+    as_of_date: '2026-07-20'
+  - id: REC_T16_interface_dockq_score_top_performing
+    metric_definition_ref: T16_interface_dockq_score
+    tool_ref: DockQ
+    role: top_performing
+    rank: 1
+    justification: 'Installed and runnable now (scripts/t16_interface_quality.py,
+      DockQ 2.1.3): scores a model complex against the deposited reference and derives
+      the CAPRI class. Identity calibration on 1sar A/B -> 1.000.'
+    as_of_date: '2026-07-22'
+  - id: REC_T16_interface_buried_surface_area_top_considered
+    metric_definition_ref: T16_interface_buried_surface_area
+    tool_ref: PISA/PDBePISA
+    role: top_considered
+    rank: 1
+    justification: PDBePISA is the reference service for interface area and biological-assembly
+      inference, and is the source the deposited assembly is judged against. Its interface_area
+      is per side, so double it before comparing with the harness total two-sided
+      BSA; require agreement within max(3% of the mean, 30 Å²) under matched conditions.
+    as_of_date: '2026-07-20'
+  - id: REC_T16_interface_buried_surface_area_top_performing
+    metric_definition_ref: T16_interface_buried_surface_area
+    tool_ref: biotite SASA
+    role: top_performing
+    rank: 1
+    justification: 'Installed and runnable now (scripts/t16_interface_quality.py):
+      Shrake-Rupley SASA via biotite gives total two-sided buried area from the model
+      alone — ΣSASA(chains) − SASA(complex) — an installable stand-in for the PISA
+      web service. The artifact''s tutorial starting model 1sar.pdb A/B → 437.2 Å²
+      total; the separately downloaded RCSB deposition → 442.1 Å² total. PISA''s per-side
+      interface_area is doubled before applying the max(3% of the mean, 30 Å²) comparison
+      tolerance.'
+    as_of_date: '2026-09-21'
+  - id: REC_T15_secondary_structure_agreement_top_performing
+    metric_definition_ref: T15_secondary_structure_agreement
+    tool_ref: biotite P-SEA
+    role: top_performing
+    rank: 1
+    justification: 'Installed and runnable now (scripts/t15_ss_agreement.py): DSSP
+      vs biotite P-SEA three-state agreement. biotite''s Cα-geometry P-SEA is a different
+      algorithm family from DSSP''s H-bond energetics, so the agreement is informative
+      rather than tautological once DSSP H+E content passes 0.20; agreement must then
+      be ≥0.65. Stands in for STRIDE, which is not currently installable via Homebrew.
+      This is distinct from the agent-vs-DSSP ≥0.85 clause, which is unevaluable without
+      agent labels.'
+  - id: REC_T16_capri_interface_quality_class_top_considered
+    metric_definition_ref: T16_capri_interface_quality_class
+    tool_ref: DockQ
+    role: top_considered
+    rank: 1
+    justification: Community-standard continuous interface-quality score.
+    as_of_date: '2026-07-21'
+  headline_verdict: 'This partial T15/T16 follow-up closes the missing oracle-side
+    T15 content gate and T16 homo-oligomer mapping control on the packaged round-4
+    model; it does not re-measure or carry forward any other task. T15''s paired-oracle
+    calculation is interpretable (content 0.3750; agreement 0.8802) but does not establish
+    improvement, and the agent-versus-DSSP clause remains unevaluable because the
+    report contains no assignment. T16 is strongly mapping-dependent (AB:AB 0.9445/High;
+    AB:BA 0.0063/Incorrect) and remains informational because A/B is a crystallographic
+    contact. These additions do not change the September audit''s central finding:
+    the archive packages round 4 while the report describes an absent round-7 model.'

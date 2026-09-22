@@ -10,6 +10,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import yaml
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import t16_interface_quality as t16  # noqa: E402
 
@@ -53,10 +55,51 @@ def test_buried_surface_area() -> None:
     _check(t16.buried_surface_area(5000.0, 5000.0) == 0.0, "no burial -> BSA 0")
 
 
+def test_render_keeps_comparison_provenance() -> None:
+    summary = {
+        "dockq": 0.9445,
+        "capri": "High",
+        "mapping": "AB:AB",
+        "interfaces": {"AB": {"dockq": 0.9445}},
+    }
+    rows = yaml.safe_load(t16.render_yaml(
+        summary,
+        "EVAL_x",
+        "EVAL_x_IFACE_AB_IDENTITY",
+        "artifact:x#model.pdb",
+        "pdb:1abc",
+        "data/evidence/model_AB_AB.dockq.json",
+    ))
+    _check(len({row["id"] for row in rows}) == 2, "DockQ and CAPRI row ids are unique")
+    for row in rows:
+        _check(row["scope_selector"] == "EVAL_x_IFACE_AB_IDENTITY",
+               "measurement selects the declared interface row")
+        _check(row["subject_ref"] == "artifact:x#model.pdb",
+               "candidate subject survives rendering")
+        _check(row["reference_subject_ref"] == "pdb:1abc",
+               "native/reference subject survives rendering")
+        _check(row["evidence_refs"] == ["data/evidence/model_AB_AB.dockq.json"],
+               "retained raw DockQ evidence survives rendering")
+        _check("mapping AB:AB" in row["notes"], "mapping survives rendering")
+
+
+def test_bsa_selects_declared_interface() -> None:
+    rows = yaml.safe_load(t16.render_bsa_yaml(
+        {"bsa": 437.8, "chains": ["A", "B"], "complex_sasa": 1.0},
+        "EVAL_x",
+        "EVAL_x_IFACE_AB_IDENTITY",
+        "artifact:x#model.pdb",
+    ))
+    _check(rows[0]["scope_selector"] == "EVAL_x_IFACE_AB_IDENTITY",
+           "BSA selects the declared interface row")
+
+
 def main() -> int:
     test_capri_bands()
     test_extract()
     test_buried_surface_area()
+    test_render_keeps_comparison_provenance()
+    test_bsa_selects_declared_interface()
     print("\nall t16_interface_quality unit tests passed")
     return 0
 

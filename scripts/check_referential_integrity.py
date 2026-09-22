@@ -6,7 +6,15 @@ that string-typed references point at declared instances. This script
 walks every YAML record under `ref/` and `data/examples/` and verifies:
 
   - every `metric_definition_ref` resolves in `ref/catalog.yaml::metric_definitions`
+  - every MeasurementValue uses its metric only with a task declared by that
+    MetricDefinition's `applicable_task_refs`
+  - every `pass_criterion_ref` resolves in
+    `ref/structural_criteria.yaml::pass_criterion_bindings`
   - every `oracle_tool_ref` / `tool_ref` resolves in `ref/catalog.yaml::tools`
+  - every MeasurementValue's `oracle_family` matches its source-pinned Tool
+    declaration when present, otherwise the canonical catalog declaration
+  - every MeasurementValue uses its oracle tool only with a task declared by
+    that source-pinned Tool, falling back to the canonical catalog declaration
   - every `catalog_task_ref` / `catalog_tasks_applied[]` is a known T0NN id
   - every `structure_ref` resolves in `ref/catalog.yaml::structures` or the same
     record's structures[] WHEN either exists; neither does today, so it falls back
@@ -18,6 +26,7 @@ walks every YAML record under `ref/` and `data/examples/` and verifies:
   - measurement-to-measurement delta/derivation refs resolve within their owning run;
     pair deltas also preserve context, numeric units, and exact nominal arithmetic
   - QDS input/source refs, superseded assumptions, and `EVAL_*` evidence refs resolve;
+    an EvaluationRun cannot cite itself as its own evidence;
     paired source run/measurement refs name an input run that actually owns the
     measurement, and every wrapped scalar exactly matches that source measurement
   - repository-path evidence refs stay inside the repository and resolve to a file
@@ -32,7 +41,10 @@ and the committed example already drifts from the canonical catalog."
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
+import hashlib
+import json
 from pathlib import Path, PureWindowsPath
 import re
 import sys
@@ -44,9 +56,15 @@ import yaml
 import qds_emit_contract_v1
 import qds_emit_contract_v2
 
+try:
+    from strict_yaml import strict_yaml_load
+except ModuleNotFoundError:  # imported as scripts.check_referential_integrity
+    from scripts.strict_yaml import strict_yaml_load
+
 
 REPO = Path(__file__).resolve().parent.parent
 CATALOG = REPO / "ref" / "catalog.yaml"
+STRUCTURAL_CRITERIA = REPO / "ref" / "structural_criteria.yaml"
 
 KNOWN_TASK_IDS = {f"T{n:02d}" for n in range(1, 18)}
 EVIDENCE_FILE_SUFFIXES = {
@@ -79,6 +97,8 @@ class RefTarget:
     source_collection: str | None = None
     node: dict[str, Any] | None = None
     source_tool_families: tuple[tuple[str, str], ...] = ()
+    source_tool_tasks: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    source_metric_tasks: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
 
 CorpusIndices = dict[str, dict[str, list[RefTarget]]]
@@ -121,6 +141,86 @@ QDS_COPIED_ROW_SOURCE_KEYS = {
 }
 
 
+# Immutable records that predate these relationship guards are preserved without
+# widening today's catalog to fit their stale metric/tool assignments. Each
+# exception binds the rule, repository path, owning run, row id, and complete
+# parsed row. Grouping row digests below only removes repeated path/run literals;
+# the materialized keys retain all four coordinates. Any content change must be
+# published as a new dated record rather than silently inheriting an exemption.
+_LEGACY_TOOL_TASK_ROW_DIGESTS = (
+    (
+        "data/coscientists/openscientist/EVAL_1sar_cdba2c07_2026-04-24.yaml",
+        "EVAL_1sar_cdba2c07_2026-04-24",
+        {
+            "EVAL_1sar_cdba2c07_2026-04-24_M_004": "a3cfa5310976ab2aa0e98bff380f6fd0b962f5ed59b4cec89ded9420c1ee3985",
+            "EVAL_1sar_cdba2c07_2026-04-24_M_005": "da49abc6dd6766ee403bc0b970d3089015bbf083661707deb451daad670e79c2",
+            "EVAL_1sar_cdba2c07_2026-04-24_M_006": "4ec860b5e1d2ccd867b0a9cd4d1752c501acb4a2d957f71b9a9fe71fe25c4c52",
+            "EVAL_1sar_cdba2c07_2026-04-24_M_007": "5722a0f869d8be38546244f8526115e46798e00155cbd91d35f7079833431584",
+            "EVAL_1sar_cdba2c07_2026-04-24_M_008": "884c6ac7cb0e1c234c9899c71f2ddeb2aff56e26a750b0a6024743f29cc490a2",
+            "EVAL_1sar_cdba2c07_2026-04-24_M_009": "93ae20f14dd833363435adab1cc7b62d4e379f38ce77e49627eafc4c7b6f88fc",
+            "EVAL_1sar_cdba2c07_2026-04-24_M_010": "3cccd357e17ab1bbd80dc053abe02a34338f0cae47847280505d2586eeda2a39",
+            "EVAL_1sar_cdba2c07_2026-04-24_M_011": "af89f85407d946ada7bebb29b3159a275fccbd532ce0ff579d8a9f151ccffbfd",
+            "EVAL_1sar_cdba2c07_2026-04-24_M_013": "4497acf71e90a57fcf980944e6d8ba89293e3f122e1b77202a1a2750a4320a6b",
+            "EVAL_1sar_cdba2c07_2026-04-24_M_018": "73194e8be2b8aa13cdf5e93018bfd0a14f41aca9b97a88fd51c20aea0d26eecb",
+            "EVAL_1sar_cdba2c07_2026-04-24_M_030": "e2750b8e5ba17f1610aca5a072c47f75342f193b9373d32126ff640fee33b651",
+            "EVAL_1sar_cdba2c07_2026-04-24_M_ca_b_vs_mean_ratio": "f21f4c015e1c446f028811d4c5234827e9a1238705095b655cf2bca7c7b02359",
+            "EVAL_1sar_cdba2c07_2026-04-24_M_mean_b": "01e53f6517114a024431bfc3ec3a7ae05aae3f6c66fb115e03f2551a36707816",
+            "EVAL_1sar_cdba2c07_2026-04-24_M_per_residue_displacement_summary": "1a20b0d87b7cfb505af8d226486abf3e69e9699f64097ee4effbd7ebf3f6a3bb",
+            "EVAL_1sar_cdba2c07_2026-04-24_M_prosmart_global_rmsd": "7dc9b9c3f742b8d3c271dfeba66d18a6a626af85ddc5aec4135e66f2717c657d",
+            "EVAL_1sar_cdba2c07_2026-04-24_M_round0_rfree": "27c229debd6c3ab2cfa0a6ab4d4b1c5292f077734577d3f964614374f0824d27",
+            "EVAL_1sar_cdba2c07_2026-04-24_M_round0_rwork": "08d9c11916e2a8c32bab81320a5256ceb81786c3cb6a8e29e8d5693b6898f06a",
+            "EVAL_1sar_cdba2c07_2026-04-24_M_round2_rfree": "716cd3e25e65e6cd3b99ff91236c808b2985c964be2562b8d029a80a3b9b29d4",
+            "EVAL_1sar_cdba2c07_2026-04-24_M_round2_rwork": "7fc9891ca8f04ccb08faa4cc6b6a3377e7b6ef5f974d05778c4ae1bbe99cddef",
+            "EVAL_1sar_cdba2c07_2026-04-24_M_round3_rfree": "a9d3ee62a56c4f95f705a63f18b969a2cc70ec91e9c00e8ca8221366d4de901c",
+            "EVAL_1sar_cdba2c07_2026-04-24_M_round3_rwork": "9713810eb10a659ef90dc75c0c46a520c2c0d8300bcebdd67178d70b38d93b64",
+            "EVAL_1sar_cdba2c07_2026-04-24_M_round5_rfree": "79773645d0435de546439b422a3cbfab3dfbe72ce7b9476d4b5be94bde70aed7",
+            "EVAL_1sar_cdba2c07_2026-04-24_M_round5_rwork": "ff116858375657bcd71fba1b3d7741f1349a0dfb175aefc32fe652a955b92155",
+            "EVAL_1sar_cdba2c07_2026-04-24_M_round6_rfree": "e3cb6c5a506008279f9934ecd7d961dd9c4dd45e1959123be6fa781750023e5a",
+            "EVAL_1sar_cdba2c07_2026-04-24_M_round6_rwork": "9d475e18e5d91f2b9f88c0d4a8a007921ec7fd834e453585383c82ae92ceff28",
+            "EVAL_1sar_cdba2c07_2026-04-24_M_round7_rfree": "d0583db91fe4736bb9cf07148bb5176eee207a19faa3902e28b6bf90edb563c7",
+            "EVAL_1sar_cdba2c07_2026-04-24_M_round7_rwork": "e878c127033602ca32683bfa391ac54e9afac312cc57bfe05b8c97e806aa3ed4",
+            "EVAL_1sar_cdba2c07_2026-04-24_M_total_atoms": "bda6294c0cf6bafd95560e2669259d9a6d917438c1108540ac7a9e78f5142e42",
+            "EVAL_1sar_cdba2c07_2026-04-24_M_water_count": "c40200650b7c82d2e7bf6c827d23894e9875f23035c14a79be39f653f8032860",
+        },
+    ),
+    (
+        "data/coscientists/openscientist/EVAL_1sar_cdba2c07_2026-09-07.yaml",
+        "EVAL_1sar_cdba2c07_2026-09-07",
+        {
+            "EVAL_1sar_cdba2c07_2026-09-07_M_001": "16b74acfacca57f4232ae63d2660525160bb868815b7f272e1048dfe86247209",
+            "EVAL_1sar_cdba2c07_2026-09-07_M_002": "a1bc789619b5c75dbc32e0dc4203357da7b0e0215fcbd44e641a5ad50e198b28",
+            "EVAL_1sar_cdba2c07_2026-09-07_M_003": "ad1762e425365546335fdaaaedc66d65a8196d8cb3f54d44af60c8e3121edb1d",
+            "EVAL_1sar_cdba2c07_2026-09-07_M_004": "bd90d4960d1c9edf70d58dd629a9429f7638d2742b2ac3e975f33a3251b88f05",
+            "EVAL_1sar_cdba2c07_2026-09-07_M_005": "56e23ae684fa604796cae91985bad5d95c4834db5d1b3b4441fb743cde05c0aa",
+            "EVAL_1sar_cdba2c07_2026-09-07_M_006": "da6fd9d72d05a6452631e2510d225e241cb505c7c9cec9bf2f4d9eb28749a7d0",
+            "EVAL_1sar_cdba2c07_2026-09-07_M_007": "58deeb81400fc40da513e30696834c121392a81b7a873dcb2a0a579e63647747",
+        },
+    ),
+    (
+        "data/examples/eval/EVAL_synth_active_site_2026-04-26.yaml",
+        "EVAL_synth_active_site_2026-04-26",
+        {
+            "EVAL_synth_active_site_2026-04-26_M_004": "ebb78ed816028c4ed31e3757f678e9bf8cc069dbd74f4cddc8d5ec4a685d0a1c",
+            "EVAL_synth_active_site_2026-04-26_M_005": "b97f1bf63f0d492eca72b463b115a562abf36fd006ada98b3c51377cd92191e2",
+        },
+    ),
+)
+
+LEGACY_MEASUREMENT_SEMANTIC_EXCEPTIONS = {
+    (
+        "metric_task",
+        "data/coscientists/openscientist/EVAL_1sar_cdba2c07_2026-04-24.yaml",
+        "EVAL_1sar_cdba2c07_2026-04-24",
+        "EVAL_1sar_cdba2c07_2026-04-24_M_water_rscc_distribution",
+    ): "1e6d72b5901dff6f28b699b258df0c2a36859cfa8ca2386e3945a181a3cddbfa",
+    **{
+        ("tool_task", path, run_id, row_id): digest
+        for path, run_id, row_digests in _LEGACY_TOOL_TASK_ROW_DIGESTS
+        for row_id, digest in row_digests.items()
+    },
+}
+
+
 def _routed_scalar_slots(
     routing_table: dict[str, Any],
 ) -> frozenset[tuple[str, str]]:
@@ -160,10 +260,15 @@ def _qds_contract_routing(
 
 
 def load_catalog_indices() -> dict[str, set[str]]:
-    """Return {kind: set_of_known_ids} indices from the canonical catalog."""
-    doc = yaml.safe_load(CATALOG.read_text())
+    """Return ids from the catalog and the non-threshold verdict bindings."""
+    doc = strict_yaml_load(CATALOG.read_text())
+    criterion_doc = strict_yaml_load(STRUCTURAL_CRITERIA.read_text())
     return {
         "metric": {m["id"] for m in doc.get("metric_definitions", [])},
+        "criterion": {
+            c["id"]
+            for c in criterion_doc.get("pass_criterion_bindings", []) or []
+        },
         "tool": {t["id"] for t in doc.get("tools", [])},
         "task": KNOWN_TASK_IDS,
         # Empty today -- ref/catalog.yaml declares no `structures:` collection. The
@@ -177,6 +282,7 @@ def target_paths() -> list[Path]:
     """Return every YAML document covered by this repository guard."""
     targets = [
         CATALOG,
+        STRUCTURAL_CRITERIA,
         REPO / "ref" / "tool_recommendations.yaml",
         REPO / "ref" / "tool_assumptions.yaml",
     ]
@@ -248,6 +354,32 @@ def build_corpus_indices(records: Sequence[tuple[Path, Any]]) -> CorpusIndices:
                 if isinstance(tool, dict) and tool.get("id") and tool.get("family")
             )
         )
+        source_tool_tasks = tuple(
+            sorted(
+                (
+                    str(tool["id"]),
+                    tuple(
+                        str(task)
+                        for task in tool.get("catalog_tasks_served", []) or []
+                    ),
+                )
+                for tool in doc.get("tools", []) or []
+                if isinstance(tool, dict) and tool.get("id")
+            )
+        )
+        source_metric_tasks = tuple(
+            sorted(
+                (
+                    str(metric["id"]),
+                    tuple(
+                        str(task)
+                        for task in metric.get("applicable_task_refs", []) or []
+                    ),
+                )
+                for metric in doc.get("metric_definitions", []) or []
+                if isinstance(metric, dict) and metric.get("id")
+            )
+        )
         for i, pin in enumerate(doc.get("qds_replay_pins") or []):
             if not isinstance(pin, dict):
                 continue
@@ -290,6 +422,8 @@ def build_corpus_indices(records: Sequence[tuple[Path, Any]]) -> CorpusIndices:
                     superseded_assumption_refs=superseded,
                     node=run,
                     source_tool_families=source_tool_families,
+                    source_tool_tasks=source_tool_tasks,
+                    source_metric_tasks=source_metric_tasks,
                 ),
             )
             for j, measurement in enumerate(run.get("measurements") or []):
@@ -305,6 +439,8 @@ def build_corpus_indices(records: Sequence[tuple[Path, Any]]) -> CorpusIndices:
                         run_date=run.get("run_date"),
                         node=measurement,
                         source_tool_families=source_tool_families,
+                        source_tool_tasks=source_tool_tasks,
+                        source_metric_tasks=source_metric_tasks,
                     ),
                 )
             for collection in SOURCE_STRUCTURED_ROW_KEYS:
@@ -985,6 +1121,101 @@ def _check_t14_flip_conflict_derivation(
         )
 
 
+def check_measurement_catalog_semantics(
+    indices: CorpusIndices,
+    *,
+    enforce_legacy_policy: bool = False,
+) -> list[str]:
+    """Validate catalog-owned metric/task, tool/family, and tool/task semantics."""
+    metric_tasks = _canonical_metric_tasks()
+    catalog_tool_families = _canonical_tool_families()
+    catalog_tool_tasks = _canonical_tool_tasks()
+    seen_legacy_exceptions: set[tuple[str, str, str, str]] = set()
+    violations: list[str] = []
+
+    for targets in indices["measurement"].values():
+        for source in targets:
+            row = source.node
+            if not isinstance(row, dict):
+                continue
+            location = _measurement_location(source)
+
+            metric_ref = row.get("metric_definition_ref")
+            task_ref = row.get("catalog_task_ref")
+            authoritative_metric_tasks = dict(metric_tasks)
+            authoritative_metric_tasks.update(
+                (metric, frozenset(tasks))
+                for metric, tasks in source.source_metric_tasks
+            )
+            applicable_tasks = (
+                authoritative_metric_tasks.get(metric_ref)
+                if isinstance(metric_ref, str)
+                else None
+            )
+            if (
+                applicable_tasks is not None
+                and isinstance(task_ref, str)
+                and task_ref not in applicable_tasks
+                and not _legacy_measurement_semantic_exception(
+                    "metric_task", source, seen_legacy_exceptions
+                )
+            ):
+                violations.append(
+                    f"{location}: metric_definition_ref {metric_ref!r} is applicable "
+                    f"only to catalog tasks {sorted(applicable_tasks)!r}, not "
+                    f"catalog_task_ref {task_ref!r}"
+                )
+
+            tool_ref = row.get("oracle_tool_ref")
+            if isinstance(tool_ref, str):
+                # A source-owned Tool declaration records the family as of that
+                # immutable EvaluationRun. Its complete task declaration has the
+                # same precedence. Unpinned tools fall back to the live catalog.
+                authoritative_families = dict(catalog_tool_families)
+                authoritative_families.update(dict(source.source_tool_families))
+                expected_family = authoritative_families.get(tool_ref)
+                if (
+                    expected_family is not None
+                    and row.get("oracle_family") != expected_family
+                ):
+                    violations.append(
+                        f"{location}: oracle_family {row.get('oracle_family')!r} does "
+                        f"not match authoritative family {expected_family!r} for "
+                        f"oracle_tool_ref {tool_ref!r}"
+                    )
+
+                authoritative_tool_tasks = dict(catalog_tool_tasks)
+                authoritative_tool_tasks.update(
+                    (tool, frozenset(tasks))
+                    for tool, tasks in source.source_tool_tasks
+                )
+                served_tasks = authoritative_tool_tasks.get(tool_ref)
+                if (
+                    served_tasks is not None
+                    and isinstance(task_ref, str)
+                    and task_ref not in served_tasks
+                    and not _legacy_measurement_semantic_exception(
+                        "tool_task", source, seen_legacy_exceptions
+                    )
+                ):
+                    violations.append(
+                        f"{location}: oracle_tool_ref {tool_ref!r} serves only "
+                        f"catalog tasks {sorted(served_tasks)!r}, not "
+                        f"catalog_task_ref {task_ref!r}"
+                    )
+
+    if enforce_legacy_policy:
+        for key in sorted(
+            set(LEGACY_MEASUREMENT_SEMANTIC_EXCEPTIONS)
+            - seen_legacy_exceptions
+        ):
+            violations.append(
+                "stale or changed legacy measurement semantic exception was not "
+                f"consumed: rule={key[0]} path={key[1]} run={key[2]} row={key[3]}"
+            )
+    return violations
+
+
 def check_measurement_relations(indices: CorpusIndices) -> list[str]:
     """Validate typed MeasurementValue-to-MeasurementValue relationships."""
     violations: list[str] = []
@@ -1083,12 +1314,81 @@ WRAPPED_MEASUREMENT_FIELDS = {
 
 def _canonical_tool_families() -> dict[str, str]:
     """Return the catalog-authoritative family for each named tool."""
-    catalog = yaml.safe_load(CATALOG.read_text()) or {}
+    catalog = strict_yaml_load(CATALOG.read_text()) or {}
     return {
         str(tool["id"]): str(tool["family"])
         for tool in catalog.get("tools", []) or []
         if isinstance(tool, dict) and tool.get("id") and tool.get("family")
     }
+
+
+def _canonical_tool_tasks() -> dict[str, frozenset[str]]:
+    """Return the catalog-authoritative task applicability for each tool."""
+    catalog = strict_yaml_load(CATALOG.read_text()) or {}
+    return {
+        str(tool["id"]): frozenset(
+            str(task) for task in tool.get("catalog_tasks_served", []) or []
+        )
+        for tool in catalog.get("tools", []) or []
+        if isinstance(tool, dict) and tool.get("id")
+    }
+
+
+def _canonical_metric_tasks() -> dict[str, frozenset[str]]:
+    """Return the catalog-authoritative task applicability for each metric."""
+    catalog = strict_yaml_load(CATALOG.read_text()) or {}
+    return {
+        str(metric["id"]): frozenset(
+            str(task) for task in metric.get("applicable_task_refs", []) or []
+        )
+        for metric in catalog.get("metric_definitions", []) or []
+        if isinstance(metric, dict) and metric.get("id")
+    }
+
+
+def _json_default(value: Any) -> dict[str, str]:
+    """Represent YAML-native scalars deterministically in exception digests."""
+    if isinstance(value, (date, datetime)):
+        return {
+            "__yaml_scalar_type__": type(value).__name__,
+            "value": value.isoformat(),
+        }
+    return {
+        "__python_type__": type(value).__name__,
+        "value": repr(value),
+    }
+
+
+def _canonical_digest(value: Any) -> str:
+    payload = json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        default=_json_default,
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _legacy_measurement_semantic_exception(
+    rule: str,
+    target: RefTarget,
+    seen: set[tuple[str, str, str, str]],
+) -> bool:
+    """Consume one exact, content-addressed historical semantic exception."""
+    row = target.node
+    if not isinstance(row, dict):
+        return False
+    run_id = target.owner_run_id
+    row_id = row.get("id")
+    if not isinstance(run_id, str) or not isinstance(row_id, str):
+        return False
+    key = (rule, _shown(target.file).as_posix(), run_id, row_id)
+    expected = LEGACY_MEASUREMENT_SEMANTIC_EXCEPTIONS.get(key)
+    if expected is None or key in seen or _canonical_digest(row) != expected:
+        return False
+    seen.add(key)
+    return True
 
 
 def _expected_wrapped_measurement(
@@ -1222,16 +1522,18 @@ def _is_url_or_citation_with_slash(ref: str) -> bool:
     return bool(separator and prefix.startswith("10.") and prefix[3:].isdigit())
 
 
-def _check_evidence_path(ref: str, rel: Path, path: str) -> list[str]:
-    """Resolve path-like evidence refs without constraining citation keys or URLs."""
+def _check_evidence_path(
+    ref: str, rel: Path, path: str, *, reject_self: bool = False
+) -> tuple[list[str], bool]:
+    """Resolve path-like evidence and report whether it is a retained repo file."""
     repository_uri = ref.startswith("repo:")
     path_text = ref.removeprefix("repo:") if repository_uri else ref
     posix_path = Path(path_text)
     windows_path = PureWindowsPath(path_text)
     if posix_path.is_absolute() or windows_path.is_absolute() or ref.startswith("file:"):
-        return [f"{rel}: {path} = {ref!r} is an absolute, non-portable evidence path"]
+        return [f"{rel}: {path} = {ref!r} is an absolute, non-portable evidence path"], False
     if not repository_uri and _is_url_or_citation_with_slash(ref):
-        return []
+        return [], False
     raw_path = path_text.split("#", 1)[0]
     if (
         not repository_uri
@@ -1240,20 +1542,26 @@ def _check_evidence_path(ref: str, rel: Path, path: str) -> list[str]:
         and not path_text.startswith(".")
         and Path(raw_path).suffix.lower() not in EVIDENCE_FILE_SUFFIXES
     ):
-        return []
+        return [], False
 
     # Repository refs use POSIX separators in YAML. Treat a backslash as path syntax
     # (so it cannot masquerade as a citation) but reject it as non-portable.
     if "\\" in path_text:
-        return [f"{rel}: {path} = {ref!r} is not a portable repository evidence path"]
+        return [f"{rel}: {path} = {ref!r} is not a portable repository evidence path"], False
     resolved = (REPO / raw_path).resolve()
     try:
         resolved.relative_to(REPO.resolve())
     except ValueError:
-        return [f"{rel}: {path} = {ref!r} escapes the repository"]
+        return [f"{rel}: {path} = {ref!r} escapes the repository"], False
     if not resolved.is_file():
-        return [f"{rel}: {path} = {ref!r} does not resolve to a repository file"]
-    return []
+        return [f"{rel}: {path} = {ref!r} does not resolve to a repository file"], False
+    current_file = rel.resolve() if rel.is_absolute() else (REPO / rel).resolve()
+    if reject_self and resolved == current_file:
+        return [
+            f"{rel}: {path} = {ref!r} is circular: a record cannot cite its own "
+            "carrier file as evidence"
+        ], False
+    return [], True
 
 
 def check_corpus_refs(doc: Any, rel: Path, indices: CorpusIndices) -> list[str]:
@@ -1262,6 +1570,19 @@ def check_corpus_refs(doc: Any, rel: Path, indices: CorpusIndices) -> list[str]:
     if not isinstance(doc, dict):
         return violations
     violations += _check_data_record_filename(doc, rel)
+
+    # A path to an EVAL carrier must not turn an EvaluationRun into generic file
+    # evidence.  Criterion preconditions cite EvaluationRun ids so their dates can
+    # be checked; accepting the carrier path would bypass that temporal check.
+    evaluation_carrier_files = {
+        (
+            target.file.resolve()
+            if target.file.is_absolute()
+            else (REPO / target.file).resolve()
+        )
+        for targets in indices["evaluation_run"].values()
+        for target in targets
+    }
 
     local_run_ids = {
         str(run.get("id"))
@@ -1331,6 +1652,7 @@ def check_corpus_refs(doc: Any, rel: Path, indices: CorpusIndices) -> list[str]:
         copied_source_key: str | None = None,
         qds_block: str | None = None,
         routed_scalar_slot: bool = False,
+        in_criterion_precondition: bool = False,
     ) -> None:
         if isinstance(node, dict):
             qds_routed_slots, qds_routed_blocks = _qds_contract_routing(current_qds)
@@ -1551,13 +1873,18 @@ def check_corpus_refs(doc: Any, rel: Path, indices: CorpusIndices) -> list[str]:
                                 f"earlier than {current_id!r} dated {current_date!r}"
                             )
                 elif key == "evidence_refs" and isinstance(value, list):
+                    has_retained_precondition_evidence = False
                     for i, ref in enumerate(value):
                         if not isinstance(ref, str):
                             continue
                         evidence_path = f"{child}[{i}]"
-                        # EVAL_* is the reserved namespace for EvaluationRun ids.
-                        if ref.startswith("EVAL_"):
-                            _resolve(
+                        # EVAL_* is reserved for EvaluationRun ids, but the schema
+                        # deliberately leaves EvaluationRun.id unconstrained.  An
+                        # exact indexed id is therefore run evidence regardless of
+                        # prefix; unresolved arbitrary tokens remain citations.
+                        if (ref.startswith("EVAL_")
+                                or ref in indices["evaluation_run"]):
+                            target = _resolve(
                                 ref,
                                 "evaluation_run",
                                 indices,
@@ -1565,9 +1892,55 @@ def check_corpus_refs(doc: Any, rel: Path, indices: CorpusIndices) -> list[str]:
                                 evidence_path,
                                 violations,
                             )
+                            if target is not None and (
+                                current_run is None or not in_criterion_precondition
+                            ):
+                                has_retained_precondition_evidence = True
+                            elif target is not None and current_run is not None:
+                                current_id = current_run.get("id")
+                                evidence_date = _iso_date(target.run_date)
+                                current_date = _iso_date(current_run.get("run_date"))
+                                if ref == current_id:
+                                    violations.append(
+                                        f"{rel}: {evidence_path} = {ref!r} is circular: "
+                                        "an EvaluationRun cannot cite itself as evidence"
+                                    )
+                                elif (evidence_date is None or current_date is None
+                                      or evidence_date >= current_date):
+                                    violations.append(
+                                        f"{rel}: {evidence_path} = {ref!r} is dated "
+                                        f"{evidence_date!r}, not earlier than owning "
+                                        f"EvaluationRun {current_id!r} dated {current_date!r}"
+                                    )
+                                else:
+                                    has_retained_precondition_evidence = True
                         else:
-                            violations.extend(_check_evidence_path(ref, rel, evidence_path))
-
+                            path_violations, retained = _check_evidence_path(
+                                ref, rel, evidence_path,
+                                reject_self=in_criterion_precondition,
+                            )
+                            violations.extend(path_violations)
+                            if retained and in_criterion_precondition:
+                                path_text = ref.removeprefix("repo:")
+                                resolved_evidence = (
+                                    REPO / path_text.split("#", 1)[0]
+                                ).resolve()
+                                if resolved_evidence in evaluation_carrier_files:
+                                    violations.append(
+                                        f"{rel}: {evidence_path} = {ref!r} names an "
+                                        "EvaluationRun carrier by path; cite the "
+                                        "strictly earlier EvaluationRun id so its "
+                                        "date is checked"
+                                    )
+                                    retained = False
+                            has_retained_precondition_evidence |= retained
+                    if (in_criterion_precondition
+                            and not has_retained_precondition_evidence):
+                        violations.append(
+                            f"{rel}: {child} must include at least one distinct "
+                            "repository file or strictly earlier EvaluationRun; "
+                            "citations and URLs may only supplement retained evidence"
+                        )
                 # Source refs were resolved together above so ownership can be checked.
                 if key not in {
                     "source_evaluation_run_ref",
@@ -1594,6 +1967,7 @@ def check_corpus_refs(doc: Any, rel: Path, indices: CorpusIndices) -> list[str]:
                         child_source_key,
                         child_qds_block,
                         child_is_routed_scalar,
+                        in_criterion_precondition or key == "criterion_preconditions",
                     )
         elif isinstance(node, list):
             for i, value in enumerate(node):
@@ -1605,6 +1979,7 @@ def check_corpus_refs(doc: Any, rel: Path, indices: CorpusIndices) -> list[str]:
                     copied_source_key,
                     qds_block,
                     routed_scalar_slot,
+                    in_criterion_precondition,
                 )
 
     check(doc, "$")
@@ -1675,13 +2050,29 @@ def walk(node: Any, path: str = "$") -> Iterable[tuple[str, str, Any]]:
             yield from walk(v, f"{path}[{i}]")
 
 
-def check_record(yaml_path: Path, indices: dict[str, set[str]]) -> list[str]:
+def check_record(
+    yaml_path: Path, indices: dict[str, set[str]], doc: Any = None
+) -> list[str]:
     """Return a list of human-readable violation messages for one record."""
-    doc = yaml.safe_load(yaml_path.read_text())
+    if doc is None:
+        doc = strict_yaml_load(yaml_path.read_text())
     if doc is None:
         return []
     violations: list[str] = []
     rel = yaml_path.relative_to(REPO)
+
+    for collection in ("catalog_tasks", "tools", "metric_definitions"):
+        seen_ids: set[str] = set()
+        for index, row in enumerate(doc.get(collection, []) or []):
+            if not isinstance(row, dict) or not isinstance(row.get("id"), str):
+                continue
+            row_id = row["id"]
+            if row_id in seen_ids:
+                violations.append(
+                    f"{rel}: $.{collection}[{index}].id duplicates {row_id!r} "
+                    "within the same document"
+                )
+            seen_ids.add(row_id)
 
     # Local indices for refs that may resolve within the same document.
     local_metric_ids = {m["id"] for m in doc.get("metric_definitions", []) or []}
@@ -1689,6 +2080,7 @@ def check_record(yaml_path: Path, indices: dict[str, set[str]]) -> list[str]:
     local_structure_ids = {s["id"] for s in doc.get("structures", []) or []}
 
     metric_ok = indices["metric"] | local_metric_ids
+    criterion_ok = indices["criterion"]
     tool_ok = indices["tool"] | local_tool_ids
     task_ok = indices["task"]
 
@@ -1697,6 +2089,7 @@ def check_record(yaml_path: Path, indices: dict[str, set[str]]) -> list[str]:
     # safe — the keys we look for are unambiguous in this schema.
     REF_KEYS = {
         "metric_definition_ref": ("metric", metric_ok),
+        "pass_criterion_ref": ("criterion", criterion_ok),
         "oracle_tool_ref": ("tool", tool_ok),
         "tool_ref": ("tool", tool_ok),
         "catalog_task_ref": ("task", task_ok),
@@ -1786,14 +2179,33 @@ def check_structure_refs(doc: Any, rel: Path, declared: set[str]) -> list[str]:
 
 
 def main() -> int:
-    indices = load_catalog_indices()
+    try:
+        indices = load_catalog_indices()
+    except (
+        yaml.YAMLError,
+        OSError,
+        UnicodeError,
+        AttributeError,
+        TypeError,
+        KeyError,
+    ) as exc:
+        print(
+            "FAIL: authoritative catalog/criterion registry is unreadable: "
+            f"{type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
+        return 1
     failed = False
     records: list[tuple[Path, Any]] = []
     for path in target_paths():
         try:
-            records.append((path, yaml.safe_load(path.read_text())))
-        except yaml.YAMLError as e:
-            print(f"FAIL: {path.relative_to(REPO)}: YAML parse error: {e}", file=sys.stderr)
+            records.append((path, strict_yaml_load(path.read_text())))
+        except (yaml.YAMLError, OSError, UnicodeError) as e:
+            print(
+                f"FAIL: {path.relative_to(REPO)}: unreadable "
+                f"({type(e).__name__}): {e}",
+                file=sys.stderr,
+            )
             failed = True
 
     corpus_indices = build_corpus_indices(records)
@@ -1805,8 +2217,14 @@ def main() -> int:
         print(f"FAIL: {violation}", file=sys.stderr)
         failed = True
 
+    for violation in check_measurement_catalog_semantics(
+        corpus_indices, enforce_legacy_policy=True
+    ):
+        print(f"FAIL: {violation}", file=sys.stderr)
+        failed = True
+
     for path, doc in records:
-        violations = check_record(path, indices)
+        violations = check_record(path, indices, doc)
         violations += check_corpus_refs(doc, path.relative_to(REPO), corpus_indices)
         if violations:
             failed = True

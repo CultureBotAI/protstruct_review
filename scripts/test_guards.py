@@ -19,7 +19,11 @@ the same defect one level up. No network, no PHENIX; safe to run anywhere.
 """
 from __future__ import annotations
 
+import copy
+from contextlib import redirect_stderr
+from dataclasses import replace
 import importlib.util
+import io
 import sys
 import tempfile
 from pathlib import Path
@@ -165,14 +169,145 @@ check(
 )
 
 
+# --- Measurement catalog semantics are relationships, not isolated ids -----------
+def _measurement_catalog_semantic_violations(row, tools=None, metrics=None):
+    doc = {
+        "tools": tools or [],
+        "metric_definitions": metrics or [],
+        "evaluation_runs": [{"id": "EVAL_catalog_semantics", "measurements": [row]}],
+    }
+    index = integrity.build_corpus_indices([(Path("catalog-semantics.yaml"), doc)])
+    return integrity.check_measurement_catalog_semantics(index)
+
+
+_catalog_semantic_row = {
+    "id": "CATALOG_SEMANTICS_M_001",
+    "catalog_task_ref": "T06",
+    "metric_definition_ref": "T06_r-free",
+    "oracle_tool_ref": "gemmi validate",
+    "oracle_family": "non_cctbx",
+    "oracle_measure": {"value_numeric": 0.2, "unit": "fraction"},
+}
+check("a MeasurementValue matching both catalog relationships is clean",
+      _measurement_catalog_semantic_violations(_catalog_semantic_row), [])
+check("an unrelated source Tool snapshot preserves per-tool catalog fallback",
+      _measurement_catalog_semantic_violations(
+          _catalog_semantic_row,
+          tools=[{
+              "id": "unrelated historical oracle",
+              "family": "cctbx",
+              "catalog_tasks_served": ["T03"],
+          }]), [])
+
+_wrong_metric_task = copy.deepcopy(_catalog_semantic_row)
+_wrong_metric_task["catalog_task_ref"] = "T05"
+_violations = _measurement_catalog_semantic_violations(_wrong_metric_task)
+check("a resolved metric cannot be used under an undeclared task",
+      any("applicable only to catalog tasks" in violation
+          for violation in _violations), True)
+check("the metric/task diagnostic names both ids",
+      any("T06_r-free" in violation and "T05" in violation
+          for violation in _violations), True)
+
+_wrong_oracle_family = copy.deepcopy(_catalog_semantic_row)
+_wrong_oracle_family["oracle_family"] = "cctbx"
+_violations = _measurement_catalog_semantic_violations(_wrong_oracle_family)
+check("a resolved oracle tool cannot claim the wrong family",
+      any("does not match authoritative family" in violation
+          for violation in _violations), True)
+check("an omitted oracle family is also incoherent with a known tool",
+      any("oracle_family None" in violation for violation in
+          _measurement_catalog_semantic_violations({
+              key: value for key, value in _catalog_semantic_row.items()
+              if key != "oracle_family"
+          })), True)
+
+_source_pinned_tool = [{
+    "id": "local historical oracle",
+    "family": "cctbx",
+    "catalog_tasks_served": ["T06"],
+}]
+_source_pinned_row = {
+    **_catalog_semantic_row,
+    "id": "CATALOG_SEMANTICS_M_002",
+    "oracle_tool_ref": "local historical oracle",
+    "oracle_family": "cctbx",
+}
+check("a source-owned Tool declaration supplies the authoritative family",
+      _measurement_catalog_semantic_violations(
+          _source_pinned_row, _source_pinned_tool), [])
+_wrong_source_pinned_family = copy.deepcopy(_source_pinned_row)
+_wrong_source_pinned_family["oracle_family"] = "non_cctbx"
+check("source-owned Tool family mismatches are rejected",
+      any("authoritative family 'cctbx'" in violation for violation in
+          _measurement_catalog_semantic_violations(
+              _wrong_source_pinned_family, _source_pinned_tool)), True)
+
+_wrong_catalog_tool_task = {
+    **_catalog_semantic_row,
+    "id": "CATALOG_SEMANTICS_M_TOOL_TASK",
+    "catalog_task_ref": "T03",
+    "metric_definition_ref": "T03_r-free",
+}
+_violations = _measurement_catalog_semantic_violations(_wrong_catalog_tool_task)
+check("catalog fallback rejects a tool outside its declared task set",
+      any("serves only catalog tasks ['T06']" in violation
+          for violation in _violations), True)
+check("the tool/task diagnostic names the tool and row task",
+      any("gemmi validate" in violation and "T03" in violation
+          for violation in _violations), True)
+
+_repinned_catalog_tool = [{
+    "id": "gemmi validate",
+    "family": "non_cctbx",
+    "catalog_tasks_served": ["T03"],
+}]
+check("a source Tool snapshot overrides live catalog task applicability",
+      _measurement_catalog_semantic_violations(
+          _wrong_catalog_tool_task, tools=_repinned_catalog_tool), [])
+check("a source Tool snapshot cannot fall through to a broader live task set",
+      any("serves only catalog tasks ['T03']" in violation for violation in
+          _measurement_catalog_semantic_violations(
+              _catalog_semantic_row, tools=_repinned_catalog_tool)), True)
+
+_empty_task_snapshot = [{
+    "id": "gemmi validate",
+    "family": "non_cctbx",
+    "catalog_tasks_served": [],
+}]
+check("an explicit empty source Tool task set remains authoritative",
+      any("serves only catalog tasks []" in violation for violation in
+          _measurement_catalog_semantic_violations(
+              _catalog_semantic_row, tools=_empty_task_snapshot)), True)
+
+_source_pinned_metric = [{
+    "id": "local_historical_metric",
+    "applicable_task_refs": ["T03"],
+}]
+_source_pinned_metric_row = {
+    **_catalog_semantic_row,
+    "id": "CATALOG_SEMANTICS_M_003",
+    "catalog_task_ref": "T03",
+    "metric_definition_ref": "local_historical_metric",
+    "oracle_tool_ref": "REFMAC5 (CCP4)",
+}
+check("a source-owned MetricDefinition supplies task applicability",
+      _measurement_catalog_semantic_violations(
+          _source_pinned_metric_row, metrics=_source_pinned_metric), [])
+_wrong_source_metric_task = copy.deepcopy(_source_pinned_metric_row)
+_wrong_source_metric_task["catalog_task_ref"] = "T05"
+check("source-owned MetricDefinition task mismatches are rejected",
+      any("applicable only to catalog tasks ['T03']" in violation
+          for violation in _measurement_catalog_semantic_violations(
+              _wrong_source_metric_task, metrics=_source_pinned_metric)), True)
+
+
 # --- Round 26: the status vocabulary is declared, not inferred from predicates -----
 # Before #139 the vocabulary existed only as prefixes spread across four predicates in
 # the READER, while the WRITER that produces the values lived in another file -- the
 # shape of #136. 28 of the 97 rows matched none of those prefixes and were counted as
 # `attempted` by DEFAULT (`not startswith("skipped")`), which happened to be right for
 # them and would not be for the next status added.
-
-import copy
 
 check("every committed status matches the declared vocabulary",
       figures.vocabulary_check(ROWS)["status"], "OK")
@@ -487,6 +622,10 @@ _new_doc = {"evaluation_runs": [{
         "notes": "retained source note",
     }],
 }]}
+_future_doc = {"evaluation_runs": [{
+    "id": "EVAL_future", "run_date": "2026-03-01", "structure_ref": "1sar",
+    "measurements": [],
+}]}
 _qds_doc = {"quality_data_sheets": [{
     "id": "QDS_new",
     "emitter_contract_version": "1",
@@ -515,6 +654,7 @@ _qds_doc = {"quality_data_sheets": [{
 _cross_records = [
     (Path("old.yaml"), _old_doc),
     (Path("new.yaml"), _new_doc),
+    (Path("future.yaml"), _future_doc),
     (Path("qds.yaml"), _qds_doc),
 ]
 _cross_index = integrity.build_corpus_indices(_cross_records)
@@ -839,6 +979,112 @@ _evidence["evidence_refs"].append("EVAL_missing")
 _violations = integrity.check_corpus_refs(_evidence, Path("evidence.yaml"), _cross_index)
 check("an EVAL_* evidence token is reserved and must resolve",
       any("evidence_refs[3]" in v and "EVAL_missing" in v for v in _violations), True)
+
+_self_evidence = _copy.deepcopy(_new_doc)
+_self_evidence["evaluation_runs"][0]["measurements"][0][
+    "criterion_preconditions"
+] = [{
+    "id": "matched_h_build",
+    "status": "satisfied",
+    "evidence_refs": ["EVAL_new"],
+}]
+_violations = integrity.check_corpus_refs(
+    _self_evidence, Path("self-evidence.yaml"), _cross_index)
+check("a criterion precondition cannot cite its owning run as evidence",
+      any("is circular" in v and "EVAL_new" in v for v in _violations), True)
+_self_evidence["evaluation_runs"][0]["measurements"][0][
+    "criterion_preconditions"
+][0]["evidence_refs"] = ["EVAL_old"]
+check("a criterion precondition may cite an earlier retained run",
+      integrity.check_corpus_refs(
+          _self_evidence, Path("earlier-evidence.yaml"), _cross_index), [])
+_self_evidence["evaluation_runs"][0]["measurements"][0][
+    "criterion_preconditions"
+][0]["evidence_refs"] = ["EVAL_future"]
+_violations = integrity.check_corpus_refs(
+    _self_evidence, Path("future-evidence.yaml"), _cross_index)
+check("a criterion precondition cannot cite a future EvaluationRun",
+      any("not earlier than owning" in v and "EVAL_future" in v
+          for v in _violations), True)
+
+# EvaluationRun.id is intentionally unconstrained; the EVAL_ prefix belongs to
+# carrier naming, not object identity. Exact indexed ids must get the same temporal
+# treatment without turning unrelated unresolved citation keys into run refs.
+_arbitrary_current = _copy.deepcopy(_new_doc)
+_arbitrary_current["evaluation_runs"][0]["id"] = "RUN_current"
+_arbitrary_future = _copy.deepcopy(_future_doc)
+_arbitrary_future["evaluation_runs"][0]["id"] = "RUN_future"
+_arbitrary_index = integrity.build_corpus_indices([
+    (Path("arbitrary-current.yaml"), _arbitrary_current),
+    (Path("arbitrary-future.yaml"), _arbitrary_future),
+])
+_arbitrary_precondition = _arbitrary_current["evaluation_runs"][0][
+    "measurements"
+][0].setdefault("criterion_preconditions", [{
+    "id": "matched_h_build", "status": "satisfied", "evidence_refs": [],
+}])
+_arbitrary_precondition[0]["evidence_refs"] = [
+    "RUN_future", "ref/catalog.yaml",
+]
+_violations = integrity.check_corpus_refs(
+    _arbitrary_current, Path("arbitrary-current.yaml"), _arbitrary_index)
+check("an indexed arbitrary-id future EvaluationRun is date-checked",
+      any("not earlier than owning" in v and "RUN_future" in v
+          for v in _violations), True)
+_arbitrary_precondition[0]["evidence_refs"] = [
+    "RUN_current", "ref/catalog.yaml",
+]
+_violations = integrity.check_corpus_refs(
+    _arbitrary_current, Path("arbitrary-current.yaml"), _arbitrary_index)
+check("an indexed arbitrary-id owning EvaluationRun is circular",
+      any("is circular" in v and "RUN_current" in v
+          for v in _violations), True)
+for _label, _weak_ref in (
+    ("invented citation token", "made_up_token"),
+    ("URL only", "https://example.org/assertion"),
+):
+    _self_evidence["evaluation_runs"][0]["measurements"][0][
+        "criterion_preconditions"
+    ][0]["evidence_refs"] = [_weak_ref]
+    _violations = integrity.check_corpus_refs(
+        _self_evidence, Path("weak-evidence.yaml"), _cross_index)
+    check(f"criterion precondition rejects {_label} without retained evidence",
+          any("must include at least one distinct repository file" in v
+              for v in _violations), True)
+
+with tempfile.TemporaryDirectory() as _tmp:
+    _tmp_root = Path(_tmp)
+    _current_file = _tmp_root / "new.yaml"
+    _current_file.write_text("evaluation_runs: []\n")
+    (_tmp_root / "future.yaml").write_text("evaluation_runs: []\n")
+    _saved_repo = integrity.REPO
+    try:
+        integrity.REPO = _tmp_root
+        for _self_ref in ("new.yaml", "repo:new.yaml"):
+            _self_evidence["evaluation_runs"][0]["measurements"][0][
+                "criterion_preconditions"
+            ][0]["evidence_refs"] = [_self_ref]
+            _violations = integrity.check_corpus_refs(
+                _self_evidence, Path("new.yaml"), _cross_index)
+            check(f"criterion precondition rejects self-file evidence {_self_ref!r}",
+                  any("own carrier file" in v for v in _violations), True)
+        _self_evidence["evaluation_runs"][0]["measurements"][0][
+            "criterion_preconditions"
+        ][0]["evidence_refs"] = ["future.yaml"]
+        _violations = integrity.check_corpus_refs(
+            _self_evidence, Path("new.yaml"), _cross_index)
+        check("a future EvaluationRun carrier path cannot bypass date checking",
+              any("EvaluationRun carrier by path" in v
+                  for v in _violations), True)
+        check("an EVAL carrier path does not count as retained precondition evidence",
+              any("must include at least one distinct repository file" in v
+                  for v in _violations), True)
+        check("an EVAL carrier path remains ordinary evidence outside a precondition",
+              integrity.check_corpus_refs(
+                  {"evidence_refs": ["future.yaml"]},
+                  Path("detached-evidence.yaml"), _cross_index), [])
+    finally:
+        integrity.REPO = _saved_repo
 
 _missing_evidence = {"evidence_refs": ["data/does/not/exist.json"]}
 _violations = integrity.check_corpus_refs(
@@ -1699,12 +1945,133 @@ check("the live corpus has no ambiguous run/QDS/measurement/assumption ids",
       integrity.check_duplicate_ids(_live_index), [])
 check("the live corpus satisfies typed measurement lineage",
       integrity.check_measurement_relations(_live_index), [])
+check("the live corpus satisfies MeasurementValue catalog semantics",
+      integrity.check_measurement_catalog_semantics(
+          _live_index, enforce_legacy_policy=True), [])
+
+_legacy_semantic_row_id = (
+    "EVAL_1sar_cdba2c07_2026-04-24_M_water_rscc_distribution"
+)
+_legacy_semantic_targets = _live_index["measurement"].get(
+    _legacy_semantic_row_id, [])
+check("the content-addressed metric/task exception identifies one immutable row",
+      len(_legacy_semantic_targets), 1)
+_legacy_semantic_target = _legacy_semantic_targets[0]
+_seen_semantic_exceptions = set()
+check("the exact legacy metric/task defect consumes its registered exception",
+      integrity._legacy_measurement_semantic_exception(
+          "metric_task", _legacy_semantic_target,
+          _seen_semantic_exceptions), True)
+check("the metric/task exception consumption records its exact key",
+      len(_seen_semantic_exceptions), 1)
+
+def _live_measurements_replacing(row_id, target):
+    measurements = {
+        measurement_id: list(targets)
+        for measurement_id, targets in _live_index["measurement"].items()
+    }
+    measurements[row_id] = [target]
+    return {"measurement": measurements}
+
+_changed_legacy_row = copy.deepcopy(_legacy_semantic_target.node)
+_changed_legacy_row["notes"] += " Mutated after publication."
+_changed_legacy_target = replace(
+    _legacy_semantic_target, node=_changed_legacy_row)
+_violations = integrity.check_measurement_catalog_semantics(
+    _live_measurements_replacing(
+        _legacy_semantic_row_id, _changed_legacy_target),
+    enforce_legacy_policy=True,
+)
+check("changing any legacy row content invalidates the metric/task exception",
+      any("applicable only to catalog tasks" in violation
+          for violation in _violations), True)
+check("a changed legacy row also makes its exception stale",
+      any("exception was not consumed" in violation
+          for violation in _violations), True)
+
+_legacy_tool_task_row_id = "EVAL_synth_active_site_2026-04-26_M_005"
+_legacy_tool_task_targets = _live_index["measurement"].get(
+    _legacy_tool_task_row_id, [])
+check("a content-addressed tool/task exception identifies one immutable row",
+      len(_legacy_tool_task_targets), 1)
+_legacy_tool_task_target = _legacy_tool_task_targets[0]
+_seen_semantic_exceptions = set()
+check("the exact legacy tool/task defect consumes its registered exception",
+      integrity._legacy_measurement_semantic_exception(
+          "tool_task", _legacy_tool_task_target,
+          _seen_semantic_exceptions), True)
+_changed_tool_task_row = copy.deepcopy(_legacy_tool_task_target.node)
+_changed_tool_task_row["notes"] = "Mutated after publication."
+_changed_tool_task_target = replace(
+    _legacy_tool_task_target, node=_changed_tool_task_row)
+_violations = integrity.check_measurement_catalog_semantics(
+    _live_measurements_replacing(
+        _legacy_tool_task_row_id, _changed_tool_task_target),
+    enforce_legacy_policy=True,
+)
+check("changing any legacy row content invalidates the tool/task exception",
+      any("serves only catalog tasks" in violation
+          for violation in _violations), True)
+check("a changed tool/task row also makes its exception stale",
+      any("rule=tool_task" in violation and "exception was not consumed" in violation
+          for violation in _violations), True)
 _live_ref_violations = []
 for _path, _doc in _live_records:
     _live_ref_violations += integrity.check_corpus_refs(
         _doc, _path.relative_to(REPO), _live_index)
 check("the live corpus satisfies all new cross-record references",
       _live_ref_violations, [])
+
+# Strict YAML loading must fail contextually even before an authority index exists.
+_saved_catalog = integrity.CATALOG
+_saved_structural_criteria = integrity.STRUCTURAL_CRITERIA
+for _label, _corrupt_authority in (
+    ("catalog", "catalog.yaml"),
+    ("criterion registry", "structural_criteria.yaml"),
+):
+    with tempfile.TemporaryDirectory() as _tmp:
+        _tmp_root = Path(_tmp)
+        _catalog = _tmp_root / "catalog.yaml"
+        _criteria = _tmp_root / "structural_criteria.yaml"
+        _catalog.write_bytes(_saved_catalog.read_bytes())
+        _criteria.write_bytes(_saved_structural_criteria.read_bytes())
+        (_tmp_root / _corrupt_authority).write_bytes(b"\xff\xfe")
+        integrity.CATALOG = _catalog
+        integrity.STRUCTURAL_CRITERIA = _criteria
+        _stderr = io.StringIO()
+        with redirect_stderr(_stderr):
+            _rc = integrity.main()
+        _diagnostic = _stderr.getvalue()
+    check(f"non-UTF-8 {_label} fails referential integrity", _rc, 1)
+    check(f"non-UTF-8 {_label} has contextual authority diagnostic",
+          "authoritative catalog/criterion registry is unreadable" in _diagnostic
+          and "UnicodeDecodeError" in _diagnostic, True)
+    check(f"non-UTF-8 {_label} has no traceback",
+          "Traceback" in _diagnostic, False)
+integrity.CATALOG = _saved_catalog
+integrity.STRUCTURAL_CRITERIA = _saved_structural_criteria
+
+with tempfile.TemporaryDirectory() as _tmp:
+    _tmp_root = Path(_tmp)
+    _bad_record = _tmp_root / "bad.yaml"
+    _bad_record.write_bytes(b"\xff\xfe")
+    _saved_integrity_repo = integrity.REPO
+    _saved_target_paths = integrity.target_paths
+    try:
+        integrity.REPO = _tmp_root
+        integrity.target_paths = lambda: [_bad_record]
+        _stderr = io.StringIO()
+        with redirect_stderr(_stderr):
+            _rc = integrity.main()
+        _diagnostic = _stderr.getvalue()
+    finally:
+        integrity.REPO = _saved_integrity_repo
+        integrity.target_paths = _saved_target_paths
+check("non-UTF-8 target record fails referential integrity", _rc, 1)
+check("non-UTF-8 target record has contextual file diagnostic",
+      "bad.yaml: unreadable (UnicodeDecodeError)" in _diagnostic, True)
+check("non-UTF-8 target record has no traceback",
+      "Traceback" in _diagnostic, False)
 
 # --- #608: every structured row selected by subject can carry that subject --------
 _schema = _yaml.safe_load((REPO / "schemas" / "protstruct_review.yaml").read_text())

@@ -45,6 +45,11 @@ import yaml
 
 import qds_emit_contract_v1
 
+try:
+    from strict_yaml import strict_yaml_load
+except ModuleNotFoundError:  # imported as scripts.qds_emit
+    from scripts.strict_yaml import strict_yaml_load
+
 
 REPO = Path(__file__).resolve().parent.parent
 CATALOG_PATH = REPO / "ref" / "catalog.yaml"
@@ -172,8 +177,21 @@ def yaml_dump(obj: Any) -> str:
     return yaml.safe_dump(obj, sort_keys=False, default_flow_style=False, allow_unicode=True)
 
 
+def _load_yaml_document(path: Path, *, label: str) -> dict[str, Any]:
+    """Load one authoritative YAML document without last-key-wins ambiguity."""
+    try:
+        doc = strict_yaml_load(path.read_text()) or {}
+    except (yaml.YAMLError, OSError, UnicodeError) as exc:
+        raise QdsCompletenessError(
+            f"QDS {label} is unreadable: {type(exc).__name__}: {exc}"
+        ) from exc
+    if not isinstance(doc, dict):
+        raise QdsCompletenessError(f"QDS {label} must be a YAML mapping")
+    return doc
+
+
 def _load_catalog_metric_ids() -> set[str]:
-    doc = yaml.safe_load(CATALOG_PATH.read_text())
+    doc = _load_yaml_document(CATALOG_PATH, label="catalog")
     return {m["id"] for m in doc.get("metric_definitions", [])}
 
 
@@ -211,7 +229,7 @@ def _tool_families_from_rows(
 
 def _load_catalog_tool_families() -> dict[str, str]:
     """Return the live catalog Tool.id -> Tool.family mapping."""
-    doc = yaml.safe_load(CATALOG_PATH.read_text()) or {}
+    doc = _load_yaml_document(CATALOG_PATH, label="catalog")
     return _tool_families_from_rows(
         doc.get("tools", []) or [], source_name="catalog"
     )
@@ -656,6 +674,32 @@ def _candidate_priority(m: dict[str, Any], subject_ref: str | None) -> tuple[Any
     return (subject_score, type_score, fam_score, recency_score)
 
 
+_SEMANTIC_SET_FIELDS = frozenset({
+    "assumptions", "criterion_preconditions", "derived_from_measurement_refs",
+    "evidence_refs",
+})
+
+
+def _canonical_semantic_value(field: str, value: Any) -> Any:
+    """Normalize order-insensitive semantics without trusting prose notes."""
+    if isinstance(value, dict):
+        return {
+            key: _canonical_semantic_value(key, child)
+            for key, child in sorted(value.items())
+            if key != "notes" and child not in (None, "", [])
+        }
+    if isinstance(value, list):
+        normalized = [_canonical_semantic_value("", child) for child in value]
+        if field not in _SEMANTIC_SET_FIELDS:
+            return normalized
+        keyed = {
+            yaml.safe_dump(item, sort_keys=True, allow_unicode=True): item
+            for item in normalized
+        }
+        return [keyed[key] for key in sorted(keyed)]
+    return value
+
+
 def _scientific_payload(m: dict[str, Any]) -> str:
     """Canonical scientific payload used to distinguish duplicates from conflicts.
 
@@ -674,16 +718,26 @@ def _scientific_payload(m: dict[str, Any]) -> str:
         "scope_selector",
         "oracle_tool_ref",
         "oracle_family",
+        "agent_claim",
         "oracle_measure",
+        "delta",
+        "delta_from_measurement_ref",
+        "derived_from_measurement_refs",
         "pass_status",
         "pass_criterion",
+        "pass_criterion_ref",
+        "criterion_preconditions",
         "provenance_ref",
         "evidence_refs",
         "bundle_ref",
+        "assumptions",
         "_source_evaluation_run_ref",
     )
     return yaml.safe_dump(
-        {key: m.get(key) for key in semantic_fields if m.get(key) not in (None, "")},
+        {
+            key: _canonical_semantic_value(key, m.get(key))
+            for key in semantic_fields if m.get(key) not in (None, "", [])
+        },
         sort_keys=True,
         allow_unicode=True,
     )
@@ -718,10 +772,20 @@ def _strongest(
     return winner
 
 
+_SOURCE_TYPED_VALUE_FIELDS = frozenset({
+    "value_numeric", "value_text", "unit", "is_not_applicable", "percentile",
+    "mean", "std_dev", "min_value", "max_value", "count",
+})
+
+
 def _wrap_value(m: dict[str, Any] | None) -> dict[str, Any] | None:
     if m is None:
         return None
-    v = dict(m.get("oracle_measure") or {})
+    source_value = m.get("oracle_measure") or {}
+    v = {
+        key: value for key, value in source_value.items()
+        if key in _SOURCE_TYPED_VALUE_FIELDS
+    }
     provenance_fields = {
         "source_measurement_ref": "id",
         "source_evaluation_run_ref": "_source_evaluation_run_ref",
@@ -2707,7 +2771,9 @@ def build_assumptions_report(
             supersedes_field="supersedes_assumption_ref",
         )
     elif TOOL_ASSUMPTIONS_PATH.exists():
-        ta_doc = yaml.safe_load(TOOL_ASSUMPTIONS_PATH.read_text()) or {}
+        ta_doc = _load_yaml_document(
+            TOOL_ASSUMPTIONS_PATH, label="tool-assumption registry"
+        )
         active_assumptions = _active_registry_rows(
             ta_doc.get("assumptions", []) or [],
             issued_at=issued_at,
@@ -2777,7 +2843,9 @@ def build_tool_recommendations_applied(
     if registry_rows is None:
         if not TOOL_RECS_PATH.exists():
             return []
-        doc = yaml.safe_load(TOOL_RECS_PATH.read_text()) or {}
+        doc = _load_yaml_document(
+            TOOL_RECS_PATH, label="tool-recommendation registry"
+        )
         registry_rows = doc.get("tool_recommendations", []) or []
     recs = _active_registry_rows(
         registry_rows,
@@ -3125,7 +3193,7 @@ def _emit_qds_contract_2(
     has_recommendation_snapshot = True
     has_assumption_snapshot = True
     for path in eval_paths:
-        doc = yaml.safe_load(path.read_text())
+        doc = _load_yaml_document(path, label=f"EvaluationRun source {path}")
         source_structures.extend(doc.get("structures", []) or [])
         source_tools.extend(doc.get("tools", []) or [])
         has_recommendation_snapshot &= "tool_recommendations" in doc
@@ -3454,6 +3522,28 @@ def emit_qds(
     emitter or live registries to reinterpret an earlier contract.
     """
     if emitter_contract_version == "1":
+        # Keep the retained implementation byte-stable while applying today's
+        # input-integrity boundary before its historical loader sees the source.
+        # Contract 1 must not silently accept duplicate YAML mapping keys.
+        for path in eval_paths:
+            _load_yaml_document(path, label=f"EvaluationRun source {path}")
+        if not require_pinned_tool_snapshot:
+            _load_yaml_document(
+                qds_emit_contract_v1.CATALOG_PATH,
+                label="contract-1 catalog",
+            )
+            for registry_path, registry_label in (
+                (
+                    qds_emit_contract_v1.TOOL_RECS_PATH,
+                    "contract-1 tool-recommendation registry",
+                ),
+                (
+                    qds_emit_contract_v1.TOOL_ASSUMPTIONS_PATH,
+                    "contract-1 tool-assumption registry",
+                ),
+            ):
+                if registry_path.exists():
+                    _load_yaml_document(registry_path, label=registry_label)
         return qds_emit_contract_v1._emit_qds_contract_1(
             eval_paths,
             qds_id,

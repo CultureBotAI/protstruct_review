@@ -174,12 +174,15 @@ scripts/                            # qds_emit.py, validate.sh, records_to_tsv.p
 any catalog task has no `### T<NN> ` section in the Markdown. That gate exists because T15–T17 once
 shipped in `catalog.yaml` alone and the published views went stale without anything noticing.
 
-**Pass criteria do NOT live in this catalog** — they live in the per-task driving-example files. The catalog is metric-shape, not thresholds.
+**Pass criteria do NOT live in this catalog or in the per-task drivers.** The catalog is
+metric-shape; numeric definitions live only in `ref/thresholds_and_standards.md`, and drivers cite
+and contextualize that registry.
 
 **Per-task drivers exist for all 17 tasks (T01–T17)** (`ref/driving_example_T<NN>.md`),
 plus the combined `ref/driving_example.md` (T01+T04+T05+T06). Each per-task driver grades **cross-tool
-agreement**, not an absolute quality bar, and tags every rubric threshold with its provenance
-(`[schema]` / `[MolProbity]` / `[literature]` / `[catalog]` / `[template]` / `[calibration]`) so a
+agreement**, not an absolute quality bar, and cites registry thresholds carrying approved provenance
+(`[schema]` / `[MolProbity]` / `[literature]` / `[catalog]` / `[template]` / `[calibration]` /
+`[benchmark]`) so a
 domain reviewer can audit it. The T15/T16/T17 drivers correspond to the runnable wrappers
 `scripts/t15_ss_agreement.py`, `scripts/t16_interface_quality.py`,
 `scripts/t17_nmr_ensemble.py`, and `scripts/t17_restraint_summary.py`.
@@ -421,15 +424,50 @@ For waters specifically: do NOT declare every HOH as a Ligand (146 records would
    - `scope=ensemble` measurement → `PredictionEnsembleSummary` or `NmrValidationSummary` rows required
    - `pairwise_comparisons[]` on the eval → must surface in QDS
 
-3. **Fail-hard on cctbx-only coverage (#315).** Coverage is computed per metric and comparison context, never by task-level union: an unrelated or failed oracle attempt cannot close a claim. A cctbx-only or unclassifiable claim refuses to emit unless the eval declares a matching `CrossToolWaiver` (task plus metric/context qualifiers, reason, `as_of_date`). A legacy task-only waiver is accepted only when one claim for that task is gated. The waiver is surfaced on the QDS and annotates only the row it excuses (`… — WAIVED <date>: <reason>`). Non-cctbx-only coverage is deliberately not gated — the trust model forbids self-grading, not independent-only evidence. Committed QDS files are separately checked by `scripts/check_qds_trust_invariant.py` (validate step 3c), which rebuilds coverage and waivers from the referenced source EvaluationRuns. Modern source documents must pin the relevant top-level `Structure`, `Tool`, `tool_recommendations`, and `assumptions` snapshots plus a `qds_replay_pins` content-addressed boundary; the sheet pins `emitter_contract_version`. Whole-sheet derivation is replayed through the retained contract module using only those source snapshots, then independently canonicalized and compared with the source-owned output pin. Today's emitter, catalog, and registries cannot reinterpret an older artifact. Contract implementations and supported-version dispatch are append-only. Historical exemptions are an explicit frozen allowlist keyed by repository path, QDS identity, issue timestamp, and content fingerprint; there is no date-based grandfathering.
+3. **Fail-hard on cctbx-only coverage (#315).** Coverage is computed per metric and comparison context, never by task-level union: an unrelated or failed oracle attempt cannot close a claim. A cctbx-only or unclassifiable claim refuses to emit unless the eval declares a matching `CrossToolWaiver` (task plus metric/context qualifiers, reason, `as_of_date`). A legacy task-only waiver is accepted only when one claim for that task is gated. The waiver is surfaced on the QDS and annotates only the row it excuses (`… — WAIVED <date>: <reason>`). Non-cctbx-only coverage is deliberately not gated — the trust model forbids self-grading, not independent-only evidence. Committed QDS files are separately checked by `scripts/check_qds_trust_invariant.py` (validate step 3c), which rebuilds coverage and waivers from the referenced source EvaluationRuns. Modern source documents must pin the relevant top-level `Structure`, `Tool`, `tool_recommendations`, and `assumptions` snapshots plus a `qds_replay_pins` content-addressed boundary; the sheet pins `emitter_contract_version`. Whole-sheet derivation is replayed through the retained contract module using only those source snapshots, then independently canonicalized and compared with the source-owned output pin. Today's emitter, catalog, and registries cannot reinterpret an older artifact. Live selection and retained-contract preflight reject equal-priority sources that differ in criterion binding/preconditions, claim/delta lineage, or assumptions, and reject nested source lineage/verdict fields. This protects frozen v1/v2 output shapes without adding fields to them. Contract implementations and supported-version dispatch are append-only. Historical exemptions are an explicit frozen allowlist keyed by repository path, QDS identity, issue timestamp, and content fingerprint; there is no date-based grandfathering.
 
-4. **A verdict must name its criterion (#567).** Any `pass_status` that asserts an outcome requires a non-empty `pass_criterion`; `informational` means "reported without a declared criterion" and must not carry one; `fail_by_oracle` / `fail_by_oracle_within_cctbx` require the `agent_claim` they disagree with, and the latter requires `oracle_family: cctbx`. Reasoning a verdict out in `notes` while leaving `pass_criterion` empty is the defect this rule exists to stop — it is what let one 1SAR row ship marked `pass` with no criterion, and two identical rows be graded on opposite conclusions from the same premise. Committed records are checked by `scripts/check_pass_status.py` (validate step 3c-bis). The criterion and cctbx-family rules apply to every record; the two that pre-existing history violates are enforced from 2026-09-07, with older rows grandfathered by name. A `PassStatus` value the guard does not classify — or a schema it cannot read — is a hard failure, so the rules cannot silently fall out of step with the enum.
+4. **A verdict must name an applicable, registry-grounded criterion (#567, #588).** Any
+   `pass_status` that asserts an outcome requires a numeric-comparison `pass_criterion` and a
+   `pass_criterion_ref` resolving in
+   `ref/structural_criteria.yaml::pass_criterion_bindings`. The binding must match the row's exact
+   metric, task, stage, scope, oracle tool/family, effective date, canonical unit, and bidirectional
+   catalog task links. It selects one complete normalized registry cell by section, first-cell row
+   label, and one-based column. That cell must contain exactly one strict positive-polarity numeric
+   comparison; the binding declares its operand/transform and the guard recomputes the result with
+   exact decimal arithmetic (including exact unit-compatible `delta = oracle_measure - agent_claim`).
+   The row's displayed criterion and status must match the cell and result. Its dedicated
+   Provenance/Source cell must carry an approved tag. Do not copy threshold values into the catalog
+   or binding.
+
+   Encode every load-bearing condition in the selected cell as `[requires: id,...]`; the binding's
+   ids must match that annotation exactly. A verdict carries every required
+   `criterion_preconditions[]` check once, as `satisfied` with non-circular retained evidence.
+   `criterion_inapplicable` retains the authoritative criterion/ref and documents at least one
+   required `void`/`unknown` check. `informational` carries no criterion/ref/preconditions. All four
+   disagreement statuses (`fail_by_oracle`, `fail_by_oracle_within_cctbx`, `pass_with_caveat`, and
+   `pass_criterion_fail_headline`) require a finite numeric, unit-compatible agent claim that differs
+   from the oracle; text-only disagreement cannot grade a numeric rule, and plain `pass` or
+   `fail_criterion` cannot hide a contradictory claim. Value carriers set exactly one of numeric,
+   text, or true-not-applicable and cannot contain nested QDS lineage/verdict fields.
+
+   `fail_by_oracle_within_cctbx` is the only criterion-bearing status permitted on a cctbx row; put
+   hard verdicts on an independent non-cctbx measurement. Bindings use inclusive effective intervals
+   and immediate-predecessor, same-context, append-only supersession; the EVAL filename date equals
+   `run_date`. Notes do not substitute for structured applicability or justify opposite statuses on
+   otherwise identical evidence. Committed records are checked by `scripts/check_pass_status.py`
+   (validate step 3c-bis). Pre-registry files and their known R2/R3 defects are preserved only by exact
+   path/file/row SHA-256 pins: this records unvalidated history, not approval. Backdating never grants
+   an exemption; correct a frozen Eval/QDS pair by publishing a new dated record. Duplicate YAML keys,
+   unknown enum values, statusless criterion metadata, and malformed schema, binding, carrier, or
+   record shapes fail hard.
 
 5. **Selection is subject-aware and provenance-preserving.** Put a stable `subject_ref` on every
    measurement when an eval contains more than one concrete model, dataset, or assembly. The QDS
    names its subject too. Exact-subject measurements outrank legacy rows with no subject; explicit
    non-matches are excluded. Every wrapped QDS scalar keeps its source run/measurement ids, metric,
-   stage, scope/selector, tool/family, status, criterion, and notes. `scope_selector` remains a terse
+   stage, scope/selector, tool/family, status, criterion, and notes. Frozen output contracts do not
+   inline newer binding/precondition fields; resolve `source_measurement_ref` for full context.
+   `scope_selector` remains a terse
    machine selector; provenance prose belongs in `notes` or first-class fields.
 
 6. **Coupled values stay on one code path.** R-work, R-free, and the gap are one bundle, selected
@@ -442,7 +480,8 @@ Regression tests at `scripts/test_qds_emit.py` enforce that the 1SAR example has
 
 - **Inverting the trust model.** MolProbity is the geometry oracle; it is not a PHENIX tool. `phenix.holton_geometry_validation` and MolProbity are *both* run, and the harness compares them.
 - **Naming drift.** It's `phenix.superpose_models`, not `phenix.superpose_pdbs`. Verify in `ref/phenix_docs/phenix-online.org/documentation/reference/` before adding a new row.
-- **Adding pass thresholds to the catalog.** Don't. They go in `driving_example_T<NN>.md`.
+- **Adding pass thresholds to the catalog or driver.** Don't. Define them once in
+  `ref/thresholds_and_standards.md`; drivers cite that row.
 - **Skipping the baseline.** Pre-refinement metrics are required to compute Δ-anything. The driving example shows this; per-task drivers should follow.
 - **Vague example datasets.** "Any high-resolution structure" is not reproducible. Use a PDB/EMDB ID.
 - **Reporting RMSD alone for pair comparisons.** TM-score and lDDT are the mandatory pair (`ref/quality_reporting.md` §2.1); RMSD is reported additionally for legibility, never as the basis of the verdict.

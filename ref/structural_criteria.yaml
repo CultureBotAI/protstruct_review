@@ -1,4 +1,4 @@
-# Structural-criteria registry — self-describing entries per criterion / measurement.
+# Structural-criteria and pass-criterion-binding registry.
 # Schema: schemas/structural_criteria.yaml (class CriteriaCollection).
 # Validate: linkml-validate --schema schemas/structural_criteria.yaml ref/structural_criteria.yaml
 #
@@ -6,6 +6,15 @@
 # + cross-tool agreement + a worked example from a real repo structure. It is the
 # rich companion to ref/catalog.yaml, ref/thresholds_and_standards.md,
 # ref/tool_recommendations.yaml and ref/oracle_tools.md.
+# A PassCriterionBinding selects one complete registry cell by section, row label,
+# and column; declares operand/unit and atomic applicability; and uses inclusive
+# effective dates with a linear, append-only same-context supersession chain.
+
+# No post-registry verdict binding has been admitted yet. Historical verdict
+# rows are preserved under exact content pins by scripts/check_pass_status.py;
+# the first new verdict must add a fully contextual binding here and cite the
+# canonical threshold registry rather than copying a value into this file.
+pass_criterion_bindings: []
 
 criteria:
 

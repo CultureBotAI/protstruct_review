@@ -187,8 +187,10 @@ domain reviewer can audit it. The T15/T16/T17 drivers correspond to the runnable
 `scripts/t15_ss_agreement.py`, `scripts/t16_interface_quality.py`,
 `scripts/t17_nmr_ensemble.py`, and `scripts/t17_restraint_summary.py`.
 T15 invocations must supply a new repository-local `--evidence-out`; do not paste its rows unless
-the retained JSON exists and both rows cite it. The wrapper refuses overwrite and the bundle keeps
-the exact normalized input and raw DSSP bytes, both assignment streams, hashes, and tool versions.
+the retained JSON exists and both rows cite it. When the input came from a retained ZIP, also pass
+`--source-archive` and `--source-member`. The wrapper rejects duplicate or size-mismatched members,
+refuses overwrite, pins the complete archive and exact member/source bytes, and retains the
+normalized input, raw DSSP bytes, both assignment streams, hashes, and tool versions.
 
 ## Existing tasks (don't reinvent these — extend them)
 
@@ -473,6 +475,29 @@ For waters specifically: do NOT declare every HOH as a Ligand (146 records would
 6. **Coupled values stay on one code path.** R-work, R-free, and the gap are one bundle, selected
    from the same run, subject, tool, and oracle family. If no coherent bundle covers the available
    slots, the emitter fails instead of manufacturing a mixed-family or mixed-tool triple.
+
+7. **Contract-3 partial sheets require one typed emission context.** Put exactly one
+   `qds_emission_contexts[]` row in a canonical source `EVAL_*.yaml`, owned by one of the named
+   EvaluationRuns. It binds the target QDS, deterministic source-run order, structure, exact
+   subject, timezone-qualified issue timestamp, `coverage_scope: partial`, boundary note, identity description, and
+   current combined headline. Point both the QDS and replay pin to it and pin the context snapshot
+   digest. This is required even for a one-run partial sheet. A cumulative contract-3 sheet carries
+   no context and retains run-level headline concatenation. Never infer summary prose from input
+   file order, “latest run,” or stale per-run retraction language.
+
+   Retained v1/v2 emitters are replay-only, not authoring alternatives. Every new committed QDS
+   uses the current contract. The only exception is an already-issued artifact whose repository
+   path, QDS id, timestamp, contract, and complete carrier digest match the immutable guard
+   allowlist; that artifact still has to pass its ordinary source-pin replay.
+   Keep EvaluationRuns and QDSs in canonical `data/**/EVAL_*.yaml` and
+   `data/**/QDS_*.yaml` carriers. The schema's generic Container shape does not authorize placing
+   either collection in a registry or other YAML file that its dedicated guards do not discover.
+   The suffix is exact lowercase `.yaml`; case variants and symlink aliases are discovered and
+   rejected under their lexical paths.
+
+8. **Bind retained archive provenance to the subject.** For T15 artifact runs, provide the exact
+   repository-local archive and member. The wrapper derives the canonical `artifact:<id>#<member>`
+   subject from that pair or rejects a conflicting `--subject-ref` before invoking any oracle.
 
 Regression tests at `scripts/test_qds_emit.py` enforce that the 1SAR example has every expected geometry slot populated, the synthetic active-site eval (`data/examples/eval/EVAL_synth_active_site_*.yaml`) populates per_residue_quality / site_qualities / ligand_quality / pairwise_comparisons / tool_recommendations_applied, and the negative test confirms the fail-hard behaviour. `scripts/validate.sh` runs all of this in sequence.
 

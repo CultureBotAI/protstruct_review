@@ -37,11 +37,14 @@ import argparse
 import base64
 import hashlib
 import importlib.metadata
+import io
 import json
 import os
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
+from pathlib import PurePosixPath
 from typing import Any
 
 import yaml
@@ -353,6 +356,97 @@ def evidence_ref_for_path(destination: Path) -> tuple[Path, str]:
     return resolved, relative.as_posix()
 
 
+def source_archive_provenance(
+    archive: Path | None,
+    member: str | None,
+    source_bytes: bytes,
+) -> tuple[str | None, str | None, str | None]:
+    """Validate an optional repository-local ZIP member as the exact input source.
+
+    A temporary extracted pathname is not durable provenance.  When an input came
+    from a retained artifact archive, bind the evidence to both the portable
+    archive path and the exact safe member name before any oracle work begins.
+    """
+    if (archive is None) != (member is None):
+        _fail("--source-archive and --source-member must be supplied together")
+    if archive is None or member is None:
+        return None, None, None
+
+    resolved = archive.resolve()
+    try:
+        archive_ref = resolved.relative_to(REPO.resolve()).as_posix()
+    except ValueError:
+        _fail(f"--source-archive must be inside the repository: {resolved}")
+    member_path = PurePosixPath(member)
+    if (
+        not member
+        or member_path.is_absolute()
+        or "\\" in member
+        or ".." in member_path.parts
+        or member_path.as_posix() != member
+    ):
+        _fail(f"--source-member must be a safe canonical ZIP path: {member!r}")
+    try:
+        archive_bytes = resolved.read_bytes()
+        with zipfile.ZipFile(io.BytesIO(archive_bytes)) as source_zip:
+            matches = [info for info in source_zip.infolist() if info.filename == member]
+            if len(matches) != 1:
+                _fail(
+                    f"source archive must contain exactly one member named {member!r}; "
+                    f"found {len(matches)}"
+                )
+            info = matches[0]
+            if info.is_dir():
+                _fail(f"source archive member {member!r} is a directory")
+            if info.file_size != len(source_bytes):
+                _fail(
+                    "source archive member size does not match the input model: "
+                    f"{info.file_size} != {len(source_bytes)} bytes"
+                )
+            with source_zip.open(info) as member_stream:
+                archived_bytes = member_stream.read(len(source_bytes) + 1)
+    except (
+        OSError,
+        KeyError,
+        RuntimeError,
+        NotImplementedError,
+        zipfile.BadZipFile,
+    ) as exc:
+        _fail(f"could not read source archive member {archive_ref}#{member}: {exc}")
+    if archived_bytes != source_bytes:
+        _fail(
+            "input model bytes do not match the declared source archive member "
+            f"{archive_ref}#{member}"
+        )
+    archive_sha256 = hashlib.sha256(archive_bytes).hexdigest()
+    return archive_ref, member, archive_sha256
+
+
+def subject_ref_for_source_archive(
+    subject_ref: str | None,
+    source_archive: str | None,
+    source_member: str | None,
+) -> str | None:
+    """Derive or verify the artifact subject bound by archive provenance."""
+    if source_archive is None or source_member is None:
+        return subject_ref
+    archive_name = PurePosixPath(source_archive).name
+    artifact_id = (
+        archive_name.removesuffix("_artifacts.zip")
+        if archive_name.endswith("_artifacts.zip")
+        else PurePosixPath(archive_name).stem
+    )
+    if not artifact_id:
+        _fail(f"could not derive an artifact id from source archive {source_archive!r}")
+    expected = f"artifact:{artifact_id}#{source_member}"
+    if subject_ref is not None and subject_ref != expected:
+        _fail(
+            f"--subject-ref {subject_ref!r} does not identify the declared source "
+            f"archive member; expected {expected!r}"
+        )
+    return expected
+
+
 def build_evidence_bundle(
     *,
     bundle_ref: str,
@@ -366,6 +460,9 @@ def build_evidence_bundle(
     gemmi_version: str,
     dssp_version: str,
     biotite_version: str,
+    source_archive: str | None = None,
+    source_member: str | None = None,
+    source_archive_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Build a self-contained, byte-replayable T15 evidence document."""
     normalized_sha256 = hashlib.sha256(normalized_bytes).hexdigest()
@@ -385,7 +482,7 @@ def build_evidence_bundle(
         field: result[field]
         for field in _BUNDLE_RESULT_FIELDS
     }
-    return {
+    evidence = {
         "evidence_format": "protstruct-review-t15-v1",
         "bundle_ref": bundle_ref,
         "subject_ref": subject_ref,
@@ -417,6 +514,15 @@ def build_evidence_bundle(
         "per_residue_assignments": assignments,
         "aggregate": aggregate,
     }
+    if (
+        source_archive is not None
+        and source_member is not None
+        and source_archive_sha256 is not None
+    ):
+        evidence["source_archive"] = source_archive
+        evidence["source_member"] = source_member
+        evidence["source_archive_sha256"] = source_archive_sha256
+    return evidence
 
 
 def write_evidence_bundle_no_overwrite(
@@ -505,7 +611,8 @@ def render_yaml(
             f"configured DSSP reported {dssp_version}; "
             f"biotite reported {biotite_version}; "
             f"DSSP input was normalized with gemmi convert ({gemmi_version}), "
-            f"normalized SHA-256 {normalized_sha256}; source SHA-256 {input_sha256}; "
+            f"normalized SHA-256 {normalized_sha256}; biotite P-SEA read the "
+            f"original source bytes, SHA-256 {input_sha256}; "
             f"{result['n_agree']}/{result['n_scored']} concordant over residues scored by both "
             f"(DSSP {result['n_dssp']}, biotite {result['n_biotite']}, "
             f"{result['n_dropped']} scored by only one and excluded). "
@@ -534,7 +641,8 @@ def render_yaml(
             f"Configured DSSP reported {dssp_version}. "
             f"Biotite reported {biotite_version}. "
             f"DSSP input was normalized with gemmi convert ({gemmi_version}), "
-            f"normalized SHA-256 {normalized_sha256}; source SHA-256 {input_sha256}. "
+            f"normalized SHA-256 {normalized_sha256}; biotite P-SEA read the "
+            f"original source bytes, SHA-256 {input_sha256}. "
             f"{interpretation_note}"
         ),
     }
@@ -553,8 +661,14 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("model", type=Path, help="protein model (PDB)")
     ap.add_argument("--eval-id", default="EVAL_T15", help="eval id prefix for the emitted row")
-    ap.add_argument("--subject-ref", default=None,
-                    help="stable identifier for the concrete model being measured")
+    ap.add_argument(
+        "--subject-ref",
+        default=None,
+        help=(
+            "stable identifier for the concrete model; with --source-archive it "
+            "must match (or is derived as) artifact:<archive-id>#<member>"
+        ),
+    )
     ap.add_argument(
         "--evidence-out",
         type=Path,
@@ -564,6 +678,15 @@ def main(argv: list[str] | None = None) -> int:
             "output, assignments, hashes, and tool versions (never overwritten)"
         ),
     )
+    ap.add_argument(
+        "--source-archive",
+        type=Path,
+        help="repository-local ZIP containing the exact input model",
+    )
+    ap.add_argument(
+        "--source-member",
+        help="canonical member path whose bytes must exactly match the input model",
+    )
     ap.add_argument("--per-residue", action="store_true", help="also print the per-residue table")
     args = ap.parse_args(argv)
 
@@ -572,6 +695,14 @@ def main(argv: list[str] | None = None) -> int:
     evidence_path, evidence_ref = evidence_ref_for_path(args.evidence_out)
     source_bytes_before = args.model.read_bytes()
     input_sha256 = hashlib.sha256(source_bytes_before).hexdigest()
+    source_archive, source_member, source_archive_sha256 = source_archive_provenance(
+        args.source_archive,
+        args.source_member,
+        source_bytes_before,
+    )
+    subject_ref = subject_ref_for_source_archive(
+        args.subject_ref, source_archive, source_member
+    )
 
     dssp_version = measured_dssp_version()
     gemmi_version = measured_gemmi_version()
@@ -599,12 +730,12 @@ def main(argv: list[str] | None = None) -> int:
         gemmi_version,
         dssp_version,
         biotite_version,
-        args.subject_ref,
+        subject_ref,
     )
     rendered = render_yaml(
         result,
         args.eval_id,
-        args.subject_ref,
+        subject_ref,
         input_sha256=input_sha256,
         normalized_sha256=normalized_sha256,
         dssp_version=dssp_version,
@@ -614,7 +745,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     evidence = build_evidence_bundle(
         bundle_ref=bundle_ref,
-        subject_ref=args.subject_ref,
+        subject_ref=subject_ref,
         source_sha256=input_sha256,
         normalized_bytes=normalized_bytes,
         raw_dssp_bytes=raw_dssp_bytes,
@@ -624,6 +755,9 @@ def main(argv: list[str] | None = None) -> int:
         gemmi_version=gemmi_version,
         dssp_version=dssp_version,
         biotite_version=biotite_version,
+        source_archive=source_archive,
+        source_member=source_member,
+        source_archive_sha256=source_archive_sha256,
     )
     write_evidence_bundle_no_overwrite(evidence_path, evidence)
     sys.stdout.write(rendered)

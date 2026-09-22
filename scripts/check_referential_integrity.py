@@ -41,12 +41,14 @@ and the committed example already drifts from the canonical catalog."
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 import hashlib
 import json
+import os
 from pathlib import Path, PureWindowsPath
 import re
+import subprocess
 import sys
 from typing import Any, Iterable, Sequence
 from urllib.parse import urlsplit
@@ -55,6 +57,7 @@ import yaml
 
 import qds_emit_contract_v1
 import qds_emit_contract_v2
+import qds_emit_contract_v3
 
 try:
     from strict_yaml import strict_yaml_load
@@ -242,6 +245,7 @@ def _routed_scalar_slots(
 QDS_ROUTED_SCALAR_SLOTS_BY_CONTRACT = {
     "1": _routed_scalar_slots(qds_emit_contract_v1.METRIC_TO_QDS_SLOT),
     "2": _routed_scalar_slots(qds_emit_contract_v2.METRIC_TO_QDS_SLOT),
+    "3": _routed_scalar_slots(qds_emit_contract_v3.METRIC_TO_QDS_SLOT),
 }
 
 
@@ -293,6 +297,56 @@ def target_paths() -> list[Path]:
     return sorted({path for path in targets if path.exists()})
 
 
+def repository_yaml_paths(root: Path = REPO) -> list[Path]:
+    """Find tracked and local YAML so a record cannot hide off the normal routes."""
+    root = root.absolute()
+    tracked: set[Path] = set()
+    try:
+        proc = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(root),
+                "ls-files",
+                "--cached",
+                "-z",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        tracked = {
+            path.absolute()
+            for item in proc.stdout.split("\0")
+            if item
+            for path in (root / item,)
+            if (path.is_file() or path.is_symlink())
+            and path.suffix.lower() in {".yaml", ".yml"}
+        }
+    except (OSError, subprocess.CalledProcessError):
+        # A source archive without .git still gets a filesystem-complete scan.
+        tracked = set()
+
+    ignored_dependency_roots = {
+        ".git",
+        ".venv",
+        ".mypy_cache",
+        ".ruff_cache",
+        "__pycache__",
+        "node_modules",
+    }
+    local: set[Path] = set()
+    for directory, child_dirs, filenames in os.walk(root):
+        child_dirs[:] = [
+            name for name in child_dirs if name not in ignored_dependency_roots
+        ]
+        for filename in filenames:
+            path = Path(directory) / filename
+            if path.suffix.lower() in {".yaml", ".yml"}:
+                local.add(path.absolute())
+    return sorted(tracked | local)
+
+
 def _shown(path: Path) -> Path:
     """Use a repository-relative path in diagnostics when possible."""
     try:
@@ -318,6 +372,8 @@ def build_corpus_indices(records: Sequence[tuple[Path, Any]]) -> CorpusIndices:
         "assumption": {},
         "qds_replay_pin": {},
         "qds_replay_pin_target": {},
+        "qds_emission_context": {},
+        "qds_emission_context_target": {},
     }
 
     def add_assumptions(node: Any, path: str, run: dict[str, Any], file: Path) -> None:
@@ -390,6 +446,22 @@ def build_corpus_indices(records: Sequence[tuple[Path, Any]]) -> CorpusIndices:
             )
             _add_target(indices["qds_replay_pin"], pin.get("id"), target)
             _add_target(indices["qds_replay_pin_target"], pin.get("qds_ref"), target)
+        for i, context in enumerate(doc.get("qds_emission_contexts") or []):
+            if not isinstance(context, dict):
+                continue
+            target = RefTarget(
+                file=file,
+                pointer=f"$.qds_emission_contexts[{i}]",
+                node=context,
+            )
+            _add_target(
+                indices["qds_emission_context"], context.get("id"), target
+            )
+            _add_target(
+                indices["qds_emission_context_target"],
+                context.get("qds_ref"),
+                target,
+            )
         for i, qds in enumerate(doc.get("quality_data_sheets") or []):
             if not isinstance(qds, dict):
                 continue
@@ -472,6 +544,7 @@ def check_duplicate_ids(indices: CorpusIndices) -> list[str]:
         "structured_row": "structured source row",
         "assumption": "Assumption",
         "qds_replay_pin": "QdsReplayPin",
+        "qds_emission_context": "QdsEmissionContext",
     }
     violations: list[str] = []
     for kind, label in labels.items():
@@ -494,6 +567,18 @@ def check_duplicate_ids(indices: CorpusIndices) -> list[str]:
             f"multiple QdsReplayPins target qds_ref {qds_ref!r} at {locations}; "
             "the replay boundary is ambiguous"
         )
+    for qds_ref, targets in sorted(
+        indices["qds_emission_context_target"].items()
+    ):
+        if len(targets) < 2:
+            continue
+        locations = ", ".join(
+            f"{_shown(target.file)}:{target.pointer}" for target in targets
+        )
+        violations.append(
+            f"multiple QdsEmissionContexts target qds_ref {qds_ref!r} at "
+            f"{locations}; the source-owned sheet recipe is ambiguous"
+        )
     return violations
 
 
@@ -511,6 +596,7 @@ def _resolve(
         "measurement": "MeasurementValue",
         "structured_row": "structured source row",
         "assumption": "Assumption",
+        "qds_emission_context": "QdsEmissionContext",
     }
     targets = indices[kind].get(object_id, [])
     if not targets:
@@ -1370,6 +1456,25 @@ def _canonical_digest(value: Any) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
+def _canonical_datetime_text(value: Any) -> str | None:
+    """Normalize a YAML string/native datetime to one UTC instant."""
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str) and value.strip():
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    else:
+        return None
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        return None
+    try:
+        return parsed.astimezone(timezone.utc).isoformat()
+    except (OverflowError, OSError, ValueError):
+        return None
+
+
 def _legacy_measurement_semantic_exception(
     rule: str,
     target: RefTarget,
@@ -1452,6 +1557,100 @@ def _repository_relative(path: Path) -> Path | None:
         return path.resolve().relative_to(REPO.resolve())
     except ValueError:
         return None
+
+
+def check_qds_contract_floor(
+    doc: dict[str, Any], yaml_path: Path, root: Path = REPO
+) -> list[str]:
+    """Reject replay-only emitter contracts on new committed QDS carriers."""
+    if not isinstance(doc, dict):
+        return []
+    try:
+        rel = yaml_path.absolute().relative_to(root.absolute())
+    except ValueError:
+        return []
+    try:
+        import check_qds_trust_invariant as trust_guard
+    except ImportError:
+        from scripts import check_qds_trust_invariant as trust_guard
+
+    violations: list[str] = []
+    for qds_i, qds in enumerate(doc.get("quality_data_sheets") or []):
+        if not isinstance(qds, dict):
+            continue
+        error = trust_guard.qds_contract_policy_error(yaml_path, root, qds)
+        if error is not None:
+            violations.append(
+                f"{rel}: $.quality_data_sheets[{qds_i}]: {error}"
+            )
+    return violations
+
+
+def check_record_carrier_route(
+    doc: dict[str, Any], yaml_path: Path, root: Path = REPO
+) -> list[str]:
+    """Keep Eval/QDS objects out of schema-valid but unguarded containers."""
+    if not isinstance(doc, dict):
+        return []
+    try:
+        rel = yaml_path.absolute().relative_to(root.absolute())
+    except ValueError:
+        return []
+    under_data = bool(rel.parts and rel.parts[0] == "data")
+    canonical_eval = (
+        under_data and rel.suffix == ".yaml" and rel.stem.startswith("EVAL_")
+    )
+    canonical_qds = (
+        under_data and rel.suffix == ".yaml" and rel.stem.startswith("QDS_")
+    )
+
+    violations: list[str] = []
+    if yaml_path.is_symlink() and (
+        "evaluation_runs" in doc or "quality_data_sheets" in doc
+    ):
+        violations.append(
+            f"{rel}: EvaluationRun/QualityDataSheet carriers must be regular "
+            "files; YAML symlinks are not permitted"
+        )
+    if "evaluation_runs" in doc and not canonical_eval:
+        violations.append(
+            f"{rel}: evaluation_runs may only be carried by canonical "
+            "data/**/EVAL_*.yaml records"
+        )
+    if "quality_data_sheets" in doc and not canonical_qds:
+        violations.append(
+            f"{rel}: quality_data_sheets may only be carried by canonical "
+            "data/**/QDS_*.yaml records"
+        )
+    return violations
+
+
+def check_repository_record_carriers(
+    root: Path = REPO, exclude_paths: Iterable[Path] = ()
+) -> list[str]:
+    """Inspect YAML outside normal record discovery for hidden Eval/QDS rows."""
+    excluded = {path.absolute() for path in exclude_paths}
+    violations: list[str] = []
+    for path in repository_yaml_paths(root):
+        if path.absolute() in excluded:
+            continue
+        try:
+            doc = strict_yaml_load(path.read_text())
+        except (yaml.YAMLError, OSError, UnicodeError) as exc:
+            try:
+                shown = path.absolute().relative_to(root.absolute())
+            except ValueError:
+                shown = path
+            violations.append(
+                f"{shown}: cannot inspect YAML for noncanonical Eval/QDS "
+                f"carriers ({type(exc).__name__}): {exc}"
+            )
+            continue
+        if not isinstance(doc, dict):
+            continue
+        violations.extend(check_record_carrier_route(doc, path, root))
+        violations.extend(check_qds_contract_floor(doc, path, root))
+    return violations
 
 
 def _check_data_record_filename(doc: dict[str, Any], rel: Path) -> list[str]:
@@ -1589,6 +1788,121 @@ def check_corpus_refs(doc: Any, rel: Path, indices: CorpusIndices) -> list[str]:
         for run in doc.get("evaluation_runs", []) or []
         if isinstance(run, dict) and run.get("id")
     }
+    for context_i, context in enumerate(doc.get("qds_emission_contexts", []) or []):
+        if not isinstance(context, dict):
+            continue
+        context_path = f"$.qds_emission_contexts[{context_i}]"
+        context_id = context.get("id")
+        if not (
+            rel.parts
+            and rel.parts[0] == "data"
+            and rel.name.startswith("EVAL_")
+            and rel.suffix == ".yaml"
+        ):
+            violations.append(
+                f"{rel}: {context_path} must live in a canonical data/**/EVAL_*.yaml "
+                "source carrier"
+            )
+        qds_ref = context.get("qds_ref")
+        qds_target = None
+        if isinstance(qds_ref, str):
+            qds_target = _resolve(
+                qds_ref,
+                "quality_data_sheet",
+                indices,
+                rel,
+                f"{context_path}.qds_ref",
+                violations,
+            )
+        else:
+            violations.append(
+                f"{rel}: {context_path}.qds_ref must name a QualityDataSheet"
+            )
+        source_refs = context.get("source_evaluation_run_refs")
+        if not isinstance(source_refs, list) or not source_refs or not all(
+            isinstance(ref, str) for ref in source_refs
+        ):
+            violations.append(
+                f"{rel}: {context_path}.source_evaluation_run_refs must be a "
+                "non-empty list of EvaluationRun ids"
+            )
+            source_refs = []
+        elif len(source_refs) != len(set(source_refs)):
+            violations.append(
+                f"{rel}: {context_path}.source_evaluation_run_refs repeats an id"
+            )
+        for ref_i, run_ref in enumerate(source_refs):
+            _resolve(
+                run_ref,
+                "evaluation_run",
+                indices,
+                rel,
+                f"{context_path}.source_evaluation_run_refs[{ref_i}]",
+                violations,
+            )
+        owner_ref = context.get("owner_evaluation_run_ref")
+        if not isinstance(owner_ref, str) or owner_ref not in source_refs:
+            violations.append(
+                f"{rel}: {context_path}.owner_evaluation_run_ref must name one of "
+                "its source EvaluationRuns"
+            )
+        elif owner_ref not in local_run_ids:
+            violations.append(
+                f"{rel}: {context_path}.owner_evaluation_run_ref must resolve in "
+                "the same document"
+            )
+        if context.get("coverage_scope") != "partial":
+            violations.append(
+                f"{rel}: {context_path}.coverage_scope must be 'partial'"
+            )
+        if qds_target is not None and isinstance(qds_target.node, dict):
+            qds = qds_target.node
+            if str(qds.get("emitter_contract_version") or "") != "3":
+                violations.append(
+                    f"{rel}: {context_path}.qds_ref must target emitter contract 3"
+                )
+            expected_pairs = (
+                ("emission_context_ref", context_id),
+                ("structure_ref", context.get("structure_ref")),
+                ("subject_ref", context.get("subject_ref")),
+                ("issued_at", context.get("issued_at")),
+                ("coverage_scope", context.get("coverage_scope")),
+                ("scope_notes", context.get("scope_notes")),
+                ("headline_verdict", context.get("headline_verdict")),
+            )
+            for field, expected in expected_pairs:
+                actual = qds.get(field)
+                if field == "issued_at":
+                    actual_time = _canonical_datetime_text(actual)
+                    values_match = (
+                        actual_time is not None
+                        and actual_time == _canonical_datetime_text(expected)
+                    )
+                else:
+                    values_match = str(actual or "") == str(expected or "")
+                if not values_match:
+                    violations.append(
+                        f"{rel}: {context_path}.{field} differs from target QDS "
+                        f"{qds_ref!r}"
+                    )
+            qds_refs = qds.get("derived_from_evaluation_run_refs") or []
+            if source_refs != qds_refs:
+                violations.append(
+                    f"{rel}: {context_path}.source_evaluation_run_refs differs "
+                    f"from target QDS {qds_ref!r} derivation refs"
+                )
+            identity = qds.get("identity_block")
+            qds_description = (
+                identity.get("description") if isinstance(identity, dict) else None
+            )
+            if str(qds_description or "") != str(
+                context.get("identity_description") or ""
+            ):
+                violations.append(
+                    f"{rel}: {context_path}.identity_description differs from "
+                    f"target QDS {qds_ref!r} identity_block.description"
+                )
+
     for pin_i, pin in enumerate(doc.get("qds_replay_pins", []) or []):
         if not isinstance(pin, dict):
             continue
@@ -1642,6 +1956,58 @@ def check_corpus_refs(doc: Any, rel: Path, indices: CorpusIndices) -> list[str]:
                 violations.append(
                     f"{rel}: {pin_path}.emitter_contract_version {pin_contract!r} "
                     f"differs from target QDS {qds_ref!r} contract {qds_contract!r}"
+                )
+            pin_context_ref = pin.get("qds_emission_context_ref")
+            qds_context_ref = qds_target.node.get("emission_context_ref")
+            contract_3_partial = (
+                pin_contract == "3"
+                and qds_target.node.get("coverage_scope") == "partial"
+            )
+            if contract_3_partial:
+                if not isinstance(pin_context_ref, str):
+                    violations.append(
+                        f"{rel}: {pin_path}.qds_emission_context_ref is required "
+                        "for a partial emitter-contract-3 QDS"
+                    )
+                else:
+                    context_target = _resolve(
+                        pin_context_ref,
+                        "qds_emission_context",
+                        indices,
+                        rel,
+                        f"{pin_path}.qds_emission_context_ref",
+                        violations,
+                    )
+                    if pin_context_ref != qds_context_ref:
+                        violations.append(
+                            f"{rel}: {pin_path}.qds_emission_context_ref differs "
+                            f"from target QDS {qds_ref!r}"
+                        )
+                    if (
+                        context_target is not None
+                        and isinstance(context_target.node, dict)
+                        and context_target.node.get("qds_ref") != qds_ref
+                    ):
+                        violations.append(
+                            f"{rel}: {pin_path}.qds_emission_context_ref targets a "
+                            "context owned by another QDS"
+                        )
+                digest = pin.get("source_qds_emission_context_sha256")
+                if not isinstance(digest, str) or not re.fullmatch(
+                    r"[0-9a-f]{64}", digest
+                ):
+                    violations.append(
+                        f"{rel}: {pin_path}.source_qds_emission_context_sha256 "
+                        "must be a lowercase SHA-256 digest for a partial "
+                        "emitter-contract-3 QDS"
+                    )
+            elif pin_context_ref is not None or pin.get(
+                "source_qds_emission_context_sha256"
+            ) is not None:
+                violations.append(
+                    f"{rel}: {pin_path} carries partial-sheet emission-context "
+                    f"fields under contract/scope {pin_contract!r}/"
+                    f"{qds_target.node.get('coverage_scope')!r}"
                 )
 
     def check(
@@ -1990,6 +2356,39 @@ def check_corpus_refs(doc: Any, rel: Path, indices: CorpusIndices) -> list[str]:
     for qds_i, qds in enumerate(doc.get("quality_data_sheets") or []):
         if not isinstance(qds, dict):
             continue
+        qds_path = f"$.quality_data_sheets[{qds_i}]"
+        qds_contract = str(qds.get("emitter_contract_version") or "")
+        qds_scope = qds.get("coverage_scope")
+        context_ref = qds.get("emission_context_ref")
+        if qds_contract == "3" and qds_scope == "partial":
+            if not isinstance(context_ref, str) or not context_ref.strip():
+                violations.append(
+                    f"{rel}: {qds_path}.emission_context_ref is required for a "
+                    "partial emitter-contract-3 QDS"
+                )
+            else:
+                context_target = _resolve(
+                    context_ref,
+                    "qds_emission_context",
+                    indices,
+                    rel,
+                    f"{qds_path}.emission_context_ref",
+                    violations,
+                )
+                if (
+                    context_target is not None
+                    and isinstance(context_target.node, dict)
+                    and context_target.node.get("qds_ref") != qds.get("id")
+                ):
+                    violations.append(
+                        f"{rel}: {qds_path}.emission_context_ref targets a context "
+                        "owned by another QDS"
+                    )
+        elif context_ref is not None:
+            violations.append(
+                f"{rel}: {qds_path}.emission_context_ref is only permitted on a "
+                "partial emitter-contract-3 QDS"
+            )
         refs = qds.get("derived_from_evaluation_run_refs") or []
         seen_refs: set[str] = set()
         qds_structure = qds.get("structure_ref")
@@ -2060,6 +2459,8 @@ def check_record(
         return []
     violations: list[str] = []
     rel = yaml_path.relative_to(REPO)
+    violations += check_record_carrier_route(doc, yaml_path)
+    violations += check_qds_contract_floor(doc, yaml_path)
 
     for collection in ("catalog_tasks", "tools", "metric_definitions"):
         seen_ids: set[str] = set()
@@ -2207,6 +2608,12 @@ def main() -> int:
                 file=sys.stderr,
             )
             failed = True
+
+    for violation in check_repository_record_carriers(
+        REPO, (path for path, _doc in records)
+    ):
+        print(f"FAIL: {violation}", file=sys.stderr)
+        failed = True
 
     corpus_indices = build_corpus_indices(records)
     for violation in check_duplicate_ids(corpus_indices):

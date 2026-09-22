@@ -16,6 +16,7 @@ import yaml
 import qds_emit
 import qds_emit_contract_v1
 import qds_emit_contract_v2
+import qds_emit_contract_v3
 import check_qds_trust_invariant as trust_guard
 
 
@@ -101,6 +102,8 @@ def write_fixture(
     mutate_qds: Callable[[dict[str, Any]], None] | None = None,
     coverage_scope: str = "cumulative",
     scope_notes: str | None = None,
+    with_context: bool = False,
+    contract_version: str = qds_emit.QDS_EMITTER_CONTRACT_VERSION,
 ) -> tuple[Path, Path]:
     write_catalog(root)
     eval_run = {
@@ -144,6 +147,20 @@ def write_fixture(
         "tools": tool_snapshot,
         "evaluation_runs": [eval_run],
     }
+    if with_context:
+        source_document["qds_emission_contexts"] = [{
+            "id": "QDS_fixture_emission_context",
+            "qds_ref": "QDS_fixture",
+            "owner_evaluation_run_ref": "EVAL_fixture",
+            "structure_ref": "1abc",
+            "subject_ref": "artifact:test-model",
+            "source_evaluation_run_refs": ["EVAL_fixture"],
+            "issued_at": issued_at,
+            "coverage_scope": coverage_scope,
+            "scope_notes": scope_notes,
+            "identity_description": "Pinned fixture context identity.",
+            "headline_verdict": "Pinned fixture context headline.",
+        }]
     measured_ids = {
         str(row.get("metric_definition_ref"))
         for row in measurements
@@ -183,6 +200,7 @@ def write_fixture(
                 coverage_scope=coverage_scope,
                 scope_notes=scope_notes,
                 issued_at=issued_at,
+                emitter_contract_version=contract_version,
             )
         except qds_emit.QdsCompletenessError:
             # Some tests deliberately construct an invalid source (for example
@@ -200,7 +218,7 @@ def write_fixture(
                 )
             qds = {
                 "id": "QDS_fixture",
-                "emitter_contract_version": qds_emit.QDS_EMITTER_CONTRACT_VERSION,
+                "emitter_contract_version": contract_version,
                 "structure_ref": "1abc",
                 "derived_from_evaluation_run_refs": ["EVAL_fixture"],
                 "issued_at": issued_at,
@@ -218,20 +236,17 @@ def write_fixture(
         qds_emit.TOOL_ASSUMPTIONS_PATH = old_assumptions
     qds_path = root / "data" / "x" / "QDS_fixture.yaml"
     canonical_text = qds_emit.yaml_dump({"quality_data_sheets": [qds]})
-    source_document["qds_replay_pins"] = [
-        {
+    replay_pin = {
             "id": "QDS_fixture_replay_pin",
             "qds_ref": "QDS_fixture",
             "source_evaluation_run_refs": ["EVAL_fixture"],
-            "emitter_contract_version": qds_emit.QDS_EMITTER_CONTRACT_VERSION,
+            "emitter_contract_version": contract_version,
             "canonical_qds_sha256": hashlib.sha256(
                 canonical_text.encode("utf-8")
             ).hexdigest(),
             "emitter_source_sha256": hashlib.sha256(
                 Path(
-                    trust_guard.REPLAY_CONTRACT_EMITTERS[
-                        qds_emit.QDS_EMITTER_CONTRACT_VERSION
-                    ].__file__
+                    trust_guard.REPLAY_CONTRACT_EMITTERS[contract_version].__file__
                 ).read_bytes()
             ).hexdigest(),
             "source_tools_sha256": snapshot_digest("tools", tool_snapshot),
@@ -242,7 +257,15 @@ def write_fixture(
                 "assumptions", source_document["assumptions"]
             ),
         }
-    ]
+    if with_context:
+        replay_pin.update({
+            "qds_emission_context_ref": "QDS_fixture_emission_context",
+            "source_qds_emission_context_sha256": snapshot_digest(
+                "qds_emission_contexts",
+                source_document["qds_emission_contexts"],
+            ),
+        })
+    source_document["qds_replay_pins"] = [replay_pin]
     eval_path.write_text(yaml.safe_dump(source_document, sort_keys=False))
     if mutate_qds:
         mutate_qds(qds)
@@ -581,6 +604,79 @@ with tempfile.TemporaryDirectory() as tmp:
 
 with tempfile.TemporaryDirectory() as tmp:
     root = Path(tmp)
+    eval_path, _ = write_fixture(
+        root,
+        [NON_CCTBX],
+        coverage_scope="partial",
+        scope_notes="Only the fixture T06 measurement.",
+        with_context=True,
+    )
+    code, out = run_guard(root)
+    check("typed partial contract-3 context passes pinned replay", code, 0)
+    check("typed context replay is clean", "FAIL" not in out, True)
+
+    eval_doc = yaml.safe_load(eval_path.read_text())
+    eval_doc["qds_emission_contexts"][0]["headline_verdict"] = (
+        "Mutated source context headline."
+    )
+    eval_path.write_text(yaml.safe_dump(eval_doc, sort_keys=False))
+    code, out = run_guard(root)
+    check("source context drift invalidates its replay pin", code, 1)
+    check(
+        "source context digest drift is diagnosed",
+        "source_qds_emission_context_sha256" in out,
+        True,
+    )
+
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    eval_path, _ = write_fixture(
+        root,
+        [NON_CCTBX],
+        coverage_scope="partial",
+        scope_notes="Only the fixture T06 measurement.",
+        with_context=True,
+    )
+    eval_doc = yaml.safe_load(eval_path.read_text())
+    eval_doc["qds_emission_contexts"][0]["headline_verdict"] = (
+        "Mutated but freshly pinned context headline."
+    )
+    eval_doc["qds_replay_pins"][0][
+        "source_qds_emission_context_sha256"
+    ] = snapshot_digest(
+        "qds_emission_contexts", eval_doc["qds_emission_contexts"]
+    )
+    eval_path.write_text(yaml.safe_dump(eval_doc, sort_keys=False))
+    code, out = run_guard(root)
+    check("repinned context drift still fails deterministic replay", code, 1)
+    check(
+        "repinned context drift is diagnosed as replay divergence",
+        "frozen contract-3 replay" in out,
+        True,
+    )
+
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    eval_path, _ = write_fixture(
+        root,
+        [NON_CCTBX],
+        coverage_scope="partial",
+        scope_notes="Only the fixture T06 measurement.",
+        with_context=True,
+    )
+    eval_doc = yaml.safe_load(eval_path.read_text())
+    del eval_doc["qds_replay_pins"][0]["source_qds_emission_context_sha256"]
+    eval_path.write_text(yaml.safe_dump(eval_doc, sort_keys=False))
+    code, out = run_guard(root)
+    check("contract-3 partial pin requires a context digest", code, 1)
+    check(
+        "missing context digest is explicit",
+        "source_qds_emission_context_sha256" in out,
+        True,
+    )
+
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
 
     def omit_row(qds: dict[str, Any]) -> None:
         qds["cross_tool_coverage"]["task_coverage"].pop()
@@ -716,10 +812,83 @@ check(
     True,
 )
 check(
-    "trust guard registers both retained emitter contracts",
-    set(trust_guard.REPLAY_CONTRACT_EMITTERS),
-    {"1", "2"},
+    "contract 3 is retained in a module distinct from the current emitter",
+    Path(qds_emit_contract_v3.__file__).resolve()
+    != Path(qds_emit.__file__).resolve(),
+    True,
 )
+check(
+    "trust guard registers all retained emitter contracts",
+    set(trust_guard.REPLAY_CONTRACT_EMITTERS),
+    {"1", "2", "3"},
+)
+
+_retained_qds_rel = Path(
+    "data/coscientists/openscientist/QDS_1sar_cdba2c07_2026-09-21.yaml"
+)
+_retained_qds_source = REPO / _retained_qds_rel
+_retained_qds_doc = yaml.safe_load(_retained_qds_source.read_text())
+_retained_qds = _retained_qds_doc["quality_data_sheets"][0]
+check(
+    "the exact September 21 sheet retains its historical contract",
+    trust_guard._is_frozen_retained_contract(
+        _retained_qds_source, REPO, _retained_qds
+    ),
+    True,
+)
+check(
+    "a renamed historical sheet cannot inherit its retained contract",
+    trust_guard._is_frozen_retained_contract(
+        REPO / "data/x/QDS_renamed_history.yaml", REPO, _retained_qds
+    ),
+    False,
+)
+_wrong_retained_identity = copy.deepcopy(_retained_qds)
+_wrong_retained_identity["id"] = "QDS_backdated_copy"
+check(
+    "a changed QDS identity cannot inherit a retained contract",
+    trust_guard._is_frozen_retained_contract(
+        _retained_qds_source, REPO, _wrong_retained_identity
+    ),
+    False,
+)
+with tempfile.TemporaryDirectory() as tmp:
+    _history_root = Path(tmp)
+    _history_copy = _history_root / _retained_qds_rel
+    _history_copy.parent.mkdir(parents=True)
+    shutil.copy2(_retained_qds_source, _history_copy)
+    _history_copy.write_bytes(_history_copy.read_bytes() + b"\n")
+    _tampered_history_allowed = trust_guard._is_frozen_retained_contract(
+        _history_copy, _history_root, _retained_qds
+    )
+check(
+    "a byte change invalidates the retained-contract authorization",
+    _tampered_history_allowed,
+    False,
+)
+
+for retained_version in ("1", "2"):
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_fixture(
+            root,
+            [NON_CCTBX],
+            coverage_scope="partial",
+            scope_notes="Bounded downgrade-regression fixture.",
+            contract_version=retained_version,
+        )
+        code, out = run_guard(root)
+    check(
+        f"new contract-{retained_version} QDS is rejected despite a valid replay pin",
+        code,
+        1,
+    )
+    check(
+        f"contract-{retained_version} downgrade has a replay-only diagnostic",
+        "retained contracts are replay-only" in out
+        and "must use current emitter contract 3" in out,
+        True,
+    )
 
 with tempfile.TemporaryDirectory() as tmp:
     root = Path(tmp)
@@ -766,7 +935,9 @@ def run_projection_mutation(
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         write_catalog(root)
-        data_dir = root / "data" / "x"
+        # Preserve the exact historical path: its retained contract is admitted
+        # only when path, identity, timestamp, and complete file bytes match.
+        data_dir = root / "data" / "coscientists" / "openscientist"
         data_dir.mkdir(parents=True, exist_ok=True)
         eval_source = (
             REPO

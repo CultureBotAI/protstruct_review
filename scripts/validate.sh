@@ -169,8 +169,9 @@ if ! "${PYTHON}" "${REPO_ROOT}/scripts/test_qds_emit.py"; then
   fail "qds_emit regression"
 fi
 
-# 4b. T15 SS-agreement pure-logic unit tests (parsing/collapse/agreement; no
-#     mkdssp/biotite needed, so safe to run anywhere).
+# 4b. T15 SS-agreement pure-logic and retained-evidence tests. No mkdssp is
+#     invoked; exact P-SEA replay is conditional on the recorded optional
+#     biotite version, while retained assignments and arithmetic always replay.
 if ! "${PYTHON}" "${REPO_ROOT}/scripts/test_t15_ss_agreement.py"; then
   fail "t15_ss_agreement unit tests"
 fi

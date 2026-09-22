@@ -401,6 +401,15 @@ classes:
           replays a retained emitter contract against source-owned snapshots and
           compares the result with a stable canonical byte projection, without
           reading the current emitter, catalog, or registries.
+      qds_emission_contexts:
+        range: QdsEmissionContext
+        multivalued: true
+        inlined_as_list: true
+        description: >-
+          Source-owned recipes for contract-3 partial-QDS identity, scope, and
+          headline prose. These records prevent stale run-level summaries from
+          being concatenated into a current partial sheet and are content-pinned
+          alongside the replay boundary.
       tool_recommendations:
         range: ToolRecommendation
         multivalued: true
@@ -1146,6 +1155,50 @@ classes:
 
   # ---------------------------------------------------- quality data sheet
 
+  QdsEmissionContext:
+    description: >-
+      Source-owned, QDS-specific presentation and scope recipe. It binds one
+      immutable sheet to the exact ordered EvaluationRuns, structure, subject,
+      issue time, coverage boundary, identity description, and headline used by
+      emitter contract 3. It does not alter or supersede source measurements.
+    attributes:
+      id:
+        identifier: true
+        required: true
+      qds_ref:
+        range: QualityDataSheet
+        required: true
+      owner_evaluation_run_ref:
+        range: EvaluationRun
+        required: true
+        description: >-
+          The one EvaluationRun whose canonical source document owns this context.
+      structure_ref:
+        range: Structure
+        required: true
+      subject_ref:
+        range: string
+        required: true
+      source_evaluation_run_refs:
+        range: EvaluationRun
+        multivalued: true
+        required: true
+      issued_at:
+        range: datetime
+        required: true
+      coverage_scope:
+        range: QdsCoverageScope
+        required: true
+      scope_notes:
+        range: string
+        required: true
+      identity_description:
+        range: string
+        required: true
+      headline_verdict:
+        range: string
+        required: true
+
   QdsReplayPin:
     description: >-
       Content-addressed replay boundary stored with the source EvaluationRun.
@@ -1164,6 +1217,9 @@ classes:
         range: EvaluationRun
         multivalued: true
         required: true
+      qds_emission_context_ref:
+        range: QdsEmissionContext
+        description: Required for partial emitter-contract-3 replay boundaries.
       emitter_contract_version:
         required: true
       canonical_qds_sha256:
@@ -1180,6 +1236,11 @@ classes:
         pattern: '^[0-9a-f]{64}$'
       source_tool_assumptions_sha256:
         required: true
+        pattern: '^[0-9a-f]{64}$'
+      source_qds_emission_context_sha256:
+        description: >-
+          Canonical digest of the source-owned QdsEmissionContext snapshot.
+          Required for partial emitter-contract-3 replay boundaries.
         pattern: '^[0-9a-f]{64}$'
 
   QualityDataSheet:
@@ -1203,6 +1264,9 @@ classes:
         range: EvaluationRun
         multivalued: true
         required: true
+      emission_context_ref:
+        range: QdsEmissionContext
+        description: Source-owned QDS recipe required by partial emitter contract 3.
       coverage_scope:
         range: QdsCoverageScope
         description: Cumulative sheet or explicitly bounded partial update.

@@ -10,7 +10,9 @@ against a source-owned canonical byte pin. Later emitter, catalog, or registry
 changes therefore cannot reinterpret it.
 Historical sheets are exempt only when their repository path, QDS id, exact
 issue timestamp, and full-file digest match the frozen allowlist below; an
-arbitrary backdated or edited file is not history.
+arbitrary backdated or edited file is not history. Retained emitter contracts
+remain available for deterministic replay, but only exact content-pinned
+artifacts that predate the current contract may declare one.
 
 Network-free. ``--root`` exists for the tests.
 """
@@ -29,6 +31,7 @@ import yaml
 
 import qds_emit_contract_v1
 import qds_emit_contract_v2
+import qds_emit_contract_v3
 
 try:
     from strict_yaml import strict_yaml_load
@@ -83,10 +86,29 @@ LEGACY_QDS: dict[str, tuple[str, str, str]] = {
     ),
 }
 
+# Contract implementations are retained so an immutable sheet can always be
+# replayed with the code that issued it. They are not alternate authoring modes:
+# every new QDS must use the current contract. This separate allowlist keeps the
+# September 21 sheet under full modern replay validation while binding its old
+# contract declaration to one exact historical artifact.
+RETAINED_CONTRACT_QDS: dict[str, tuple[str, str, str, str]] = {
+    "data/coscientists/openscientist/QDS_1sar_cdba2c07_2026-09-21.yaml": (
+        "QDS_1sar_cdba2c07_2026-09-21",
+        "2026-09-22T09:14:00+00:00",
+        "1",
+        "c76d100e1ba98389c723d153e7acc5133dafdf2e9de58350c833726db18bc76f",
+    ),
+}
+
+CURRENT_QDS_EMITTER_CONTRACT_VERSION = (
+    qds_emit_contract_v3.QDS_EMITTER_CONTRACT_VERSION
+)
+
 
 def _relative(path: Path, root: Path) -> str:
+    """Return a normalized lexical path without resolving symlink identity."""
     try:
-        return path.resolve().relative_to(root.resolve()).as_posix()
+        return path.absolute().relative_to(root.absolute()).as_posix()
     except ValueError:
         return path.as_posix()
 
@@ -106,6 +128,44 @@ def _is_frozen_legacy(path: Path, root: Path, qds: dict[str, Any]) -> bool:
     )
 
 
+def _is_frozen_retained_contract(
+    path: Path, root: Path, qds: dict[str, Any]
+) -> bool:
+    """Return whether an old contract belongs to one exact replayed artifact."""
+    expected = RETAINED_CONTRACT_QDS.get(_relative(path, root))
+    if expected is None:
+        return False
+    try:
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return False
+    return expected == (
+        str(qds.get("id") or ""),
+        str(qds.get("issued_at") or ""),
+        str(qds.get("emitter_contract_version") or ""),
+        digest,
+    )
+
+
+def qds_contract_policy_error(
+    path: Path, root: Path, qds: dict[str, Any]
+) -> str | None:
+    """Reject legacy-contract declarations except on exact historical files."""
+    if _is_frozen_legacy(path, root, qds):
+        return None
+    contract_version = str(qds.get("emitter_contract_version") or "")
+    if contract_version == CURRENT_QDS_EMITTER_CONTRACT_VERSION:
+        return None
+    if _is_frozen_retained_contract(path, root, qds):
+        return None
+    return (
+        f"{path.name}: QDS {qds.get('id')!r} declares emitter contract "
+        f"{contract_version!r}; retained contracts are replay-only and every "
+        "new QDS artifact must use current emitter contract "
+        f"{CURRENT_QDS_EMITTER_CONTRACT_VERSION}"
+    )
+
+
 def _yaml_paths(root: Path, pattern: str = "*") -> list[Path]:
     """Discover both accepted YAML suffixes without double-counting paths."""
     return sorted(
@@ -122,6 +182,7 @@ class EvalRunSource:
     tools: tuple[dict[str, Any], ...]
     tool_recommendations: tuple[dict[str, Any], ...]
     assumptions: tuple[dict[str, Any], ...]
+    qds_emission_contexts: tuple[dict[str, Any], ...]
     has_tool_recommendations: bool
     has_assumptions: bool
     qds_replay_pins: tuple[dict[str, Any], ...]
@@ -152,6 +213,9 @@ def _load_eval_runs(root: Path, failures: list[str]) -> dict[str, list[EvalRunSo
                             doc.get("tool_recommendations", []) or []
                         ),
                         assumptions=tuple(doc.get("assumptions", []) or []),
+                        qds_emission_contexts=tuple(
+                            doc.get("qds_emission_contexts", []) or []
+                        ),
                         has_tool_recommendations="tool_recommendations" in doc,
                         has_assumptions="assumptions" in doc,
                         qds_replay_pins=tuple(doc.get("qds_replay_pins", []) or []),
@@ -370,6 +434,7 @@ def _validate_contract_pin(
     source_tools: list[dict[str, Any]],
     source_recommendations: list[dict[str, Any]],
     source_assumptions: list[dict[str, Any]],
+    source_contexts: list[dict[str, Any]],
     source_runs: list[dict[str, Any]],
     *,
     contract_version: str,
@@ -395,6 +460,9 @@ def _validate_contract_pin(
             f"pin for {qds_id!r}; found {len(unique)}"
         ]
     pin = next(iter(unique.values()))
+    context_required = (
+        contract_version == "3" and qds.get("coverage_scope") == "partial"
+    )
     if str(pin.get("emitter_contract_version") or "") != contract_version:
         errors.append(
             f"{path.name}: replay pin contract version does not match QDS "
@@ -412,6 +480,43 @@ def _validate_contract_pin(
             errors.append(
                 f"{path.name}: replay pin {field} must be a lowercase SHA-256 digest"
             )
+    context_ref = qds.get("emission_context_ref")
+    pin_context_ref = pin.get("qds_emission_context_ref")
+    pin_context_digest = pin.get("source_qds_emission_context_sha256")
+    if context_required:
+        if not isinstance(context_ref, str) or not context_ref.strip():
+            errors.append(
+                f"{path.name}: partial contract-3 QDS has no emission_context_ref"
+            )
+        if pin_context_ref != context_ref:
+            errors.append(
+                f"{path.name}: replay pin emission-context ref differs from the QDS"
+            )
+        if not isinstance(pin_context_digest, str) or len(pin_context_digest) != 64 \
+                or any(ch not in "0123456789abcdef" for ch in pin_context_digest):
+            errors.append(
+                f"{path.name}: replay pin source_qds_emission_context_sha256 "
+                "must be a lowercase SHA-256 digest"
+            )
+        matching_contexts = [
+            context
+            for context in source_contexts
+            if context.get("id") == context_ref
+            and context.get("qds_ref") == qds_id
+        ]
+        if len(matching_contexts) != 1:
+            errors.append(
+                f"{path.name}: partial contract-3 QDS requires exactly one "
+                f"source context {context_ref!r}; found {len(matching_contexts)}"
+            )
+    elif any(
+        value is not None
+        for value in (context_ref, pin_context_ref, pin_context_digest)
+    ):
+        errors.append(
+            f"{path.name}: emission-context fields are only permitted for a "
+            "partial contract-3 QDS"
+        )
 
     actual_inputs = {
         "emitter_source_sha256": hashlib.sha256(
@@ -425,6 +530,10 @@ def _validate_contract_pin(
             "assumptions", source_assumptions
         ),
     }
+    if context_required:
+        actual_inputs["source_qds_emission_context_sha256"] = _snapshot_digest(
+            "qds_emission_contexts", source_contexts
+        )
     for field, actual in actual_inputs.items():
         if pin.get(field) != actual:
             errors.append(
@@ -450,6 +559,7 @@ def _validate_contract_pin(
         "tools": source_tools,
         "tool_recommendations": source_recommendations,
         "assumptions": source_assumptions,
+        "qds_emission_contexts": source_contexts,
         "evaluation_runs": source_runs,
     }
     try:
@@ -458,14 +568,15 @@ def _validate_contract_pin(
             eval_path.write_text(
                 yaml.safe_dump(replay_doc, sort_keys=False, allow_unicode=True)
             )
+            context_owned = contract_version == "3" and context_required
             replayed = contract_emitter.emit_qds(
                 [eval_path],
                 qds_id=str(qds.get("id") or ""),
                 structure_id=str(qds.get("structure_ref") or ""),
-                subject_ref=qds.get("subject_ref"),
-                coverage_scope=qds.get("coverage_scope"),
-                scope_notes=qds.get("scope_notes"),
-                issued_at=qds.get("issued_at"),
+                subject_ref=None if context_owned else qds.get("subject_ref"),
+                coverage_scope=None if context_owned else qds.get("coverage_scope"),
+                scope_notes=None if context_owned else qds.get("scope_notes"),
+                issued_at=None if context_owned else qds.get("issued_at"),
                 emitter_contract_version=contract_version,
                 require_pinned_tool_snapshot=True,
             )
@@ -497,13 +608,23 @@ def _validate_contract_2_pin(*args: Any) -> list[str]:
     )
 
 
+def _validate_contract_3_pin(*args: Any) -> list[str]:
+    return _validate_contract_pin(
+        *args,
+        contract_version="3",
+        contract_emitter=qds_emit_contract_v3,
+    )
+
+
 REPLAY_CONTRACT_VALIDATORS = {
     "1": _validate_contract_1_pin,
     "2": _validate_contract_2_pin,
+    "3": _validate_contract_3_pin,
 }
 REPLAY_CONTRACT_EMITTERS = {
     "1": qds_emit_contract_v1,
     "2": qds_emit_contract_v2,
+    "3": qds_emit_contract_v3,
 }
 
 
@@ -524,6 +645,7 @@ def _rebuild_coverage(
     source_tools: list[dict[str, Any]] = []
     source_recommendations: list[dict[str, Any]] = []
     source_assumptions: list[dict[str, Any]] = []
+    source_contexts: list[dict[str, Any]] = []
     source_pins: list[dict[str, Any]] = []
     for ref in refs:
         matches = eval_runs.get(str(ref), [])
@@ -540,6 +662,9 @@ def _rebuild_coverage(
                 copy.deepcopy(matches[0].tool_recommendations)
             )
             source_assumptions.extend(copy.deepcopy(matches[0].assumptions))
+            source_contexts.extend(
+                copy.deepcopy(matches[0].qds_emission_contexts)
+            )
             source_pins.extend(copy.deepcopy(matches[0].qds_replay_pins))
             if not matches[0].has_tool_recommendations:
                 errors.append(
@@ -560,6 +685,7 @@ def _rebuild_coverage(
             "recommendations",
         ),
         (source_assumptions, "source tool-assumption snapshot", "assumptions"),
+        (source_contexts, "source QDS-emission-context snapshot", "contexts"),
     ):
         merged, merge_errors = _deduplicate_snapshot_rows(rows, label=label)
         errors.extend(f"{path.name}: {error}" for error in merge_errors)
@@ -569,6 +695,8 @@ def _rebuild_coverage(
             source_tools = merged
         elif assign == "recommendations":
             source_recommendations = merged
+        elif assign == "contexts":
+            source_contexts = merged
         else:
             source_assumptions = merged
     if errors:
@@ -693,6 +821,7 @@ def _rebuild_coverage(
                 source_tools,
                 source_recommendations,
                 source_assumptions,
+                source_contexts,
                 replay_source_runs,
             )
         )
@@ -716,6 +845,10 @@ def check_sheet(
             "(frozen path/id/timestamp/SHA-256)"
         )
         return
+
+    contract_policy_error = qds_contract_policy_error(path, root, qds)
+    if contract_policy_error is not None:
+        failures.append(contract_policy_error)
 
     qds_id = str(qds.get("id") or "<missing id>")
     coverage_scope = qds.get("coverage_scope")

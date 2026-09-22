@@ -7,8 +7,13 @@ anywhere.
 """
 from __future__ import annotations
 
+import contextlib
+import io
 import sys
+import tempfile
 from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
 import yaml
 
@@ -92,6 +97,146 @@ def test_bsa_selects_declared_interface() -> None:
     ))
     _check(rows[0]["scope_selector"] == "EVAL_x_IFACE_AB_IDENTITY",
            "BSA selects the declared interface row")
+    _check(rows[0]["id"].endswith("EVAL_x_IFACE_AB_IDENTITY"),
+           "BSA measurement id includes its interface selector")
+
+
+def test_sequence_equivalent_mapping_controls() -> None:
+    same = {"A": ("ALA", "GLY"), "B": ("ALA", "GLY")}
+    expected = t16._sequence_equivalent_mappings(same, same, ("A", "B"), ("A", "B"))
+    _check(expected == {"AB:AB", "AB:BA"},
+           "same-sequence two-chain contact requires identity and swapped controls")
+    hetero_model = {"A": ("ALA",), "B": ("GLY",)}
+    hetero_native = {"A": ("ALA",), "B": ("GLY",)}
+    expected = t16._sequence_equivalent_mappings(
+        hetero_model, hetero_native, ("A", "B"), ("A", "B")
+    )
+    _check(expected == {"AB:AB"}, "heteromer has only its sequence-compatible mapping")
+
+
+def test_mapping_controls_are_complete_and_match_bsa_chains() -> None:
+    sequences = {"A": ("ALA",), "B": ("ALA",)}
+    with mock.patch.object(t16, "_protein_chain_sequences", return_value=sequences):
+        pair = t16._validate_mapping_controls(
+            Path("model.pdb"), Path("native.pdb"), ["AB:AB", "AB:BA"], ("A", "B")
+        )
+        _check(pair == ("A", "B"), "complete controls return the bound BSA chain pair")
+        try:
+            t16._validate_mapping_controls(
+                Path("model.pdb"), Path("native.pdb"), ["AB:AB"], ("A", "B")
+            )
+        except SystemExit as exc:
+            incomplete = "missing=['AB:BA']" in str(exc)
+        else:
+            incomplete = False
+        _check(incomplete, "omitting a sequence-equivalent mapping fails loudly")
+        try:
+            t16._validate_mapping_controls(
+                Path("model.pdb"), Path("native.pdb"), ["AB:AB", "AB:BA"], ("C", "D")
+            )
+        except SystemExit as exc:
+            mismatch = "does not match mapping candidate chains" in str(exc)
+        else:
+            mismatch = False
+        _check(mismatch, "BSA chain selection must match DockQ candidate chains")
+
+
+def test_missing_native_emits_no_partial_yaml() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        model = Path(tmpdir) / "model.pdb"
+        model.write_text("END\n")
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            try:
+                t16.main([
+                    str(model), "--native", str(Path(tmpdir) / "missing.pdb"),
+                    "--subject-ref", "artifact:model", "--reference-subject-ref", "pdb:native",
+                    "--mapping", "AB:AB", "--interface-id", "IFACE_AB",
+                    "--raw-json", str(Path(tmpdir) / "raw.json"),
+                ])
+            except SystemExit as exc:
+                failed = "file not found" in str(exc)
+            else:
+                failed = False
+        _check(failed and stdout.getvalue() == "",
+               "native preflight fails before printing a valid-looking BSA prefix")
+
+
+def test_dockq_failure_leaves_no_partial_evidence() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        target = root / "evidence.json"
+
+        def failed_run(arguments):
+            Path(arguments[2]).write_text("{partial")
+            return SimpleNamespace(returncode=2, stdout="", stderr="failed")
+
+        with (
+            mock.patch.object(t16.shutil, "which", return_value="/fake/DockQ"),
+            mock.patch.object(t16, "run_capture", side_effect=failed_run),
+        ):
+            try:
+                t16.run_dockq(root / "model.pdb", root / "native.pdb", "AB:AB", target)
+            except SystemExit:
+                pass
+        leftovers = list(root.glob(".*evidence.json.*.tmp"))
+        _check(not target.exists() and not leftovers,
+               "failed DockQ removes its temporary/partial JSON and leaves target reusable")
+
+
+def test_repeated_mappings_publish_as_one_group() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        model = root / "model.pdb"
+        native = root / "native.pdb"
+        model.write_text("END\n")
+        native.write_text("END\n")
+        finals = [root / "identity.json", root / "swapped.json"]
+        calls = 0
+
+        def fail_second(_model, _native, mapping, destination):
+            nonlocal calls
+            calls += 1
+            destination.write_text('{"complete": true}')
+            if calls == 2:
+                raise SystemExit("second mapping failed")
+            return {
+                "GlobalDockQ": 0.9,
+                "best_mapping_str": mapping,
+                "best_result": {},
+            }
+
+        stdout = io.StringIO()
+        with (
+            mock.patch.object(t16, "REPO", root),
+            mock.patch.object(t16, "_validate_mapping_controls", return_value=("A", "B")),
+            mock.patch.object(
+                t16,
+                "run_biotite_bsa",
+                return_value={"bsa": 1.0, "chains": ["A", "B"]},
+            ),
+            mock.patch.object(t16, "run_dockq", side_effect=fail_second),
+            contextlib.redirect_stdout(stdout),
+        ):
+            try:
+                t16.main([
+                    str(model), "--native", str(native),
+                    "--subject-ref", "artifact:model",
+                    "--reference-subject-ref", "artifact:native",
+                    "--mapping", "AB:AB", "--interface-id", "IFACE_ID",
+                    "--raw-json", str(finals[0]),
+                    "--mapping", "AB:BA", "--interface-id", "IFACE_SWAP",
+                    "--raw-json", str(finals[1]),
+                ])
+            except SystemExit:
+                pass
+        leftovers = list(root.glob(".*.group.*.json"))
+        _check(
+            not any(path.exists() for path in finals)
+            and not leftovers
+            and stdout.getvalue() == "",
+            "a later mapping failure publishes neither evidence file nor YAML",
+        )
 
 
 def main() -> int:
@@ -100,6 +245,11 @@ def main() -> int:
     test_buried_surface_area()
     test_render_keeps_comparison_provenance()
     test_bsa_selects_declared_interface()
+    test_sequence_equivalent_mapping_controls()
+    test_mapping_controls_are_complete_and_match_bsa_chains()
+    test_missing_native_emits_no_partial_yaml()
+    test_dockq_failure_leaves_no_partial_evidence()
+    test_repeated_mappings_publish_as_one_group()
     print("\nall t16_interface_quality unit tests passed")
     return 0
 

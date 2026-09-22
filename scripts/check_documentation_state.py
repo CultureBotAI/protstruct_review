@@ -25,6 +25,7 @@ STATE_RE = re.compile(
 )
 TASK_RE = re.compile(r"T\d{2}")
 DRIVER_RE = re.compile(r"driving_example_(T\d{2})\.md")
+TASK_SECTION_RE = re.compile(r"^### (T\d{2}) — (.+)$", re.MULTILINE)
 
 RUNNABLE_WRAPPERS = {
     "T15": ("scripts/t15_ss_agreement.py",),
@@ -71,10 +72,27 @@ def expected_task_sequence(task_ids: list[str]) -> list[str]:
     return [f"T{number:02d}" for number in range(1, len(task_ids) + 1)]
 
 
+def markdown_task_sections(text: str) -> dict[str, tuple[str, str]]:
+    """Return task id -> (heading name, complete section text)."""
+    headings = list(TASK_SECTION_RE.finditer(text))
+    return {
+        match.group(1): (
+            match.group(2).strip(),
+            text[match.start() : headings[index + 1].start()]
+            if index + 1 < len(headings)
+            else text[match.start() :],
+        )
+        for index, match in enumerate(headings)
+    }
+
+
 def collect_problems(repo_root: Path) -> list[str]:
     problems: list[str] = []
     try:
-        task_ids = catalog_task_ids(repo_root / "ref/catalog.yaml")
+        catalog_path = repo_root / "ref/catalog.yaml"
+        task_ids = catalog_task_ids(catalog_path)
+        catalog_document = yaml.safe_load(catalog_path.read_text()) or {}
+        catalog_tasks = catalog_document.get("catalog_tasks") or []
     except (OSError, ValueError, yaml.YAMLError) as exc:
         return [str(exc)]
 
@@ -104,6 +122,34 @@ def collect_problems(repo_root: Path) -> list[str]:
         problems.append("catalog tasks missing drivers: " + ", ".join(missing_drivers))
     if extra_drivers:
         problems.append("drivers without catalog tasks: " + ", ".join(extra_drivers))
+
+    markdown_path = repo_root / "ref/tasks_and_evaluations.md"
+    try:
+        markdown_sections = markdown_task_sections(markdown_path.read_text())
+    except OSError as exc:
+        problems.append(f"ref/tasks_and_evaluations.md: cannot read: {exc}")
+        markdown_sections = {}
+    for task in catalog_tasks:
+        if not isinstance(task, dict) or not isinstance(task.get("id"), str):
+            continue
+        task_id = task["id"]
+        section = markdown_sections.get(task_id)
+        if section is None:
+            problems.append(f"ref/tasks_and_evaluations.md: missing section for {task_id}")
+            continue
+        heading_name, section_text = section
+        expected_name = task.get("task_name")
+        if isinstance(expected_name, str) and heading_name != expected_name:
+            problems.append(
+                f"ref/tasks_and_evaluations.md: {task_id} heading {heading_name!r} "
+                f"does not match catalog task_name {expected_name!r}"
+            )
+        for tool_ref in task.get("phenix_tool_refs") or []:
+            if isinstance(tool_ref, str) and tool_ref not in section_text:
+                problems.append(
+                    f"ref/tasks_and_evaluations.md: {task_id} does not name "
+                    f"catalog PHENIX tool {tool_ref!r}"
+                )
 
     first_id, last_id = task_ids[0], task_ids[-1]
     expected_state = (first_id, last_id, len(task_ids), len(driver_ids))

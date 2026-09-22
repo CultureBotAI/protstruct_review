@@ -73,8 +73,10 @@ Where this file and the handbook overlap, they must agree; if they drift, that i
     only the coverage row it excuses.
     Non-cctbx-only coverage is deliberately NOT gated — the rule forbids self-grading, not
     independent-only evidence. Committed QDS files are checked by
-    `scripts/check_qds_trust_invariant.py` (validate step 3c) with pre-2026-08-13 history
-    grandfathered by name.
+    `scripts/check_qds_trust_invariant.py` (validate step 3c), which rebuilds coverage from the
+    named source EvaluationRuns using canonical `Tool.family` values. Historical exceptions are
+    frozen by exact repository path, QDS id, and issue timestamp in that guard; a date alone never
+    grants an exemption.
 13c. **A verdict must name the criterion it was judged against (#567).** A `pass_status` that
     asserts an outcome — `pass`, `fail_by_oracle`, `pass_with_caveat`,
     `pass_criterion_fail_headline`, `fail_by_oracle_within_cctbx` — requires a non-empty

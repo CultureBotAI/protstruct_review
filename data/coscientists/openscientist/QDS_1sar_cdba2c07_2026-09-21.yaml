@@ -153,7 +153,7 @@ quality_data_sheets:
         value_text: Incorrect
       evidence_refs:
       - data/coscientists/openscientist/EVIDENCE_1sar_cdba2c07_2026-09-21_dockq_AB_BA.json
-      notes: Required homo-oligomer mapping control. The 0.9382 spread relative to
+      notes: Required same-sequence crystallographic-contact mapping control. The 0.9382 spread relative to
         AB:AB demonstrates that the disclosed mapping is load-bearing; a high score
         alone would not establish the mapping. This remains an exercise-path result
         on a crystallographic contact, not biological-assembly validation.
@@ -309,7 +309,7 @@ quality_data_sheets:
     justification: Community-standard continuous interface-quality score.
     as_of_date: '2026-07-21'
   headline_verdict: 'This partial T15/T16 follow-up closes the missing oracle-side
-    T15 content gate and T16 homo-oligomer mapping control on the packaged round-4
+    T15 content gate and T16 same-sequence crystallographic-contact mapping control on the packaged round-4
     model; it does not re-measure or carry forward any other task. T15''s paired-oracle
     calculation is interpretable (content 0.3750; agreement 0.8802) but does not establish
     improvement, and the agent-versus-DSSP clause remains unevaluable because the

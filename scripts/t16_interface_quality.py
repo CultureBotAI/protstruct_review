@@ -31,10 +31,13 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import itertools
 import json
+import os
 import re
 import shutil
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -97,8 +100,14 @@ def run_biotite_bsa(
         if missing:
             _fail(f"selected chain(s) {missing} absent from model; available: {available}.")
         atoms = atoms[(atoms.chain_id == chains[0]) | (atoms.chain_id == chains[1])]
-    complex_sasa = float(np.nansum(struc.sasa(atoms)))
-    separated = sum(float(np.nansum(struc.sasa(atoms[atoms.chain_id == c]))) for c in chains)
+    # Pin the quadrature explicitly.  The benchmark and the committed 1SAR
+    # values were produced with biotite 1.7.1's 1000-point default; relying on
+    # an implicit default would let a dependency update silently redefine BSA.
+    complex_sasa = float(np.nansum(struc.sasa(atoms, point_number=1000)))
+    separated = sum(
+        float(np.nansum(struc.sasa(atoms[atoms.chain_id == c], point_number=1000)))
+        for c in chains
+    )
     return {
         "bsa": buried_surface_area(complex_sasa, separated),
         "chains": chains,
@@ -113,19 +122,132 @@ def run_dockq(
     exe = shutil.which("DockQ")
     if exe is None:
         _fail("DockQ not found on PATH — install it (`pip install DockQ`).")
+    raw_json_path = raw_json_path.resolve()
     if raw_json_path.exists():
         _fail(f"raw DockQ evidence already exists; refusing to overwrite: {raw_json_path}")
     raw_json_path.parent.mkdir(parents=True, exist_ok=True)
-    cmd = [exe, "--json", str(raw_json_path), str(model), str(native), "--mapping", mapping]
-    proc = run_capture(cmd)
-    if proc.returncode != 0:
-        _fail(f"DockQ failed ({proc.returncode}): {proc.stderr.strip() or proc.stdout.strip()}")
-    if not raw_json_path.is_file() or not raw_json_path.stat().st_size:
-        _fail(f"DockQ produced no output: {proc.stderr.strip() or proc.stdout.strip()}")
+    with tempfile.NamedTemporaryFile(
+        dir=raw_json_path.parent,
+        prefix=f".{raw_json_path.name}.",
+        suffix=".tmp",
+        delete=False,
+    ) as handle:
+        temporary = Path(handle.name)
+    # DockQ owns creation of its JSON output.  Give it a nonexistent temporary
+    # destination, validate that file, then publish with one atomic rename.
+    temporary.unlink()
     try:
-        return json.loads(raw_json_path.read_text())
-    except (OSError, json.JSONDecodeError) as exc:
-        _fail(f"retained DockQ output is not valid JSON ({raw_json_path}): {exc}")
+        cmd = [exe, "--json", str(temporary), str(model), str(native), "--mapping", mapping]
+        proc = run_capture(cmd)
+        if proc.returncode != 0:
+            _fail(
+                f"DockQ failed ({proc.returncode}): "
+                f"{proc.stderr.strip() or proc.stdout.strip()}"
+            )
+        if not temporary.is_file() or not temporary.stat().st_size:
+            _fail(f"DockQ produced no output: {proc.stderr.strip() or proc.stdout.strip()}")
+        try:
+            result = json.loads(temporary.read_text())
+        except (OSError, json.JSONDecodeError) as exc:
+            _fail(f"DockQ output is not valid JSON ({temporary}): {exc}")
+        temporary.replace(raw_json_path)
+        return result
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _mapping_parts(mapping: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Parse DockQ's one-character PDB chain mapping syntax."""
+    pieces = mapping.split(":")
+    if len(pieces) != 2 or not all(pieces):
+        _fail(f"invalid DockQ mapping {mapping!r}; expected MODELCHAINS:NATIVECHAINS.")
+    model_chains = tuple(pieces[0])
+    native_chains = tuple(pieces[1])
+    if len(model_chains) != len(native_chains) or len(set(model_chains)) != len(model_chains):
+        _fail(f"invalid DockQ mapping {mapping!r}; chains must form a one-to-one mapping.")
+    if len(set(native_chains)) != len(native_chains):
+        _fail(f"invalid DockQ mapping {mapping!r}; native chains are repeated.")
+    return model_chains, native_chains
+
+
+def _protein_chain_sequences(model: Path) -> dict[str, tuple[str, ...]]:
+    """Return residue-name sequences for each protein chain in a PDB model."""
+    try:
+        import biotite.structure as struc
+        import biotite.structure.io.pdb as pdb
+    except ImportError:
+        _fail("biotite not importable — install it (`pip install biotite`).")
+    arr = pdb.get_structure(pdb.PDBFile.read(str(model)), model=1)
+    protein = arr[struc.filter_amino_acids(arr)]
+    sequences: dict[str, tuple[str, ...]] = {}
+    for chain_id in sorted(set(protein.chain_id)):
+        chain = protein[protein.chain_id == chain_id]
+        starts = struc.get_residue_starts(chain)
+        sequences[str(chain_id)] = tuple(str(chain.res_name[index]) for index in starts)
+    return sequences
+
+
+def _sequence_equivalent_mappings(
+    model_sequences: dict[str, tuple[str, ...]],
+    native_sequences: dict[str, tuple[str, ...]],
+    model_chains: tuple[str, ...],
+    native_chains: tuple[str, ...],
+) -> set[str]:
+    """Enumerate every sequence-equivalent bijection for the selected chains."""
+    expected: set[str] = set()
+    for permutation in itertools.permutations(native_chains):
+        if all(
+            model_sequences.get(model_chain) == native_sequences.get(native_chain)
+            and model_sequences.get(model_chain) is not None
+            for model_chain, native_chain in zip(model_chains, permutation, strict=True)
+        ):
+            expected.add(f"{''.join(model_chains)}:{''.join(permutation)}")
+    return expected
+
+
+def _validate_mapping_controls(
+    model: Path,
+    native: Path,
+    mappings: list[str],
+    selected_chains: tuple[str, str] | None,
+) -> tuple[str, str]:
+    """Require one chain pair and every sequence-equivalent native bijection."""
+    parsed = [_mapping_parts(mapping) for mapping in mappings]
+    model_chains, first_native = parsed[0]
+    if len(model_chains) != 2:
+        _fail("T16 currently scores one two-chain interface; mappings must name two chains.")
+    native_set = set(first_native)
+    for mapping, (candidate, native_order) in zip(mappings, parsed, strict=True):
+        if candidate != model_chains or set(native_order) != native_set:
+            _fail(
+                f"mapping {mapping!r} does not describe the same candidate/native chain sets "
+                f"as {mappings[0]!r}."
+            )
+    if selected_chains is not None and set(selected_chains) != set(model_chains):
+        _fail(
+            f"--chains {':'.join(selected_chains)} does not match mapping candidate chains "
+            f"{''.join(model_chains)}."
+        )
+    expected = _sequence_equivalent_mappings(
+        _protein_chain_sequences(model),
+        _protein_chain_sequences(native),
+        model_chains,
+        tuple(sorted(native_set)),
+    )
+    if not expected:
+        _fail(
+            "none of the requested candidate/native chains have exactly matching protein "
+            "sequences; plausible mapping controls cannot be established."
+        )
+    provided = set(mappings)
+    if provided != expected:
+        missing = sorted(expected - provided)
+        extra = sorted(provided - expected)
+        _fail(
+            "DockQ requires every sequence-equivalent mapping control; "
+            f"missing={missing}, unexpected={extra}."
+        )
+    return model_chains[0], model_chains[1]
 
 
 def extract(result: dict[str, Any]) -> dict[str, Any]:
@@ -207,7 +329,7 @@ def render_bsa_yaml(
 ) -> str:
     """Emit the buried-surface-area measurement row."""
     row = {
-        "id": f"{eval_id}_M_T16_bsa",
+        "id": f"{eval_id}_M_T16_bsa_{re.sub(r'[^A-Za-z0-9]+', '_', interface_id).strip('_')}",
         "catalog_task_ref": "T16",
         "stage": "final",
         "scope": "interface",
@@ -259,7 +381,15 @@ def main(argv: list[str] | None = None) -> int:
             _fail("--chains must name two distinct chain ids as CHAIN1:CHAIN2.")
         selected_chains = (parts[0], parts[1])
 
+    dockq_options_present = bool(args.mapping or args.interface_id or args.raw_json)
+    if args.native is None and dockq_options_present:
+        _fail("--mapping, --interface-id, and --raw-json require --native.")
+
     if args.native is not None:
+        if not args.native.exists():
+            _fail(f"file not found: {args.native}")
+        if args.native.suffix.lower() not in {".pdb", ".ent"}:
+            _fail("only PDB native/reference input is currently supported.")
         if not args.subject_ref or not args.reference_subject_ref:
             _fail("DockQ requires both --subject-ref and --reference-subject-ref.")
         counts = (len(args.mapping), len(args.interface_id), len(args.raw_json))
@@ -268,38 +398,83 @@ def main(argv: list[str] | None = None) -> int:
                 "DockQ requires one --mapping, --interface-id, and --raw-json per "
                 f"scored mapping (received {counts})."
             )
+        if len(set(args.mapping)) != len(args.mapping):
+            _fail("duplicate --mapping values are not allowed.")
+        if len(set(args.interface_id)) != len(args.interface_id):
+            _fail("duplicate --interface-id values are not allowed.")
+        resolved_raw = [path.resolve() for path in args.raw_json]
+        if len(set(resolved_raw)) != len(resolved_raw):
+            _fail("duplicate --raw-json destinations are not allowed.")
+        for path in resolved_raw:
+            if not path.is_relative_to(REPO.resolve()):
+                _fail(f"raw DockQ evidence must be stored inside the repository: {path}")
+            if path.exists():
+                _fail(f"raw DockQ evidence already exists; refusing to overwrite: {path}")
+        mapped_pair = _validate_mapping_controls(
+            args.model, args.native, args.mapping, selected_chains
+        )
+        if selected_chains is None:
+            selected_chains = mapped_pair
 
-    # Buried surface area is a model-intrinsic property — always emitted.
+    # Build all stdout in memory.  A failed native/mapping leg must not leave a
+    # valid-looking prefix that can be mistaken for a successful invocation.
     bsa_interface_id = args.interface_id[0] if args.interface_id else f"{args.eval_id}_IFACE"
-    print(render_bsa_yaml(
+    rendered = [render_bsa_yaml(
         run_biotite_bsa(args.model, selected_chains),
         args.eval_id,
         bsa_interface_id,
         args.subject_ref,
-    ), end="")
+    )]
 
     # DockQ needs a reference; emit its rows only when --native is supplied.
     if args.native is not None:
-        if not args.native.exists():
-            _fail(f"file not found: {args.native}")
-        for mapping, interface_id, raw_json in zip(
-            args.mapping, args.interface_id, args.raw_json, strict=True
-        ):
-            summary = extract(run_dockq(args.model, args.native, mapping, raw_json))
-            if summary["mapping"] and summary["mapping"] != mapping:
-                _fail(
-                    f"DockQ reported mapping {summary['mapping']!r}, expected {mapping!r}."
+        staged: list[tuple[Path, Path]] = []
+        published: list[Path] = []
+        try:
+            for mapping, interface_id, raw_json in zip(
+                args.mapping, args.interface_id, args.raw_json, strict=True
+            ):
+                final_path = raw_json.resolve()
+                with tempfile.NamedTemporaryFile(
+                    dir=final_path.parent,
+                    prefix=f".{final_path.name}.group.",
+                    suffix=".json",
+                    delete=False,
+                ) as handle:
+                    stage_path = Path(handle.name)
+                stage_path.unlink()
+                staged.append((stage_path, final_path))
+                summary = extract(
+                    run_dockq(args.model, args.native, mapping, stage_path)
                 )
-            evidence_ref = str(raw_json.resolve().relative_to(REPO)) \
-                if raw_json.resolve().is_relative_to(REPO) else str(raw_json.resolve())
-            print(render_yaml(
-                summary,
-                args.eval_id,
-                interface_id,
-                args.subject_ref,
-                args.reference_subject_ref,
-                evidence_ref,
-            ), end="")
+                if summary["mapping"] and summary["mapping"] != mapping:
+                    _fail(
+                        f"DockQ reported mapping {summary['mapping']!r}, expected {mapping!r}."
+                    )
+                evidence_ref = str(final_path.relative_to(REPO.resolve()))
+                rendered.append(render_yaml(
+                    summary,
+                    args.eval_id,
+                    interface_id,
+                    args.subject_ref,
+                    args.reference_subject_ref,
+                    evidence_ref,
+                ))
+            # Publish only after every mapping and rendered row has succeeded.
+            # Hard-link creation is atomic and refuses an unexpected pre-existing
+            # destination, unlike rename/replace which could overwrite evidence.
+            for stage_path, final_path in staged:
+                os.link(stage_path, final_path)
+                published.append(final_path)
+            for stage_path, _final_path in staged:
+                stage_path.unlink(missing_ok=True)
+        except BaseException:
+            for stage_path, _final_path in staged:
+                stage_path.unlink(missing_ok=True)
+            for path in published:
+                path.unlink(missing_ok=True)
+            raise
+    sys.stdout.write("".join(rendered))
     return 0
 
 

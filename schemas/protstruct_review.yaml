@@ -1593,6 +1593,12 @@ classes:
       id:
         identifier: true
         required: true
+      subject_ref:
+        range: string
+        description: Concrete candidate artefact compared by this row.
+      reference_subject_ref:
+        range: string
+        description: Concrete reference artefact used by this comparison.
       candidate_ref:
         range: Structure
         required: true
@@ -1726,6 +1732,9 @@ classes:
       id:
         identifier: true
         required: true
+      subject_ref:
+        range: string
+        description: Concrete model or artefact on which this outlier was measured.
       residue_ref:
         range: ResidueRef
         required: true
@@ -1756,6 +1765,9 @@ classes:
       id:
         identifier: true
         required: true
+      subject_ref:
+        range: string
+        description: Concrete model or map artefact in which this peak was measured.
       sigma_level:
         range: float
         required: true
@@ -1786,6 +1798,9 @@ classes:
       id:
         identifier: true
         required: true
+      subject_ref:
+        range: string
+        description: Concrete model or artefact containing this flagged region.
       structure_ref:
         range: Structure
         required: true
@@ -1815,6 +1830,9 @@ classes:
       id:
         identifier: true
         required: true
+      subject_ref:
+        range: string
+        description: Concrete model or artefact on which this value was measured.
       residue_ref:
         range: ResidueRef
         required: true
@@ -1900,6 +1918,9 @@ classes:
       id:
         identifier: true
         required: true
+      subject_ref:
+        range: string
+        description: Concrete model or artefact receiving this assignment.
       structure_ref:
         range: Structure
         required: true
@@ -1927,6 +1948,9 @@ classes:
       id:
         identifier: true
         required: true
+      subject_ref:
+        range: string
+        description: Concrete model or artefact receiving this domain assignment.
       structure_ref:
         range: Structure
         required: true
@@ -2001,6 +2025,9 @@ classes:
       id:
         identifier: true
         required: true
+      subject_ref:
+        range: string
+        description: Concrete NMR ensemble artefact summarized by this row.
       structure_ref:
         range: Structure
         required: true
@@ -2023,6 +2050,9 @@ classes:
       id:
         identifier: true
         required: true
+      subject_ref:
+        range: string
+        description: Concrete prediction-ensemble artefact summarized by this row.
       structure_ref:
         range: Structure
         required: true
@@ -2051,6 +2081,9 @@ classes:
         identifier: true
         required: true
         description: e.g. "1sar:A:Ca33" (structure:chain:CCD+resnum).
+      subject_ref:
+        range: string
+        description: Concrete model or artefact containing this ligand.
       structure_ref:
         range: Structure
         required: true
@@ -2223,6 +2256,9 @@ classes:
       id:
         identifier: true
         required: true
+      subject_ref:
+        range: string
+        description: Concrete model or artefact containing this site.
       structure_ref:
         range: Structure
         required: true

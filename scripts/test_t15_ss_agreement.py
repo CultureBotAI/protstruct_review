@@ -81,17 +81,31 @@ def test_collapse_maps() -> None:
 
 def test_agreement() -> None:
     a = {("A", "1", ""): "C", ("A", "2", ""): "E", ("A", "3", ""): "H", ("A", "4", ""): "H"}
-    b = {("A", "1", ""): "C", ("A", "2", ""): "E", ("A", "3", ""): "C", ("A", "9", ""): "H"}
+    b = {("A", "1", ""): "C", ("A", "2", ""): "E", ("A", "3", ""): "C", ("A", "4", ""): "H"}
     r = t15.agreement(a, b)
-    # shared residues: 1,2,3 → 2 of 3 agree; residue 4 (dssp-only) and 9 (biotite-only) excluded.
-    _check(r["n_scored"] == 3, f"agreement scores only shared residues (got {r['n_scored']})")
-    _check(r["n_agree"] == 2 and r["fraction"] == round(2 / 3, 4),
-           f"agreement fraction = 2/3 (got {r['fraction']})")
-    _check(r["n_dssp"] == 4 and r["n_biotite"] == 4 and r["n_dropped"] == 2,
-           f"per-assigner + dropped counts reported (got dssp={r['n_dssp']} "
+    _check(r["n_scored"] == 4, f"agreement scores the complete matched set (got {r['n_scored']})")
+    _check(r["n_agree"] == 3 and r["fraction"] == 0.75,
+           f"agreement fraction = 3/4 (got {r['fraction']})")
+    _check(r["n_dssp"] == 4 and r["n_biotite"] == 4 and r["n_dropped"] == 0,
+           f"per-assigner counts prove no dropped residues (got dssp={r['n_dssp']} "
            f"biotite={r['n_biotite']} dropped={r['n_dropped']})")
     _check(r["dssp_ss_content"] == 0.75,
            f"DSSP content uses all DSSP rows, not the shared denominator (got {r['dssp_ss_content']})")
+
+
+def test_mismatched_residue_sets_fail() -> None:
+    dssp = {("A", str(i), ""): ("H" if i <= 30 else "C") for i in range(1, 101)}
+    biotite = {("A", str(i), ""): "C" for i in range(91, 101)}
+    try:
+        t15.agreement(dssp, biotite)
+    except SystemExit as exc:
+        message = str(exc)
+    else:
+        message = ""
+    _check(
+        "different residue sets" in message and "DSSP-only=90" in message,
+        "a tiny biased intersection is unevaluable instead of agreement=1.0/content=0.30",
+    )
 
 
 def test_content_detects_degenerate_agreement() -> None:
@@ -132,6 +146,7 @@ def main() -> int:
     test_dssp_uses_toolchain_override_and_runner()
     test_collapse_maps()
     test_agreement()
+    test_mismatched_residue_sets_fail()
     test_content_detects_degenerate_agreement()
     test_render_emits_agreement_and_content()
     test_insertion_code_not_conflated()

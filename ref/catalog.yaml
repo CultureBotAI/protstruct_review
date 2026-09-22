@@ -441,7 +441,8 @@ catalog_tasks:
     Deposited biological assembly and CAPRI/DockQ class where available. BSA is stored
     as total two-sided ΣSASA(separated chains) - SASA(complex); double PISA's per-side
     interface_area before comparison and require agreement within max(3% of the mean,
-    30 Å²) under matched 1.4 Å probe and protein-only selection.
+    30 Å²) under a matched 1.4 Å probe. The benchmark compares biotite protein-only
+    selection with PISA's API assembly-molecule surface (which may include hetero atoms).
   example_dataset: PDB 1BRS (barnase-barstar); PDB 2SIC (subtilisin-SSI)
 - id: T17
   task_name: NMR ensemble/restraint validation
@@ -1784,8 +1785,9 @@ metric_definitions:
   description: >-
     Total two-sided buried surface area for a chain-chain or assembly interface,
     ΣSASA(separated chains) - SASA(complex). PISA interface_area is per side and
-    must be doubled before comparison. With matched 1.4 Å probe and protein-only
-    selection, require agreement within max(3% of the two totals' mean, 30 Å²).
+    must be doubled before comparison. With a matched 1.4 Å probe, require agreement
+    within max(3% of the two totals' mean, 30 Å²). The empirical PISA comparison uses
+    its API assembly-molecule surface, not a matched protein-only selection.
   applicable_task_refs:
   - T16
   scope: interface

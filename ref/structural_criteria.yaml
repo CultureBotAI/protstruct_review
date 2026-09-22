@@ -171,7 +171,7 @@ criteria:
       - tool: biotite SASA
         family: non_cctbx
         installed: true
-        recipe: "python: sum(nansum(struc.sasa(chain)) for chain) - nansum(struc.sasa(complex))  # Shrake-Rupley, 1.4 Å probe"
+        recipe: "python: sum(nansum(struc.sasa(chain, point_number=1000)) for chain) - nansum(struc.sasa(complex, point_number=1000))  # Shrake-Rupley, 1.4 Å probe"
         recipe_language: python
         recipe_notes: "Installable stand-in for PISA (scripts/t16_interface_quality.py). SASA depends on probe radius / point density / water & hetero inclusion."
       - tool: PISA/PDBePISA
@@ -189,7 +189,7 @@ criteria:
     cross_tool_agreement:
       tolerance: "|Δ| ≤ max(3 % of the two total two-sided values' mean, 30 Å²)"
       tools: "biotite SASA vs PISA (PDBe API)"
-      precondition: "matched probe radius (1.4 Å), protein-only atom selection, and PISA's per-side interface_area doubled; chain pairs that are fragments of one molecule must be excluded first (they are not interfaces); one-sided — biotite read high in 25/25 benchmark interfaces, so a negative Δ is off-distribution"
+      precondition: "matched probe radius (1.4 Å), biotite protein-only selection versus the benchmarked PISA API assembly-molecule surface (which may include ligand/hetero atoms), and PISA's per-side interface_area doubled; do not claim the PISA leg is matched protein-only; chain pairs that are fragments of one molecule must be excluded first (they are not interfaces); one-sided — biotite read high in 25/25 benchmark interfaces, so a negative Δ is off-distribution"
       provenance:
         - benchmark
       citation: "ref/research/tolerance_benchmark_interface_bsa.md — 25 interfaces / 17 entries, median |Δ| 1.2 %, p90 2.4 % (scripts/bench_t16_bsa_vs_pisa.py, issues #18 and #25)"

@@ -175,8 +175,12 @@ def biotite_bsa(model: Path, chain_a: str, chain_b: str) -> float | None:
     b = pair[pair.chain_id == chain_b]
     if not a.array_length() or not b.array_length():
         return None
-    complex_sasa = float(np.nansum(struc.sasa(pair)))
-    separated = float(np.nansum(struc.sasa(a))) + float(np.nansum(struc.sasa(b)))
+    # Pin the biotite 1.7.1 default used for the published benchmark.  The
+    # 1000-point quadrature is load-bearing (and differs measurably from 100).
+    complex_sasa = float(np.nansum(struc.sasa(pair, point_number=1000)))
+    separated = float(np.nansum(struc.sasa(a, point_number=1000))) + float(
+        np.nansum(struc.sasa(b, point_number=1000))
+    )
     return separated - complex_sasa
 
 

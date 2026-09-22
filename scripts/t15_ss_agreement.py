@@ -152,7 +152,11 @@ def run_biotite(model: Path) -> dict[ResKey, str]:
         sse = struc.annotate_sse(chain)  # one 'a'/'b'/'c' per residue, in order
         starts = struc.get_residue_starts(chain)  # first-atom index per residue, in order
         if len(sse) != len(starts):
-            continue  # assignment/residue mismatch on this chain; skip rather than misalign
+            _fail(
+                "biotite assignment/residue mismatch on chain "
+                f"{chain_id!r}: {len(sse)} assignments for {len(starts)} residues; "
+                "refusing to drop the chain from the agreement denominator."
+            )
         for idx, code in zip(starts, sse):
             resnum = str(chain.res_id[idx])
             icode = str(chain.ins_code[idx]).strip() if has_icode else ""
@@ -161,10 +165,24 @@ def run_biotite(model: Path) -> dict[ResKey, str]:
 
 
 def agreement(a: dict[ResKey, str], b: dict[ResKey, str]) -> dict[str, Any]:
-    """Three-state agreement fraction over residues both assigners scored."""
+    """Three-state agreement over one exactly matched residue-key set.
+
+    Scoring an intersection is unsafe here: dropping coil-rich or otherwise
+    difficult residues can simultaneously inflate agreement and leave the DSSP
+    content gate on a different denominator.  The wrapper therefore treats any
+    key-set mismatch as an unevaluable run rather than silently shortening it.
+    """
     shared = sorted(set(a) & set(b))
     if not shared:
         _fail("no residues in common between the two assigners — cannot compute agreement.")
+    dssp_only = sorted(set(a) - set(b))
+    biotite_only = sorted(set(b) - set(a))
+    if dssp_only or biotite_only:
+        _fail(
+            "assigners scored different residue sets: "
+            f"DSSP-only={len(dssp_only)}, biotite-only={len(biotite_only)}; "
+            "T15 agreement and its DSSP H+E content gate require the same denominator."
+        )
     matches = sum(1 for k in shared if a[k] == b[k])
     per_residue = [
         {"chain": c, "resnum": r, "icode": i, "dssp": a[k], "biotite": b[k], "agree": a[k] == b[k]}
@@ -176,7 +194,7 @@ def agreement(a: dict[ResKey, str], b: dict[ResKey, str]) -> dict[str, Any]:
         "n_dssp": len(a),
         "n_biotite": len(b),
         "n_scored": len(shared),
-        "n_dropped": len(set(a) ^ set(b)),  # residues assigned by only one tool
+        "n_dropped": 0,
         "n_agree": matches,
         "fraction": round(matches / len(shared), 4),
         "dssp_h": dssp_counts["H"],

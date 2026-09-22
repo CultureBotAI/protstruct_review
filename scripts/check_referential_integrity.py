@@ -13,10 +13,12 @@ walks every YAML record under `ref/` and `data/examples/` and verifies:
     to requiring every nested `structure_ref` to match its own record's. See
     `check_structure_refs` — this bullet described a check that was never
     implemented until #118.
-  - EvaluationRun, MeasurementValue, and run-owned Assumption ids are unique across
-    the corpus, so a string reference never resolves by file ordering
+  - EvaluationRun, QualityDataSheet, MeasurementValue, and run-owned Assumption ids
+    are unique across the corpus, so a string reference never resolves by file ordering
   - QDS input/source refs, superseded assumptions, and `EVAL_*` evidence refs resolve;
-    paired source run/measurement refs name the run that actually owns the measurement
+    paired source run/measurement refs name an input run that actually owns the
+    measurement, and every wrapped scalar exactly matches that source measurement
+  - repository-path evidence refs stay inside the repository and resolve to a file
 
 Exits non-zero with a per-violation report on the first miss. Wired into
 `scripts/validate.sh` so `linkml-validate` and the integrity check both
@@ -29,8 +31,9 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any, Iterable, Sequence
+from urllib.parse import urlsplit
 
 import yaml
 
@@ -39,6 +42,22 @@ REPO = Path(__file__).resolve().parent.parent
 CATALOG = REPO / "ref" / "catalog.yaml"
 
 KNOWN_TASK_IDS = {f"T{n:02d}" for n in range(1, 18)}
+EVIDENCE_FILE_SUFFIXES = {
+    ".cif",
+    ".csv",
+    ".json",
+    ".log",
+    ".map",
+    ".md",
+    ".mtz",
+    ".out",
+    ".pdb",
+    ".tsv",
+    ".txt",
+    ".xml",
+    ".yaml",
+    ".yml",
+}
 
 
 @dataclass(frozen=True)
@@ -50,6 +69,7 @@ class RefTarget:
     owner_run_id: str | None = None
     run_date: Any = None
     superseded_assumption_refs: tuple[str, ...] = ()
+    node: dict[str, Any] | None = None
 
 
 CorpusIndices = dict[str, dict[str, list[RefTarget]]]
@@ -101,6 +121,7 @@ def build_corpus_indices(records: Sequence[tuple[Path, Any]]) -> CorpusIndices:
     """Index cross-document reference targets and retain their owning runs."""
     indices: CorpusIndices = {
         "evaluation_run": {},
+        "quality_data_sheet": {},
         "measurement": {},
         "assumption": {},
     }
@@ -121,6 +142,7 @@ def build_corpus_indices(records: Sequence[tuple[Path, Any]]) -> CorpusIndices:
                                 pointer=f"{child}[{i}]",
                                 owner_run_id=run.get("id"),
                                 run_date=run.get("run_date"),
+                                node=assumption,
                             ),
                         )
                 add_assumptions(value, child, run, file)
@@ -131,6 +153,18 @@ def build_corpus_indices(records: Sequence[tuple[Path, Any]]) -> CorpusIndices:
     for file, doc in records:
         if not isinstance(doc, dict):
             continue
+        for i, qds in enumerate(doc.get("quality_data_sheets") or []):
+            if not isinstance(qds, dict):
+                continue
+            _add_target(
+                indices["quality_data_sheet"],
+                qds.get("id"),
+                RefTarget(
+                    file=file,
+                    pointer=f"$.quality_data_sheets[{i}]",
+                    node=qds,
+                ),
+            )
         for i, run in enumerate(doc.get("evaluation_runs") or []):
             if not isinstance(run, dict):
                 continue
@@ -149,6 +183,7 @@ def build_corpus_indices(records: Sequence[tuple[Path, Any]]) -> CorpusIndices:
                     owner_run_id=run.get("id"),
                     run_date=run.get("run_date"),
                     superseded_assumption_refs=superseded,
+                    node=run,
                 ),
             )
             for j, measurement in enumerate(run.get("measurements") or []):
@@ -162,6 +197,7 @@ def build_corpus_indices(records: Sequence[tuple[Path, Any]]) -> CorpusIndices:
                         pointer=f"{run_path}.measurements[{j}]",
                         owner_run_id=run.get("id"),
                         run_date=run.get("run_date"),
+                        node=measurement,
                     ),
                 )
             add_assumptions(run, run_path, run, file)
@@ -172,6 +208,7 @@ def check_duplicate_ids(indices: CorpusIndices) -> list[str]:
     """Report ids whose references would have more than one possible target."""
     labels = {
         "evaluation_run": "EvaluationRun",
+        "quality_data_sheet": "QualityDataSheet",
         "measurement": "MeasurementValue",
         "assumption": "Assumption",
     }
@@ -199,6 +236,7 @@ def _resolve(
 ) -> RefTarget | None:
     labels = {
         "evaluation_run": "EvaluationRun",
+        "quality_data_sheet": "QualityDataSheet",
         "measurement": "MeasurementValue",
         "assumption": "Assumption",
     }
@@ -224,18 +262,144 @@ def _iso_date(value: Any) -> str | None:
     return text[:10] if len(text) >= 10 else None
 
 
+WRAPPED_MEASUREMENT_FIELDS = {
+    "source_measurement_ref": "id",
+    "source_evaluation_run_ref": "_source_evaluation_run_ref",
+    "metric_definition_ref": "metric_definition_ref",
+    "oracle_tool_ref": "oracle_tool_ref",
+    "oracle_family": "oracle_family",
+    "pass_status": "pass_status",
+    "pass_criterion": "pass_criterion",
+    "subject_ref": "subject_ref",
+    "reference_subject_ref": "reference_subject_ref",
+    "evidence_refs": "evidence_refs",
+    "stage": "stage",
+    "scope": "scope",
+    "scope_selector": "scope_selector",
+    "notes": "notes",
+}
+
+
+def _expected_wrapped_measurement(
+    measurement: dict[str, Any], owner_run_id: str
+) -> dict[str, Any]:
+    """Reconstruct the TypedMeasurementValue that qds_emit must have copied."""
+    expected = dict(measurement.get("oracle_measure") or {})
+    source = dict(measurement)
+    source["_source_evaluation_run_ref"] = owner_run_id
+    for output_key, source_key in WRAPPED_MEASUREMENT_FIELDS.items():
+        value = source.get(source_key)
+        if value not in (None, ""):
+            expected[output_key] = value
+    return expected
+
+
+def _repository_relative(path: Path) -> Path | None:
+    """Normalize an absolute or caller-relative path to a repository path."""
+    if not path.is_absolute():
+        return path
+    try:
+        return path.resolve().relative_to(REPO.resolve())
+    except ValueError:
+        return None
+
+
+def _check_qds_filename(doc: dict[str, Any], rel: Path) -> list[str]:
+    """Keep record-shaped data YAML discoverable by every QDS gate."""
+    qds_rows = doc.get("quality_data_sheets") or []
+    repo_rel = _repository_relative(rel)
+    if not qds_rows or repo_rel is None or not repo_rel.parts or repo_rel.parts[0] != "data":
+        return []
+
+    violations: list[str] = []
+    if not repo_rel.stem.startswith("QDS_"):
+        violations.append(
+            f"{rel}: a data YAML carrying quality_data_sheets must use a QDS_*.yaml filename"
+        )
+    for i, qds in enumerate(qds_rows):
+        if not isinstance(qds, dict):
+            continue
+        qds_id = qds.get("id")
+        if isinstance(qds_id, str) and repo_rel.stem != qds_id:
+            violations.append(
+                f"{rel}: $.quality_data_sheets[{i}].id = {qds_id!r} does not match "
+                f"filename stem {repo_rel.stem!r}"
+            )
+    return violations
+
+
+def _is_url_or_citation_with_slash(ref: str) -> bool:
+    """Return true for URL/DOI syntax that must not be treated as a repo path."""
+    parsed = urlsplit(ref)
+    if parsed.scheme and parsed.scheme.lower() != "file":
+        return True
+    # Bare DOI syntax is common in citation fields and contains a slash.
+    prefix, separator, _suffix = ref.partition("/")
+    return bool(separator and prefix.startswith("10.") and prefix[3:].isdigit())
+
+
+def _check_evidence_path(ref: str, rel: Path, path: str) -> list[str]:
+    """Resolve path-like evidence refs without constraining citation keys or URLs."""
+    repository_uri = ref.startswith("repo:")
+    path_text = ref.removeprefix("repo:") if repository_uri else ref
+    posix_path = Path(path_text)
+    windows_path = PureWindowsPath(path_text)
+    if posix_path.is_absolute() or windows_path.is_absolute() or ref.startswith("file:"):
+        return [f"{rel}: {path} = {ref!r} is an absolute, non-portable evidence path"]
+    if not repository_uri and _is_url_or_citation_with_slash(ref):
+        return []
+    raw_path = path_text.split("#", 1)[0]
+    if (
+        not repository_uri
+        and "/" not in path_text
+        and "\\" not in path_text
+        and not path_text.startswith(".")
+        and Path(raw_path).suffix.lower() not in EVIDENCE_FILE_SUFFIXES
+    ):
+        return []
+
+    # Repository refs use POSIX separators in YAML. Treat a backslash as path syntax
+    # (so it cannot masquerade as a citation) but reject it as non-portable.
+    if "\\" in path_text:
+        return [f"{rel}: {path} = {ref!r} is not a portable repository evidence path"]
+    resolved = (REPO / raw_path).resolve()
+    try:
+        resolved.relative_to(REPO.resolve())
+    except ValueError:
+        return [f"{rel}: {path} = {ref!r} escapes the repository"]
+    if not resolved.is_file():
+        return [f"{rel}: {path} = {ref!r} does not resolve to a repository file"]
+    return []
+
+
 def check_corpus_refs(doc: Any, rel: Path, indices: CorpusIndices) -> list[str]:
     """Resolve references whose targets can live in another YAML document."""
     violations: list[str] = []
     if not isinstance(doc, dict):
         return violations
+    violations += _check_qds_filename(doc, rel)
 
-    def check(node: Any, path: str, current_run: dict[str, Any] | None = None) -> None:
+    def check(
+        node: Any,
+        path: str,
+        current_run: dict[str, Any] | None = None,
+        current_qds: dict[str, Any] | None = None,
+    ) -> None:
         if isinstance(node, dict):
             source_run_ref = node.get("source_evaluation_run_ref")
             source_measurement_ref = node.get("source_measurement_ref")
             source_run = None
             source_measurement = None
+            has_source_run = isinstance(source_run_ref, str)
+            has_source_measurement = isinstance(source_measurement_ref, str)
+            if has_source_run != has_source_measurement:
+                missing = (
+                    "source_measurement_ref" if has_source_run else "source_evaluation_run_ref"
+                )
+                violations.append(
+                    f"{rel}: {path} must pair source_evaluation_run_ref and "
+                    f"source_measurement_ref; {missing} is missing"
+                )
             if isinstance(source_run_ref, str):
                 source_run = _resolve(
                     source_run_ref,
@@ -261,12 +425,56 @@ def check_corpus_refs(doc: Any, rel: Path, indices: CorpusIndices) -> list[str]:
                         f"belongs to {source_measurement.owner_run_id!r}, not paired "
                         f"source_evaluation_run_ref {source_run_ref!r}"
                     )
+                if current_qds is None:
+                    violations.append(
+                        f"{rel}: {path} carries source refs outside a QualityDataSheet"
+                    )
+                else:
+                    derived_refs = current_qds.get("derived_from_evaluation_run_refs") or []
+                    if source_run_ref not in derived_refs:
+                        violations.append(
+                            f"{rel}: {path}.source_evaluation_run_ref = {source_run_ref!r} "
+                            "is not an input in the enclosing QDS "
+                            "derived_from_evaluation_run_refs"
+                        )
+                source_node = source_measurement.node
+                if (
+                    source_measurement.owner_run_id == source_run_ref
+                    and isinstance(source_node, dict)
+                ):
+                    expected = _expected_wrapped_measurement(source_node, source_run_ref)
+                    if node != expected:
+                        differing = sorted(
+                            key
+                            for key in set(node) | set(expected)
+                            if node.get(key) != expected.get(key)
+                            or (key in node) != (key in expected)
+                        )
+                        violations.append(
+                            f"{rel}: {path} does not exactly match source measurement "
+                            f"{source_measurement_ref!r}; differing fields: "
+                            f"{', '.join(differing)}"
+                        )
 
             for key, value in node.items():
                 child = f"{path}.{key}"
                 if key == "evaluation_runs" and isinstance(value, list):
                     for i, run in enumerate(value):
-                        check(run, f"{child}[{i}]", run if isinstance(run, dict) else None)
+                        check(
+                            run,
+                            f"{child}[{i}]",
+                            run if isinstance(run, dict) else None,
+                            current_qds,
+                        )
+                    continue
+                if key == "quality_data_sheets" and isinstance(value, list):
+                    for i, qds in enumerate(value):
+                        check(
+                            qds,
+                            f"{child}[{i}]",
+                            current_run,
+                            qds if isinstance(qds, dict) else None,
+                        )
                     continue
                 if key == "derived_from_evaluation_run_refs" and isinstance(value, list):
                     for i, ref in enumerate(value):
@@ -309,24 +517,28 @@ def check_corpus_refs(doc: Any, rel: Path, indices: CorpusIndices) -> list[str]:
                             )
                 elif key == "evidence_refs" and isinstance(value, list):
                     for i, ref in enumerate(value):
-                        # Citation keys and repository paths intentionally remain open
-                        # strings. EVAL_* is the reserved namespace for EvaluationRun ids.
-                        if isinstance(ref, str) and ref.startswith("EVAL_"):
+                        if not isinstance(ref, str):
+                            continue
+                        evidence_path = f"{child}[{i}]"
+                        # EVAL_* is the reserved namespace for EvaluationRun ids.
+                        if ref.startswith("EVAL_"):
                             _resolve(
                                 ref,
                                 "evaluation_run",
                                 indices,
                                 rel,
-                                f"{child}[{i}]",
+                                evidence_path,
                                 violations,
                             )
+                        else:
+                            violations.extend(_check_evidence_path(ref, rel, evidence_path))
 
                 # Source refs were resolved together above so ownership can be checked.
                 if key not in {"source_evaluation_run_ref", "source_measurement_ref"}:
-                    check(value, child, current_run)
+                    check(value, child, current_run, current_qds)
         elif isinstance(node, list):
             for i, value in enumerate(node):
-                check(value, f"{path}[{i}]", current_run)
+                check(value, f"{path}[{i}]", current_run, current_qds)
 
     check(doc, "$")
 
@@ -337,6 +549,31 @@ def check_corpus_refs(doc: Any, rel: Path, indices: CorpusIndices) -> list[str]:
         if not isinstance(qds, dict):
             continue
         refs = qds.get("derived_from_evaluation_run_refs") or []
+        seen_refs: set[str] = set()
+        qds_structure = qds.get("structure_ref")
+        for run_i, run_ref in enumerate(refs):
+            if not isinstance(run_ref, str):
+                continue
+            if run_ref in seen_refs:
+                violations.append(
+                    f"{rel}: $.quality_data_sheets[{qds_i}]."
+                    f"derived_from_evaluation_run_refs[{run_i}] duplicates {run_ref!r}"
+                )
+            seen_refs.add(run_ref)
+            run_targets = indices["evaluation_run"].get(run_ref, [])
+            if len(run_targets) != 1 or not isinstance(run_targets[0].node, dict):
+                continue
+            run_structure = run_targets[0].node.get("structure_ref")
+            if (
+                isinstance(qds_structure, str)
+                and isinstance(run_structure, str)
+                and qds_structure != run_structure
+            ):
+                violations.append(
+                    f"{rel}: $.quality_data_sheets[{qds_i}].structure_ref = "
+                    f"{qds_structure!r} does not match input EvaluationRun {run_ref!r} "
+                    f"structure_ref {run_structure!r}"
+                )
         positions = {ref: i for i, ref in enumerate(refs) if isinstance(ref, str)}
         for run_i, run_ref in enumerate(refs):
             if not isinstance(run_ref, str):

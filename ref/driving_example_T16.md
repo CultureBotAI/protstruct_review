@@ -49,9 +49,11 @@ Each bullet is pass/fail; all must pass for green.
    DockQ within **± 0.01** (same-implementation noise floor ≈ 0.004); the **CAPRI class matches**,
    except it is not flagged when either score is within **± 0.03** of a class boundary
    (0.23 / 0.49 / 0.80). `[template — DockQ score]`
-2. **Buried surface area agrees.** The agent's BSA agrees with the biotite-SASA (or PISA) value within
-   **max(3 % of the two values' mean, 30 Å²)**, after matching a 1.4 Å probe and protein-only atom
-   selection. PISA's per-side `interface_area` must be doubled before applying this tolerance.
+2. **Buried surface area agrees.** The agent's protein-only BSA agrees with biotite SASA within
+   **max(3 % of the two values' mean, 30 Å²)** after matching a 1.4 Å probe and atom selection.
+   A PISA comparison instead uses the exact API convention benchmarked here: its assembly surface
+   may include ligand/hetero atoms, and its per-side `interface_area` is doubled. Do not describe
+   that PISA leg as a matched protein-only comparison.
    `[benchmark — interface buried surface area]`
 3. **CAPRI class matches the score.** The reported class is consistent with the DockQ score under the
    standard bands (High ≥ 0.80; Medium ≥ 0.49; Acceptable ≥ 0.23; Incorrect < 0.23).
@@ -60,9 +62,9 @@ Each bullet is pass/fail; all must pass for green.
    class **High**; anything else exposes a chain-mapping or parsing bug, not a model defect.
    `[calibration]`
 5. **Chain mapping disclosed.** The model→native chain mapping used by DockQ is recorded — a wrong
-   mapping silently deflates the score. For homo-oligomers, score and retain every plausible
-   same-sequence mapping control; selecting only the highest DockQ mapping does not satisfy this
-   gate.
+   mapping silently deflates the score. For selected chain sets with sequence-equivalent partners,
+   score and retain every plausible bijection; selecting only the highest DockQ mapping does not
+   satisfy this gate.
 
 ## Notes
 

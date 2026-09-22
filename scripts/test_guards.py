@@ -439,25 +439,56 @@ check("while issues bracketing them do",
 # isolation is exactly how a dangling QDS source reference used to pass.
 
 _old_doc = {"evaluation_runs": [{
-    "id": "EVAL_old", "run_date": "2026-01-01",
+    "id": "EVAL_old", "run_date": "2026-01-01", "structure_ref": "1sar",
     "measurements": [{
         "id": "EVAL_old_M_001",
         "assumptions": [{"id": "ASSUM_old"}],
     }],
 }]}
 _new_doc = {"evaluation_runs": [{
-    "id": "EVAL_new", "run_date": "2026-02-01",
+    "id": "EVAL_new", "run_date": "2026-02-01", "structure_ref": "1sar",
     "superseded_assumption_refs": ["ASSUM_old"],
-    "measurements": [{"id": "EVAL_new_M_001"}],
+    "measurements": [{
+        "id": "EVAL_new_M_001",
+        "catalog_task_ref": "T16",
+        "stage": "final",
+        "scope": "interface",
+        "scope_selector": "interface_A_B",
+        "subject_ref": "artifact:new#model.pdb",
+        "reference_subject_ref": "repo:reference.pdb",
+        "metric_definition_ref": "T16_interface_dockq_score",
+        "oracle_tool_ref": "DockQ",
+        "oracle_family": "non_cctbx",
+        "oracle_measure": {"value_numeric": 0.9, "unit": "fraction"},
+        "pass_status": "pass",
+        "pass_criterion": ">= 0.8",
+        "evidence_refs": ["ref/catalog.yaml"],
+        "notes": "retained source note",
+    }],
 }]}
 _qds_doc = {"quality_data_sheets": [{
     "id": "QDS_new",
+    "structure_ref": "1sar",
     "derived_from_evaluation_run_refs": ["EVAL_old", "EVAL_new"],
     "value": {
+        "value_numeric": 0.9,
+        "unit": "fraction",
         "source_measurement_ref": "EVAL_new_M_001",
         "source_evaluation_run_ref": "EVAL_new",
+        "metric_definition_ref": "T16_interface_dockq_score",
+        "oracle_tool_ref": "DockQ",
+        "oracle_family": "non_cctbx",
+        "pass_status": "pass",
+        "pass_criterion": ">= 0.8",
+        "subject_ref": "artifact:new#model.pdb",
+        "reference_subject_ref": "repo:reference.pdb",
+        "evidence_refs": ["ref/catalog.yaml"],
+        "stage": "final",
+        "scope": "interface",
+        "scope_selector": "interface_A_B",
+        "notes": "retained source note",
     },
-    "evidence_refs": ["EVAL_old", "PaperCitation", "data/raw-output.json"],
+    "evidence_refs": ["EVAL_old", "PaperCitation", "ref/catalog.yaml"],
 }]}
 _cross_records = [
     (Path("old.yaml"), _old_doc),
@@ -503,13 +534,105 @@ _violations = integrity.check_corpus_refs(
 check("paired source refs must name the measurement's actual owning run",
       any("belongs to 'EVAL_new', not paired" in v for v in _violations), True)
 
-_evidence = {"evidence_refs": ["PaperCitation", "data/raw-output.json", "EVAL_old"]}
-check("citation keys, paths, and a resolving EVAL evidence ref are allowed",
+_unpaired_measurement = _copy.deepcopy(_qds_doc)
+del _unpaired_measurement["quality_data_sheets"][0]["value"][
+    "source_evaluation_run_ref"]
+_violations = integrity.check_corpus_refs(
+    _unpaired_measurement, Path("unpaired-measurement.yaml"), _cross_index)
+check("source_measurement_ref is rejected without its source run pair",
+      any("must pair" in v and "source_evaluation_run_ref" in v
+          for v in _violations), True)
+
+_unpaired_run = _copy.deepcopy(_qds_doc)
+del _unpaired_run["quality_data_sheets"][0]["value"]["source_measurement_ref"]
+_violations = integrity.check_corpus_refs(
+    _unpaired_run, Path("unpaired-run.yaml"), _cross_index)
+check("source_evaluation_run_ref is rejected without its source measurement pair",
+      any("must pair" in v and "source_measurement_ref" in v
+          for v in _violations), True)
+
+_not_an_input = _copy.deepcopy(_qds_doc)
+_not_an_input["quality_data_sheets"][0]["derived_from_evaluation_run_refs"] = [
+    "EVAL_old"]
+_violations = integrity.check_corpus_refs(
+    _not_an_input, Path("not-an-input.yaml"), _cross_index)
+check("a scalar source run must be an input to its enclosing QDS",
+      any("is not an input in the enclosing QDS" in v for v in _violations), True)
+
+_source_fields = (
+    "value_numeric", "unit", "metric_definition_ref", "oracle_tool_ref",
+    "oracle_family", "pass_status", "pass_criterion", "subject_ref",
+    "reference_subject_ref", "evidence_refs", "stage", "scope",
+    "scope_selector", "notes",
+)
+for _field in _source_fields:
+    _mutated_wrapper = _copy.deepcopy(_qds_doc)
+    _mutated_wrapper["quality_data_sheets"][0]["value"][_field] = "tampered"
+    _violations = integrity.check_corpus_refs(
+        _mutated_wrapper, Path(f"tampered-{_field}.yaml"), _cross_index)
+    check(f"a wrapped {_field} must exactly match its source measurement",
+          any("does not exactly match source measurement" in v and _field in v
+              for v in _violations), True)
+
+_missing_source_field = _copy.deepcopy(_qds_doc)
+del _missing_source_field["quality_data_sheets"][0]["value"]["notes"]
+_violations = integrity.check_corpus_refs(
+    _missing_source_field, Path("missing-source-field.yaml"), _cross_index)
+check("a wrapped scalar cannot silently omit source metadata",
+      any("does not exactly match source measurement" in v and "notes" in v
+          for v in _violations), True)
+
+_outside_qds = _copy.deepcopy(_qds_doc["quality_data_sheets"][0]["value"])
+_violations = integrity.check_corpus_refs(
+    {"detached_value": _outside_qds}, Path("detached.yaml"), _cross_index)
+check("source refs outside a QualityDataSheet are rejected",
+      any("outside a QualityDataSheet" in v for v in _violations), True)
+
+_evidence = {"evidence_refs": ["PaperCitation", "ref/catalog.yaml", "EVAL_old"]}
+check("citation keys, repository paths, and a resolving EVAL evidence ref are allowed",
       integrity.check_corpus_refs(_evidence, Path("evidence.yaml"), _cross_index), [])
 _evidence["evidence_refs"].append("EVAL_missing")
 _violations = integrity.check_corpus_refs(_evidence, Path("evidence.yaml"), _cross_index)
 check("an EVAL_* evidence token is reserved and must resolve",
       any("evidence_refs[3]" in v and "EVAL_missing" in v for v in _violations), True)
+
+_missing_evidence = {"evidence_refs": ["data/does/not/exist.json"]}
+_violations = integrity.check_corpus_refs(
+    _missing_evidence, Path("missing-evidence.yaml"), _cross_index)
+check("a missing repository evidence path is rejected",
+      any("does not resolve to a repository file" in v for v in _violations), True)
+
+_missing_bare_evidence = {"evidence_refs": ["missing-output.json"]}
+_violations = integrity.check_corpus_refs(
+    _missing_bare_evidence, Path("missing-bare-evidence.yaml"), _cross_index)
+check("a missing bare evidence filename is also rejected",
+      any("does not resolve to a repository file" in v for v in _violations), True)
+
+_absolute_evidence = {"evidence_refs": ["/private/tmp/nonportable.json"]}
+_violations = integrity.check_corpus_refs(
+    _absolute_evidence, Path("absolute-evidence.yaml"), _cross_index)
+check("an absolute evidence path is rejected",
+      any("absolute, non-portable" in v for v in _violations), True)
+
+_escaping_evidence = {"evidence_refs": ["../outside-repository.json"]}
+_violations = integrity.check_corpus_refs(
+    _escaping_evidence, Path("escaping-evidence.yaml"), _cross_index)
+check("an escaping evidence path is rejected",
+      any("escapes the repository" in v for v in _violations), True)
+
+_portable_evidence = {"evidence_refs": [
+    "https://example.org/evidence/output.json", "10.1234/example/article",
+    "Smith.et.al.2024", "repo:ref/catalog.yaml#catalog",
+]}
+check("URLs, citation keys, and resolving repo: evidence refs are allowed",
+      integrity.check_corpus_refs(
+          _portable_evidence, Path("portable-evidence.yaml"), _cross_index), [])
+
+_missing_repo_uri = {"evidence_refs": ["repo:data/missing-output.json"]}
+_violations = integrity.check_corpus_refs(
+    _missing_repo_uri, Path("missing-repo-uri.yaml"), _cross_index)
+check("a missing repo: evidence URI is rejected",
+      any("does not resolve to a repository file" in v for v in _violations), True)
 
 _missing_assumption = _copy.deepcopy(_new_doc)
 _missing_assumption["evaluation_runs"][0]["superseded_assumption_refs"] = ["ASSUM_gone"]
@@ -568,13 +691,51 @@ _violations = integrity.check_corpus_refs(_qds_doc, Path("qds.yaml"), _duplicate
 check("a ref to a duplicate id is explicitly ambiguous",
       any("is ambiguous" in v for v in _violations), True)
 
+_duplicate_qds_index = integrity.build_corpus_indices([
+    (Path("first.yaml"), _qds_doc), (Path("second.yaml"), _qds_doc),
+])
+check("duplicate QualityDataSheet ids are diagnosed corpus-wide",
+      any("duplicate QualityDataSheet id 'QDS_new'" in v
+          for v in integrity.check_duplicate_ids(_duplicate_qds_index)), True)
+
+_misnamed_qds = {"quality_data_sheets": [{
+    "id": "QDS_named", "structure_ref": "1sar",
+    "derived_from_evaluation_run_refs": [],
+}]}
+_violations = integrity.check_corpus_refs(
+    _misnamed_qds, Path("data/provider/not_a_qds.yaml"), _cross_index)
+check("data YAML containing a QDS cannot escape QDS filename discovery",
+      any("must use a QDS_*.yaml filename" in v for v in _violations), True)
+check("a QDS id must exactly match its data filename stem",
+      any("does not match filename stem" in v for v in _violations), True)
+check("a correctly named QDS data file satisfies the naming convention",
+      integrity.check_corpus_refs(
+          _misnamed_qds, Path("data/provider/QDS_named.yaml"), _cross_index), [])
+
+_wrong_structure = _copy.deepcopy(_qds_doc)
+_wrong_structure["quality_data_sheets"][0]["structure_ref"] = "9zzz"
+_violations = integrity.check_corpus_refs(
+    _wrong_structure, Path("wrong-structure.yaml"), _cross_index)
+check("every QDS structure_ref must match each input run",
+      any("does not match input EvaluationRun" in v and "9zzz" in v
+          for v in _violations), True)
+
+_duplicate_input = _copy.deepcopy(_qds_doc)
+_duplicate_input["quality_data_sheets"][0][
+    "derived_from_evaluation_run_refs"].append("EVAL_new")
+_violations = integrity.check_corpus_refs(
+    _duplicate_input, Path("duplicate-input.yaml"), _cross_index)
+check("a QDS cannot list one derivation input twice",
+      any("derived_from_evaluation_run_refs" in v and "duplicates 'EVAL_new'" in v
+          for v in _violations), True)
+
 # Exercise the actual corpus through the same API, including ignored files because
 # target_paths uses Path.rglob rather than a gitignore-aware search.
 import yaml as _yaml
 _live_records = [(_path, _yaml.safe_load(_path.read_text()))
                  for _path in integrity.target_paths()]
 _live_index = integrity.build_corpus_indices(_live_records)
-check("the live corpus has no ambiguous run/measurement/assumption ids",
+check("the live corpus has no ambiguous run/QDS/measurement/assumption ids",
       integrity.check_duplicate_ids(_live_index), [])
 _live_ref_violations = []
 for _path, _doc in _live_records:
@@ -582,6 +743,21 @@ for _path, _doc in _live_records:
         _doc, _path.relative_to(REPO), _live_index)
 check("the live corpus satisfies all new cross-record references",
       _live_ref_violations, [])
+
+# --- #608: every structured row selected by subject can carry that subject --------
+_schema = _yaml.safe_load((REPO / "schemas" / "protstruct_review.yaml").read_text())
+_subject_scoped_classes = (
+    "SecondaryStructureAssignment", "DomainAssignment",
+    "PredictionEnsembleQuality", "NmrEnsembleQuality", "PairwiseComparison",
+    "ResidueOutlier", "DensityPeak", "FlaggedRegion", "PerResidueValue",
+    "Ligand", "Site",
+)
+for _class_name in _subject_scoped_classes:
+    check(f"{_class_name} can identify its concrete subject",
+          "subject_ref" in _schema["classes"][_class_name]["attributes"], True)
+check("PairwiseComparison can identify its concrete reference subject",
+      "reference_subject_ref" in
+      _schema["classes"]["PairwiseComparison"]["attributes"], True)
 
 
 print(f"\nall guard unit tests passed ({PASSED} checks)")

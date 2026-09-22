@@ -17,7 +17,24 @@ def make_repo(root: Path, task_ids: tuple[str, ...] = ("T01", "T02")) -> None:
     (root / ".claude/skills/protstruct-eval").mkdir(parents=True)
     (root / "scripts").mkdir()
     (root / "ref/catalog.yaml").write_text(
-        yaml.safe_dump({"catalog_tasks": [{"id": task_id} for task_id in task_ids]})
+        yaml.safe_dump({
+            "catalog_tasks": [
+                {
+                    "id": task_id,
+                    "task_name": f"Task {task_id}",
+                    "phenix_tool_refs": [f"phenix.{task_id.lower()}"],
+                }
+                for task_id in task_ids
+            ]
+        })
+    )
+    (root / "ref/tasks_and_evaluations.md").write_text(
+        "\n\n".join(
+            f"### {task_id} — Task {task_id}\n\n"
+            f"- **PHENIX tool(s):** `phenix.{task_id.lower()}`"
+            for task_id in task_ids
+        )
+        + "\n"
     )
     for task_id in task_ids:
         (root / f"ref/driving_example_{task_id}.md").write_text("driver\n")
@@ -77,6 +94,17 @@ with tempfile.TemporaryDirectory() as tmp:
         "adding a catalog task without its documentation state is caught",
         any("missing drivers: T03" in p for p in problems)
         and any("catalog-state marker" in p for p in problems),
+    )
+
+with tempfile.TemporaryDirectory() as tmp:
+    repo = Path(tmp)
+    make_repo(repo)
+    path = repo / "ref/tasks_and_evaluations.md"
+    path.write_text(path.read_text().replace("`phenix.t02`", "`different.tool`"))
+    problems = cds.collect_problems(repo)
+    check(
+        "a task section missing its catalog PHENIX tool is caught",
+        any("T02" in problem and "phenix.t02" in problem for problem in problems),
     )
 
 print("\nall documentation-state unit tests passed")

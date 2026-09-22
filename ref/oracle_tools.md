@@ -142,15 +142,17 @@ model and reports DSSP H+E content plus the three-state (H/E/C) agreement fracti
   given, via **DockQ** (2.1.3), CAPRI class derived from the score (Basu & Wallner 2016 bands).
   Identity calibration on deposited `1sar` A/B → DockQ 1.000, class High. DockQ runs require
   typed candidate and native subjects plus one repeated mapping/interface-id/raw-JSON triple per
-  mapping; homo-oligomer controls are explicit and every raw JSON output is retained. The wrapper
-  currently accepts PDB input only.
+  mapping; every sequence-equivalent mapping control is explicit and every raw JSON output is
+  retained. The wrapper currently accepts PDB input only.
 
 PISA/PDBePISA stays the `top_considered` oracle for buried surface area (the deposition-grade
 reference); its `interface_area` is per side and must be doubled before comparison with the
 harness's total two-sided value. Biotite SASA is the installed `top_performing` stand-in. The two
 have now been benchmarked head-to-head over 25 interfaces — biotite runs **1.2 % high (median),
-one-sided in 25/25** — with agreement required within **max(3 % of the mean, 30 Å²)** under matched
-1.4 Å probe and protein-only selection:
+one-sided in 25/25** — with agreement required within **max(3 % of the mean, 30 Å²)** under a
+matched 1.4 Å probe. The measured selection is intentionally asymmetric: biotite is protein-only,
+whereas the PISA API assembly surface may include ligand/hetero atoms; the envelope includes that
+difference and is not a matched-protein-only PISA claim:
 `ref/research/tolerance_benchmark_interface_bsa.md`.
 
 > **numpy pin:** DockQ requires `numpy < 2` and pip downgraded the base env to numpy 1.26.4. If a

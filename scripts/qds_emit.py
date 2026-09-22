@@ -10,8 +10,8 @@ tool-recommendations blocks when the source eval carries that content.
 Routing is driven by a single explicit `METRIC_TO_QDS_SLOT` table keyed on
 the canonical metric ids declared in `ref/catalog.yaml`. Substring matching
 is not used. Selection is subject-aware and deterministic: explicit subject,
-independent family, numeric value, source date, and stable ids are considered
-in that order. Coupled R-work/R-free/gap values remain on one code path.
+substantive numeric value, independent family, source date, and stable ids are
+considered in that order. Coupled R-work/R-free/gap values remain on one code path.
 
 After building, a fail-hard consistency pass rejects QDS that would hide
 load-bearing local content: a scope=site measurement implies a
@@ -23,6 +23,8 @@ Usage:
         data/examples/eval/EVAL_1sar_cdba2c07_2026-04-24.yaml \\
         --qds-id QDS_1sar_cdba2c07_2026-04-26 \\
         --structure-id 1sar \\
+        --coverage-scope cumulative \\
+        --issued-at 2026-04-26T00:00:00Z \\
         -o data/examples/qds/QDS_1sar_cdba2c07_2026-04-26.yaml
 """
 from __future__ import annotations
@@ -31,6 +33,7 @@ import argparse
 import copy
 import datetime as dt
 import hashlib
+import math
 import re
 import statistics
 import sys
@@ -158,6 +161,106 @@ def _load_catalog_metric_ids() -> set[str]:
     return {m["id"] for m in doc.get("metric_definitions", [])}
 
 
+def _load_catalog_tool_families() -> dict[str, str]:
+    """Return the canonical Tool.id -> Tool.family mapping.
+
+    ``MeasurementValue.oracle_family`` is copied evidence, not an authority.
+    Trust decisions must use the catalog classification and fail if the catalog
+    itself is incomplete or contradictory.
+    """
+    doc = yaml.safe_load(CATALOG_PATH.read_text()) or {}
+    families: dict[str, str] = {}
+    errors: list[str] = []
+    for tool in doc.get("tools", []) or []:
+        tool_id = str(tool.get("id") or "").strip()
+        family = str(tool.get("family") or "").strip()
+        if not tool_id:
+            errors.append("catalog Tool has no id")
+            continue
+        if family not in {"cctbx", "non_cctbx"}:
+            errors.append(
+                f"catalog Tool {tool_id!r} has no canonical cctbx/non_cctbx family"
+            )
+            continue
+        previous = families.get(tool_id)
+        if previous is not None and previous != family:
+            errors.append(
+                f"catalog Tool {tool_id!r} has conflicting families "
+                f"{previous!r} and {family!r}"
+            )
+        families[tool_id] = family
+    if errors:
+        raise QdsCompletenessError(
+            "QDS canonical-tool integrity failed:\n  - " + "\n  - ".join(errors)
+        )
+    return families
+
+
+def _has_oracle_payload(measurement: dict[str, Any]) -> bool:
+    """Whether a row claims any oracle result, including a failed attempt."""
+    value = measurement.get("oracle_measure") or {}
+    return any(
+        (
+            value.get("value_numeric") is not None,
+            bool(str(value.get("value_text") or "").strip()),
+            value.get("is_not_applicable") is True,
+        )
+    )
+
+
+def _canonicalize_measurement_tools(
+    measurements: list[dict[str, Any]], *, context: str
+) -> list[dict[str, Any]]:
+    """Validate named tools and replace asserted families with catalog truth."""
+    families = _load_catalog_tool_families()
+    out: list[dict[str, Any]] = []
+    errors: list[str] = []
+    for index, source in enumerate(measurements):
+        measurement = dict(source)
+        measurement_id = str(measurement.get("id") or f"row {index + 1}")
+        tool_id = str(measurement.get("oracle_tool_ref") or "").strip()
+        asserted_family = measurement.get("oracle_family")
+        has_payload = _has_oracle_payload(measurement)
+
+        if not tool_id:
+            if has_payload:
+                errors.append(
+                    f"{context} measurement {measurement_id!r} has an oracle result "
+                    "but no oracle_tool_ref"
+                )
+            elif asserted_family not in (None, ""):
+                errors.append(
+                    f"{context} measurement {measurement_id!r} asserts oracle_family "
+                    "without naming an oracle_tool_ref"
+                )
+            out.append(measurement)
+            continue
+
+        canonical_family = families.get(tool_id)
+        if canonical_family is None:
+            if has_payload or asserted_family not in (None, ""):
+                errors.append(
+                    f"{context} measurement {measurement_id!r} names unknown catalog "
+                    f"Tool {tool_id!r}"
+                )
+            out.append(measurement)
+            continue
+        if asserted_family not in (None, "", canonical_family):
+            errors.append(
+                f"{context} measurement {measurement_id!r} labels catalog Tool "
+                f"{tool_id!r} as {asserted_family!r}; canonical family is "
+                f"{canonical_family!r}"
+            )
+        measurement["oracle_family"] = canonical_family
+        out.append(measurement)
+
+    if errors:
+        raise QdsCompletenessError(
+            "QDS canonical-tool integrity failed:\n  - " + "\n  - ".join(errors)
+        )
+    return out
+
+
 def _validate_routing_table() -> None:
     """Every key in METRIC_TO_QDS_SLOT must exist in ref/catalog.yaml."""
     catalog_ids = _load_catalog_metric_ids()
@@ -188,11 +291,18 @@ def _final_or_all_measurements(eval_run: dict[str, Any]) -> list[dict[str, Any]]
 
 
 SUBJECT_ROW_KEYS = (
+    "residue_outliers",
+    "density_peaks",
+    "flagged_regions",
+    "per_residue_values",
     "secondary_structure_assignments",
     "domain_assignments",
+    "sites",
+    "ligands",
     "interface_qualities",
     "prediction_ensemble_qualities",
     "nmr_ensemble_qualities",
+    "pairwise_comparisons",
 )
 
 
@@ -278,16 +388,61 @@ def _eligible_for_subject(
     ]
 
 
+TEXTUAL_SUMMARY_METRIC_IDS: set[str] = {
+    "T10_ligand_element_identity",
+    "T15_secondary_structure_assignment",
+    "T15_structural_domain_assignment",
+    "T15_fold_classification",
+    "T16_capri_interface_quality_class",
+    "T17_nmr_restraint_violation_summary",
+}
+
+
+def _finite_numeric_value(measurement: dict[str, Any]) -> float | None:
+    value = (measurement.get("oracle_measure") or {}).get("value_numeric")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    numeric = float(value)
+    return numeric if math.isfinite(numeric) else None
+
+
+def _is_selectable_summary_measurement(measurement: dict[str, Any]) -> bool:
+    """Only a real value of the metric's expected kind may populate a summary.
+
+    In particular, prose such as ``tool aborted`` on a numeric metric is useful
+    attempt metadata but is not a scientific result and cannot outrank a numeric
+    value from another family.
+    """
+    if _finite_numeric_value(measurement) is not None:
+        return True
+    if measurement.get("metric_definition_ref") not in TEXTUAL_SUMMARY_METRIC_IDS:
+        return False
+    text = str((measurement.get("oracle_measure") or {}).get("value_text") or "")
+    if not text.strip():
+        return False
+    failed_attempt_markers = (
+        "abort",
+        "unavailable",
+        "not run",
+        "failed to",
+        "failure:",
+        "error:",
+        "could not",
+        "unable to",
+        "no result",
+    )
+    return not any(marker in text.casefold() for marker in failed_attempt_markers)
+
+
 def _candidate_priority(m: dict[str, Any], subject_ref: str | None) -> tuple[Any, ...]:
     """Only policy-backed preferences; scientific context is not a tie-breaker."""
     explicit_subject = m.get("subject_ref")
     subject_score = 0 if subject_ref is not None and explicit_subject == subject_ref else 1
+    type_score = 0 if _finite_numeric_value(m) is not None else 1
     fam_score = {"non_cctbx": 0, "cctbx": 1}.get(m.get("oracle_family"), 2)
-    oracle = m.get("oracle_measure") or {}
-    type_score = 0 if oracle.get("value_numeric") is not None else 1
     run_date = str(m.get("_source_run_date") or "").replace("-", "")
     recency_score = -int(run_date) if run_date.isdigit() else 0
-    return (subject_score, fam_score, type_score, recency_score)
+    return (subject_score, type_score, fam_score, recency_score)
 
 
 def _scientific_payload(m: dict[str, Any]) -> str:
@@ -325,8 +480,12 @@ def _scientific_payload(m: dict[str, Any]) -> str:
 def _strongest(
     measurements: list[dict[str, Any]], subject_ref: str | None = None
 ) -> dict[str, Any] | None:
-    """Pick deterministically by subject, family, value type, date, then id."""
-    eligible = _eligible_for_subject(measurements, subject_ref)
+    """Pick deterministically by subject, value type, family, date, then id."""
+    eligible = [
+        measurement
+        for measurement in _eligible_for_subject(measurements, subject_ref)
+        if _is_selectable_summary_measurement(measurement)
+    ]
     if not eligible:
         return None
     ordered = sorted(
@@ -413,12 +572,18 @@ def _route_measurements(
             # Coupled below as a single provenance/context bundle; selecting a
             # scalar first can raise or, worse, mix otherwise coherent triples.
             continue
+        if block == "classification_summary" and slot in T15_BUNDLE_SLOTS:
+            continue
+        if block == "interface_quality_summary" and slot in T16_BUNDLE_SLOTS:
+            continue
         winner = _strongest(candidates, subject_ref)
         if winner is None:
             continue
         out.setdefault(block, {})[slot] = winner
 
     _enforce_coherent_refinement_bundle(out, by_slot, subject_ref)
+    _enforce_coherent_t15_bundle(out, by_slot, subject_ref)
+    _enforce_coherent_t16_bundle(out, by_slot, subject_ref)
     return out
 
 
@@ -620,6 +785,435 @@ def _enforce_coherent_refinement_bundle(
     )
 
 
+T15_BUNDLE_SLOTS = (
+    "secondary_structure_content",
+    "secondary_structure_agreement",
+)
+T15_BUNDLE_FIELDS = (
+    "_source_evaluation_run_ref",
+    "catalog_task_ref",
+    "subject_ref",
+    "stage",
+    "scope",
+    "scope_selector",
+)
+PASSING_STATUSES = {"pass", "pass_with_caveat", "pass_criterion_fail_headline"}
+
+
+def _bundle_key(
+    measurement: dict[str, Any], fields: tuple[str, ...]
+) -> tuple[str, ...]:
+    return tuple(_context_token(measurement.get(field)) for field in fields)
+
+
+def _bundle_payload(selected: dict[str, dict[str, Any]]) -> str:
+    return yaml.safe_dump(
+        {slot: _scientific_payload(row) for slot, row in sorted(selected.items())},
+        sort_keys=True,
+        allow_unicode=True,
+    )
+
+
+def _select_unique_best_bundle(
+    complete: list[tuple[tuple[Any, ...], dict[str, dict[str, Any]]]],
+    *,
+    label: str,
+) -> dict[str, dict[str, Any]]:
+    """Choose a bundle by policy and fail when science, rather than ids, ties."""
+    best_priority = min(priority for priority, _ in complete)
+    tied = [selected for priority, selected in complete if priority == best_priority]
+    payloads = {_bundle_payload(selected) for selected in tied}
+    if len(payloads) > 1:
+        ids = "; ".join(
+            ",".join(str(row.get("id") or "<missing id>") for row in bundle.values())
+            for bundle in tied
+        )
+        raise QdsCompletenessError(
+            f"QDS {label} selection is scientifically ambiguous: equally ranked "
+            f"coherent bundles differ in value, status, or context ({ids})."
+        )
+    return min(
+        tied,
+        key=lambda bundle: tuple(
+            str(bundle[slot].get("id") or "") for slot in sorted(bundle)
+        ),
+    )
+
+
+def _fraction_measurement_value(measurement: dict[str, Any], *, label: str) -> float:
+    value = _finite_numeric_value(measurement)
+    if value is None:
+        raise QdsCompletenessError(f"QDS {label} requires a finite numeric value")
+    unit = str((measurement.get("oracle_measure") or {}).get("unit") or "").strip()
+    if unit.casefold() in {"%", "percent", "percentage"}:
+        return value / 100.0
+    if unit.casefold() not in {"", "1", "fraction", "unitless", "dimensionless"}:
+        raise QdsCompletenessError(
+            f"QDS {label} has unsupported unit {unit!r}; expected fraction or percent"
+        )
+    return value
+
+
+def _validate_t15_bundle(selected: dict[str, dict[str, Any]]) -> None:
+    content = selected["secondary_structure_content"]
+    agreement = selected["secondary_structure_agreement"]
+    content_value = _fraction_measurement_value(
+        content, label="T15 secondary-structure content gate"
+    )
+    agreement_value = _fraction_measurement_value(
+        agreement, label="T15 secondary-structure agreement"
+    )
+    if not 0.0 <= content_value <= 1.0 or not 0.0 <= agreement_value <= 1.0:
+        raise QdsCompletenessError(
+            "QDS T15 bundle is inconsistent: normalized content and agreement "
+            "must both lie in [0, 1]"
+        )
+    agreement_passes = agreement.get("pass_status") in PASSING_STATUSES
+    content_passes = content.get("pass_status") in PASSING_STATUSES
+    if agreement_passes and content_value < 0.20:
+        raise QdsCompletenessError(
+            "QDS T15 bundle is inconsistent: a passing secondary-structure "
+            f"agreement uses content {content_value:.6g}, below the governed 0.20 gate"
+        )
+    if agreement_passes and not content_passes:
+        raise QdsCompletenessError(
+            "QDS T15 bundle is inconsistent: a passing secondary-structure "
+            "agreement requires the paired content-gate row to have a passing verdict"
+        )
+    if agreement_passes and agreement_value < 0.65:
+        raise QdsCompletenessError(
+            "QDS T15 bundle is inconsistent: passing agreement "
+            f"{agreement_value:.6g} is below the governed 0.65 threshold"
+        )
+
+
+def _enforce_coherent_t15_bundle(
+    routed: dict[str, dict[str, dict[str, Any]]],
+    by_slot: dict[QdsSlot, list[dict[str, Any]]],
+    subject_ref: str | None,
+) -> None:
+    block = "classification_summary"
+    candidates = {
+        slot: [
+            row
+            for row in by_slot.get((block, slot), [])
+            if _is_selectable_summary_measurement(row)
+        ]
+        for slot in T15_BUNDLE_SLOTS
+    }
+    content_rows = candidates["secondary_structure_content"]
+    agreement_rows = candidates["secondary_structure_agreement"]
+    if not agreement_rows:
+        winner = _strongest(content_rows, subject_ref)
+        if winner is not None:
+            routed.setdefault(block, {})["secondary_structure_content"] = winner
+        return
+
+    bundles: dict[tuple[str, ...], dict[str, list[dict[str, Any]]]] = {}
+    for slot, rows in candidates.items():
+        for row in _eligible_for_subject(rows, subject_ref):
+            bundles.setdefault(_bundle_key(row, T15_BUNDLE_FIELDS), {}).setdefault(
+                slot, []
+            ).append(row)
+
+    complete: list[tuple[tuple[Any, ...], dict[str, dict[str, Any]]]] = []
+    for rows_by_slot in bundles.values():
+        if any(slot not in rows_by_slot for slot in T15_BUNDLE_SLOTS):
+            continue
+        selected = {
+            slot: _strongest(rows_by_slot[slot], subject_ref)
+            for slot in T15_BUNDLE_SLOTS
+        }
+        if any(row is None for row in selected.values()):
+            continue
+        concrete = {slot: row for slot, row in selected.items() if row is not None}
+        priority = max(_candidate_priority(row, subject_ref) for row in concrete.values())
+        complete.append((priority, concrete))
+
+    if not complete:
+        agreement_ids = ", ".join(
+            str(row.get("id") or "<missing id>") for row in agreement_rows
+        )
+        raise QdsCompletenessError(
+            "QDS T15 coherence failed: secondary-structure agreement requires "
+            "a content-gate measurement from the same run, subject, stage, scope, "
+            f"and selector; agreement rows were {agreement_ids}."
+        )
+    selected = _select_unique_best_bundle(complete, label="T15 bundle")
+    _validate_t15_bundle(selected)
+    routed.setdefault(block, {}).update(selected)
+
+
+T16_BUNDLE_SLOTS = (
+    "interface_buried_surface_area",
+    "interface_dockq_score",
+    "capri_interface_quality_class",
+)
+T16_BUNDLE_FIELDS = (
+    "_source_evaluation_run_ref",
+    "catalog_task_ref",
+    "subject_ref",
+    "stage",
+    "scope",
+    "scope_selector",
+)
+T16_COMPARISON_FIELDS = (
+    "reference_subject_ref",
+    "oracle_tool_ref",
+    "provenance_ref",
+    "evidence_refs",
+)
+
+
+def _expected_capri_class(dockq_score: float) -> str:
+    if dockq_score >= 0.80:
+        return "high"
+    if dockq_score >= 0.49:
+        return "medium"
+    if dockq_score >= 0.23:
+        return "acceptable"
+    return "incorrect"
+
+
+def _validate_t16_bundle(selected: dict[str, dict[str, Any]]) -> None:
+    dockq = selected.get("interface_dockq_score")
+    capri = selected.get("capri_interface_quality_class")
+    if capri is not None and dockq is None:
+        raise QdsCompletenessError(
+            "QDS T16 coherence failed: CAPRI class cannot be verified without "
+            "a same-comparison DockQ score"
+        )
+    if dockq is None or capri is None:
+        return
+    score = _finite_numeric_value(dockq)
+    if score is None or not 0.0 <= score <= 1.0:
+        raise QdsCompletenessError(
+            "QDS T16 CAPRI consistency failed: DockQ must be a finite value in [0, 1]"
+        )
+    observed = str((capri.get("oracle_measure") or {}).get("value_text") or "").strip()
+    normalized = re.sub(r"[\s_-]+", " ", observed.casefold()).strip()
+    normalized = normalized.removesuffix(" quality")
+    expected = _expected_capri_class(score)
+    if normalized != expected:
+        raise QdsCompletenessError(
+            "QDS T16 CAPRI consistency failed: "
+            f"DockQ {score:.6g} implies {expected!r}, not {observed!r}"
+        )
+
+
+def _enforce_coherent_t16_bundle(
+    routed: dict[str, dict[str, dict[str, Any]]],
+    by_slot: dict[QdsSlot, list[dict[str, Any]]],
+    subject_ref: str | None,
+) -> None:
+    block = "interface_quality_summary"
+    candidates = {
+        slot: [
+            row
+            for row in by_slot.get((block, slot), [])
+            if _is_selectable_summary_measurement(row)
+        ]
+        for slot in T16_BUNDLE_SLOTS
+    }
+    present = tuple(slot for slot in T16_BUNDLE_SLOTS if candidates[slot])
+    if not present:
+        return
+    if "capri_interface_quality_class" in present and "interface_dockq_score" not in present:
+        raise QdsCompletenessError(
+            "QDS T16 coherence failed: CAPRI class is present without a DockQ score"
+        )
+
+    by_core: dict[tuple[str, ...], dict[str, list[dict[str, Any]]]] = {}
+    for slot in present:
+        for row in _eligible_for_subject(candidates[slot], subject_ref):
+            by_core.setdefault(_bundle_key(row, T16_BUNDLE_FIELDS), {}).setdefault(
+                slot, []
+            ).append(row)
+
+    complete: list[tuple[tuple[Any, ...], dict[str, dict[str, Any]]]] = []
+    for rows_by_slot in by_core.values():
+        if any(slot not in rows_by_slot for slot in present):
+            continue
+
+        # DockQ and its derived CAPRI class must name the exact same native,
+        # tool/provenance path, and retained raw evidence. The interface mapping
+        # itself is represented by the shared scope_selector in the core key.
+        comparison_slots = tuple(
+            slot
+            for slot in ("interface_dockq_score", "capri_interface_quality_class")
+            if slot in present
+        )
+        comparison_groups: dict[
+            tuple[str, ...], dict[str, list[dict[str, Any]]]
+        ] = {}
+        for slot in comparison_slots:
+            for row in rows_by_slot[slot]:
+                comparison_groups.setdefault(
+                    _bundle_key(row, T16_COMPARISON_FIELDS), {}
+                ).setdefault(slot, []).append(row)
+
+        comparison_options: list[dict[str, dict[str, Any]]] = []
+        if comparison_slots:
+            for rows_by_comparison_slot in comparison_groups.values():
+                if any(slot not in rows_by_comparison_slot for slot in comparison_slots):
+                    continue
+                selected_comparison = {
+                    slot: _strongest(rows_by_comparison_slot[slot], subject_ref)
+                    for slot in comparison_slots
+                }
+                if all(row is not None for row in selected_comparison.values()):
+                    comparison_options.append(
+                        {
+                            slot: row
+                            for slot, row in selected_comparison.items()
+                            if row is not None
+                        }
+                    )
+        else:
+            comparison_options.append({})
+
+        for comparison in comparison_options:
+            selected = dict(comparison)
+            if "interface_buried_surface_area" in present:
+                bsa = _strongest(
+                    rows_by_slot["interface_buried_surface_area"], subject_ref
+                )
+                if bsa is None:
+                    continue
+                # An explicitly comparative BSA must not contradict the selected
+                # native/evidence path. Empty BSA fields are valid: ordinary BSA
+                # is measured on the candidate alone.
+                anchor = comparison.get("interface_dockq_score") or comparison.get(
+                    "capri_interface_quality_class"
+                )
+                if anchor is not None:
+                    for field in ("reference_subject_ref", "evidence_refs"):
+                        bsa_value = bsa.get(field)
+                        if bsa_value not in (None, "", []) and bsa_value != anchor.get(field):
+                            break
+                    else:
+                        selected["interface_buried_surface_area"] = bsa
+                        anchor = None
+                    if anchor is not None:
+                        continue
+                else:
+                    selected["interface_buried_surface_area"] = bsa
+            if any(slot not in selected for slot in present):
+                continue
+            priority = max(_candidate_priority(row, subject_ref) for row in selected.values())
+            complete.append((priority, selected))
+
+    if not complete:
+        details = ", ".join(
+            f"{slot}={','.join(str(row.get('id') or '<missing id>') for row in candidates[slot])}"
+            for slot in present
+        )
+        raise QdsCompletenessError(
+            "QDS T16 coherence failed: no single run/subject/interface and "
+            "reference/mapping/evidence comparison supplies the published slots; "
+            + details
+        )
+    selected = _select_unique_best_bundle(complete, label="T16 interface bundle")
+    _validate_t16_bundle(selected)
+    routed.setdefault(block, {}).update(selected)
+
+
+def _validate_t16_interface_contexts(eval_runs: list[dict[str, Any]]) -> None:
+    """Resolve every headline T16 selector to its declared mapping/evidence row."""
+    metric_ids = {
+        "T16_interface_buried_surface_area",
+        "T16_interface_dockq_score",
+        "T16_capri_interface_quality_class",
+    }
+    comparative_ids = {
+        "T16_interface_dockq_score",
+        "T16_capri_interface_quality_class",
+    }
+    errors: list[str] = []
+    for run in eval_runs:
+        run_id = str(run.get("id") or "<missing id>")
+        index: dict[str, dict[str, Any]] = {}
+        for interface in run.get("interface_qualities", []) or []:
+            interface_id = str(interface.get("id") or "").strip()
+            if not interface_id:
+                errors.append(f"{run_id}: InterfaceQuality row has no id")
+            elif interface_id in index:
+                errors.append(
+                    f"{run_id}: duplicate InterfaceQuality id {interface_id!r}"
+                )
+            else:
+                index[interface_id] = interface
+
+        for measurement in run.get("measurements", []) or []:
+            metric_id = measurement.get("metric_definition_ref")
+            if metric_id not in metric_ids or measurement.get("stage") not in (
+                "final",
+                "all",
+            ):
+                continue
+            measurement_id = str(measurement.get("id") or "<missing id>")
+            if measurement.get("scope") != "interface":
+                errors.append(
+                    f"{run_id}/{measurement_id}: {metric_id} must use scope=interface"
+                )
+                continue
+            selector = str(measurement.get("scope_selector") or "").strip()
+            interface = index.get(selector)
+            if interface is None:
+                errors.append(
+                    f"{run_id}/{measurement_id}: interface selector {selector!r} "
+                    "does not resolve to a unique InterfaceQuality row"
+                )
+                continue
+            measurement_subject = measurement.get("subject_ref")
+            interface_subject = interface.get("subject_ref")
+            if (
+                measurement_subject not in (None, "")
+                and interface_subject not in (None, "")
+                and measurement_subject != interface_subject
+            ):
+                errors.append(
+                    f"{run_id}/{measurement_id}: subject_ref does not match "
+                    f"InterfaceQuality {selector!r}"
+                )
+            if metric_id not in comparative_ids:
+                continue
+            reference = measurement.get("reference_subject_ref")
+            interface_reference = interface.get("reference_subject_ref")
+            if not reference:
+                errors.append(
+                    f"{run_id}/{measurement_id}: comparative T16 measurement has no "
+                    "reference_subject_ref"
+                )
+            elif reference != interface_reference:
+                errors.append(
+                    f"{run_id}/{measurement_id}: reference_subject_ref does not match "
+                    f"InterfaceQuality {selector!r}"
+                )
+            if not interface.get("model_to_native_chain_mapping"):
+                errors.append(
+                    f"{run_id}/{measurement_id}: InterfaceQuality {selector!r} has no "
+                    "model_to_native_chain_mapping"
+                )
+            measurement_evidence = measurement.get("evidence_refs") or []
+            interface_evidence = interface.get("evidence_refs") or []
+            if not measurement_evidence:
+                errors.append(
+                    f"{run_id}/{measurement_id}: comparative T16 measurement has no "
+                    "retained evidence_refs"
+                )
+            elif _context_token(measurement_evidence) != _context_token(interface_evidence):
+                errors.append(
+                    f"{run_id}/{measurement_id}: evidence_refs do not match "
+                    f"InterfaceQuality {selector!r}"
+                )
+    if errors:
+        raise QdsCompletenessError(
+            "QDS T16 interface-context integrity failed:\n  - "
+            + "\n  - ".join(errors)
+        )
+
+
 # ---------------------------------------------------------------------------
 # Block builders driven by the routing table
 # ---------------------------------------------------------------------------
@@ -686,8 +1280,7 @@ def _coverage_context_key(measurement: dict[str, Any]) -> tuple[str, ...]:
 
 
 def _has_numeric_oracle_value(measurement: dict[str, Any]) -> bool:
-    value = (measurement.get("oracle_measure") or {}).get("value_numeric")
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+    return _finite_numeric_value(measurement) is not None
 
 
 def _coverage_id(qds_id: str, context: tuple[str, ...]) -> str:
@@ -709,8 +1302,11 @@ def build_cross_tool_coverage(
     (including an aborted tool invocation) are retained as informational context
     but never close quantitative coverage.
     """
+    canonical_measurements = _canonicalize_measurement_tools(
+        measurements, context="cross-tool coverage"
+    )
     grouped: dict[tuple[str, ...], list[dict[str, Any]]] = {}
-    for measurement in measurements:
+    for measurement in canonical_measurements:
         if not measurement.get("catalog_task_ref"):
             continue
         grouped.setdefault(_coverage_context_key(measurement), []).append(measurement)
@@ -723,7 +1319,11 @@ def build_cross_tool_coverage(
             candidates = exact
 
         numeric = [row for row in candidates if _has_numeric_oracle_value(row)]
-        text_only = [row for row in candidates if not _has_numeric_oracle_value(row)]
+        text_only = [
+            row
+            for row in candidates
+            if not _has_numeric_oracle_value(row) and _has_oracle_payload(row)
+        ]
         buckets: dict[str, set[str]] = {
             "cctbx": set(),
             "non_cctbx": set(),
@@ -748,7 +1348,11 @@ def build_cross_tool_coverage(
             if attempts:
                 gap += f" (not counted as coverage: {', '.join(attempts)})"
         elif non_cctbx:
-            gap = "closed" if cctbx else "non-cctbx only"
+            gap = (
+                "dual-family coverage — agreement not evaluated"
+                if cctbx
+                else "non-cctbx only"
+            )
         elif cctbx:
             gap = "open — cctbx only"
         else:
@@ -1537,17 +2141,24 @@ def _write_immutable_output(path: Path, content: str) -> bool:
 
 
 def _validate_cli_emission_contract(
-    *, coverage_scope: str | None, scope_notes: str | None,
+    *, qds_id: str, coverage_scope: str | None, scope_notes: str | None,
     output: Path | None, issued_at: str | None,
 ) -> None:
     """Require enough pinned scope/time metadata for a file artifact."""
     errors: list[str] = []
+    if not qds_id.startswith("QDS_"):
+        errors.append("--qds-id must begin with 'QDS_'")
     if coverage_scope is None:
         errors.append("--coverage-scope is required for QDS emission")
     if coverage_scope == "partial" and not str(scope_notes or "").strip():
         errors.append("--coverage-scope partial requires non-empty --scope-notes")
     if output is not None and not issued_at:
         errors.append("--issued-at is required when --output is used")
+    if output is not None and output.name != f"{qds_id}.yaml":
+        errors.append(
+            f"--output filename must be exactly {qds_id}.yaml so repository "
+            "QDS discovery cannot miss the artifact"
+        )
     if errors:
         raise QdsCompletenessError(
             "QDS emission contract failed:\n  - " + "\n  - ".join(errors)
@@ -1568,6 +2179,15 @@ def emit_qds(
     structure_description: str | None = None,
 ) -> dict[str, Any]:
     _validate_routing_table()
+    if not qds_id.startswith("QDS_"):
+        raise QdsCompletenessError(
+            "QDS emission contract failed: qds_id must begin with 'QDS_'"
+        )
+    if coverage_scope not in {"cumulative", "partial"}:
+        raise QdsCompletenessError(
+            "QDS emission contract failed: coverage_scope is required and must be "
+            "'cumulative' or 'partial'"
+        )
     if coverage_scope == "partial" and not str(scope_notes or "").strip():
         raise QdsCompletenessError(
             "QDS emission contract failed: coverage_scope=partial requires "
@@ -1579,6 +2199,34 @@ def emit_qds(
         doc = yaml.safe_load(path.read_text())
         for r in doc.get("evaluation_runs", []):
             source_runs.append(r)
+    run_ids: set[str] = set()
+    source_errors: list[str] = []
+    for index, run in enumerate(source_runs, start=1):
+        run_id = str(run.get("id") or "").strip()
+        if not run_id:
+            source_errors.append(f"input evaluation run {index} has no id")
+        elif run_id in run_ids:
+            source_errors.append(f"duplicate input EvaluationRun id {run_id!r}")
+        else:
+            run_ids.add(run_id)
+        run_structure = run.get("structure_ref")
+        if run_structure != structure_id:
+            source_errors.append(
+                f"EvaluationRun {run_id or index!r} has structure_ref "
+                f"{run_structure!r}, not requested structure_id {structure_id!r}"
+            )
+    if not source_runs:
+        source_errors.append("input files contain no evaluation_runs")
+    if source_errors:
+        raise QdsCompletenessError(
+            "QDS source-run integrity failed:\n  - " + "\n  - ".join(source_errors)
+        )
+
+    for run in source_runs:
+        run_id = str(run.get("id") or "<missing id>")
+        run["measurements"] = _canonicalize_measurement_tools(
+            run.get("measurements", []) or [], context=f"EvaluationRun {run_id}"
+        )
     source_runs.sort(
         key=lambda run: (str(run.get("run_date") or ""), str(run.get("id") or ""))
     )
@@ -1612,6 +2260,7 @@ def emit_qds(
         raise QdsCompletenessError(
             f"QDS subject {effective_subject!r} left no applicable evaluation runs"
         )
+    _validate_t16_interface_contexts(runs)
 
     qds_measurements = [m for r in runs for m in _final_or_all_measurements(r)]
     final_only = [m for m in qds_measurements if m.get("stage") == "final"]
@@ -1634,8 +2283,7 @@ def emit_qds(
     }
     if effective_subject is not None:
         qds["subject_ref"] = effective_subject
-    if coverage_scope is not None:
-        qds["coverage_scope"] = coverage_scope
+    qds["coverage_scope"] = coverage_scope
     if scope_notes is not None:
         qds["scope_notes"] = scope_notes
 
@@ -1773,6 +2421,7 @@ def main() -> int:
     args = p.parse_args()
 
     _validate_cli_emission_contract(
+        qds_id=args.qds_id,
         coverage_scope=args.coverage_scope,
         scope_notes=args.scope_notes,
         output=args.output,

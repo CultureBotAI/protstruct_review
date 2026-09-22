@@ -152,7 +152,7 @@ terms. TSV form with the same rows: `ref/tasks_and_evaluations.tsv`.
 
 ### T14 — Hydrogen placement / protonation
 
-- **PHENIX tool(s):** `phenix.reduce`, `phenix.ready_set`
+- **PHENIX tool(s):** `phenix.reduce`, `phenix.ready_set`, `mmtbx.reduce2`
 - **Doc paths:** `reference/hydrogens.html`, `reference/ready_set.html`
 - **Independent oracle(s):** `reduce` (standalone, Richardson lab), `propka3` (pKa), OpenBabel `--addh`, `pdb2pqr`, Schrödinger `PrepWizard`
 - **Typical inputs:** model without hydrogens (or partial H)

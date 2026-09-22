@@ -21,6 +21,12 @@ its human-readable narrative when one is published. They share the same stem so 
 narrative-only reissues may point to an earlier canonical YAML record; new structured re-runs should
 instead publish a date-matched YAML record so their measurements and scope are immutable.
 
+Every top-level `evaluation_runs` member must set `eval_filename_stem` to the exact owning YAML
+stem. A YAML may contain more than one run only when every run names that same stem; individual
+run `id` values may differ because they are record identifiers, not filenames. A data YAML carrying
+`evaluation_runs` under any other filename is not part of the evaluation corpus and is rejected by
+the repository gate.
+
 ### Optional parallel `_<view>.tsv` exports
 
 A single eval may export one or more denormalized TSV views of the canonical YAML. Add a `_<view>`

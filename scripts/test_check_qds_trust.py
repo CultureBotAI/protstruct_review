@@ -105,6 +105,7 @@ def write_fixture(
     write_catalog(root)
     eval_run = {
         "id": "EVAL_fixture",
+        "eval_filename_stem": "EVAL_fixture",
         "structure_ref": "1abc",
         "run_date": "2026-09-22",
         "catalog_tasks_applied": sorted(
@@ -496,6 +497,18 @@ with tempfile.TemporaryDirectory() as tmp:
     write_fixture(root, [NON_CCTBX])
     code, _ = run_guard(root)
     check("source-derived non-cctbx-only coverage passes", code, 0)
+
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    eval_path, _ = write_fixture(root, [NON_CCTBX])
+    eval_path.rename(eval_path.with_name("not_an_eval.yaml"))
+    code, out = run_guard(root)
+    check("a noncanonical EvaluationRun carrier is not trusted", code, 1)
+    check(
+        "the renamed trust source resolves zero times",
+        "source EvaluationRun 'EVAL_fixture' resolves 0 times" in out,
+        True,
+    )
 
 with tempfile.TemporaryDirectory() as tmp:
     root = Path(tmp)

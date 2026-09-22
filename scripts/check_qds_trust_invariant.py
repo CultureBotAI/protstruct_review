@@ -124,7 +124,10 @@ class EvalRunSource:
 
 def _load_eval_runs(root: Path, failures: list[str]) -> dict[str, list[EvalRunSource]]:
     runs: dict[str, list[EvalRunSource]] = {}
-    for path in _yaml_paths(root / "data"):
+    # Evaluation sources are admitted only through the canonical filename route.
+    # Path.rglob is deliberately ignore-independent: ignored EVAL files remain
+    # visible, while an arbitrary YAML carrier cannot become a trusted source.
+    for path in sorted((root / "data").rglob("EVAL_*.yaml")):
         try:
             doc = yaml.safe_load(path.read_text()) or {}
         except (yaml.YAMLError, OSError):

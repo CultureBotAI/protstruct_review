@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+import tempfile
 from pathlib import Path
 
 import qds_emit as current_qds_emitter
@@ -748,13 +749,82 @@ check("a copied structured row cannot omit both lineage fields",
           for v in _violations), True)
 
 check("record-shaped .yml files are explicitly rejected",
-      any("must use the .yaml suffix" in v for v in integrity._check_qds_filename(
+      any("must use the .yaml suffix" in v for v in integrity._check_data_record_filename(
           _row_qds_doc, Path("data/x/QDS_rows.yml"))), True)
 
 check("EvaluationRun .yml files are explicitly rejected too",
       any("evaluation_runs must use the .yaml suffix" in v
-          for v in integrity._check_qds_filename(
+          for v in integrity._check_data_record_filename(
               _row_eval_doc, Path("data/x/EVAL_rows.yml"))), True)
+
+_canonical_eval_carrier = {"evaluation_runs": [
+    {"id": "run-a", "eval_filename_stem": "EVAL_rows"},
+    {"id": "run-b", "eval_filename_stem": "EVAL_rows"},
+]}
+check("a canonical multi-run EvaluationRun carrier is accepted",
+      integrity._check_data_record_filename(
+          _canonical_eval_carrier, Path("data/x/EVAL_rows.yaml")), [])
+
+_noncanonical_eval_path = Path("data/x/not_an_eval.yaml")
+_noncanonical_eval_index = integrity.build_corpus_indices(
+    [(_noncanonical_eval_path, _canonical_eval_carrier)])
+_noncanonical_eval_violations = integrity.check_corpus_refs(
+    _canonical_eval_carrier, _noncanonical_eval_path,
+    _noncanonical_eval_index)
+check("a noncanonical .yaml carrier cannot smuggle EvaluationRuns",
+      any("must use an EVAL_*.yaml filename" in v
+          for v in _noncanonical_eval_violations), True)
+
+with tempfile.TemporaryDirectory() as _tmp:
+    _tmp_root = Path(_tmp)
+    _ignored_carrier = _tmp_root / "data" / ".ignored" / "not_an_eval.yaml"
+    _ignored_carrier.parent.mkdir(parents=True)
+    _ignored_carrier.write_text(_yaml.safe_dump(_canonical_eval_carrier))
+    _saved_repo, _saved_catalog = integrity.REPO, integrity.CATALOG
+    try:
+        integrity.REPO = _tmp_root
+        integrity.CATALOG = _tmp_root / "ref" / "catalog.yaml"
+        _discovered = integrity.target_paths()
+        _discovered_records = [
+            (_path, _yaml.safe_load(_path.read_text()))
+            for _path in _discovered
+        ]
+        _discovered_index = integrity.build_corpus_indices(_discovered_records)
+        _ignored_doc = next(
+            _doc for _path, _doc in _discovered_records
+            if _path == _ignored_carrier)
+        _ignored_violations = integrity.check_corpus_refs(
+            _ignored_doc, _ignored_carrier.relative_to(_tmp_root),
+            _discovered_index)
+    finally:
+        integrity.REPO, integrity.CATALOG = _saved_repo, _saved_catalog
+    check("ignore-independent corpus discovery sees a hidden YAML carrier",
+          _ignored_carrier in _discovered, True)
+    check("the discovered hidden carrier is rejected by filename admission",
+          any("must use an EVAL_*.yaml filename" in v
+              for v in _ignored_violations), True)
+
+_missing_eval_stem = {"evaluation_runs": [{"id": "run-a"}]}
+check("a canonical EvaluationRun carrier requires eval_filename_stem",
+      any("eval_filename_stem must be a nonblank string" in v
+          for v in integrity._check_data_record_filename(
+              _missing_eval_stem, Path("data/x/EVAL_rows.yaml"))), True)
+
+_mismatched_eval_stem = _copy.deepcopy(_canonical_eval_carrier)
+_mismatched_eval_stem["evaluation_runs"][1]["eval_filename_stem"] = "EVAL_other"
+check("every run in a multi-run carrier must name the owning stem",
+      any("does not match filename stem 'EVAL_rows'" in v
+          for v in integrity._check_data_record_filename(
+              _mismatched_eval_stem, Path("data/x/EVAL_rows.yaml"))), True)
+
+_mixed_carrier = _copy.deepcopy(_row_qds_doc)
+_mixed_carrier["evaluation_runs"] = [{
+    "id": "run-a", "eval_filename_stem": "QDS_rows",
+}]
+check("a QDS_ carrier cannot also smuggle EvaluationRuns",
+      any("must use an EVAL_*.yaml filename" in v
+          for v in integrity._check_data_record_filename(
+              _mixed_carrier, Path("data/x/QDS_rows.yaml"))), True)
 
 _outside_qds = _copy.deepcopy(_qds_doc["quality_data_sheets"][0]["value"])
 _violations = integrity.check_corpus_refs(

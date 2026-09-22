@@ -1154,17 +1154,40 @@ def _repository_relative(path: Path) -> Path | None:
         return None
 
 
-def _check_qds_filename(doc: dict[str, Any], rel: Path) -> list[str]:
-    """Keep record-shaped data YAML discoverable by every QDS gate."""
+def _check_data_record_filename(doc: dict[str, Any], rel: Path) -> list[str]:
+    """Keep record-shaped data YAML discoverable by every authoritative gate."""
     repo_rel = _repository_relative(rel)
     if repo_rel is None or not repo_rel.parts or repo_rel.parts[0] != "data":
         return []
 
     violations: list[str] = []
-    if "evaluation_runs" in doc and repo_rel.suffix != ".yaml":
-        violations.append(
-            f"{rel}: a data YAML carrying evaluation_runs must use the .yaml suffix"
-        )
+    eval_rows = doc.get("evaluation_runs") or []
+    if "evaluation_runs" in doc:
+        if repo_rel.suffix != ".yaml":
+            violations.append(
+                f"{rel}: a data YAML carrying evaluation_runs must use the .yaml suffix"
+            )
+        if not repo_rel.stem.startswith("EVAL_"):
+            violations.append(
+                f"{rel}: a data YAML carrying evaluation_runs must use an "
+                "EVAL_*.yaml filename"
+            )
+        if isinstance(eval_rows, list):
+            for i, run in enumerate(eval_rows):
+                if not isinstance(run, dict):
+                    continue
+                declared_stem = run.get("eval_filename_stem")
+                if not isinstance(declared_stem, str) or not declared_stem.strip():
+                    violations.append(
+                        f"{rel}: $.evaluation_runs[{i}].eval_filename_stem must be "
+                        f"a nonblank string matching filename stem {repo_rel.stem!r}"
+                    )
+                elif declared_stem != repo_rel.stem:
+                    violations.append(
+                        f"{rel}: $.evaluation_runs[{i}].eval_filename_stem = "
+                        f"{declared_stem!r} does not match filename stem "
+                        f"{repo_rel.stem!r}"
+                    )
 
     qds_rows = doc.get("quality_data_sheets") or []
     if "quality_data_sheets" in doc and repo_rel.suffix != ".yaml":
@@ -1238,7 +1261,7 @@ def check_corpus_refs(doc: Any, rel: Path, indices: CorpusIndices) -> list[str]:
     violations: list[str] = []
     if not isinstance(doc, dict):
         return violations
-    violations += _check_qds_filename(doc, rel)
+    violations += _check_data_record_filename(doc, rel)
 
     local_run_ids = {
         str(run.get("id"))

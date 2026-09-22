@@ -30,6 +30,11 @@ import yaml
 import qds_emit_contract_v1
 import qds_emit_contract_v2
 
+try:
+    from strict_yaml import strict_yaml_load
+except ModuleNotFoundError:  # imported as scripts.check_qds_trust_invariant
+    from scripts.strict_yaml import strict_yaml_load
+
 
 # These immutable artifacts predate source-derived committed-QDS enforcement.
 # Each exemption is pinned to the full committed file bytes as well as its
@@ -129,9 +134,11 @@ def _load_eval_runs(root: Path, failures: list[str]) -> dict[str, list[EvalRunSo
     # visible, while an arbitrary YAML carrier cannot become a trusted source.
     for path in sorted((root / "data").rglob("EVAL_*.yaml")):
         try:
-            doc = yaml.safe_load(path.read_text()) or {}
-        except (yaml.YAMLError, OSError):
-            # General YAML readability is owned by the schema/record guards.
+            doc = strict_yaml_load(path.read_text()) or {}
+        except (yaml.YAMLError, OSError, UnicodeError) as exc:
+            failures.append(
+                f"{path.name}: unreadable ({type(exc).__name__}): {exc}"
+            )
             continue
         for run in doc.get("evaluation_runs", []) or []:
             run_id = str(run.get("id") or "").strip()
@@ -253,6 +260,105 @@ def _canonical_qds_text(qds: dict[str, Any]) -> str:
         default_flow_style=False,
         allow_unicode=True,
     )
+
+
+_RETAINED_SEMANTIC_FIELDS = (
+    "agent_claim", "delta", "delta_from_measurement_ref",
+    "derived_from_measurement_refs", "pass_criterion_ref",
+    "criterion_preconditions", "assumptions",
+)
+_RETAINED_SET_FIELDS = frozenset({
+    "assumptions", "criterion_preconditions", "derived_from_measurement_refs",
+    "evidence_refs",
+})
+_NESTED_SOURCE_LINEAGE_FIELDS = frozenset({
+    "source_measurement_ref", "source_evaluation_run_ref",
+    "metric_definition_ref", "oracle_tool_ref", "oracle_family",
+    "pass_status", "pass_criterion", "subject_ref", "reference_subject_ref",
+    "stage", "scope", "scope_selector", "evidence_refs", "bundle_ref",
+})
+
+
+def _canonical_retained_semantics(field: str, value: Any) -> Any:
+    """Canonicalize source-only semantics omitted by historical contracts."""
+    if isinstance(value, dict):
+        return {
+            key: _canonical_retained_semantics(key, child)
+            for key, child in sorted(value.items())
+            if key != "notes" and child not in (None, "", [])
+        }
+    if isinstance(value, list):
+        normalized = [_canonical_retained_semantics("", child) for child in value]
+        if field not in _RETAINED_SET_FIELDS:
+            return normalized
+        keyed = {
+            yaml.safe_dump(item, sort_keys=True, allow_unicode=True): item
+            for item in normalized
+        }
+        return [keyed[key] for key in sorted(keyed)]
+    return value
+
+
+def _retained_selection_semantic_errors(
+    path: Path,
+    measurements: list[dict[str, Any]],
+    subject_ref: str | None,
+    contract_emitter: Any,
+) -> list[str]:
+    """Fail before replay when a frozen selector would collapse newer semantics."""
+    errors: list[str] = []
+    for row in measurements:
+        for carrier_name in ("agent_claim", "oracle_measure", "delta"):
+            carrier = row.get(carrier_name)
+            if not isinstance(carrier, dict):
+                continue
+            nested = sorted(set(carrier) & _NESTED_SOURCE_LINEAGE_FIELDS)
+            if nested:
+                errors.append(
+                    f"{path.name}: source measurement {row.get('id')!r} "
+                    f"{carrier_name} carries nested QDS lineage/verdict field(s): "
+                    + ", ".join(nested)
+                )
+    selector = (
+        contract_emitter
+        if hasattr(contract_emitter, "_eligible_for_subject")
+        else getattr(contract_emitter, "_v1", contract_emitter)
+    )
+    eligible = [
+        row
+        for row in selector._eligible_for_subject(measurements, subject_ref)
+        if selector._is_selectable_summary_measurement(row)
+    ]
+    groups: dict[tuple[Any, str], list[dict[str, Any]]] = {}
+    for row in eligible:
+        key = (
+            selector._candidate_priority(row, subject_ref),
+            selector._scientific_payload(row),
+        )
+        groups.setdefault(key, []).append(row)
+    for rows in groups.values():
+        if len(rows) < 2:
+            continue
+        payloads = {
+            yaml.safe_dump(
+                {
+                    field: _canonical_retained_semantics(field, row.get(field))
+                    for field in _RETAINED_SEMANTIC_FIELDS
+                    if row.get(field) not in (None, "", [])
+                },
+                sort_keys=True,
+                allow_unicode=True,
+            )
+            for row in rows
+        }
+        if len(payloads) > 1:
+            ids = ", ".join(str(row.get("id") or "<missing id>") for row in rows)
+            errors.append(
+                f"{path.name}: retained contract selection cannot safely choose "
+                "between equally ranked source measurements whose binding, "
+                f"preconditions, claim/delta lineage, or assumptions differ ({ids})"
+            )
+    return errors
 
 
 def _validate_contract_pin(
@@ -541,6 +647,9 @@ def _rebuild_coverage(
             for run in filtered
             for measurement in contract_emitter._final_or_all_measurements(run)
         ]
+        errors.extend(_retained_selection_semantic_errors(
+            path, measurements, effective_subject, contract_emitter
+        ))
         expected = contract_emitter.build_cross_tool_coverage(
             str(qds.get("id") or ""),
             measurements,
@@ -649,9 +758,11 @@ def main() -> int:
     eval_runs = _load_eval_runs(root, failures)
     for path in _yaml_paths(root / "data", "QDS_*"):
         try:
-            doc = yaml.safe_load(path.read_text()) or {}
-        except (yaml.YAMLError, OSError) as exc:
-            failures.append(f"{path.name}: unreadable ({type(exc).__name__})")
+            doc = strict_yaml_load(path.read_text()) or {}
+        except (yaml.YAMLError, OSError, UnicodeError) as exc:
+            failures.append(
+                f"{path.name}: unreadable ({type(exc).__name__}): {exc}"
+            )
             continue
         sheets = doc.get("quality_data_sheets", []) or []
         if not sheets:

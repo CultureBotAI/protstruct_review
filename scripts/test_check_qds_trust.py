@@ -500,6 +500,39 @@ with tempfile.TemporaryDirectory() as tmp:
 
 with tempfile.TemporaryDirectory() as tmp:
     root = Path(tmp)
+    first = copy.deepcopy(NON_CCTBX)
+    second = copy.deepcopy(NON_CCTBX)
+    first.update({
+        "id": "M_binding_a", "pass_status": "pass",
+        "pass_criterion": "pass when < 0.25",
+        "pass_criterion_ref": "CRIT_a",
+    })
+    second.update({
+        "id": "M_binding_b", "pass_status": "pass",
+        "pass_criterion": "pass when < 0.25",
+        "pass_criterion_ref": "CRIT_b",
+    })
+    write_fixture(root, [first, second])
+    code, out = run_guard(root)
+    check("retained replay rejects collapsed criterion bindings", code, 1)
+    check(
+        "retained semantic conflict is diagnosed before replay",
+        "retained contract selection cannot safely choose" in out,
+        True,
+    )
+
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    nested = copy.deepcopy(NON_CCTBX)
+    nested["oracle_measure"]["pass_status"] = "pass"
+    write_fixture(root, [nested])
+    code, out = run_guard(root)
+    check("retained replay rejects nested source verdict metadata", code, 1)
+    check("nested source verdict is diagnosed",
+          "nested QDS lineage/verdict" in out, True)
+
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
     eval_path, _ = write_fixture(root, [NON_CCTBX])
     eval_path.rename(eval_path.with_name("not_an_eval.yaml"))
     code, out = run_guard(root)
@@ -832,5 +865,31 @@ for label, mutation in (
         "source-owned canonical byte pin" in out,
         True,
     )
+
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    data_dir = root / "data"
+    data_dir.mkdir(parents=True)
+    (data_dir / "QDS_duplicate.yaml").write_text(
+        "quality_data_sheets: []\n"
+        "quality_data_sheets: []\n"
+    )
+    code, out = run_guard(root)
+check("duplicate QDS YAML mapping keys fail trust validation", code, 1)
+check("duplicate QDS YAML diagnostic names the repeated key",
+      "duplicate YAML mapping key 'quality_data_sheets'" in out, True)
+
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    data_dir = root / "data"
+    data_dir.mkdir(parents=True)
+    (data_dir / "QDS_invalid_utf8.yaml").write_bytes(
+        b"quality_data_sheets:\n\xff"
+    )
+    code, out = run_guard(root)
+check("invalid-UTF-8 QDS fails trust validation", code, 1)
+check("invalid-UTF-8 QDS has no traceback", "Traceback" in out, False)
+check("invalid-UTF-8 QDS has a contextual diagnostic",
+      "UnicodeDecodeError" in out and "QDS_invalid_utf8.yaml" in out, True)
 
 print(f"\n{PASSED} checks passed")

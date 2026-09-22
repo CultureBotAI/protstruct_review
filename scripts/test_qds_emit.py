@@ -184,6 +184,10 @@ def test_synth_local_blocks_present() -> None:
     _check(prq.get("outliers"), "per_residue_quality.outliers empty (eval has 2 ResidueOutliers)")
     _check(prq.get("density_peaks"), "per_residue_quality.density_peaks empty (eval has 1 peak)")
     _check(prq.get("lddt_per_residue"), "per_residue_quality.lddt_per_residue empty (eval has 5 values)")
+    _check(
+        {row.get("tool_ref") for row in prq["lddt_per_residue"]} == {"TM-align"},
+        "frozen synthetic QDS no longer matches its immutable source provenance",
+    )
 
     _check("site_qualities" in qds and qds["site_qualities"], "synthetic QDS missing site_qualities")
     sq = qds["site_qualities"][0]
@@ -1619,6 +1623,54 @@ def test_equal_priority_semantic_conflicts_fail() -> None:
             ["scientifically ambiguous", "status_pass", "status_fail"],
             "equal-priority values differed in pass status",
         )
+    binding_rows = [
+        _measurement("binding_a", "T15_secondary_structure_agreement", 0.8),
+        _measurement("binding_b", "T15_secondary_structure_agreement", 0.8),
+    ]
+    binding_rows[0]["pass_criterion_ref"] = "CRIT_a"
+    binding_rows[1]["pass_criterion_ref"] = "CRIT_b"
+    assert_raises_completeness(
+        lambda: qds_emit._strongest(binding_rows),
+        ["scientifically ambiguous", "binding_a", "binding_b"],
+        "equal-priority values differed only in criterion binding",
+    )
+    reordered = copy.deepcopy(binding_rows)
+    for row in reordered:
+        row["pass_criterion_ref"] = "CRIT_same"
+    reordered[0]["criterion_preconditions"] = [
+        {"id": "a", "status": "satisfied", "evidence_refs": ["x", "y"]},
+        {"id": "b", "status": "satisfied", "evidence_refs": ["z"]},
+    ]
+    reordered[1]["criterion_preconditions"] = [
+        {"id": "b", "status": "satisfied", "evidence_refs": ["z"]},
+        {"id": "a", "status": "satisfied", "evidence_refs": ["y", "x", "x"]},
+    ]
+    _check(
+        qds_emit._strongest(reordered)["id"] == "binding_a",
+        "set-like precondition/evidence ordering created a false conflict",
+    )
+    assumption_rows = copy.deepcopy(reordered)
+    assumption_rows[0]["assumptions"] = [{"id": "selection_a"}]
+    assumption_rows[1]["assumptions"] = [{"id": "selection_b"}]
+    assert_raises_completeness(
+        lambda: qds_emit._strongest(assumption_rows),
+        ["scientifically ambiguous", "binding_a", "binding_b"],
+        "equal-priority values differed in material assumptions",
+    )
+    nested = _measurement(
+        "nested_verdict", "T15_secondary_structure_agreement", 0.8
+    )
+    nested["oracle_measure"].update({
+        "pass_status": "pass", "pass_criterion": "pass when < 1",
+        "source_measurement_ref": "forged",
+    })
+    wrapped = qds_emit._wrap_value(nested)
+    _check(
+        wrapped.get("pass_status") == "informational"
+        and "pass_criterion" not in wrapped
+        and wrapped.get("source_measurement_ref") == "nested_verdict",
+        "nested source verdict/lineage leaked into a wrapped QDS scalar",
+    )
     print("PASS  test_equal_priority_semantic_conflicts_fail")
 
 
@@ -2604,6 +2656,64 @@ def test_structure_identity_comes_from_pinned_eval_source() -> None:
     print("PASS  test_structure_identity_comes_from_pinned_eval_source")
 
 
+def test_duplicate_yaml_keys_fail_before_emission() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "EVAL_duplicate.yaml"
+        path.write_text(
+            "evaluation_runs: []\n"
+            "evaluation_runs: []\n"
+        )
+        for contract_version in ("1", "2"):
+            assert_raises_completeness(
+                lambda version=contract_version: qds_emit.emit_qds(
+                    [path],
+                    qds_id="QDS_duplicate",
+                    structure_id="1abc",
+                    coverage_scope="cumulative",
+                    emitter_contract_version=version,
+                ),
+                ["duplicate YAML mapping key", "evaluation_runs"],
+                "an EvaluationRun source contained a duplicate YAML key under "
+                f"contract {contract_version}",
+            )
+        valid_source = Path(tmp) / "EVAL_empty.yaml"
+        valid_source.write_text("{}\n")
+        duplicate_catalog = Path(tmp) / "catalog.yaml"
+        duplicate_catalog.write_text(
+            "metric_definitions: []\n"
+            "metric_definitions: []\n"
+        )
+        original_catalog = qds_emit.qds_emit_contract_v1.CATALOG_PATH
+        qds_emit.qds_emit_contract_v1.CATALOG_PATH = duplicate_catalog
+        try:
+            assert_raises_completeness(
+                lambda: qds_emit.emit_qds(
+                    [valid_source],
+                    qds_id="QDS_duplicate_catalog",
+                    structure_id="1abc",
+                    coverage_scope="cumulative",
+                    emitter_contract_version="1",
+                ),
+                ["duplicate YAML mapping key", "metric_definitions"],
+                "contract 1 accepted duplicate keys in its live catalog",
+            )
+        finally:
+            qds_emit.qds_emit_contract_v1.CATALOG_PATH = original_catalog
+        invalid_utf8 = Path(tmp) / "EVAL_invalid_utf8.yaml"
+        invalid_utf8.write_bytes(b"evaluation_runs:\n\xff")
+        assert_raises_completeness(
+            lambda: qds_emit.emit_qds(
+                [invalid_utf8],
+                qds_id="QDS_invalid_utf8",
+                structure_id="1abc",
+                coverage_scope="cumulative",
+            ),
+            ["EvaluationRun source", "UnicodeDecodeError"],
+            "an EvaluationRun source contained invalid UTF-8",
+        )
+    print("PASS  test_duplicate_yaml_keys_fail_before_emission")
+
+
 def main() -> int:
     test_coverage_never_claims_an_absent_family()
     test_derived_coverage_uses_only_validated_source_families()
@@ -2642,6 +2752,7 @@ def main() -> int:
     test_t16_interface_summary_is_one_consistent_bundle()
     test_programmatic_source_admission_contract()
     test_structure_identity_comes_from_pinned_eval_source()
+    test_duplicate_yaml_keys_fail_before_emission()
     print("\nall qds_emit regression tests passed")
     return 0
 

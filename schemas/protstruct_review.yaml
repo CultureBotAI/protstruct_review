@@ -65,7 +65,9 @@ enums:
         description: Applies to the whole dataset (e.g. completeness across all reflections).
 
   PassStatus:
-    description: Outcome of a measurement against its declared pass criterion.
+    description: >-
+      Interpretation/status of a measurement: a criterion-bearing outcome,
+      criterion inapplicability, or an informational observation.
     permissible_values:
       pass: { description: Meets the criterion }
       fail_criterion: { description: Fails a declared criterion without asserting disagreement with an agent claim }
@@ -74,6 +76,22 @@ enums:
       pass_criterion_fail_headline: { description: Criterion passes but headline number is inaccurate }
       fail_by_oracle_within_cctbx: { description: Two cctbx tools disagree with agent claim — needs a non-cctbx confirmation to harden }
       informational: { description: Reported without a declared criterion }
+      criterion_inapplicable:
+        description: >-
+          A declared criterion cannot grade this row because at least one of its
+          evidence-backed required preconditions is void or unknown.
+
+  CriterionPreconditionStatus:
+    description: >-
+      Whether a load-bearing precondition for applying a pass criterion was
+      demonstrated on this measurement.
+    permissible_values:
+      satisfied:
+        description: The precondition was checked and holds for this row.
+      void:
+        description: The precondition fails, so the criterion cannot grade this row.
+      unknown:
+        description: Available evidence cannot establish the precondition.
 
   RefinementMethod:
     description: Experimental / computational method category for a structure.
@@ -673,6 +691,25 @@ classes:
       run_at:
         range: datetime
 
+  CriterionPreconditionCheck:
+    description: >-
+      One evidence-backed check of a threshold-registry precondition. Binding
+      definitions name required ids. A verdict row must satisfy each one;
+      criterion_inapplicable instead retains all checks and marks at least one
+      required check void or unknown.
+    attributes:
+      id:
+        identifier: true
+        required: true
+      status:
+        range: CriterionPreconditionStatus
+        required: true
+      evidence_refs:
+        range: string
+        multivalued: true
+        required: true
+      notes:
+
   # ----------------------------------------------------------- measurements
 
   MeasurementValue:
@@ -756,7 +793,29 @@ classes:
           selector context. These typed lineage refs identify every contributing
           row; they do not replace retained raw evidence.
       pass_criterion:
-        description: Free-text pass criterion (e.g. "< 0.05", "match within 0.005").
+        description: >-
+          Complete normalized display snapshot of the authoritative table cell
+          selected by pass_criterion_ref. Numeric threshold authority remains in
+          ref/thresholds_and_standards.md. Retain this snapshot both for a verdict
+          and when criterion_inapplicable documents why the declared rule could
+          not grade the row.
+      pass_criterion_ref:
+        range: string
+        description: >-
+          PassCriterionBinding id in ref/structural_criteria.yaml. For a verdict
+          row the binding's metric and structured applicability must match the
+          measurement. The binding points to the canonical threshold registry;
+          it does not duplicate threshold values into the catalog.
+      criterion_preconditions:
+        range: CriterionPreconditionCheck
+        multivalued: true
+        inlined_as_list: true
+        description: >-
+          Structured applicability checks required by pass_criterion_ref. A
+          verdict is valid only when every precondition required by the binding
+          is present exactly once, marked satisfied, and backed by non-circular
+          retained evidence. criterion_inapplicable instead requires at least one
+          required check to be evidence-backed void or unknown.
       pass_status:
         range: PassStatus
       notes:
@@ -789,7 +848,10 @@ classes:
       enforced semantically by the loader, not by a LinkML rule (LinkML
       `rules:` for cross-slot constraints are not honoured by all
       validators in 1.9; see scripts/tsv_to_records.py for the canonical
-      cell parser that always produces a valid combination).
+      cell parser that always produces a valid combination). On source
+      MeasurementValue.agent_claim/oracle_measure/delta, QDS lineage and verdict
+      attributes from this reusable class are forbidden; those remain on the
+      parent source row.
     attributes:
       value_numeric:
         range: float
@@ -854,7 +916,10 @@ classes:
         range: PassStatus
         description: Interpretation assigned by the source measurement.
       pass_criterion:
-        description: Criterion applied by the source measurement, when any.
+        description: >-
+          Display snapshot of the source criterion, when any. Resolve
+          source_measurement_ref to obtain its PassCriterionBinding and
+          the source row's full verdict context.
       subject_ref:
         range: string
         description: Concrete measured subject carried through from the source row.

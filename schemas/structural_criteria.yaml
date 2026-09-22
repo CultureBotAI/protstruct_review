@@ -1,9 +1,10 @@
 id: https://w3id.org/protstruct-review/structural-criteria
 name: structural_criteria
-title: Structural criteria — self-describing definitions of structural-biology criteria and measurements
+title: Structural criteria and pass-criterion bindings
 description: >-
   A LinkML schema for self-describing entries, one per structural-biology
-  criterion or measurement the harness records. Each entry consolidates, in one
+  criterion or measurement the harness records, plus contextual bindings that
+  authorize an Eval verdict to use one complete threshold-registry cell. Each entry consolidates, in one
   place, what the metric IS (text definition + citations), HOW it is computed
   (tools, families, runnable recipes), its UNITS, its normal / anomalous /
   expected value ranges (with resolution or method dependence noted), the
@@ -65,6 +66,54 @@ enums:
       web_service:
         description: "Remote service (PDBePISA, wwPDB validation, CATH)."
 
+  VerdictStage:
+    description: >-
+      Measurement stage vocabulary mirrored from schemas/protstruct_review.yaml;
+      the pass-status guard also verifies the live Eval enum.
+    permissible_values:
+      start:
+      intermediate:
+      final:
+      all:
+
+  VerdictMeasurementScope:
+    description: >-
+      Measurement scope vocabulary mirrored from schemas/protstruct_review.yaml;
+      the pass-status guard also verifies the live Eval enum.
+    permissible_values:
+      complex:
+      chain:
+      domain:
+      site:
+      residue:
+      atom:
+      dataset:
+      ligand:
+      interface:
+      ensemble:
+      assembly:
+      cohort:
+
+  VerdictOracleFamily:
+    description: >-
+      Oracle-family vocabulary valid on MeasurementValue. Unlike the broader
+      structural-criteria ToolFamily enum, this excludes web_service.
+    permissible_values:
+      cctbx:
+      non_cctbx:
+
+  CriterionOperand:
+    description: Numeric MeasurementValue carrier graded by a criterion.
+    permissible_values:
+      oracle_measure:
+      delta:
+
+  CriterionTransform:
+    description: Value-free transform applied before the extracted comparison.
+    permissible_values:
+      identity:
+      absolute:
+
   RecipeLanguage:
     description: How the recipe is invoked.
     permissible_values:
@@ -100,13 +149,134 @@ classes:
 
   CriteriaCollection:
     tree_root: true
-    description: Top-level container holding every structural-criterion entry.
+    description: >-
+      Top-level container holding structural-criterion entries and the contextual
+      PassCriterionBindings referenced by MeasurementValue.pass_criterion_ref.
     attributes:
       criteria:
         range: StructuralCriterion
         multivalued: true
         inlined_as_list: true
         required: true
+      pass_criterion_bindings:
+        range: PassCriterionBinding
+        multivalued: true
+        inlined_as_list: true
+        required: true
+        description: >-
+          Machine-checkable bindings from a stable binding id, referenced by
+          MeasurementValue.pass_criterion_ref, to one catalog metric and allowed
+          measurement context. Bindings select a canonical threshold-registry
+          cell; they never duplicate threshold values here.
+
+  PassCriterionBinding:
+    description: >-
+      A reviewed permission to apply a threshold-registry criterion to one
+      catalog metric in an explicit context. The referenced Markdown remains
+      authoritative for the threshold value.
+    attributes:
+      id:
+        identifier: true
+        required: true
+      metric_definition_ref:
+        required: true
+        description: Exact MetricDefinition id in ref/catalog.yaml.
+      threshold_registry_section:
+        range: integer
+        required: true
+        description: >-
+          Number of the ## N. section in ref/thresholds_and_standards.md.
+      threshold_registry_row:
+        required: true
+        description: >-
+          Exact first-cell label of the authoritative Markdown table row. The
+          guard reads that row; no threshold value is duplicated here.
+      threshold_registry_column:
+        range: integer
+        required: true
+        description: >-
+          One-based index (2 or greater) of the authoritative table cell. The
+          complete normalized cell is the criterion; selecting a whole cell
+          prevents a locator from omitting load-bearing operators or units. The
+          measurement's displayed criterion must equal it after normalization.
+      comparison_operand:
+        range: CriterionOperand
+        required: true
+        description: >-
+          Numeric row carrier evaluated against the extracted threshold. This
+          selects data, not a threshold value.
+      comparison_transform:
+        range: CriterionTransform
+        required: true
+        description: >-
+          Transform applied to the selected numeric carrier before comparison.
+          Use absolute for criteria expressed as an absolute delta.
+      comparison_unit:
+        required: true
+        description: >-
+          Unit required on the selected numeric carrier, or unitless. The guard
+          requires this to equal the referenced catalog metric's canonical unit;
+          it is interpretation metadata, not a threshold value.
+      effective_from:
+        range: date
+        required: true
+        description: Inclusive first EvaluationRun date on which this binding applies.
+      effective_until:
+        range: date
+        description: >-
+          Inclusive last EvaluationRun date on which this binding applies. Retired bindings
+          and their referenced registry rows remain append-only historical records.
+      supersedes_ref:
+        description: >-
+          Immediate earlier same-context PassCriterionBinding replaced by this
+          binding. Versions form one linear append-only chain, and the new
+          effective interval begins after the predecessor ends.
+      applicability:
+        range: VerdictApplicability
+        inlined: true
+        required: true
+
+  VerdictApplicability:
+    description: >-
+      Structured row fields that must all match before a binding may grade a
+      measurement. Lists are allowed sets, not prose guidance. Versioned bindings
+      use atomic identical applicability sets; partly overlapping contexts cannot
+      change silently across time.
+    attributes:
+      catalog_task_refs:
+        multivalued: true
+        required: true
+      stages:
+        range: VerdictStage
+        multivalued: true
+        required: true
+      scopes:
+        range: VerdictMeasurementScope
+        multivalued: true
+        required: true
+      oracle_tool_refs:
+        multivalued: true
+        required: true
+      oracle_families:
+        range: VerdictOracleFamily
+        multivalued: true
+        required: true
+      required_precondition_ids:
+        multivalued: true
+        required: true
+        description: >-
+          CriterionPreconditionCheck ids a measurement must carry as satisfied,
+          with non-circular retained evidence, before this threshold is applicable.
+          The ids must exactly equal the selected registry cell's literal
+          `[requires: id,...]` annotation. criterion_inapplicable retains the checks
+          with at least one required id marked void or unknown.
+      requires_agent_claim:
+        range: boolean
+        required: true
+        description: >-
+          Whether applying this criterion requires a finite numeric agent claim;
+          disagreement statuses always require a unit-compatible numeric claim
+          that differs from the oracle.
 
   StructuralCriterion:
     description: >-

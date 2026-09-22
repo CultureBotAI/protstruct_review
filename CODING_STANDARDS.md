@@ -43,12 +43,11 @@ Where this file and the handbook overlap, they must agree; if they drift, that i
    numeric metric, never instead of one. The idiom for grading categorical data is to score the
    *agreement between two independent labellers* as a number
    (e.g. `T15_secondary_structure_agreement` = three-state DSSP-vs-STRIDE concordance).
-10. **Pass thresholds do not live in the catalog** — the catalog is metric-shape, not thresholds.
-    They live in per-task `driving_example_T<NN>.md` files, present for all 17 catalog tasks
-    (T01–T17). Every numeric threshold is defined once in
-    `ref/thresholds_and_standards.md` with a `[provenance]` tag naming its source; drivers cite it
-    rather than restating values, and a new threshold without an admissible provenance is not
-    admissible. **Negative-control clause:** the §6 verdict thresholds are re-derived from committed
+10. **Pass thresholds live only in `ref/thresholds_and_standards.md`** — the catalog defines metric
+    shape, and the per-task `driving_example_T<NN>.md` files for T01–T17 cite and contextualize the
+    registry rather than defining or restating numeric values. Every threshold carries an approved
+    `[provenance]` tag, and a new threshold without admissible provenance is not admissible.
+    **Negative-control clause:** the §6 verdict thresholds are re-derived from committed
     round records by `scripts/bench_recover_leg.py`, so there the registry *restates* the
     record-derived constants and validate 3b (`check_negative_control_records.py`) asserts the
     restatement is exact — the record is the source, the registry the human-readable copy.
@@ -80,23 +79,61 @@ Where this file and the handbook overlap, they must agree; if they drift, that i
     sheet through that retained implementation, independently canonicalizes it, and verifies the
     source/output SHA-256 pins without consulting today's live registries. Historical exceptions
     are frozen by exact repository path, QDS id, issue timestamp, and full-file SHA-256; a date
-    alone never grants an exemption.
-13c. **A verdict must name the criterion it was judged against (#567).** A `pass_status` that
-    asserts an outcome — `pass`, `fail_criterion`, `fail_by_oracle`, `pass_with_caveat`,
-    `pass_criterion_fail_headline`, `fail_by_oracle_within_cctbx` — requires a non-empty
-    `pass_criterion`; `informational` means "reported without a declared criterion" and must not
-    carry one; the disagreement statuses require the `agent_claim` they disagree with; and
-    `fail_by_oracle_within_cctbx` requires `oracle_family: cctbx`. A criterion recorded only in
-    free-text `notes` is not a criterion, and neither is a placeholder (`n/a`, `TBD`, or the
-    status name itself) — which on an `informational` row is reported rather than ignored,
-    because it is the status leaking into the criterion slot. Committed records are checked by
-    `scripts/check_pass_status.py` (validate step 3c-bis). The criterion and cctbx-family rules
-    are enforced on every record; the two that pre-existing history violates are enforced from
-    2026-09-07 with older rows grandfathered by name, and any status the guard does not
-    classify — or a schema it cannot read — is a hard failure.
+    alone never grants an exemption. Live selection and the retained-contract preflight reject
+    equal-priority rows whose criterion binding/preconditions, agent-claim/delta lineage, or
+    assumptions differ, and reject QDS lineage/verdict fields smuggled inside source value carriers.
+    This source-owned preflight protects retained v1/v2 artifacts without changing their frozen
+    output shape.
+13c. **A verdict must name an applicable, registry-grounded criterion (#567, #588).** A
+    `pass_status` that asserts an outcome — `pass`, `fail_criterion`, `fail_by_oracle`,
+    `pass_with_caveat`, `pass_criterion_fail_headline`, `fail_by_oracle_within_cctbx` — requires
+    both a numeric-comparison `pass_criterion` and a `pass_criterion_ref`. The reference resolves in
+    `ref/structural_criteria.yaml::pass_criterion_bindings`, whose exact metric and structured
+    task/stage/scope/tool/family applicability, effective date, canonical catalog unit, and
+    metric↔task/tool↔task links must match the row. A binding selects one complete normalized table
+    cell by section, first-cell row label, and one-based column; that cell must contain exactly one
+    strict positive-polarity comparison (`pass(es)`, `fail(s/ure)`, or `outlier`, followed by
+    `if`/`when`). The binding declares the operand and transform, and the guard recomputes the result
+    with exact decimal arithmetic; a delta must equal unit-compatible `oracle_measure - agent_claim`.
+    The row's status must agree with that result. The registry's dedicated Provenance/Source cell
+    must contain an approved tag. Bindings never copy threshold values into the catalog or create a
+    second threshold source.
+
+    Every load-bearing applicability condition must be encoded in the selected cell's literal
+    `[requires: id,...]` annotation. The binding lists exactly those ids, and the measurement carries
+    each once in evidence-backed `criterion_preconditions[]`. A verdict requires every check to be
+    `satisfied`; `criterion_inapplicable` retains the authoritative criterion/ref and requires at
+    least one required check to be `void` or `unknown`. `informational` means "reported without a
+    declared criterion" and carries none of `pass_criterion`, `pass_criterion_ref`, or
+    `criterion_preconditions`. The four disagreement statuses (`fail_by_oracle`,
+    `fail_by_oracle_within_cctbx`, `pass_with_caveat`, and `pass_criterion_fail_headline`) require a
+    finite numeric, unit-compatible agent claim that differs from the oracle. A plain `pass` or
+    `fail_criterion` cannot retain a contradictory asserted claim. Gradeable source carriers set
+    exactly one of numeric, text, or true-not-applicable, and cannot contain nested QDS lineage or
+    verdict fields. Text-only disagreement cannot support a numeric verdict.
+
+    `fail_by_oracle_within_cctbx` is the sole criterion-bearing status allowed on a cctbx-only row;
+    a hard pass/failure belongs on an independently remeasured non-cctbx row. A criterion recorded
+    only in `notes`, nonnumeric prose, a placeholder (`n/a`, `TBD`, or a status name), or text absent
+    from its cited registry cell is not a criterion. Rows in one run with identical structured
+    scientific context, values, criterion binding/preconditions, assumptions, and retained evidence
+    must not assign different statuses; list ordering and duplicates do not make evidence different,
+    and free-text `notes` alone cannot justify a different verdict. Looser metric/tool groupings remain
+    unsafe because different subjects and values can legitimately pass and fail the same rule.
+    Committed records are checked by `scripts/check_pass_status.py` (validate step 3c-bis).
+    Pre-registry history is preserved, not validated, only by explicit path plus exact file/row
+    SHA-256; a date never grants an exemption, mutation makes an exemption stale, and scientific
+    corrections require a new dated record rather than rewriting an immutable source/QDS pair.
+    Binding versions use inclusive effective intervals and an immediate-predecessor, same-context,
+    append-only supersession chain; overlapping or partly changed temporal contexts fail. A canonical
+    EVAL filename date must equal `EvaluationRun.run_date`. Duplicate YAML keys, statusless criterion
+    metadata, and malformed status, criterion, schema, binding, carrier, or record shapes fail with
+    contextual diagnostics.
 13d. **A QDS scalar keeps its measurement context.** Newly emitted summary values carry the source
     EvaluationRun and MeasurementValue ids, canonical metric, subject, stage/scope/selector,
-    oracle tool and family, `pass_status`, criterion, and notes. `subject_ref` identifies the
+    oracle tool and family, `pass_status`, criterion, and notes. Frozen contracts do not inline newer
+    binding/precondition fields; consumers resolve `source_measurement_ref` for that complete source
+    context, and retained-contract preflight prevents ambiguous source collapse. `subject_ref` identifies the
     concrete model or dataset; do not overload `scope_selector` with provenance prose. When a QDS
     names a subject, explicit non-matching measurements are ineligible and legacy unlabelled rows
     are fallback-only. A multi-subject input without an explicit QDS subject fails hard.

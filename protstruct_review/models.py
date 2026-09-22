@@ -208,7 +208,7 @@ class Stage(str, Enum):
 
 class PassStatus(str, Enum):
     """
-    Outcome of a measurement against its declared pass criterion.
+    Interpretation/status of a measurement: a criterion-bearing outcome, criterion inapplicability, or an informational observation.
     """
     pass_ = "pass"
     """
@@ -237,6 +237,28 @@ class PassStatus(str, Enum):
     informational = "informational"
     """
     Reported without a declared criterion
+    """
+    criterion_inapplicable = "criterion_inapplicable"
+    """
+    A declared criterion cannot grade this row because at least one of its evidence-backed required preconditions is void or unknown.
+    """
+
+
+class CriterionPreconditionStatus(str, Enum):
+    """
+    Whether a load-bearing precondition for applying a pass criterion was demonstrated on this measurement.
+    """
+    satisfied = "satisfied"
+    """
+    The precondition was checked and holds for this row.
+    """
+    void = "void"
+    """
+    The precondition fails, so the criterion cannot grade this row.
+    """
+    unknown = "unknown"
+    """
+    Available evidence cannot establish the precondition.
     """
 
 
@@ -572,6 +594,7 @@ class Finding(ConfiguredBaseModel):
                        'TypedMeasurementValue',
                        'HeadlineFinding']} })
     notes: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Finding',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'TypedMeasurementValue',
                        'HeadlineFinding',
@@ -609,6 +632,7 @@ class CatalogTask(ConfiguredBaseModel):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -671,6 +695,7 @@ class Tool(ConfiguredBaseModel):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -730,6 +755,7 @@ class MetricDefinition(ConfiguredBaseModel):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -798,6 +824,7 @@ class Structure(ConfiguredBaseModel):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -861,6 +888,7 @@ class ExperimentalData(ConfiguredBaseModel):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -922,6 +950,7 @@ class AgentArtifact(ConfiguredBaseModel):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -992,6 +1021,7 @@ class Refinement(ConfiguredBaseModel):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -1063,6 +1093,7 @@ class MeasurementProvenance(ConfiguredBaseModel):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -1107,6 +1138,81 @@ class MeasurementProvenance(ConfiguredBaseModel):
     run_at: Optional[datetime ] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementProvenance']} })
 
 
+class CriterionPreconditionCheck(ConfiguredBaseModel):
+    """
+    One evidence-backed check of a threshold-registry precondition. Binding definitions name required ids. A verdict row must satisfy each one; criterion_inapplicable instead retains all checks and marks at least one required check void or unknown.
+    """
+    linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'https://w3id.org/protstruct-review/schema'})
+
+    id: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['CatalogTask',
+                       'Tool',
+                       'MetricDefinition',
+                       'Structure',
+                       'ExperimentalData',
+                       'AgentArtifact',
+                       'Refinement',
+                       'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
+                       'MeasurementValue',
+                       'HeadlineFinding',
+                       'EvaluationRun',
+                       'QdsReplayPin',
+                       'QualityDataSheet',
+                       'IdentityBlock',
+                       'GeometrySummary',
+                       'RefinementSummary',
+                       'MapSummary',
+                       'CrossToolCoverage',
+                       'TaskCoverage',
+                       'CrossToolWaiver',
+                       'DataQualitySummary',
+                       'PredictedConfidenceSummary',
+                       'PackingSummary',
+                       'ClassificationSummary',
+                       'InterfaceQualitySummary',
+                       'PredictionEnsembleSummary',
+                       'NmrValidationSummary',
+                       'PairwiseComparison',
+                       'ToolRecommendation',
+                       'ResidueRef',
+                       'ResidueOutlier',
+                       'DensityPeak',
+                       'FlaggedRegion',
+                       'PerResidueValue',
+                       'PerResidueQuality',
+                       'SecondaryStructureAssignment',
+                       'DomainAssignment',
+                       'InterfaceQuality',
+                       'NmrEnsembleQuality',
+                       'PredictionEnsembleQuality',
+                       'Ligand',
+                       'LigandQuality',
+                       'Assumption',
+                       'CoordinationContact',
+                       'Site',
+                       'SiteQuality']} })
+    status: CriterionPreconditionStatus = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['CriterionPreconditionCheck', 'Assumption']} })
+    evidence_refs: list[str] = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['CriterionPreconditionCheck',
+                       'MeasurementValue',
+                       'TypedMeasurementValue',
+                       'ToolRecommendation',
+                       'InterfaceQuality',
+                       'Assumption']} })
+    notes: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Finding',
+                       'CriterionPreconditionCheck',
+                       'MeasurementValue',
+                       'TypedMeasurementValue',
+                       'HeadlineFinding',
+                       'ToolRecommendation',
+                       'SecondaryStructureAssignment',
+                       'DomainAssignment',
+                       'InterfaceQuality',
+                       'NmrEnsembleQuality',
+                       'PredictionEnsembleQuality',
+                       'Assumption',
+                       'CoordinationContact']} })
+
+
 class MeasurementValue(Finding):
     """
     One oracle's reading of one metric at one stage on one artifact.
@@ -1122,6 +1228,7 @@ class MeasurementValue(Finding):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -1219,9 +1326,12 @@ class MeasurementValue(Finding):
     delta: Optional[TypedMeasurementValue] = Field(default=None, description="""Optional pre-computed difference. Unless delta_from_measurement_ref is present, this is oracle − agent or post − pre. When delta_from_measurement_ref is present, this is this row's oracle_measure minus the referenced MeasurementValue's oracle_measure.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue']} })
     delta_from_measurement_ref: Optional[str] = Field(default=None, description="""Same-EvaluationRun comparison row used for an oracle-versus-oracle delta. The two rows must share task, metric, stage, subject, reference subject, scope, and selector; delta equals this row's oracle_measure minus the referenced row's oracle_measure.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue']} })
     derived_from_measurement_refs: Optional[list[str]] = Field(default=[], description="""Same-EvaluationRun source measurements used to compute a composite measurement in the same subject, reference-subject, stage, scope, and selector context. These typed lineage refs identify every contributing row; they do not replace retained raw evidence.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue']} })
-    pass_criterion: Optional[str] = Field(default=None, description="""Free-text pass criterion (e.g. \"< 0.05\", \"match within 0.005\").""", json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue', 'TypedMeasurementValue']} })
+    pass_criterion: Optional[str] = Field(default=None, description="""Complete normalized display snapshot of the authoritative table cell selected by pass_criterion_ref. Numeric threshold authority remains in ref/thresholds_and_standards.md. Retain this snapshot both for a verdict and when criterion_inapplicable documents why the declared rule could not grade the row.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue', 'TypedMeasurementValue']} })
+    pass_criterion_ref: Optional[str] = Field(default=None, description="""PassCriterionBinding id in ref/structural_criteria.yaml. For a verdict row the binding's metric and structured applicability must match the measurement. The binding points to the canonical threshold registry; it does not duplicate threshold values into the catalog.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue']} })
+    criterion_preconditions: Optional[list[CriterionPreconditionCheck]] = Field(default=[], description="""Structured applicability checks required by pass_criterion_ref. A verdict is valid only when every precondition required by the binding is present exactly once, marked satisfied, and backed by non-circular retained evidence. criterion_inapplicable instead requires at least one required check to be evidence-backed void or unknown.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue']} })
     pass_status: Optional[PassStatus] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue', 'TypedMeasurementValue']} })
     notes: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Finding',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'TypedMeasurementValue',
                        'HeadlineFinding',
@@ -1235,7 +1345,8 @@ class MeasurementValue(Finding):
                        'CoordinationContact']} })
     provenance_ref: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue']} })
     bundle_ref: Optional[str] = Field(default=None, description="""Stable invocation/bundle id shared by coupled measurements that must be selected and interpreted together.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue', 'TypedMeasurementValue']} })
-    evidence_refs: Optional[list[str]] = Field(default=[], description="""Retained raw outputs or EvaluationRun ids supporting this measurement.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue',
+    evidence_refs: Optional[list[str]] = Field(default=[], description="""Retained raw outputs or EvaluationRun ids supporting this measurement.""", json_schema_extra = { "linkml_meta": {'domain_of': ['CriterionPreconditionCheck',
+                       'MeasurementValue',
                        'TypedMeasurementValue',
                        'ToolRecommendation',
                        'InterfaceQuality',
@@ -1245,7 +1356,7 @@ class MeasurementValue(Finding):
 
 class TypedMeasurementValue(ConfiguredBaseModel):
     """
-    A typed carrier for one measurement value. Exactly one of {value_numeric, value_text, is_not_applicable=true} should be set — enforced semantically by the loader, not by a LinkML rule (LinkML `rules:` for cross-slot constraints are not honoured by all validators in 1.9; see scripts/tsv_to_records.py for the canonical cell parser that always produces a valid combination).
+    A typed carrier for one measurement value. Exactly one of {value_numeric, value_text, is_not_applicable=true} should be set — enforced semantically by the loader, not by a LinkML rule (LinkML `rules:` for cross-slot constraints are not honoured by all validators in 1.9; see scripts/tsv_to_records.py for the canonical cell parser that always produces a valid combination). On source MeasurementValue.agent_claim/oracle_measure/delta, QDS lineage and verdict attributes from this reusable class are forbidden; those remain on the parent source row.
     """
     linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'https://w3id.org/protstruct-review/schema'})
 
@@ -1278,7 +1389,7 @@ class TypedMeasurementValue(ConfiguredBaseModel):
                        'TypedMeasurementValue',
                        'HeadlineFinding']} })
     pass_status: Optional[PassStatus] = Field(default=None, description="""Interpretation assigned by the source measurement.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue', 'TypedMeasurementValue']} })
-    pass_criterion: Optional[str] = Field(default=None, description="""Criterion applied by the source measurement, when any.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue', 'TypedMeasurementValue']} })
+    pass_criterion: Optional[str] = Field(default=None, description="""Display snapshot of the source criterion, when any. Resolve source_measurement_ref to obtain its PassCriterionBinding and the source row's full verdict context.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue', 'TypedMeasurementValue']} })
     subject_ref: Optional[str] = Field(default=None, description="""Concrete measured subject carried through from the source row.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue',
                        'TypedMeasurementValue',
                        'QualityDataSheet',
@@ -1316,13 +1427,15 @@ class TypedMeasurementValue(ConfiguredBaseModel):
                        'TypedMeasurementValue',
                        'TaskCoverage',
                        'CrossToolWaiver']} })
-    evidence_refs: Optional[list[str]] = Field(default=[], description="""Retained raw outputs or EvaluationRun ids carried from the source row.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue',
+    evidence_refs: Optional[list[str]] = Field(default=[], description="""Retained raw outputs or EvaluationRun ids carried from the source row.""", json_schema_extra = { "linkml_meta": {'domain_of': ['CriterionPreconditionCheck',
+                       'MeasurementValue',
                        'TypedMeasurementValue',
                        'ToolRecommendation',
                        'InterfaceQuality',
                        'Assumption']} })
     bundle_ref: Optional[str] = Field(default=None, description="""Coupled source-measurement bundle id carried through verbatim.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue', 'TypedMeasurementValue']} })
     notes: Optional[str] = Field(default=None, description="""Source caveats and interpretation carried through verbatim.""", json_schema_extra = { "linkml_meta": {'domain_of': ['Finding',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'TypedMeasurementValue',
                        'HeadlineFinding',
@@ -1351,6 +1464,7 @@ class HeadlineFinding(Finding):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -1410,6 +1524,7 @@ class HeadlineFinding(Finding):
     oracle_measure: Optional[TypedMeasurementValue] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue', 'HeadlineFinding']} })
     verdict_label: Optional[str] = Field(default=None, description="""Free-text label such as \"confirms\", \"off_by_0.015\", \"fails_<_0.05_criterion\". Not an enum at v0 — the label space is still settling.""", json_schema_extra = { "linkml_meta": {'domain_of': ['HeadlineFinding']} })
     notes: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Finding',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'TypedMeasurementValue',
                        'HeadlineFinding',
@@ -1438,6 +1553,7 @@ class EvaluationRun(ConfiguredBaseModel):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -1529,6 +1645,7 @@ class QdsReplayPin(ConfiguredBaseModel):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -1656,6 +1773,7 @@ class QualityDataSheet(ConfiguredBaseModel):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -1763,6 +1881,7 @@ class IdentityBlock(ConfiguredBaseModel):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -1828,6 +1947,7 @@ class GeometrySummary(ConfiguredBaseModel):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -1895,6 +2015,7 @@ class RefinementSummary(ConfiguredBaseModel):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -1954,6 +2075,7 @@ class MapSummary(ConfiguredBaseModel):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -2020,6 +2142,7 @@ class CrossToolCoverage(ConfiguredBaseModel):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -2075,6 +2198,7 @@ class TaskCoverage(ConfiguredBaseModel):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -2178,6 +2302,7 @@ class CrossToolWaiver(ConfiguredBaseModel):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -2280,6 +2405,7 @@ class DataQualitySummary(ConfiguredBaseModel):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -2341,6 +2467,7 @@ class PredictedConfidenceSummary(ConfiguredBaseModel):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -2404,6 +2531,7 @@ class PackingSummary(ConfiguredBaseModel):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -2461,6 +2589,7 @@ class ClassificationSummary(ConfiguredBaseModel):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -2522,6 +2651,7 @@ class InterfaceQualitySummary(ConfiguredBaseModel):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -2580,6 +2710,7 @@ class PredictionEnsembleSummary(ConfiguredBaseModel):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -2636,6 +2767,7 @@ class NmrValidationSummary(ConfiguredBaseModel):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -2694,6 +2826,7 @@ class PairwiseComparison(SourceRowLineage):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -2789,6 +2922,7 @@ class ToolRecommendation(ConfiguredBaseModel):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -2848,7 +2982,8 @@ class ToolRecommendation(ConfiguredBaseModel):
     role: RecommendationRole = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['ToolRecommendation']} })
     rank: Optional[int] = Field(default=None, description="""1 = primary recommendation, 2+ = alternatives in order.""", json_schema_extra = { "linkml_meta": {'domain_of': ['ToolRecommendation']} })
     justification: Optional[str] = Field(default=None, description="""One-line rationale (\"CASP gold standard for fold similarity\"; \"matches PHENIX within 0.03 Å on 1SAR eval\"). Cite the source paper or the EvaluationRun id that supplies the evidence.""", json_schema_extra = { "linkml_meta": {'domain_of': ['ToolRecommendation']} })
-    evidence_refs: Optional[list[str]] = Field(default=[], description="""Citation keys (e.g. \"Zhang2004\", \"Williams2018\") and/or EvaluationRun ids that support this recommendation.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue',
+    evidence_refs: Optional[list[str]] = Field(default=[], description="""Citation keys (e.g. \"Zhang2004\", \"Williams2018\") and/or EvaluationRun ids that support this recommendation.""", json_schema_extra = { "linkml_meta": {'domain_of': ['CriterionPreconditionCheck',
+                       'MeasurementValue',
                        'TypedMeasurementValue',
                        'ToolRecommendation',
                        'InterfaceQuality',
@@ -2857,6 +2992,7 @@ class ToolRecommendation(ConfiguredBaseModel):
     effective_at: Optional[datetime ] = Field(default=None, description="""Exact timezone-qualified activation instant used for immutable QDS time slicing. Required for canonical registry rows.""", json_schema_extra = { "linkml_meta": {'domain_of': ['ToolRecommendation', 'Assumption']} })
     supersedes_recommendation_ref: Optional[str] = Field(default=None, description="""Earlier dated recommendation revision retired by this row. Keep the predecessor in the registry so older immutable QDS snapshots remain reproducible; emission selects the newest active lineage member.""", json_schema_extra = { "linkml_meta": {'domain_of': ['ToolRecommendation']} })
     notes: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Finding',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'TypedMeasurementValue',
                        'HeadlineFinding',
@@ -2884,6 +3020,7 @@ class ResidueRef(ConfiguredBaseModel):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -2959,6 +3096,7 @@ class ResidueOutlier(SourceRowLineage):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -3048,6 +3186,7 @@ class DensityPeak(SourceRowLineage):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -3137,6 +3276,7 @@ class FlaggedRegion(SourceRowLineage):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -3241,6 +3381,7 @@ class PerResidueValue(SourceRowLineage):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -3334,6 +3475,7 @@ class PerResidueQuality(ConfiguredBaseModel):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -3400,6 +3542,7 @@ class SecondaryStructureAssignment(SourceRowLineage):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -3491,6 +3634,7 @@ class SecondaryStructureAssignment(SourceRowLineage):
                        'PredictionEnsembleQuality',
                        'Assumption']} })
     notes: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Finding',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'TypedMeasurementValue',
                        'HeadlineFinding',
@@ -3521,6 +3665,7 @@ class DomainAssignment(SourceRowLineage):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -3615,6 +3760,7 @@ class DomainAssignment(SourceRowLineage):
                        'PredictionEnsembleQuality',
                        'Assumption']} })
     notes: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Finding',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'TypedMeasurementValue',
                        'HeadlineFinding',
@@ -3645,6 +3791,7 @@ class InterfaceQuality(SourceRowLineage):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -3737,12 +3884,14 @@ class InterfaceQuality(SourceRowLineage):
                        'NmrEnsembleQuality',
                        'PredictionEnsembleQuality',
                        'Assumption']} })
-    evidence_refs: Optional[list[str]] = Field(default=[], description="""Retained raw outputs supporting the interface scores and mapping.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue',
+    evidence_refs: Optional[list[str]] = Field(default=[], description="""Retained raw outputs supporting the interface scores and mapping.""", json_schema_extra = { "linkml_meta": {'domain_of': ['CriterionPreconditionCheck',
+                       'MeasurementValue',
                        'TypedMeasurementValue',
                        'ToolRecommendation',
                        'InterfaceQuality',
                        'Assumption']} })
     notes: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Finding',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'TypedMeasurementValue',
                        'HeadlineFinding',
@@ -3773,6 +3922,7 @@ class NmrEnsembleQuality(SourceRowLineage):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -3855,6 +4005,7 @@ class NmrEnsembleQuality(SourceRowLineage):
                        'PredictionEnsembleQuality',
                        'Assumption']} })
     notes: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Finding',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'TypedMeasurementValue',
                        'HeadlineFinding',
@@ -3885,6 +4036,7 @@ class PredictionEnsembleQuality(SourceRowLineage):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -3967,6 +4119,7 @@ class PredictionEnsembleQuality(SourceRowLineage):
                        'PredictionEnsembleQuality',
                        'Assumption']} })
     notes: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Finding',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'TypedMeasurementValue',
                        'HeadlineFinding',
@@ -3996,6 +4149,7 @@ class Ligand(ConfiguredBaseModel):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -4091,6 +4245,7 @@ class LigandQuality(ConfiguredBaseModel):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -4153,6 +4308,7 @@ class Assumption(ConfiguredBaseModel):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -4213,7 +4369,7 @@ class Assumption(ConfiguredBaseModel):
                        'Site']} })
     consequences: Optional[str] = Field(default=None, description="""What can go wrong if the assumption is violated — the mechanism by which the affected number could be misleading.""", json_schema_extra = { "linkml_meta": {'domain_of': ['Assumption']} })
     mitigation: Optional[str] = Field(default=None, description="""What check, cross-tool comparison, or follow-up oracle would catch a violation. Should be runnable.""", json_schema_extra = { "linkml_meta": {'domain_of': ['Assumption']} })
-    status: Optional[AssumptionStatus] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Assumption']} })
+    status: Optional[AssumptionStatus] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['CriterionPreconditionCheck', 'Assumption']} })
     tool_ref: Optional[str] = Field(default=None, description="""When the assumption is tool-level, point at the tool.""", json_schema_extra = { "linkml_meta": {'domain_of': ['ToolRecommendation',
                        'ResidueOutlier',
                        'DensityPeak',
@@ -4225,12 +4381,14 @@ class Assumption(ConfiguredBaseModel):
                        'PredictionEnsembleQuality',
                        'Assumption']} })
     measurement_ref: Optional[str] = Field(default=None, description="""When the assumption is measurement-level, point at the measurement.""", json_schema_extra = { "linkml_meta": {'domain_of': ['Assumption']} })
-    evidence_refs: Optional[list[str]] = Field(default=[], description="""Citations or EvaluationRun ids supporting the assumption's presence (e.g. cite the paper documenting the tool's default, or the eval that observed a violation).""", json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue',
+    evidence_refs: Optional[list[str]] = Field(default=[], description="""Citations or EvaluationRun ids supporting the assumption's presence (e.g. cite the paper documenting the tool's default, or the eval that observed a violation).""", json_schema_extra = { "linkml_meta": {'domain_of': ['CriterionPreconditionCheck',
+                       'MeasurementValue',
                        'TypedMeasurementValue',
                        'ToolRecommendation',
                        'InterfaceQuality',
                        'Assumption']} })
     notes: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Finding',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'TypedMeasurementValue',
                        'HeadlineFinding',
@@ -4258,6 +4416,7 @@ class CoordinationContact(ConfiguredBaseModel):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -4308,6 +4467,7 @@ class CoordinationContact(ConfiguredBaseModel):
                        'CoordinationContact',
                        'Site']} })
     notes: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Finding',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'TypedMeasurementValue',
                        'HeadlineFinding',
@@ -4335,6 +4495,7 @@ class Site(ConfiguredBaseModel):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -4430,6 +4591,7 @@ class SiteQuality(ConfiguredBaseModel):
                        'AgentArtifact',
                        'Refinement',
                        'MeasurementProvenance',
+                       'CriterionPreconditionCheck',
                        'MeasurementValue',
                        'HeadlineFinding',
                        'EvaluationRun',
@@ -4491,6 +4653,7 @@ ExperimentalData.model_rebuild()
 AgentArtifact.model_rebuild()
 Refinement.model_rebuild()
 MeasurementProvenance.model_rebuild()
+CriterionPreconditionCheck.model_rebuild()
 MeasurementValue.model_rebuild()
 TypedMeasurementValue.model_rebuild()
 HeadlineFinding.model_rebuild()

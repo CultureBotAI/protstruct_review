@@ -22,6 +22,19 @@ governed:
       - scripts/bench_t01_superposition.py
     retired: ["≤ 0.10 Å", "≤ **0.10 Å**", "≤0.10 Å"]
 
+  - metric: "Independent-code-path R-work offset (§3)"
+    section: 3
+    current: "0.02"
+    registry_pattern: '\| Independent-code-path R-work offset \|.*Require \*\*\|ΔR_work\| ≤ ([\d.]+)\*\*'
+    consumers:
+      - ref/driving_example_T03.md
+      - ref/driving_example_T06.md
+      - ref/structural_criteria.yaml
+      - ref/research/tolerance_benchmark_r_offset.md
+      - .claude/skills/protstruct-eval/SKILL.md
+      - scripts/gemmi_rfactor.py
+    retired: ["0.005–0.015", "0.005-0.015", "0 < ΔR_work ≤ 0.02", "one-sided R-work envelope"]
+
   - metric: "ΔRMSD band, d_min >= 2.5 (§4)"
     section: 4
     current: "0.25"

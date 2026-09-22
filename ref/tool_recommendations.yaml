@@ -1737,3 +1737,125 @@ tool_recommendations:
       dihedral restraints); older entries (1D3Z) predate it and the tool says so.
     as_of_date: '2026-07-22'
     effective_at: '2026-07-22T00:00:00+00:00'
+
+  # Corrective dated revisions: the independent-offset benchmark is R-work-only.
+  - id: REC_T03_r_work_top_performing_2026_09_22
+    metric_definition_ref: T03_r-work
+    tool_ref: gemmi sfcalc
+    role: top_performing
+    rank: 1
+    justification: >-
+      Independent non-cctbx R-work cross-check. For the same model, MTZ, work
+      set and cctbx mask radii, directly sum the globally scaled `gemmi sfcalc`
+      FC values and grade the absolute offset against registry §3. The 15-entry
+      benchmark found gemmi high in every case, but sign is diagnostic rather
+      than a pass condition. The packaged 1SAR +0.0058 value came from an extra
+      bin-rescaled estimator and is therefore informational, not a benchmarked
+      pass. Neither comparison adjudicates a claim about a different model.
+    evidence_refs:
+      - ref/research/tolerance_benchmark_r_offset.md
+      - EVAL_1sar_cdba2c07_2026-09-07
+    as_of_date: '2026-09-22'
+    effective_at: '2026-09-22T09:00:00+00:00'
+    supersedes_recommendation_ref: REC_T03_r_work_top_performing
+
+  - id: REC_T03_r_free_top_performing_2026_09_22
+    metric_definition_ref: T03_r-free
+    tool_ref: gemmi sfcalc
+    role: top_performing
+    rank: 1
+    justification: >-
+      Independent non-cctbx R-free measurement with scales fitted on the work
+      set and applied unchanged to the free set. Use it descriptively alongside
+      phenix.model_vs_data. No R-free-specific cross-tool offset band has been
+      benchmarked, so the registry's R-work envelope must not be used to assign
+      an R-free pass or failure; 1SAR M_006 is informational pending that work.
+    evidence_refs:
+      - ref/research/tolerance_benchmark_r_offset.md
+      - EVAL_1sar_cdba2c07_2026-09-07
+    as_of_date: '2026-09-22'
+    effective_at: '2026-09-22T09:00:00+00:00'
+    supersedes_recommendation_ref: REC_T03_r_free_top_performing
+
+  # Corrective dated T14 revisions: same-binary dispatch is not independence,
+  # and the clashscore envelope is defined on identical H-built coordinates.
+  - id: REC_T14_h_added_top_considered_2026_09_22
+    metric_definition_ref: T14_h_added
+    tool_ref: reduce (standalone, Richardson)
+    role: top_considered
+    rank: 1
+    justification: >-
+      Canonical Richardson H-build record, including USER MOD dictionary provenance.
+      When compared with phenix.reduce in the measured installation this is a
+      same-binary dispatcher/defaults check, not an independent H-placement oracle.
+      Use a distinct builder or experimental neutron evidence for corroboration.
+    as_of_date: '2026-09-22'
+    effective_at: '2026-09-22T09:00:00+00:00'
+    supersedes_recommendation_ref: REC_T14_h_added_top_considered
+
+  - id: REC_T14_asn_gln_his_flips_proposed_top_considered_2026_09_22
+    metric_definition_ref: T14_asn_gln_his_flips_proposed
+    tool_ref: mmtbx.reduce2
+    role: top_considered
+    rank: 1
+    justification: >-
+      Distinct cctbx H builder for the paired flip comparison. Run with
+      approach=add add_flip_movers=True and retain residue-level calls; interpret only
+      alongside standalone Richardson reduce, not as a self-sufficient oracle.
+    as_of_date: '2026-09-22'
+    effective_at: '2026-09-22T09:00:00+00:00'
+    supersedes_recommendation_ref: REC_T14_asn_gln_his_flips_proposed_top_considered
+
+  - id: REC_T14_asn_gln_his_flip_candidates_scored_top_considered_2026_09_22
+    metric_definition_ref: T14_asn_gln_his_flip_candidates_scored
+    tool_ref: mmtbx.reduce2
+    role: top_considered
+    rank: 1
+    justification: >-
+      Records the cctbx builder's candidate mover set when run with
+      approach=add add_flip_movers=True. This is a candidate-set diagnostic, not
+      a count of orientations actually proposed for change; retain the
+      residue-level mover records and compare with standalone reduce only after
+      documenting each tool's decision semantics.
+    as_of_date: '2026-09-22'
+    effective_at: '2026-09-22T09:00:00+00:00'
+
+  - id: REC_T14_asn_gln_his_flip_set_conflicts_top_considered_2026_09_22
+    metric_definition_ref: T14_asn_gln_his_flip_set_conflicts
+    tool_ref: mmtbx.reduce2
+    role: top_considered
+    rank: 1
+    justification: >-
+      Derived paired result from standalone Richardson reduce plus the distinct
+      mmtbx.reduce2 builder. Retain both source rows, eligible shared-residue
+      denominator and residue-level evidence; classify the composite conservatively
+      as cctbx-dependent rather than a standalone non-cctbx result.
+    as_of_date: '2026-09-22'
+    effective_at: '2026-09-22T09:00:00+00:00'
+
+  - id: REC_T14_clashscore_delta_pre_vs_post_top_considered_2026_09_22
+    metric_definition_ref: T14_clashscore_delta_pre_vs_post
+    tool_ref: MolProbity (gold)
+    role: top_considered
+    rank: 1
+    justification: >-
+      Use one counter consistently for each builder's pre/post diagnostic. The
+      registered cctbx-versus-probe envelope applies only when both counters score
+      identical H-built coordinates under a matched H convention; it does not grade
+      the difference between changes produced by distinct H builders.
+    as_of_date: '2026-09-22'
+    effective_at: '2026-09-22T09:00:00+00:00'
+    supersedes_recommendation_ref: REC_T14_clashscore_delta_pre_vs_post_top_considered
+
+  - id: REC_T14_hbond_network_consistency_top_considered_2026_09_22
+    metric_definition_ref: T14_hbond-network_consistency_vs_standalone_reduce
+    tool_ref: reduce (standalone, Richardson)
+    role: top_considered
+    rank: 1
+    justification: >-
+      Retain the standalone reduce network as the named comparison target. Agreement
+      with phenix.reduce is same-binary reproduction, not independent corroboration;
+      use propka3 or neutron evidence for a genuinely distinct protonation check.
+    as_of_date: '2026-09-22'
+    effective_at: '2026-09-22T09:00:00+00:00'
+    supersedes_recommendation_ref: REC_T14_hbond-network_consistency_vs_standalone_reduce_top_considered

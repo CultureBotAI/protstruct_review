@@ -8,7 +8,9 @@ This directory holds the LinkML schema that describes every machine-loadable rec
 - the **EvaluationRun** records that capture per-artifact measurements and headline findings (`data/examples/eval/EVAL_*.yaml`),
 - the **QualityDataSheet** snapshot per structure (`data/examples/qds/QDS_*.yaml`).
 
-The denormalized TSVs (`ref/tasks_and_evaluations.tsv`, `EVAL_*_metrics.tsv`, `EVAL_*_headline.tsv`) remain the human-facing artefacts. They are exports from the YAML records, not the validated form.
+The denormalized TSVs (`ref/tasks_and_evaluations.tsv`, `EVAL_*_metrics.tsv`,
+`EVAL_*_headline.tsv`) are optional human-facing exports from the YAML records, not the validated
+form. Their absence does not invalidate a canonical YAML evaluation record.
 
 ## Files
 

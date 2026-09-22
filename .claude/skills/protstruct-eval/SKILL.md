@@ -37,19 +37,19 @@ Every oracle in this harness rests on assumptions that determine what it sees an
 
 ### MolProbity / probe / reduce
 - **Reference distribution.** Top8000 is built from high-resolution (≤ 2.0 Å) structures. Applying its percentile thresholds to a 3.0 Å model is implicit — the percentile is still computed but the outlier definition was set against tighter geometry than the model can deliver.
-- **H-atom placement.** `reduce -build` does its own Asn/Gln/His flips and adds H atoms with default bond-length and rotamer choices. Different H-builds can shift clashscore by ~0.5 (we saw 3.13 cctbx vs 3.63 standalone on 1SAR — same model, different H placement). Do not equate "matches MolProbity" with "matches a fresh reduce + probe run" without saying so.
+- **H-atom placement.** `reduce -build` does its own Asn/Gln/His flips and adds H atoms with default bond-length and rotamer choices. In the matched 1SAR comparison, `phenix.reduce` and standalone `reduce` dispatched the same builder; the residual clashscore difference came from the cctbx-versus-probe counting path, not different H placement. Distinct-builder comparisons such as `reduce` versus `mmtbx.reduce2` require their own matched evidence.
 - **Water and altloc handling.** `probe`'s default `ogt33` water filter and altloc selection determines which atoms can clash. Quote the flags used.
 - **Rotamer library.** Rotamer outliers use a discrete library; a side-chain that is 1° outside the favored region scores as outlier. The "% outliers" number is sharp by construction; flag clusters near boundaries in `notes`.
 
 ### `phenix.refine` (in-run R-factors)
-- **Bulk-solvent and anisotropic scaling.** In-run R-work / R-free use a particular bulk-solvent model and overall scale that minimise during refinement. They are NOT the same numbers `phenix.model_vs_data` produces from a fresh re-derivation. The 1SAR eval shows this gap routinely at 0.01–0.015 R-units.
+- **Bulk-solvent and anisotropic scaling.** In-run R-work / R-free use the refinement's bulk-solvent and scaling state; a fresh `phenix.model_vs_data` derivation can differ. Measure that effect only on the exact same model and MTZ. For packaged 1SAR round 4, the PDB header and fresh result differ by just 0.0001 / 0.0002; the old 0.01–0.015 claim compared the round-7 log with the round-4 package and is withdrawn.
 - **R-free flag set.** Assumes the test set is fixed and untouched. If the agent regenerated R-free flags between rounds, cross-validation is broken silently. Compare reflection counts and column labels at every round when in doubt.
 
 ### `phenix.model_vs_data`
 - **Same bulk-solvent / scaling code path as `phenix.refine`** in principle, but a separate full re-derivation. Catalog T06 oracle of record. Treats the model as fixed; not a refinement.
 
 ### `gemmi sfcalc` + custom R calc
-- **Bulk-solvent fit is simpler** than PHENIX's. The script we ship (`gemmi_rfactor.py`) does flat-bulk + bin-wise isotropic rescaling, no anisotropic correction. Expect 0.005–0.015 higher R-work than PHENIX even on identical data. That's the price of an independent code path.
+- **The benchmark is estimator-specific.** `gemmi sfcalc --scale-to` uses flat-mask bulk solvent, one global anisotropic tensor and global solvent parameters. Registry §3's **|ΔR_work| ≤ 0.02** envelope covers direct summation of those globally scaled FC values with the same model, MTZ, work set and `--radii-set=cctbx`; the observed positive sign is diagnostic, not a pass condition. `gemmi_rfactor.py` adds a work-fitted bin-wise isotropic rescale and is not covered by that benchmark. Keep its R-work and R-free offsets informational until estimator-matched benchmarks exist.
 - **Resolution shells are linearly binned** by the calc script — different from PHENIX's adaptive shells.
 
 ### TM-align / TM-score
@@ -69,9 +69,9 @@ Every oracle in this harness rests on assumptions that determine what it sees an
 - **Geometry-energy ratio** is computed against the library's expected distribution. Resolution-aware? No — the metric is library-aware, not data-aware.
 
 ### `phenix.find_peaks_holes`
-- **Peak threshold (σ cutoff)** controls what's reported. Default 4.0 σ; lowering surfaces noise, raising hides real peaks. The 1SAR oracle run found 23 positive + 8 negative peaks at 4 σ — agent's report listed 9, suggesting a different cutoff (or a peak-merging radius) was used.
+- **Peak threshold (σ cutoff)** controls what's reported. Default 4.0 σ; lowering surfaces noise, raising hides real peaks. A 1SAR run on the packaged round-4 model found 23 positive + 8 negative peaks at 4 σ, while the report described round 7 and listed 9. Because the models differ, that mismatch cannot identify a cutoff or reporting defect; it demonstrates why peak inventories must be bound to the exact subject.
 - **Peak-merging radius** can collapse multi-atom features into one entry.
-- **Atom exclusion.** Peaks within X Å of modelled atoms are typically excluded. The agent's report describes peaks BY their nearest atom — implying their tool did NOT exclude near-atom peaks. Different exclusion = different counts.
+- **Atom exclusion.** Peaks within X Å of modelled atoms are typically excluded. Describing peaks by a nearest atom does not establish the exclusion policy. Record the actual flags and radius; different exclusion settings produce different counts.
 
 ### lDDT
 - **Distance inclusion radius** (default 15 Å) determines what counts as "local". Smaller radius rewards local fidelity, larger rewards extended geometry.
@@ -93,25 +93,25 @@ Specific to the way the OpenScientist agent aggregates and interprets oracle out
 
 ### Reporting
 
-- **R-factors are read from `phenix.refine`'s in-run log** (or from the refined MTZ's stored statistics) rather than re-derived by `phenix.model_vs_data`. The 1SAR eval shows this convention puts the published R-free 0.01–0.015 below the cross-tool oracle's value, and turns the round-7 R-free-gap claim from 0.055 (oracle) to 0.050 (agent) — exactly straddling the < 0.05 success criterion.
-- **Per-round table aggregation collapses rounds.** "Round 5–6" appears as one row in the agent's report despite being two distinct refinements. The actual round 6 oracle R-free (0.207) is *better* than round 7's (0.212) — an effect the collapsed reporting hides.
-- **Numeric position fields can refer to the initial placement, not the final**. The Ca²⁺ position quoted in the 1SAR report (66.611, 3.895, 13.404) is the initial placement; the final coordinates in `1sar_final.pdb` are 0.215 Å away at (66.752, 3.733, 13.397). The agent's text describes a "0.19 Å coordinate shift" elsewhere — implying the report templating fixed the *initial* coordinates as the position-of-record.
-- **Water counts can come from a different stage than the deposited PDB.** Agent claimed 159 ordered waters; the final PDB has 146. This 13-water gap also accounts for the +13 total-atom discrepancy. Likely cause: counting waters at one refinement step but writing the PDB after a subsequent water-pruning step.
-- **Mean B-factor is reported with rounding that hides distribution shifts.** Agent quotes `<B> = 14.6 Å²`; oracle finds `<B> = 15.98 Å²`. Δ = 1.4 Å² is small in absolute terms but exceeds the published wwPDB B-factor uncertainty bracket; it suggests a different atom subset was averaged (heavy-atom only? excluding solvent?).
+- **R-factors may be read from `phenix.refine`'s in-run log** (or stored MTZ statistics) rather than re-derived by `phenix.model_vs_data`. Re-derive against the exact same model and MTZ before attributing a difference to scaling. The 1SAR round-7 values are log-attested, but its coordinates are not retained; comparing them with the round-4 package cannot calibrate an in-run-versus-fresh offset.
+- **Per-round table aggregation collapses rounds.** "Round 5–6" appears as one row in the agent's report despite being two distinct refinements. Preserve one row and subject identity per round. The retained round-6 oracle R-free is 0.2068; round 7 has only the agent's 0.1989 log value, not an oracle measurement, so their direction cannot be adjudicated as an oracle trend.
+- **Numeric positions require subject identity.** A coordinate quoted for one round must be checked against that round's model. The 1SAR report's Ca²⁺ position and the packaged round-4 position differ by 0.215 Å, but the reported round-7 coordinates are absent, so that difference does not prove an initial-versus-final templating error.
+- **Water counts require subject identity.** The 1SAR report claims 159 ordered waters while the packaged round-4 file has 146, accounting for the package's 13-atom gap. That is a claim-to-package mismatch across rounds; without round-7 coordinates it does not establish a later pruning step or a reporting error.
+- **Mean B-factor requires subject and atom-selection identity.** The 1SAR report quotes 14.6 Å² while the packaged round-4 audit finds 15.98 Å². Because the models differ, the delta cannot diagnose rounding or a heavy-atom/solvent selection choice. Record the model digest and selected atom population before comparing.
 
 ### Interpretation
 
 - **Ion identity inferred from peak height alone.** "6.5 σ peak near Asp33 = Ca²⁺" is asserted from the difference map alone. No anomalous-Fourier check, no Mg/Mn/Na elimination, no occupancy refinement that would distinguish them. Mg²⁺ would give very similar geometry. Document the inference chain in `notes` and downgrade the verdict to "consistent with Ca²⁺ — alternatives not excluded" unless an anomalous map confirms.
-- **Density-peak narratives are interpretive, not measured.** "All peaks > 4 σ are explained by known features" is the agent's annotation, not an oracle-verifiable claim. The independent peak inventory found 23 positive peaks at 4 σ where the agent's table listed 9; five additional peaks above 5 σ were not surfaced. Re-run `phenix.find_peaks_holes` independently before adopting this kind of summary claim.
+- **Density-peak narratives are interpretive, not measured.** "All peaks > 4 σ are explained by known features" is an annotation, not a measurement. Re-run `phenix.find_peaks_holes` independently on the exact claimed model before adopting it. The 1SAR inventory of 23 positive peaks belongs to the packaged round-4 model, whereas the nine-peak report describes the absent round-7 model; their difference is not a same-subject finding.
 - **NCS effective data-to-parameter ratio is a heuristic.** "846 NCS torsion restraints effectively double the data" assumes the restraints are saturated and uncorrelated with model coordinates. The actual contribution depends on restraint weight + geometry coupling and is not a measured quantity. Agent reports 0.98 → 1.79; this is a model-assumption number, not a re-derivation.
 - **Pre-refinement baseline = deposited model.** The deposited 1SAR is itself a refined product; the "Δ start → final" framing implicitly equates the deposited model with an unrefined starting point. For agentically-refined targets the proper baseline is whichever model the agent was actually given, which may or may not be the deposition.
 - **Cooperative binding rationale is literature interpretation, not measurement.** "Weaker Ca²⁺ binding because of missing nucleotide cofactor" is a bona-fide structural-biology hypothesis but it's not measured by any oracle in the catalog. Treat such reasoning as inference, not a quality finding.
-- **Round-7 NCS-restraint improvement claim doesn't hold by oracle.** Agent: "Round 7 reduced the gap from 0.053 to 0.050 by adding NCS torsion restraints." Oracle: round 6 gap was 0.053, round 7 gap is 0.055 — restraints increased the gap, not reduced it. Verify any "X improved Y by Z" claim with the oracle re-measurement of X-without and X-with.
+- **Round-7 NCS-restraint improvement is not independently adjudicable here.** The agent log says the gap moved from 0.053 to 0.050. Round 6 has a retained oracle measurement, but round 7's coordinates are absent; 0.055 belongs to the packaged round-4 model, not round 7. Verify any "X improved Y by Z" claim on retained before/after subjects with the same oracle.
 
 ### Aggregation
 
 - **Single-model verdicts.** Agent treats the final PDB as a point estimate. No B-factor uncertainty propagation, no rotamer alternate-conformation enumeration, no map-error envelope. The QDS schema's `TypedMeasurementValue` summary stats (mean / std_dev / min / max / count) exist for this purpose — populate them when an array of values is available.
-- **Geometry "0.00% Rama outliers" rounds 1 outlier to zero.** The agent's pass/fail framing treats ≤ 0.5% as 0%. The PerResidueQuality.outliers list is the antidote: surface every outlier residue id even when the rate is sub-threshold.
+- **Geometry outlier rates require subject identity.** The agent's round-7 report says 0.00% Ramachandran outliers, while the packaged round-4 audit found one. Because the round-7 coordinates are absent, that cross-round difference does not establish rounding or omission. For any retained subject, preserve every outlier residue id even when an aggregate rate falls below display precision or a threshold.
 - **Single-tool geometry validation.** `phenix.molprobity` (the cctbx wrapper) provided the geometry numbers for the agent's report. Same code base as the refiner that minimised those restraints. Document this as `oracle_family: cctbx` and require a non-cctbx confirmation before adopting any geometry pass/fail verdict.
 
 ### How to apply these in a review
@@ -120,7 +120,7 @@ When evaluating a new OpenScientist artefact:
 
 1. **Always re-derive R-factors** with `phenix.model_vs_data` even when the agent reports R-factors. Note the gap.
 2. **Re-extract atom counts and water counts** from the deposited PDB; compare to the agent's narrative numbers.
-3. **Re-run `phenix.find_peaks_holes` at 4 σ** and compare the peak inventory to the agent's table. Five-or-more peaks > 5 σ that the agent did not list is a flag.
+3. **Re-run `phenix.find_peaks_holes` at 4 σ on the exact claimed model and map/reflection data**, recording the subject digests and flags, and compare only with the agent's inventory for that same subject. Five or more unlisted peaks > 5 σ is a flag only in that matched comparison. If the claimed model or map is unavailable, record the inventory as unadjudicable; do not substitute another round or the deposition.
 4. **For any "X moved by Y Å" or position quote**, verify the quoted coordinates exist in the deposited PDB to within ≤ 0.05 Å.
 5. **For ion identity claims**, ask whether anomalous data was used; if not, downgrade the verdict.
 6. **For Δ-claims between rounds**, run the oracle on each round's PDB+MTZ (we have the MTZs in the artefact zip) and confirm the direction of change.
@@ -358,7 +358,7 @@ Catalog T10 (ligand fitting) declares the metrics; the skill version below makes
 
 For every Ligand record in the eval:
 
-1. **Position vs deposited PDB** — verify quoted coordinates against the deposited final-model coordinates to within ≤ 0.05 Å (gemmi audit script). Treat > 0.05 Å as a flag — possibly the agent quoted an *initial* placement (1SAR Ca²⁺ was 0.215 Å off for exactly this reason).
+1. **Position vs the claimed subject** — verify quoted coordinates against the exact model/version the report names, identified by digest, to within ≤ 0.05 Å (gemmi audit script). A comparison with a deposition or differently packaged round answers a different question. In 1SAR the 0.215 Å report-to-package difference crosses round identities and cannot diagnose initial-versus-final templating.
 2. **Density support — RSCC** — `phenix.real_space_correlation` (cctbx) and ideally a non-cctbx confirmation (`edstats` from CCP4, or `gemmi sfcalc` + custom RSCC script). Threshold: > 0.85 for ligands at typical resolutions; document any deviation in `notes`.
 3. **B-factor vs surroundings** — compute the ratio `B(ligand) / mean_B(protein)`. < 1.5× = consistent with full occupancy. 1.5–3× = partial occupancy or weak binding. > 3× = very weak; investigate alternative interpretations.
 4. **Coordination geometry** (metals) — inner-sphere bonds 2.0–2.6 Å for hard metals (Ca²⁺, Mg²⁺, Zn²⁺); coordination number 6–8 for Ca²⁺. Use `gemmi contact` or a small gemmi script.
@@ -373,7 +373,7 @@ For every Ligand record in the eval:
 
 For the water set as a whole:
 
-1. **Count** the waters in the deposited PDB (`grep -cE '^HETATM.* HOH ' final.pdb` or `gemmi residues`). Compare to agent claim — 1SAR had a 13-water gap (146 actual vs 159 reported), exactly matching the total-atom gap.
+1. **Count** waters in the exact claimed model (`grep -cE '^HETATM.* HOH ' model.pdb` or `gemmi residues`) and record its digest. A deposition or stale packaged round is a separate subject. In 1SAR the packaged round-4 count is 146 and the round-7 report says 159; this is a package/claim gap, not a same-model count error.
 2. **B-factor distribution** — mean, std, min, max. Mean ~1.5–2× protein-mean is typical for surface waters. Flag waters with B > 60 Å² as `density_misfit` candidates.
 3. **RSCC distribution** — `phenix.real_space_correlation` outputs RSCC per HOH. Expect mean ~0.85, range 0.65–0.99. Flag waters with RSCC < 0.7 as **density_misfit ResidueOutliers**. 1SAR had 3 such waters (HOH S 680, 707, 729) with RSCC 0.658–0.691.
 4. **Per-water summary on the QDS** — populate `TypedMeasurementValue.mean / std_dev / min_value / max_value / count` on a single scope=complex measurement. Add `ResidueOutlier` rows for the worst N waters (not all N=146).

@@ -12,10 +12,14 @@ What it does: reads Fobs (+ sigma + free flags) from one MTZ and Fcalc from anot
 (produced by `gemmi sfcalc`, which applies its own bulk-solvent + scaling), joins on
 hkl, applies a bin-wise isotropic rescale, and reports R-work / R-free.
 
-Assumptions (`ref/tool_assumptions.yaml`): flat-bulk solvent + bin-wise isotropic
-rescale, no anisotropic correction, linear reflection-count bins. Expect R-work
-0.005-0.015 HIGHER than PHENIX on identical data — the price of an independent code
-path, and the reason its numbers must never be averaged with PHENIX's.
+Assumptions (`ref/tool_assumptions.yaml`): upstream `gemmi sfcalc --scale-to`
+uses flat-mask bulk solvent with global anisotropic/solvent scaling; this script
+then adds work-fitted bin-wise isotropic rescaling in linear reflection-count
+bins. For matched model, MTZ, work set and cctbx mask radii, only the signed
+gemmi-minus-PHENIX values are descriptive: the §3 envelope benchmarked direct
+summation of globally scaled `gemmi sfcalc` FC values, not this script's extra
+bin-wise rescaling. This script's R-work and R-free offsets are informational
+pending estimator-matched benchmarks, and values from the tools must not be averaged.
 
 Scale fitting is WORK-ONLY (#316, superseding #304's accept-and-document): the
 per-bin scales are fit on work reflections and applied unchanged to the free
@@ -27,8 +31,11 @@ in the same change: the cross-fit offset was re-measured on the four cached
 round-1/2 pairs (5SY4 and 9YGW, pre and post models) — work-only minus all-fit
 R-free was +0.00001, +0.00001, -0.00000, +0.00000, i.e. <= 1e-5. With a ~5 %
 free set and 20 bins the leakage was principled, not practically large; the
-recorded 1SAR gap band (0.005-0.015 vs PHENIX) is unaffected at its stated
-precision, and no prior round's delta moves at 4-decimal reporting.
+recorded 1SAR R-work and R-free measurements are unaffected at their stated
+precision, and no prior round's delta moves at 4-decimal reporting. Only the
+directly summed R-work offset is gradeable under registry §3; this script's
+bin-rescaled R-work and R-free offsets remain informational pending an
+estimator-matched R-work benchmark and a test-set-specific R-free benchmark.
 
 WHAT THE PROMOTION FIXED (vs data/coscientists/openscientist/gemmi_rfactor.py)
 ------------------------------------------------------------------------------

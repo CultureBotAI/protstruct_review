@@ -15,6 +15,8 @@ walks every YAML record under `ref/` and `data/examples/` and verifies:
     implemented until #118.
   - EvaluationRun, QualityDataSheet, MeasurementValue, and run-owned Assumption ids
     are unique across the corpus, so a string reference never resolves by file ordering
+  - measurement-to-measurement delta/derivation refs resolve within their owning run;
+    pair deltas also preserve context, numeric units, and exact nominal arithmetic
   - QDS input/source refs, superseded assumptions, and `EVAL_*` evidence refs resolve;
     paired source run/measurement refs name an input run that actually owns the
     measurement, and every wrapped scalar exactly matches that source measurement
@@ -29,15 +31,18 @@ and the committed example already drifts from the canonical catalog."
 """
 from __future__ import annotations
 
-import sys
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from pathlib import Path, PureWindowsPath
+import re
+import sys
 from typing import Any, Iterable, Sequence
 from urllib.parse import urlsplit
 
 import yaml
 
 import qds_emit_contract_v1
+import qds_emit_contract_v2
 
 
 REPO = Path(__file__).resolve().parent.parent
@@ -136,6 +141,7 @@ def _routed_scalar_slots(
 
 QDS_ROUTED_SCALAR_SLOTS_BY_CONTRACT = {
     "1": _routed_scalar_slots(qds_emit_contract_v1.METRIC_TO_QDS_SLOT),
+    "2": _routed_scalar_slots(qds_emit_contract_v2.METRIC_TO_QDS_SLOT),
 }
 
 
@@ -380,6 +386,670 @@ def _resolve(
         )
         return None
     return targets[0]
+
+
+DELTA_CONTEXT_FIELDS = (
+    "catalog_task_ref",
+    "metric_definition_ref",
+    "stage",
+    "subject_ref",
+    "reference_subject_ref",
+    "scope",
+    "scope_selector",
+)
+DERIVED_CONTEXT_FIELDS = (
+    "catalog_task_ref",
+    "subject_ref",
+    "reference_subject_ref",
+    "stage",
+    "scope",
+    "scope_selector",
+)
+T14_FLIP_CONFLICT_METRIC = "T14_asn_gln_his_flip_set_conflicts"
+T14_FLIP_SOURCE_METRIC = "T14_asn_gln_his_flip_candidates_scored"
+T14_COHORT_SCOPE = "cohort"
+T14_FLIP_SOURCE_TOOLS = {
+    "reduce (standalone, Richardson)",
+    "mmtbx.reduce2",
+}
+NON_CRITERION_TEXT = {
+    "n/a",
+    "na",
+    "-",
+    "--",
+    "tbd",
+    "todo",
+    "none",
+    "see notes",
+    "informational",
+}
+
+
+def _measurement_location(target: RefTarget) -> str:
+    return f"{_shown(target.file)}:{target.pointer}"
+
+
+def _normalized_measurement_unit(payload: dict[str, Any]) -> str:
+    """Normalize only spelling aliases; never silently convert numeric values."""
+    unit = str(payload.get("unit") or "").strip().casefold()
+    aliases = {
+        "": "dimensionless",
+        "1": "dimensionless",
+        "fraction": "dimensionless",
+        "unitless": "dimensionless",
+        "dimensionless": "dimensionless",
+        "%": "percent",
+        "percent": "percent",
+        "percentage": "percent",
+    }
+    return aliases.get(unit, unit)
+
+
+def _finite_integral_number(value: Any, *, minimum: int) -> int | None:
+    """Return a finite mathematical integer without requiring a YAML int token."""
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return None
+    try:
+        decimal = Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        return None
+    if not decimal.is_finite() or decimal != decimal.to_integral_value():
+        return None
+    integer = int(decimal)
+    return integer if integer >= minimum else None
+
+
+def _meaningful_pass_criterion(row: dict[str, Any]) -> str:
+    """Return a real threshold expression, excluding absence placeholders."""
+    criterion = str(row.get("pass_criterion") or "").strip()
+    return "" if criterion.casefold() in NON_CRITERION_TEXT else criterion
+
+
+def _is_t14_conflict_rate_criterion(value: Any) -> bool:
+    """Recognize only the canonical registered inclusive 10% criterion."""
+    text = str(value or "").strip().casefold().replace("≤", "<=")
+    text = re.sub(r"\s+", " ", text)
+    text = re.sub(r"\s*<=\s*", " <= ", text)
+    text = re.sub(r"\s*%\s*", "%", text).strip()
+    return text == "conflict rate <= 10%"
+
+
+def _check_t14_cohort_verdict(
+    row: dict[str, Any],
+    *,
+    numerator: int,
+    denominator: int,
+    location: str,
+    violations: list[str],
+) -> None:
+    """Bind cohort grades to the preregistered inclusive 10% boundary."""
+    status = row.get("pass_status")
+    if status == "informational":
+        _check_t14_informational_only(
+            row,
+            location=location,
+            label="cohort conflict result declared informational",
+            violations=violations,
+        )
+        return
+
+    passes = numerator * 10 <= denominator
+    expected_statuses = {"pass", "pass_with_caveat"} if passes else {
+        "fail_criterion"
+    }
+    if status not in expected_statuses:
+        relation = "at or below" if passes else "above"
+        violations.append(
+            f"{location}: cohort conflict rate {numerator}/{denominator} is "
+            f"{relation} the inclusive 10% boundary and requires pass_status in "
+            f"{sorted(expected_statuses)!r}, not {status!r}"
+        )
+    if not _is_t14_conflict_rate_criterion(row.get("pass_criterion")):
+        violations.append(
+            f"{location}: gradeable cohort conflict result requires an unambiguous "
+            "pass_criterion naming conflict rate <= 10%"
+        )
+
+    nested = row.get("oracle_measure")
+    if not isinstance(nested, dict):
+        return
+    nested_status = nested.get("pass_status")
+    nested_criterion = _meaningful_pass_criterion(nested)
+    if nested_status in (None, "") and not nested_criterion:
+        return
+    if nested_status not in expected_statuses:
+        violations.append(
+            f"{location}.oracle_measure: cohort conflict verdict must match "
+            f"{numerator}/{denominator} at the inclusive 10% boundary; expected "
+            f"{sorted(expected_statuses)!r}, not {nested_status!r}"
+        )
+    if not _is_t14_conflict_rate_criterion(nested.get("pass_criterion")):
+        violations.append(
+            f"{location}.oracle_measure: gradeable cohort conflict result requires "
+            "an unambiguous pass_criterion naming conflict rate <= 10%"
+        )
+
+
+def _check_t14_informational_only(
+    row: dict[str, Any],
+    *,
+    location: str,
+    label: str,
+    violations: list[str],
+) -> None:
+    """Reject a grade on both a measurement row and its typed value carrier."""
+    if row.get("pass_status") != "informational":
+        violations.append(
+            f"{location}: {label} requires pass_status 'informational'"
+        )
+    pass_criterion = _meaningful_pass_criterion(row)
+    if pass_criterion:
+        violations.append(
+            f"{location}: {label} must not carry pass_criterion "
+            f"{pass_criterion!r}"
+        )
+
+    oracle_measure = row.get("oracle_measure")
+    if not isinstance(oracle_measure, dict):
+        return
+    nested_status = oracle_measure.get("pass_status")
+    if nested_status not in (None, "", "informational"):
+        violations.append(
+            f"{location}.oracle_measure.pass_status = {nested_status!r}; "
+            f"{label} must remain informational when nested status is present"
+        )
+    nested_criterion = _meaningful_pass_criterion(oracle_measure)
+    if nested_criterion:
+        violations.append(
+            f"{location}.oracle_measure: {label} must not carry pass_criterion "
+            f"{nested_criterion!r}"
+        )
+
+
+def _check_t14_flip_candidate_interpretation(
+    source: RefTarget,
+    violations: list[str],
+) -> None:
+    """Candidate counts are opportunities, never thresholded outcomes."""
+    row = source.node or {}
+    if row.get("metric_definition_ref") != T14_FLIP_SOURCE_METRIC:
+        return
+    _check_t14_informational_only(
+        row,
+        location=_measurement_location(source),
+        label=f"{T14_FLIP_SOURCE_METRIC} candidate-count measurement",
+        violations=violations,
+    )
+
+
+def _finite_decimal_carrier(
+    row: dict[str, Any],
+    field: str,
+    *,
+    location: str,
+    violations: list[str],
+) -> tuple[Decimal, Any, dict[str, Any]] | None:
+    """Return one unambiguous finite numeric carrier, reporting why it is unusable."""
+    payload = row.get(field)
+    if not isinstance(payload, dict):
+        violations.append(
+            f"{location}.{field} must be a typed numeric value for a pair delta"
+        )
+        return None
+    value = payload.get("value_numeric")
+    if (
+        not isinstance(value, (int, float))
+        or isinstance(value, bool)
+        or payload.get("value_text") not in (None, "")
+        or payload.get("is_not_applicable") is True
+    ):
+        violations.append(
+            f"{location}.{field} must carry one finite value_numeric for a pair delta"
+        )
+        return None
+    try:
+        decimal = Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        violations.append(
+            f"{location}.{field}.value_numeric = {value!r} is not a finite decimal"
+        )
+        return None
+    if not decimal.is_finite():
+        violations.append(
+            f"{location}.{field}.value_numeric = {value!r} is not a finite decimal"
+        )
+        return None
+    return decimal, value, payload
+
+
+def _validate_relation_context(
+    source: RefTarget,
+    target: RefTarget,
+    fields: Sequence[str],
+    *,
+    relation: str,
+    violations: list[str],
+) -> None:
+    source_node = source.node or {}
+    target_node = target.node or {}
+    source_location = _measurement_location(source)
+    target_id = target_node.get("id")
+    if "subject_ref" in fields:
+        if not str(source_node.get("subject_ref") or "").strip():
+            violations.append(
+                f"{source_location}.{relation} requires a non-empty subject_ref on "
+                "the derived measurement"
+            )
+        if not str(target_node.get("subject_ref") or "").strip():
+            violations.append(
+                f"{source_location}.{relation} target {target_id!r} requires a "
+                "non-empty subject_ref"
+            )
+    for field in fields:
+        if source_node.get(field) != target_node.get(field):
+            violations.append(
+                f"{source_location}.{relation} target {target_id!r} has mismatched "
+                f"{field} (derived={source_node.get(field)!r}, "
+                f"source={target_node.get(field)!r})"
+            )
+
+
+def _resolve_owned_measurement_ref(
+    source: RefTarget,
+    ref: Any,
+    *,
+    relation_path: str,
+    indices: CorpusIndices,
+    violations: list[str],
+) -> RefTarget | None:
+    source_node = source.node or {}
+    source_location = _measurement_location(source)
+    if not isinstance(ref, str) or not ref.strip():
+        violations.append(f"{source_location}.{relation_path} must name a MeasurementValue")
+        return None
+    if ref == source_node.get("id"):
+        violations.append(
+            f"{source_location}.{relation_path} cannot reference its own measurement {ref!r}"
+        )
+        return None
+    target = _resolve(
+        ref,
+        "measurement",
+        indices,
+        _shown(source.file),
+        f"{source.pointer}.{relation_path}",
+        violations,
+    )
+    if target is None:
+        return None
+    if target.owner_run_id != source.owner_run_id:
+        violations.append(
+            f"{source_location}.{relation_path} = {ref!r} belongs to EvaluationRun "
+            f"{target.owner_run_id!r}, not owning EvaluationRun {source.owner_run_id!r}"
+        )
+        return None
+    return target
+
+
+def _check_pair_delta(
+    source: RefTarget,
+    indices: CorpusIndices,
+    violations: list[str],
+) -> None:
+    row = source.node or {}
+    if "delta_from_measurement_ref" not in row:
+        return
+    target = _resolve_owned_measurement_ref(
+        source,
+        row.get("delta_from_measurement_ref"),
+        relation_path="delta_from_measurement_ref",
+        indices=indices,
+        violations=violations,
+    )
+    if target is None or not isinstance(target.node, dict):
+        return
+    _validate_relation_context(
+        source,
+        target,
+        DELTA_CONTEXT_FIELDS,
+        relation="delta_from_measurement_ref",
+        violations=violations,
+    )
+
+    source_location = _measurement_location(source)
+    current = _finite_decimal_carrier(
+        row, "oracle_measure", location=source_location, violations=violations
+    )
+    referenced = _finite_decimal_carrier(
+        target.node,
+        "oracle_measure",
+        location=_measurement_location(target),
+        violations=violations,
+    )
+    delta = _finite_decimal_carrier(
+        row, "delta", location=source_location, violations=violations
+    )
+    if current is None or referenced is None or delta is None:
+        return
+
+    units = {
+        "oracle_measure": _normalized_measurement_unit(current[2]),
+        "referenced oracle_measure": _normalized_measurement_unit(referenced[2]),
+        "delta": _normalized_measurement_unit(delta[2]),
+    }
+    if len(set(units.values())) != 1:
+        violations.append(
+            f"{source_location}.delta_from_measurement_ref has incompatible numeric "
+            f"units {units}"
+        )
+        return
+
+    expected = current[0] - referenced[0]
+    observed = delta[0]
+    # Validate the nominal committed values exactly. An ordinary YAML loader erases
+    # trailing zeroes (0.0020 becomes float 0.002), so inferring a tolerance from the
+    # parsed delta would silently widen its written precision (#667).
+    if observed != expected:
+        violations.append(
+            f"{source_location}.delta.value_numeric = {observed} does not equal this "
+            f"row's oracle_measure {current[0]} minus referenced oracle_measure "
+            f"{referenced[0]} ({expected})"
+        )
+
+
+def _check_derived_measurement_refs(
+    source: RefTarget,
+    indices: CorpusIndices,
+    violations: list[str],
+) -> list[RefTarget]:
+    row = source.node or {}
+    if "derived_from_measurement_refs" not in row:
+        return []
+    refs = row.get("derived_from_measurement_refs")
+    source_location = _measurement_location(source)
+    if not isinstance(refs, list) or not refs:
+        violations.append(
+            f"{source_location}.derived_from_measurement_refs must be a non-empty list"
+        )
+        return []
+
+    string_refs = [ref for ref in refs if isinstance(ref, str)]
+    if len(string_refs) != len(set(string_refs)):
+        violations.append(
+            f"{source_location}.derived_from_measurement_refs contains duplicate refs"
+        )
+
+    resolved: list[RefTarget] = []
+    for index, ref in enumerate(refs):
+        target = _resolve_owned_measurement_ref(
+            source,
+            ref,
+            relation_path=f"derived_from_measurement_refs[{index}]",
+            indices=indices,
+            violations=violations,
+        )
+        if target is None or not isinstance(target.node, dict):
+            continue
+        resolved.append(target)
+        _validate_relation_context(
+            source,
+            target,
+            DERIVED_CONTEXT_FIELDS,
+            relation=f"derived_from_measurement_refs[{index}]",
+            violations=violations,
+        )
+    return resolved
+
+
+def _check_t14_flip_conflict_derivation(
+    source: RefTarget,
+    derived_targets: list[RefTarget],
+    violations: list[str],
+) -> None:
+    row = source.node or {}
+    if row.get("metric_definition_ref") != T14_FLIP_CONFLICT_METRIC:
+        return
+    source_location = _measurement_location(source)
+    if row.get("catalog_task_ref") != "T14":
+        violations.append(
+            f"{source_location}: {T14_FLIP_CONFLICT_METRIC} must have "
+            "catalog_task_ref 'T14'"
+        )
+    if row.get("scope") == T14_COHORT_SCOPE:
+        if not str(row.get("scope_selector") or "").strip():
+            violations.append(
+                f"{source_location}: cohort-scoped {T14_FLIP_CONFLICT_METRIC} "
+                "requires scope_selector naming the preregistered cohort"
+            )
+    else:
+        _check_t14_informational_only(
+            row,
+            location=source_location,
+            label=(
+                f"structure-level {T14_FLIP_CONFLICT_METRIC}; the <= 10% "
+                "criterion applies only to scope 'cohort'"
+            ),
+            violations=violations,
+        )
+    oracle_measure = row.get("oracle_measure") or {}
+    denominator = oracle_measure.get("count") if isinstance(oracle_measure, dict) else None
+    numerator = (
+        oracle_measure.get("value_numeric")
+        if isinstance(oracle_measure, dict)
+        else None
+    )
+    denominator_count = _finite_integral_number(denominator, minimum=1)
+    numerator_count = _finite_integral_number(numerator, minimum=0)
+    if denominator_count is None:
+        violations.append(
+            f"{source_location}: {T14_FLIP_CONFLICT_METRIC} requires a positive "
+            "integer oracle_measure.count denominator"
+        )
+    if (
+        numerator_count is None
+        or not isinstance(oracle_measure, dict)
+        or oracle_measure.get("value_text") not in (None, "")
+        or oracle_measure.get("is_not_applicable") is True
+    ):
+        violations.append(
+            f"{source_location}: {T14_FLIP_CONFLICT_METRIC} requires a "
+            "single non-negative integer oracle_measure.value_numeric conflict count"
+        )
+    if not isinstance(oracle_measure, dict) or _normalized_measurement_unit(
+        oracle_measure
+    ) != "count":
+        violations.append(
+            f"{source_location}: {T14_FLIP_CONFLICT_METRIC} requires "
+            "oracle_measure.unit 'count'"
+        )
+    if (
+        numerator_count is not None
+        and denominator_count is not None
+        and numerator_count > denominator_count
+    ):
+        violations.append(
+            f"{source_location}: conflict count {numerator_count} exceeds eligible "
+            f"denominator {denominator_count}"
+        )
+    if (
+        row.get("scope") == T14_COHORT_SCOPE
+        and numerator_count is not None
+        and denominator_count is not None
+    ):
+        _check_t14_cohort_verdict(
+            row,
+            numerator=numerator_count,
+            denominator=denominator_count,
+            location=source_location,
+            violations=violations,
+        )
+
+    refs = row.get("derived_from_measurement_refs")
+    distinct_refs = set(refs) if isinstance(refs, list) and all(
+        isinstance(ref, str) for ref in refs
+    ) else set()
+    if len(distinct_refs) != 2:
+        violations.append(
+            f"{source_location}: {T14_FLIP_CONFLICT_METRIC} requires exactly two "
+            "distinct derived_from_measurement_refs"
+        )
+
+    tool_families = _canonical_tool_families()
+    source_tools = {
+        str((target.node or {}).get("oracle_tool_ref") or "")
+        for target in derived_targets
+    }
+    if source_tools != T14_FLIP_SOURCE_TOOLS:
+        violations.append(
+            f"{source_location}: {T14_FLIP_CONFLICT_METRIC} source tools are "
+            f"{sorted(source_tools)!r}; expected {sorted(T14_FLIP_SOURCE_TOOLS)!r}"
+        )
+    source_counts: list[int] = []
+    for target in derived_targets:
+        target_node = target.node or {}
+        target_id = target_node.get("id")
+        if target_node.get("catalog_task_ref") != "T14":
+            violations.append(
+                f"{source_location}: source {target_id!r} must have catalog_task_ref 'T14'"
+            )
+        if target_node.get("metric_definition_ref") != T14_FLIP_SOURCE_METRIC:
+            violations.append(
+                f"{source_location}: source {target_id!r} must measure "
+                f"{T14_FLIP_SOURCE_METRIC!r}"
+            )
+        target_tool = str(target_node.get("oracle_tool_ref") or "")
+        canonical_family = tool_families.get(target_tool)
+        claimed_family = target_node.get("oracle_family")
+        if canonical_family is not None and claimed_family != canonical_family:
+            violations.append(
+                f"{source_location}: source {target_id!r} asserts oracle_family "
+                f"{claimed_family!r}, but catalog tool {target_tool!r} has canonical "
+                f"family {canonical_family!r}"
+            )
+        target_measure = target_node.get("oracle_measure") or {}
+        target_count = (
+            target_measure.get("value_numeric")
+            if isinstance(target_measure, dict)
+            else None
+        )
+        normalized_target_count = _finite_integral_number(target_count, minimum=1)
+        if (
+            normalized_target_count is None
+            or not isinstance(target_measure, dict)
+            or target_measure.get("value_text") not in (None, "")
+            or target_measure.get("is_not_applicable") is True
+        ):
+            violations.append(
+                f"{source_location}: source {target_id!r} must carry a positive "
+                "integral oracle_measure.value_numeric candidate count"
+            )
+        else:
+            source_counts.append(normalized_target_count)
+        if not isinstance(target_measure, dict) or _normalized_measurement_unit(
+            target_measure
+        ) != "count":
+            violations.append(
+                f"{source_location}: source {target_id!r} must use "
+                "oracle_measure.unit 'count'"
+            )
+    if (
+        denominator_count is not None
+        and source_counts
+        and denominator_count > min(source_counts)
+    ):
+        violations.append(
+            f"{source_location}: eligible denominator {denominator_count} exceeds a "
+            f"source candidate count (minimum {min(source_counts)})"
+        )
+
+    source_families = {
+        tool_families.get(str((target.node or {}).get("oracle_tool_ref") or ""))
+        for target in derived_targets
+    }
+    source_families.discard(None)
+    required_families = {"cctbx", "non_cctbx"}
+    if not required_families.issubset(source_families):
+        violations.append(
+            f"{source_location}: {T14_FLIP_CONFLICT_METRIC} source families are "
+            f"{sorted(source_families)!r}; both cctbx and non_cctbx are required"
+        )
+    if "cctbx" in source_families and row.get("oracle_family") == "non_cctbx":
+        violations.append(
+            f"{source_location}: {T14_FLIP_CONFLICT_METRIC} depends on a cctbx "
+            "source and must not claim oracle_family non_cctbx"
+        )
+    if row.get("oracle_tool_ref") != "mmtbx.reduce2" or row.get("oracle_family") != "cctbx":
+        violations.append(
+            f"{source_location}: {T14_FLIP_CONFLICT_METRIC} must conservatively "
+            "identify its cctbx dependency as mmtbx.reduce2 / cctbx"
+        )
+
+
+def check_measurement_relations(indices: CorpusIndices) -> list[str]:
+    """Validate typed MeasurementValue-to-MeasurementValue relationships."""
+    violations: list[str] = []
+    for targets in indices["measurement"].values():
+        for source in targets:
+            if not isinstance(source.node, dict):
+                continue
+            _check_pair_delta(source, indices, violations)
+            derived_targets = _check_derived_measurement_refs(source, indices, violations)
+            _check_t14_flip_candidate_interpretation(source, violations)
+            _check_t14_flip_conflict_derivation(source, derived_targets, violations)
+    _check_measurement_relation_cycles(indices, violations)
+    return violations
+
+
+def _check_measurement_relation_cycles(
+    indices: CorpusIndices, violations: list[str]
+) -> None:
+    """Reject cycles across all directional measurement-lineage relations."""
+    unique_targets = {
+        measurement_id: targets[0]
+        for measurement_id, targets in indices["measurement"].items()
+        if len(targets) == 1 and isinstance(targets[0].node, dict)
+    }
+    edges: dict[str, set[str]] = {}
+    for measurement_id, source in unique_targets.items():
+        source_node = source.node or {}
+        refs: list[Any] = [source_node.get("delta_from_measurement_ref")]
+        derived_refs = source_node.get("derived_from_measurement_refs")
+        if isinstance(derived_refs, list):
+            refs.extend(derived_refs)
+        for ref in refs:
+            target = unique_targets.get(ref) if isinstance(ref, str) else None
+            if (
+                target is not None
+                and target.owner_run_id == source.owner_run_id
+                and ref != measurement_id
+            ):
+                edges.setdefault(measurement_id, set()).add(ref)
+
+    state: dict[str, int] = {}
+    stack: list[str] = []
+    positions: dict[str, int] = {}
+
+    def visit(measurement_id: str) -> None:
+        state[measurement_id] = 1
+        positions[measurement_id] = len(stack)
+        stack.append(measurement_id)
+        for target_id in sorted(edges.get(measurement_id, set())):
+            if state.get(target_id, 0) == 0:
+                visit(target_id)
+            elif state.get(target_id) == 1:
+                cycle = stack[positions[target_id]:] + [target_id]
+                source = unique_targets[measurement_id]
+                violations.append(
+                    f"{_measurement_location(source)} measurement lineage forms a "
+                    f"cycle: {' -> '.join(cycle)}"
+                )
+        stack.pop()
+        positions.pop(measurement_id, None)
+        state[measurement_id] = 2
+
+    for measurement_id in sorted(edges):
+        if state.get(measurement_id, 0) == 0:
+            visit(measurement_id)
 
 
 def _iso_date(value: Any) -> str | None:
@@ -1105,6 +1775,10 @@ def main() -> int:
 
     corpus_indices = build_corpus_indices(records)
     for violation in check_duplicate_ids(corpus_indices):
+        print(f"FAIL: {violation}", file=sys.stderr)
+        failed = True
+
+    for violation in check_measurement_relations(corpus_indices):
         print(f"FAIL: {violation}", file=sys.stderr)
         failed = True
 

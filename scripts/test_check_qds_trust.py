@@ -15,6 +15,7 @@ import yaml
 
 import qds_emit
 import qds_emit_contract_v1
+import qds_emit_contract_v2
 import check_qds_trust_invariant as trust_guard
 
 
@@ -226,7 +227,11 @@ def write_fixture(
                 canonical_text.encode("utf-8")
             ).hexdigest(),
             "emitter_source_sha256": hashlib.sha256(
-                (REPO / "scripts" / "qds_emit_contract_v1.py").read_bytes()
+                Path(
+                    trust_guard.REPLAY_CONTRACT_EMITTERS[
+                        qds_emit.QDS_EMITTER_CONTRACT_VERSION
+                    ].__file__
+                ).read_bytes()
             ).hexdigest(),
             "source_tools_sha256": snapshot_digest("tools", tool_snapshot),
             "source_tool_recommendations_sha256": snapshot_digest(
@@ -246,6 +251,48 @@ def write_fixture(
 
 CCTBX = oracle_measurement("M_cctbx", "phenix.model_vs_data", "cctbx")
 NON_CCTBX = oracle_measurement("M_gemmi", "gemmi validate", "non_cctbx")
+T14_DERIVED = [
+    {
+        "id": "M_t14_reduce",
+        "catalog_task_ref": "T14",
+        "metric_definition_ref": "T14_asn_gln_his_flip_candidates_scored",
+        "oracle_tool_ref": "reduce (standalone, Richardson)",
+        "oracle_family": "non_cctbx",
+        "oracle_measure": {"value_numeric": 14, "unit": "count"},
+        "pass_status": "informational",
+        "stage": "final",
+        "scope": "complex",
+        "scope_selector": "model",
+        "subject_ref": "artifact:test-model",
+    },
+    {
+        "id": "M_t14_reduce2",
+        "catalog_task_ref": "T14",
+        "metric_definition_ref": "T14_asn_gln_his_flip_candidates_scored",
+        "oracle_tool_ref": "mmtbx.reduce2",
+        "oracle_family": "cctbx",
+        "oracle_measure": {"value_numeric": 18, "unit": "count"},
+        "pass_status": "informational",
+        "stage": "final",
+        "scope": "complex",
+        "scope_selector": "model",
+        "subject_ref": "artifact:test-model",
+    },
+    {
+        "id": "M_t14_conflicts",
+        "catalog_task_ref": "T14",
+        "metric_definition_ref": "T14_asn_gln_his_flip_set_conflicts",
+        "oracle_tool_ref": "mmtbx.reduce2",
+        "oracle_family": "cctbx",
+        "oracle_measure": {"value_numeric": 0, "unit": "count", "count": 14},
+        "derived_from_measurement_refs": ["M_t14_reduce", "M_t14_reduce2"],
+        "pass_status": "informational",
+        "stage": "final",
+        "scope": "complex",
+        "scope_selector": "model",
+        "subject_ref": "artifact:test-model",
+    },
+]
 
 
 with tempfile.TemporaryDirectory() as tmp:
@@ -459,6 +506,28 @@ with tempfile.TemporaryDirectory() as tmp:
 
 with tempfile.TemporaryDirectory() as tmp:
     root = Path(tmp)
+    _eval_path, qds_path = write_fixture(root, T14_DERIVED)
+    code, out = run_guard(root)
+    check("contract-2 derived T14 coverage passes full pinned replay", code, 0)
+    check("derived T14 replay has no trust failure", "FAIL" not in out, True)
+    qds = yaml.safe_load(qds_path.read_text())["quality_data_sheets"][0]
+    conflict_coverage = next(
+        row
+        for row in qds["cross_tool_coverage"]["task_coverage"]
+        if row.get("metric_definition_ref")
+        == "T14_asn_gln_his_flip_set_conflicts"
+    )
+    check(
+        "pinned T14 replay derives both participating families",
+        (
+            conflict_coverage["cctbx_oracles"],
+            conflict_coverage["non_cctbx_oracles"],
+        ),
+        (["mmtbx.reduce2"], ["reduce (standalone, Richardson)"]),
+    )
+
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
     write_fixture(root, [NON_CCTBX], coverage_scope="partial")
     code, out = run_guard(root)
     check("partial QDS without scope notes fails", code, 1)
@@ -594,6 +663,17 @@ check(
     != Path(qds_emit.__file__).resolve(),
     True,
 )
+check(
+    "contract 2 is retained in a module distinct from the current emitter",
+    Path(qds_emit_contract_v2.__file__).resolve()
+    != Path(qds_emit.__file__).resolve(),
+    True,
+)
+check(
+    "trust guard registers both retained emitter contracts",
+    set(trust_guard.REPLAY_CONTRACT_EMITTERS),
+    {"1", "2"},
+)
 
 with tempfile.TemporaryDirectory() as tmp:
     root = Path(tmp)
@@ -627,7 +707,7 @@ with tempfile.TemporaryDirectory() as tmp:
         for name, implementation in originals.items():
             setattr(qds_emit, name, implementation)
     check(
-        "contract-1 validation ignores divergent current-emitter helpers",
+        "retained-contract validation ignores divergent current-emitter helpers",
         failures,
         [],
     )

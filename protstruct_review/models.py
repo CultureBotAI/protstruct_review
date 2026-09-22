@@ -514,6 +514,10 @@ For `residue` and `atom` scope, store every value in the per-residue/per-atom sl
     """
     Biological assembly or multimeric complex.
     """
+    cohort = "cohort"
+    """
+    A preregistered collection of structures aggregated into one measurement. Use scope_selector to name the exact cohort; do not use this scope for a result computed on one structure.
+    """
 
 
 
@@ -1161,17 +1165,17 @@ class MeasurementValue(Finding):
                        'TypedMeasurementValue',
                        'TaskCoverage',
                        'CrossToolWaiver']} })
-    scope: Optional[MeasurementScope] = Field(default=None, description="""Granularity of this specific measurement. Optional override of the canonical `scope` on the referenced MetricDefinition. When set, the `agent_claim` / `oracle_measure` may be a summary (mean+SD over a residue/chain/site array) — see TypedMeasurementValue.mean / std_dev / count.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MetricDefinition',
+    scope: Optional[MeasurementScope] = Field(default=None, description="""Granularity of this specific measurement. Optional override of the canonical `scope` on the referenced MetricDefinition. When set, the `agent_claim` / `oracle_measure` may be a summary (mean+SD over a residue/chain/site array) — see TypedMeasurementValue.mean / std_dev / count. `cohort` means that the value aggregates an explicitly named preregistered collection of structures rather than measuring one structure.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MetricDefinition',
                        'MeasurementValue',
                        'TypedMeasurementValue',
                        'TaskCoverage',
                        'CrossToolWaiver',
                        'Assumption']} })
-    scope_selector: Optional[str] = Field(default=None, description="""When `scope` is `chain`, `site`, `residue`, `atom`, or `ligand`, this is a free-text selector identifying what was measured (e.g. \"chain A residues 30-45\", \"active site 1\", \"Asn A 39\"). Site / residue selectors should also have a structured ResidueRef / Site reference where appropriate. For `site` and `ligand` scope this value is the exact declared Site or Ligand id; put comparison qualifiers and human-readable detail in `notes`.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue',
+    scope_selector: Optional[str] = Field(default=None, description="""When `scope` is `chain`, `site`, `residue`, `atom`, or `ligand`, this is a free-text selector identifying what was measured (e.g. \"chain A residues 30-45\", \"active site 1\", \"Asn A 39\"). Site / residue selectors should also have a structured ResidueRef / Site reference where appropriate. For `site` and `ligand` scope this value is the exact declared Site or Ligand id; put comparison qualifiers and human-readable detail in `notes`. For `cohort` scope it is required and names the exact preregistered cohort.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue',
                        'TypedMeasurementValue',
                        'TaskCoverage',
                        'CrossToolWaiver']} })
-    subject_ref: Optional[str] = Field(default=None, description="""Stable identifier for the concrete model, dataset, or assembly measured. This is distinct from scope_selector: the subject identifies the artefact, while the selector identifies a chain, interface mapping, site, or other subset within it. QDS emission uses an exact subject match ahead of legacy rows where this field is absent and excludes explicit non-matches.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue',
+    subject_ref: Optional[str] = Field(default=None, description="""Stable identifier for the concrete model, dataset, assembly, or cohort measured. This is distinct from scope_selector: the subject identifies the artefact, while the selector identifies a chain, interface mapping, site, or other subset within it. QDS emission uses an exact subject match ahead of legacy rows where this field is absent and excludes explicit non-matches.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue',
                        'TypedMeasurementValue',
                        'QualityDataSheet',
                        'TaskCoverage',
@@ -1212,7 +1216,9 @@ class MeasurementValue(Finding):
                        'HeadlineFinding']} })
     agent_claim: Optional[TypedMeasurementValue] = Field(default=None, description="""Value reported by the agent.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue', 'HeadlineFinding']} })
     oracle_measure: Optional[TypedMeasurementValue] = Field(default=None, description="""Value the independent oracle returned.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue', 'HeadlineFinding']} })
-    delta: Optional[TypedMeasurementValue] = Field(default=None, description="""Optional pre-computed difference (oracle − agent or post − pre).""", json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue']} })
+    delta: Optional[TypedMeasurementValue] = Field(default=None, description="""Optional pre-computed difference. Unless delta_from_measurement_ref is present, this is oracle − agent or post − pre. When delta_from_measurement_ref is present, this is this row's oracle_measure minus the referenced MeasurementValue's oracle_measure.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue']} })
+    delta_from_measurement_ref: Optional[str] = Field(default=None, description="""Same-EvaluationRun comparison row used for an oracle-versus-oracle delta. The two rows must share task, metric, stage, subject, reference subject, scope, and selector; delta equals this row's oracle_measure minus the referenced row's oracle_measure.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue']} })
+    derived_from_measurement_refs: Optional[list[str]] = Field(default=[], description="""Same-EvaluationRun source measurements used to compute a composite measurement in the same subject, reference-subject, stage, scope, and selector context. These typed lineage refs identify every contributing row; they do not replace retained raw evidence.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue']} })
     pass_criterion: Optional[str] = Field(default=None, description="""Free-text pass criterion (e.g. \"< 0.05\", \"match within 0.005\").""", json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue', 'TypedMeasurementValue']} })
     pass_status: Optional[PassStatus] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['MeasurementValue', 'TypedMeasurementValue']} })
     notes: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Finding',
@@ -1252,7 +1258,7 @@ class TypedMeasurementValue(ConfiguredBaseModel):
     std_dev: Optional[float] = Field(default=None, description="""Standard deviation paired with `mean`.""", json_schema_extra = { "linkml_meta": {'domain_of': ['TypedMeasurementValue']} })
     min_value: Optional[float] = Field(default=None, description="""Minimum across the array (paired with `mean`).""", json_schema_extra = { "linkml_meta": {'domain_of': ['TypedMeasurementValue']} })
     max_value: Optional[float] = Field(default=None, description="""Maximum across the array (paired with `mean`).""", json_schema_extra = { "linkml_meta": {'domain_of': ['TypedMeasurementValue']} })
-    count: Optional[int] = Field(default=None, description="""Number of values summarised by `mean`/`std_dev`. Required when `mean` is set, so a downstream consumer can interpret the summary statistics.""", json_schema_extra = { "linkml_meta": {'domain_of': ['TypedMeasurementValue']} })
+    count: Optional[int] = Field(default=None, description="""Number of observations underlying this value (for example, the eligible denominator for a count or rate, or the values summarised by `mean`/`std_dev`). Required when `mean` is set.""", json_schema_extra = { "linkml_meta": {'domain_of': ['TypedMeasurementValue']} })
     source_measurement_ref: Optional[str] = Field(default=None, description="""MeasurementValue id from which this QDS scalar was selected.""", json_schema_extra = { "linkml_meta": {'domain_of': ['TypedMeasurementValue']} })
     source_evaluation_run_ref: Optional[str] = Field(default=None, description="""EvaluationRun id containing source_measurement_ref.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SourceRowLineage', 'TypedMeasurementValue']} })
     metric_definition_ref: Optional[str] = Field(default=None, description="""Canonical metric carried through when a QDS wraps a measurement.""", json_schema_extra = { "linkml_meta": {'domain_of': ['Finding',

@@ -38,6 +38,7 @@ ROW_ALT = "#f7f8fb"
 
 REVIEW_DATE = "2026-09-07"
 DECK_DATE = "2026-09-07"
+REVISION_DATE = "2026-09-22"
 PRIOR_DATE = "2026-05-05"
 
 OUT = Path(__file__).parent / "svg"
@@ -87,7 +88,7 @@ def header(title, subtitle=None):
     )
     out.append(
         f'  <text x="{W-80}" y="{H-30}" font-size="16" fill="{MUTED}" text-anchor="end">'
-        f'protstruct_review · artefact audit {DECK_DATE}</text>'
+        f'protstruct_review · revised {REVISION_DATE}</text>'
     )
     return "\n".join(out) + "\n"
 
@@ -228,7 +229,7 @@ def slide_01_title():
     bullets = [
         "Seven rounds were run · round 7 was reported · round 4 was shipped as 1sar_final.pdb",
         "The round-7 coordinates are absent from the archive entirely",
-        "So the reported R-free of 0.199 is real — it rounds from round 7's 0.1989",
+        "The agent log attributes R-free 0.1989 (reported as 0.199) to round 7",
         "Five earlier review passes compared the report against the wrong model",
     ]
     for i, b in enumerate(bullets):
@@ -239,14 +240,14 @@ def slide_01_title():
     out.append(panel(120, 780, 1680, 150, BAD_LIGHT))
     out.append(paragraph(
         150, 832,
-        "The defect is packaging, not reporting. An artefact that cannot substantiate its own "
-        "report is indistinguishable, from the coordinates alone, from one that lies.",
+        "The archive establishes a packaging mismatch; without the round-7 model or raw result it "
+        "cannot adjudicate same-model reporting accuracy. The log still exposes internal defects.",
         width=86, size=26, color=BAD, weight="700", leading=36))
 
     out.append(
         f'  <text x="120" y="{H-70}" font-size="20" fill="{MUTED}">'
         f'openscientist artefact cdba2c07-daff-4f60-ae96-12452b3a5fbb · '
-        f'protstruct_review · {DECK_DATE}</text>')
+        f'protstruct_review · audit {DECK_DATE} · revised {REVISION_DATE}</text>')
     return "\n".join(out) + "\n"
 
 
@@ -261,7 +262,7 @@ def slide_02_why():
         ["packaged 1sar_final.pdb", "0.1563", "0.2114", "yes — labelled final", "round-4 output"],
         ["round 5", "0.1555", "0.2109", "yes", ""],
         ["round 6", "0.1539", "0.2068", "yes", ""],
-        ["round 7 — the reported final", "0.1488", "0.1989", "NO — coordinates absent", "transcripts only"],
+        ["round 7 — the reported final", "0.1488", "0.1989", "NO — coordinates absent", "retained log only"],
     ]
     fills = [[WARN_LIGHT, None, None, WARN_LIGHT, WARN_LIGHT],
              [None, None, None, None, None],
@@ -296,30 +297,30 @@ def slide_02_why():
     out.append(panel(80, 790, 1760, 140, ACCENT_LIGHT))
     out.append(paragraph(
         110, 840,
-        "So 0.199 is not fabricated — it rounds from the agent's own round 7. The deliverable was "
-        "simply never written into the archive, and a three-round-stale file was shipped under the "
-        "name the report cites.",
+        "The retained log attributes 0.1989 to the missing round-7 path, which rounds to 0.199. "
+        "Without coordinates or raw output that value is traceable, not independently verified. "
+        "The archive does establish that a three-round-stale file was shipped as the final model.",
         width=100, size=22, color=ACCENT, weight="700", leading=32))
     return "\n".join(out) + "\n"
 
 
 # ------------------------------------------------------------------
-# 03 — What the report got right, and the one real defect
+# 03 — What the retained report/log can and cannot establish
 # ------------------------------------------------------------------
 def slide_03_headline():
     out = [header("The report's numbers, re-examined",
                   "The clearest surviving defect is not the one we filed")]
 
     cols = [
-        ("Not a misreport", GOOD, GOOD_LIGHT,
-         "0.199 rounds from round 7's 0.1989, and 0.149 from 0.1488. Both are the "
-         "agent's own measured values for the model it describes."),
-        ("A packaging failure", WARN, WARN_LIGHT,
-         "The model those numbers describe was never packaged. Measuring the shipped "
-         "file gives 0.2116 — 0.0127 worse — with no way to tell why."),
-        ("A real defect", BAD, BAD_LIGHT,
-         "Round 7's gap is 0.1989 − 0.1488 = 0.0501, failing the < 0.05 criterion the task "
-         "prompt set. The report states “gap=0.050”."),
+        ("Log-traceable, not verified", WARN, WARN_LIGHT,
+         "The retained log attributes 0.1989 / 0.1488 to round 7. Its coordinates and raw "
+         "tool result are absent, so neither value can be independently re-measured."),
+        ("A proven packaging mismatch", WARN, WARN_LIGHT,
+         "The named round-7 file was not packaged; the shipped file is round 4. Its 0.2116 "
+         "is a cross-model comparison, not a same-model accuracy test."),
+        ("An internal logged defect", BAD, BAD_LIGHT,
+         "The logged values imply 0.1989 − 0.1488 = 0.0501, failing the < 0.05 criterion. "
+         "The report states “gap=0.050”; this does not verify either input value."),
     ]
     for i, (title, color, fill, body) in enumerate(cols):
         cx = 80 + i * 590
@@ -344,8 +345,8 @@ def slide_03_headline():
     out.append(panel(80, 790, 1760, 140, BAD_LIGHT))
     out.append(paragraph(
         110, 842,
-        "An accusation that an agent invented a number is a serious claim. It was wrong, it was "
-        "checkable from the archive throughout, and it survived five adversarial passes.",
+        "The archive makes the number traceable to a round-7 path, but does not independently "
+        "verify it. The defensible correction is provenance-scoped, not categorical exoneration.",
         width=96, size=23, color=BAD, weight="700", leading=33))
     return "\n".join(out) + "\n"
 
@@ -355,22 +356,20 @@ def slide_03_headline():
 # ------------------------------------------------------------------
 def slide_04_regrade():
     out = [header("What was measured — and on which model",
-                  "A valid audit of the packaged round-4 model; NOT a measurement of the reported final")]
+                  "Candidate-final rows audit packaged round 4; contextual baselines are labelled")]
 
     rows = [
         ["T03", "R-work / R-free, phenix.model_vs_data", "0.1564 / 0.2116", "matches packaged header"],
         ["T03", "R-work / R-free, gemmi matched radii", "0.1622 / 0.2136", "independent code path"],
-        ["T03", "gemmi − PHENIX R-work offset (rule 2)", "+0.0058", "passes"],
+        ["T03", "gemmi − PHENIX R-work offset", "+0.0058", "unmatched estimator; informational"],
         ["T03", "R-work/R-free gap", "0.0552", "no criterion applied"],
-        ["T14", "flip sets — reduce / mmtbx.reduce2", "14 / 18", "0 confident conflicts"],
-        ["T15", "SS agreement — packaged / deposited", "0.8802 / 0.8646", "uninterpretable"],
+        ["T14", "candidate residues scored — reduce / reduce2", "14 / 18", "historical 0/14; calls absent"],
         ["T16", "DockQ vs deposited, AB:AB", "0.9445", "crystallographic dimer"],
     ]
     fills = [[ACCENT_LIGHT, None, None, None] for _ in rows]
     colors = [[ACCENT, INK, INK, MUTED] for _ in rows]
-    colors[2][3] = GOOD; fills[2][3] = GOOD_LIGHT
+    colors[2][3] = WARN; fills[2][3] = WARN_LIGHT
     colors[3][3] = MUTED; fills[3][3] = ROW_ALT
-    colors[5][3] = WARN; fills[5][3] = WARN_LIGHT
     out.append(table(
         80, 190, [110, 700, 380, 460],
         ["Task", "Metric", "Value", "Reading"],
@@ -383,9 +382,9 @@ def slide_04_regrade():
               "the R-value rules were run. Rule 1's deposition reference does not exist for 1SAR (the "
               "1990 entry records FREE R VALUE : NULL); rule 4 was not re-run; and rule 3 does not hold "
               "as written — input NREF 7248 against 7262 in every output MTZ (see #584)."),
-        (WARN, "Neither the accusation nor the exoneration is oracled. Raw oracle output was not "
-               "committed, so 0.1564 / 0.2116 need a licensed PHENIX rerun to reproduce — and round 7's "
-               "numbers are attested only by the agent's own log, so they can never be re-measured."),
+        (WARN, "The archive proves the packaging mismatch, but not the missing model's numeric "
+               "accuracy. Raw packaged-model oracle output was not committed, so 0.1564 / 0.2116 "
+               "need a licensed PHENIX rerun to reproduce; round 7's numbers are log-attested only."),
     ]
     y = 640
     for color, text in notes:
@@ -460,23 +459,23 @@ def slide_05_new_tasks():
 # ------------------------------------------------------------------
 def slide_06_coverage():
     out = [header("Coverage on the packaged artefact",
-                  "9 tasks measured · T03 incomplete · 1 uncovered")]
+                  "8 tasks measured · T03 incomplete · 2 uncovered")]
 
     groups = [
         ("Measured — May, carried, not re-run", WARN, WARN_LIGHT,
          ["T01 superposition", "T05 geometry", "T06 model-vs-data",
           "T10 ligand/site", "T13 data quality"]),
-        ("Measured — this audit, on the packaged round-4 model", ACCENT, ACCENT_LIGHT,
+        ("Measured — this audit; candidate-final rows use packaged round 4", ACCENT, ACCENT_LIGHT,
          ["T03 X-ray refinement — R-value rules only; rubric NOT satisfied",
-          "T14 hydrogen placement", "T15 structural classification",
-          "T16 interface quality"]),
+          "T14 hydrogen placement", "T16 interface quality"]),
         ("Not applicable", MUTED, ROW_ALT,
          ["T04 real-space refinement · T07 predicted-model processing · T08 docking into a map · "
           "T12 cryo-EM map quality · T17 NMR ensembles — none apply to an X-ray artefact",
           "T09 molecular replacement — the model was already placed",
           "T11 loop fitting — no chain gaps (A 1–96, B 1–96)"]),
         ("Uncovered", BAD, BAD_LIGHT,
-         ["T02 per-residue comparison — no driver written"]),
+         ["T02 per-residue comparison — driver exists; not run or retained in this audit",
+          "T15 structural classification — historical numbers lack retained inputs, content and assignments"]),
     ]
     y = 190
     for title, color, fill, items in groups:
@@ -507,8 +506,8 @@ def slide_07_findings():
                   "What this record withdraws, and why")]
 
     rows = [
-        ["“0.199 corresponds to no model the agent produced”", "withdrawn — false",
-         "Round 7 produced 0.1989; it was never packaged"],
+        ["“0.199 corresponds to no model the agent produced”", "withdrawn — overstated",
+         "Log attributes 0.1989 to absent round-7 path; raw result absent"],
         ["“The report describes the wrong protein” (agent's error)", "reattributed",
          "The harness prompt supplied the identity"],
         ["“The starting model has zero heteroatoms”", "withdrawn — false",
@@ -558,20 +557,23 @@ def slide_08_trust():
                   "What this record's own numbers can and cannot support")]
 
     items = [
-        ("No verdict rests on cctbx grading cctbx", GOOD,
-         "After the demotions, the only rows still carrying a verdict are the two gemmi offset rows "
-         "— both non-cctbx. The cctbx rows that compared a round-7 claim against the round-4 "
-         "packaged model are now informational."),
-        ("Neither the accusation nor the exoneration is oracled", WARN,
-         "Raw oracle output was not committed, so 0.1564 / 0.2116 need a licensed PHENIX rerun to "
-         "reproduce. And round 7's 0.1488 / 0.1989 are attested only by the agent's own cctbx log "
-         "— the coordinates are gone, so the number that clears the report can never be checked."),
-        ("The QDS carries no verdicts", WARN,
-         "qds_emit.py does not propagate pass_status, so no status in this record reaches the sheet, "
-         "and its headline R-factors are the gemmi triple. Read verdicts from the eval, not the sheet."),
-        ("The trust invariant passes by omission", MUTED,
-         "The sheet carries no open cctbx-only row because it does not grade T06 — the row open on "
-         "every prior 1SAR sheet. Nothing that was open was closed."),
+        ("No quantitative oracle row carries a verdict", GOOD,
+         "The gemmi R-work row uses a bin-rescaled estimator that the raw-sfcalc benchmark did not "
+         "measure, and the R-free row has no test-set-specific band, so both are informational. "
+         "The cctbx rows measure packaged round 4 only; round-7 values remain narrative log "
+         "provenance, not structured row comparisons."),
+        ("The round-7 numeric claim is not oracled", WARN,
+         "Raw packaged-model oracle output was not committed, so 0.1564 / 0.2116 need a licensed "
+         "PHENIX rerun to reproduce. Round 7's 0.1488 / 0.1989 are attested only by the agent log; "
+         "the archive directly establishes the packaging mismatch, not those missing-model values."),
+        ("This legacy QDS carries no verdicts", WARN,
+         "The frozen 2026-09-07 sheet predates pass_status propagation, so no status in this record "
+         "reaches that sheet. Read status and interpretation from the eval; modern emitted sheets "
+         "preserve source status and context."),
+        ("The frozen sheet has an explicit legacy exemption", MUTED,
+         "The current trust guard grandfathers this 2026-09-07 sheet before inspecting its rows. "
+         "The sheet does not grade T06, and the exemption must not be read as a passed trust check "
+         "or as closing anything that was open."),
     ]
     y = 200
     for title, color, body in items:
@@ -606,7 +608,7 @@ def slide_09_harness():
         ("What none of it checked", BAD,
          "Whether the file under evaluation is the file the report describes. No guard ties an "
          "artefact's measured model to the model its provenance names as final — which is how a "
-         "false accusation survived five adversarial review passes."),
+         "categorically overstated accusation survived five adversarial review passes."),
     ]
     y = 210
     for title, color, body in items:
@@ -633,11 +635,10 @@ def slide_10_net():
         f'  <text x="112" y="240" font-size="27" font-weight="700" fill="{GOOD}">'
         f'Supported</text>')
     holds = [
-        "The reported R-factors match the agent's round 7",
+        "The reported R-factors are traceable to the agent's round-7 log",
+        "The packaged file follows the round-4 provenance trail",
         "The sulfate edit the report describes was correct",
-        "Both H builders agree on every confident flip",
-        "The deposited T15 leg reproduces its calibration",
-        "gemmi−PHENIX R-work offset passes at +0.0058",
+        "The +0.0058 cross-tool offset is retained as informational",
     ]
     for i, t in enumerate(holds):
         out.append(
@@ -647,8 +648,8 @@ def slide_10_net():
     out.append(
         f'  <text x="1012" y="240" font-size="27" font-weight="700" fill="{BAD}">Not supported</text>')
     fails = [
-        "The archive does not contain the reported model",
-        "Round 7's gap is 0.0501 — fails the task's < 0.05",
+        "A packaged copy of the reported round-7 model",
+        "A passing T03 gap — logged values imply 0.0501 (> 0.05)",
         "The protein identity — supplied by our prompt",
         "Ion assignments — both on deposited water sites",
         "“T03 settled” and “refinement sound”",
@@ -657,24 +658,25 @@ def slide_10_net():
         out.append(
             f'  <text x="1012" y="{292 + i*38}" font-size="20" fill="{INK}">✗ {escape(t)}</text>')
 
-    out.append(panel(80, 520, 1760, 170, WARN_LIGHT))
+    out.append(panel(80, 520, 1760, 190, WARN_LIGHT))
     out.append(
         f'  <text x="112" y="568" font-size="25" font-weight="700" fill="{WARN}">Open</text>')
     out.append(paragraph(
-        112, 610,
+        112, 605,
         "Recover or re-run the round-7 model before any claim about the agent's final refinement · "
-        "fix the upstream prompt · T02 has no driver · T15 needs a content figure · the T16 swapped "
-        "mapping is unmeasured · geometry, waters and data quality are carried from May, not "
+        "fix the upstream prompt · run and retain T02 · retain/re-run T14 residue calls · T15 needs "
+        "retained content/evidence · the T16 swapped mapping is absent here (measured in the Sep21 "
+        "follow-up) · geometry, waters and data quality are carried from May, not "
         "re-measured.",
         width=104, size=20, leading=29))
 
-    out.append(panel(80, 720, 1760, 210, ACCENT_LIGHT))
+    out.append(panel(80, 730, 1760, 200, ACCENT_LIGHT))
     out.append(paragraph(
-        112, 772,
+        112, 782,
         "The agent's largest visible failure — a headline number that did not match its own shipped "
         "model — was an artefact-packaging failure. Its real failure was accepting a protein identity "
         "the benchmark handed it without checking the coordinates. This harness made the mirror-image "
-        "error: it trusted a filename for five review rounds, and nearly published the accusation.",
+        "error: it trusted a filename for five review rounds, and nearly published an overstated accusation.",
         width=100, size=23, color=ACCENT, weight="700", leading=33))
     return "\n".join(out) + "\n"
 

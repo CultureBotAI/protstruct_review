@@ -37,7 +37,7 @@ The **MolProbity score** is the only single-number geometry summary the field tr
 
 The R-free rule of thumb (Brünger 1992; Evans & Murshudov 2013): expected R-free ≈ resolution_Å / 10. At 2.5 Å, ≤ 0.25; at 1.8 Å, ≤ 0.18. Numbers far above the expectation flag the model, not the data; numbers far below raise an overfitting flag.
 
-**Never report the R-factors that come out of `phenix.refine`'s in-run log alone.** They incorporate the same bulk-solvent and scaling that drove the refinement. The catalog T06 oracle is `phenix.model_vs_data`, not `phenix.refine`'s log; the non-cctbx oracle is `gemmi sfcalc` + a small R-factor calculation (`scripts/gemmi_rfactor.py` or its successor). The 1SAR evaluation in this repo found a 0.013 R-free disagreement between the two — that gap matters when the success criterion is "gap < 0.05".
+**Never report the R-factors that come out of `phenix.refine`'s in-run log alone.** They incorporate the same bulk-solvent and scaling that drove the refinement. The catalog T06 oracle is `phenix.model_vs_data`, not `phenix.refine`'s log; the non-cctbx oracle is `gemmi sfcalc` plus an explicitly named R-factor estimator. On the same packaged 1SAR model, the historical PHENIX/gemmi R-free offset was +0.0020, not 0.013, and it is informational because no R-free-specific cross-tool benchmark is registered. The roughly 0.013 discrepancy was between an unretained round-7 claim and the packaged round-4 model, so it measured a model/package mismatch rather than same-model oracle agreement.
 
 ### 1.3 X-ray data quality
 

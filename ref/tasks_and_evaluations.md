@@ -156,8 +156,8 @@ terms. TSV form with the same rows: `ref/tasks_and_evaluations.tsv`.
 - **Doc paths:** `reference/hydrogens.html`, `reference/ready_set.html`
 - **Independent oracle(s):** `reduce` (standalone, Richardson lab), `propka3` (pKa), OpenBabel `--addh`, `pdb2pqr`, Schrödinger `PrepWizard`
 - **Typical inputs:** model without hydrogens (or partial H)
-- **Metrics:** number of H atoms added, Asn/Gln/His flips proposed, clashscore delta (pre vs post), hbond-network consistency vs standalone `reduce`
-- **Gold standard:** standalone `reduce` output on the same input (PHENIX `phenix.reduce` wraps it but exposing both lets us catch wrapping bugs); neutron structure if available (e.g. PDB `5E5V`)
+- **Metrics:** number of H atoms added, Asn/Gln/His flip candidates scored, Asn/Gln/His flips actually proposed, confident flip-set conflict count (with eligible shared-residue denominator), clashscore delta (pre vs post), hbond-network consistency vs standalone `reduce`
+- **Gold standard:** standalone `reduce` vs `phenix.reduce` is a same-binary dispatcher/defaults check, not an independent oracle. Use standalone `reduce` vs `mmtbx.reduce2` for the confident flip-conflict comparison; count only disagreements where `reduce` committed an F/K call, and apply the ≤ 10% band only to a preregistered cohort aggregate. H-count agreement is exact only for protein-only models and void with non-water hetero components. Apply the registered clashscore envelope only when two counters score identical H-built coordinates under a matched convention; distinct-builder pre/post changes are informational. A neutron structure remains the experimental tiebreaker where available (e.g. PDB `5E5V`).
 - **Example dataset:** PDB `1HQ1` (high-res, no hydrogens deposited), or a neutron-paired structure for comparison
 
 ### T15 — Structural/domain classification

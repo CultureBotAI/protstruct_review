@@ -43,13 +43,15 @@ from typing import Any
 
 import yaml
 
+import qds_emit_contract_v1
+
 
 REPO = Path(__file__).resolve().parent.parent
 CATALOG_PATH = REPO / "ref" / "catalog.yaml"
 TOOL_RECS_PATH = REPO / "ref" / "tool_recommendations.yaml"
 TOOL_ASSUMPTIONS_PATH = REPO / "ref" / "tool_assumptions.yaml"
-QDS_EMITTER_CONTRACT_VERSION = "1"
-SUPPORTED_QDS_EMITTER_CONTRACT_VERSIONS = frozenset({"1"})
+QDS_EMITTER_CONTRACT_VERSION = "2"
+SUPPORTED_QDS_EMITTER_CONTRACT_VERSIONS = frozenset({"1", "2"})
 
 
 # ---------------------------------------------------------------------------
@@ -137,6 +139,18 @@ METRIC_TO_QDS_SLOT: dict[str, QdsSlot | list[QdsSlot]] = {
     "T17_nmr_restraint_violation_summary": ("nmr_validation_summary", "nmr_restraint_violation_summary"),
     "T17_nmr_ensemble_precision_rmsd": ("nmr_validation_summary", "nmr_ensemble_precision_rmsd"),
 }
+
+# These contract-2 metrics intentionally remain coverage-only: QualityDataSheet
+# has no T14 headline-summary scalar, and mapping either candidate inventory or
+# their derived conflict count into an unrelated block would misrepresent it.
+# Listing them explicitly makes omission from METRIC_TO_QDS_SLOT a versioned
+# disposition rather than an accidental unknown-metric drop.
+COVERAGE_ONLY_METRIC_IDS = frozenset(
+    {
+        "T14_asn_gln_his_flip_candidates_scored",
+        "T14_asn_gln_his_flip_set_conflicts",
+    }
+)
 
 
 # Metric ids that, when a measurement carries them, force the QDS to populate
@@ -276,12 +290,19 @@ def _canonicalize_measurement_tools(
 
 
 def _validate_routing_table() -> None:
-    """Every key in METRIC_TO_QDS_SLOT must exist in ref/catalog.yaml."""
+    """Every routed/coverage-only contract metric must exist in the catalog."""
     catalog_ids = _load_catalog_metric_ids()
     bad = [mid for mid in METRIC_TO_QDS_SLOT if mid not in catalog_ids]
+    bad.extend(mid for mid in COVERAGE_ONLY_METRIC_IDS if mid not in catalog_ids)
+    overlap = sorted(COVERAGE_ONLY_METRIC_IDS.intersection(METRIC_TO_QDS_SLOT))
+    if overlap:
+        raise SystemExit(
+            "qds_emit: metrics cannot be both scalar-routed and coverage-only:\n  "
+            + "\n  ".join(overlap)
+        )
     if bad:
         raise SystemExit(
-            "qds_emit: QDS routing references metric ids not in ref/catalog.yaml:\n  "
+            "qds_emit: QDS metric disposition references ids not in ref/catalog.yaml:\n  "
             + "\n  ".join(bad)
         )
 
@@ -1577,6 +1598,30 @@ COVERAGE_CONTEXT_FIELDS = (
     "reference_subject_ref",
 )
 
+# A composite row cannot gain independent-family credit merely by naming an
+# arbitrary non-cctbx measurement in ``derived_from_measurement_refs``.  Each
+# metric whose value genuinely combines tool families needs an explicit
+# coverage contract.  The T14 conflict count is currently the only such metric:
+# it is jointly derived from the two candidate inventories named below.
+DERIVED_COVERAGE_CONTEXT_FIELDS = (
+    "catalog_task_ref",
+    "subject_ref",
+    "reference_subject_ref",
+    "stage",
+    "scope",
+    "scope_selector",
+)
+DERIVED_COVERAGE_CONTRACTS: dict[str, dict[str, Any]] = {
+    "T14_asn_gln_his_flip_set_conflicts": {
+        "catalog_task_ref": "T14",
+        "carrier_tool": "mmtbx.reduce2",
+        "source_metric": "T14_asn_gln_his_flip_candidates_scored",
+        "source_tools": frozenset(
+            {"reduce (standalone, Richardson)", "mmtbx.reduce2"}
+        ),
+    },
+}
+
 
 def _coverage_context_key(measurement: dict[str, Any]) -> tuple[str, ...]:
     """Claim context excluding subject, which is resolved within each group."""
@@ -1585,6 +1630,334 @@ def _coverage_context_key(measurement: dict[str, Any]) -> tuple[str, ...]:
 
 def _has_numeric_oracle_value(measurement: dict[str, Any]) -> bool:
     return _finite_numeric_value(measurement) is not None
+
+
+_NON_CRITERION_TEXT = {
+    "",
+    "n/a",
+    "na",
+    "-",
+    "--",
+    "none",
+    "informational",
+}
+
+
+def _require_informational_coverage_source(
+    measurement: dict[str, Any], *, location: str
+) -> None:
+    """Keep T14 opportunity counts and structure results non-gradeable."""
+    if measurement.get("pass_status") != "informational":
+        raise QdsCompletenessError(
+            "QDS derived-coverage integrity failed: "
+            f"{location} must have pass_status 'informational'"
+        )
+    for carrier_name, carrier in (
+        ("measurement", measurement),
+        ("oracle_measure", measurement.get("oracle_measure")),
+    ):
+        if not isinstance(carrier, dict):
+            continue
+        status = carrier.get("pass_status")
+        if carrier_name == "oracle_measure" and status not in (
+            None,
+            "",
+            "informational",
+        ):
+            raise QdsCompletenessError(
+                "QDS derived-coverage integrity failed: "
+                f"{location} {carrier_name} carries grade {status!r}"
+            )
+        criterion = str(carrier.get("pass_criterion") or "").strip()
+        if criterion.casefold() not in _NON_CRITERION_TEXT:
+            raise QdsCompletenessError(
+                "QDS derived-coverage integrity failed: "
+                f"{location} {carrier_name} carries criterion {criterion!r}"
+            )
+
+
+def _is_t14_conflict_rate_criterion(value: Any) -> bool:
+    text = str(value or "").strip().casefold().replace("≤", "<=")
+    text = re.sub(r"\s+", " ", text)
+    text = re.sub(r"\s*<=\s*", " <= ", text)
+    text = re.sub(r"\s*%\s*", "%", text).strip()
+    return text == "conflict rate <= 10%"
+
+
+def _validate_t14_cohort_verdict(
+    measurement: dict[str, Any],
+    *,
+    numerator: int,
+    denominator: int,
+    location: str,
+) -> None:
+    status = measurement.get("pass_status")
+    if status == "informational":
+        _require_informational_coverage_source(measurement, location=location)
+        return
+    passes = numerator * 10 <= denominator
+    expected = {"pass", "pass_with_caveat"} if passes else {"fail_criterion"}
+    if status not in expected:
+        raise QdsCompletenessError(
+            "QDS derived-coverage integrity failed: "
+            f"{location} conflict rate {numerator}/{denominator} requires "
+            f"pass_status in {sorted(expected)!r}, not {status!r}"
+        )
+    if not _is_t14_conflict_rate_criterion(measurement.get("pass_criterion")):
+        raise QdsCompletenessError(
+            "QDS derived-coverage integrity failed: "
+            f"{location} requires an unambiguous pass_criterion naming "
+            "conflict rate <= 10%"
+        )
+    nested = measurement.get("oracle_measure")
+    if not isinstance(nested, dict):
+        return
+    nested_status = nested.get("pass_status")
+    nested_criterion = str(nested.get("pass_criterion") or "").strip()
+    if nested_status in (None, "") and not nested_criterion:
+        return
+    if nested_status not in expected:
+        raise QdsCompletenessError(
+            "QDS derived-coverage integrity failed: "
+            f"{location} oracle_measure verdict does not match conflict rate "
+            f"{numerator}/{denominator}; expected {sorted(expected)!r}, not "
+            f"{nested_status!r}"
+        )
+    if not _is_t14_conflict_rate_criterion(nested.get("pass_criterion")):
+        raise QdsCompletenessError(
+            "QDS derived-coverage integrity failed: "
+            f"{location} oracle_measure requires an unambiguous pass_criterion "
+            "naming conflict rate <= 10%"
+        )
+
+
+def _integral_coverage_count(
+    measurement: dict[str, Any],
+    field: str,
+    *,
+    minimum: int,
+    location: str,
+) -> int:
+    payload = measurement.get("oracle_measure")
+    value = payload.get(field) if isinstance(payload, dict) else None
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        raise QdsCompletenessError(
+            "QDS derived-coverage integrity failed: "
+            f"{location} oracle_measure.{field} must be an integral count"
+        )
+    decimal = Decimal(str(value))
+    if (
+        not decimal.is_finite()
+        or decimal != decimal.to_integral_value()
+        or decimal < minimum
+    ):
+        raise QdsCompletenessError(
+            "QDS derived-coverage integrity failed: "
+            f"{location} oracle_measure.{field} must be an integral count "
+            f">= {minimum}"
+        )
+    unit = str(payload.get("unit") or "").strip().casefold()
+    if unit != "count":
+        raise QdsCompletenessError(
+            "QDS derived-coverage integrity failed: "
+            f"{location} requires oracle_measure.unit 'count'"
+        )
+    return int(decimal)
+
+
+def _derived_coverage_participants(
+    measurements: list[dict[str, Any]],
+) -> dict[int, set[tuple[str, str]]]:
+    """Return the tools/families that actually participate in each numeric row.
+
+    Direct measurements contribute their own canonical tool family.  A composite
+    may additionally inherit its direct sources only through an explicit contract
+    above.  The contract and same-run/context checks are deliberately repeated in
+    the emitter: QDS emission is a public API and must not rely on callers having
+    run the repository-wide referential-integrity gate first.
+    """
+    by_run_and_id: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    by_id: dict[str, list[dict[str, Any]]] = {}
+    for measurement in measurements:
+        measurement_id = str(measurement.get("id") or "").strip()
+        owner_run_id = str(
+            measurement.get("_source_evaluation_run_ref") or ""
+        ).strip()
+        if measurement_id:
+            by_id.setdefault(measurement_id, []).append(measurement)
+        if measurement_id and owner_run_id:
+            by_run_and_id.setdefault((owner_run_id, measurement_id), []).append(
+                measurement
+            )
+
+    participants: dict[int, set[tuple[str, str]]] = {}
+    for measurement in measurements:
+        own: set[tuple[str, str]] = set()
+        if _has_numeric_oracle_value(measurement):
+            family = str(measurement.get("oracle_family") or "unclassified")
+            tool = str(measurement.get("oracle_tool_ref") or "<unnamed oracle>")
+            own.add((family, tool))
+        participants[id(measurement)] = own
+
+        metric_id = str(measurement.get("metric_definition_ref") or "")
+        contract = DERIVED_COVERAGE_CONTRACTS.get(metric_id)
+        if contract is None:
+            # Generic lineage remains useful provenance, but it is not enough to
+            # confer independent-family trust coverage without a metric-specific
+            # contract that prevents unrelated-oracle laundering.
+            continue
+
+        measurement_id = str(measurement.get("id") or "<missing id>")
+        location = f"derived measurement {measurement_id!r}"
+        refs = measurement.get("derived_from_measurement_refs")
+        expected_tools = set(contract["source_tools"])
+        if (
+            not isinstance(refs, list)
+            or len(refs) != len(expected_tools)
+            or not all(isinstance(ref, str) and ref.strip() for ref in refs)
+            or len(set(refs)) != len(refs)
+        ):
+            raise QdsCompletenessError(
+                "QDS derived-coverage integrity failed: "
+                f"{location} requires exactly {len(expected_tools)} distinct, "
+                "non-empty derived_from_measurement_refs"
+            )
+
+        owner_run_id = str(
+            measurement.get("_source_evaluation_run_ref") or ""
+        ).strip()
+        if not owner_run_id:
+            raise QdsCompletenessError(
+                "QDS derived-coverage integrity failed: "
+                f"{location} has no source EvaluationRun identity"
+            )
+        if measurement.get("catalog_task_ref") != contract["catalog_task_ref"]:
+            raise QdsCompletenessError(
+                "QDS derived-coverage integrity failed: "
+                f"{location} uses catalog_task_ref "
+                f"{measurement.get('catalog_task_ref')!r}; expected "
+                f"{contract['catalog_task_ref']!r}"
+            )
+        if measurement.get("oracle_tool_ref") != contract["carrier_tool"]:
+            raise QdsCompletenessError(
+                "QDS derived-coverage integrity failed: "
+                f"{location} uses carrier tool "
+                f"{measurement.get('oracle_tool_ref')!r}; expected "
+                f"{contract['carrier_tool']!r}"
+            )
+        if not str(measurement.get("subject_ref") or "").strip():
+            raise QdsCompletenessError(
+                "QDS derived-coverage integrity failed: "
+                f"{location} requires a non-empty subject_ref"
+            )
+        if measurement.get("scope") == "cohort":
+            if not str(measurement.get("scope_selector") or "").strip():
+                raise QdsCompletenessError(
+                    "QDS derived-coverage integrity failed: "
+                    f"{location} with scope 'cohort' requires a non-empty "
+                    "scope_selector naming the preregistered cohort"
+                )
+        else:
+            _require_informational_coverage_source(
+                measurement, location=location
+            )
+        numerator = _integral_coverage_count(
+            measurement,
+            "value_numeric",
+            minimum=0,
+            location=location,
+        )
+        denominator = _integral_coverage_count(
+            measurement,
+            "count",
+            minimum=1,
+            location=location,
+        )
+        if numerator > denominator:
+            raise QdsCompletenessError(
+                "QDS derived-coverage integrity failed: "
+                f"{location} conflict count {numerator} exceeds denominator "
+                f"{denominator}"
+            )
+        if measurement.get("scope") == "cohort":
+            _validate_t14_cohort_verdict(
+                measurement,
+                numerator=numerator,
+                denominator=denominator,
+                location=location,
+            )
+
+        sources: list[dict[str, Any]] = []
+        source_candidate_counts: list[int] = []
+        for ref in refs:
+            targets = by_run_and_id.get((owner_run_id, ref), [])
+            if len(targets) != 1:
+                elsewhere = by_id.get(ref, [])
+                detail = (
+                    "belongs to another EvaluationRun"
+                    if elsewhere and not targets
+                    else "does not resolve uniquely in its owning EvaluationRun"
+                )
+                raise QdsCompletenessError(
+                    "QDS derived-coverage integrity failed: "
+                    f"{location} source ref {ref!r} {detail}"
+                )
+            source = targets[0]
+            source_id = str(source.get("id") or ref)
+            for field in DERIVED_COVERAGE_CONTEXT_FIELDS:
+                if source.get(field) != measurement.get(field):
+                    raise QdsCompletenessError(
+                        "QDS derived-coverage integrity failed: "
+                        f"{location} source {source_id!r} has mismatched {field} "
+                        f"(derived={measurement.get(field)!r}, "
+                        f"source={source.get(field)!r})"
+                    )
+            if source.get("metric_definition_ref") != contract["source_metric"]:
+                raise QdsCompletenessError(
+                    "QDS derived-coverage integrity failed: "
+                    f"{location} source {source_id!r} measures "
+                    f"{source.get('metric_definition_ref')!r}; expected "
+                    f"{contract['source_metric']!r}"
+                )
+            if not _has_numeric_oracle_value(source):
+                raise QdsCompletenessError(
+                    "QDS derived-coverage integrity failed: "
+                    f"{location} source {source_id!r} has no finite numeric oracle value"
+                )
+            _require_informational_coverage_source(
+                source, location=f"{location} source {source_id!r}"
+            )
+            source_candidate_counts.append(
+                _integral_coverage_count(
+                    source,
+                    "value_numeric",
+                    minimum=1,
+                    location=f"{location} source {source_id!r}",
+                )
+            )
+            sources.append(source)
+
+        source_tools = {
+            str(source.get("oracle_tool_ref") or "") for source in sources
+        }
+        if source_tools != expected_tools:
+            raise QdsCompletenessError(
+                "QDS derived-coverage integrity failed: "
+                f"{location} source tools are {sorted(source_tools)!r}; expected "
+                f"{sorted(expected_tools)!r}"
+            )
+        if denominator > min(source_candidate_counts):
+            raise QdsCompletenessError(
+                "QDS derived-coverage integrity failed: "
+                f"{location} denominator {denominator} exceeds a source candidate "
+                f"count ({sorted(source_candidate_counts)!r})"
+            )
+        for source in sources:
+            family = str(source.get("oracle_family") or "unclassified")
+            tool = str(source.get("oracle_tool_ref") or "<unnamed oracle>")
+            own.add((family, tool))
+
+    return participants
 
 
 def _coverage_id(qds_id: str, context: tuple[str, ...]) -> str:
@@ -1612,6 +1985,7 @@ def build_cross_tool_coverage(
         context="cross-tool coverage",
         tool_families=tool_families,
     )
+    participants_by_row = _derived_coverage_participants(canonical_measurements)
     grouped: dict[tuple[str, ...], list[dict[str, Any]]] = {}
     for measurement in canonical_measurements:
         if not measurement.get("catalog_task_ref"):
@@ -1645,12 +2019,11 @@ def build_cross_tool_coverage(
             "unclassified": set(),
         }
         for measurement in numeric:
-            family = measurement.get("oracle_family") or ""
-            tool = str(measurement.get("oracle_tool_ref") or "<unnamed oracle>")
-            if family in ("cctbx", "non_cctbx"):
-                buckets[family].add(tool)
-            else:
-                buckets["unclassified"].add(tool)
+            for family, tool in participants_by_row[id(measurement)]:
+                if family in ("cctbx", "non_cctbx"):
+                    buckets[family].add(tool)
+                else:
+                    buckets["unclassified"].add(tool)
 
         def verdict_classes(family: str) -> set[str]:
             classes: set[str] = set()
@@ -2710,7 +3083,7 @@ def _validate_cli_emission_contract(
         )
 
 
-def _emit_qds_contract_1(
+def _emit_qds_contract_2(
     eval_paths: list[Path],
     qds_id: str,
     structure_id: str,
@@ -2931,7 +3304,7 @@ def _emit_qds_contract_1(
         "structure_ref": structure_id,
         "derived_from_evaluation_run_refs": [r["id"] for r in runs],
         "issued_at": effective_issued_at,
-        "emitter_contract_version": "1",
+        "emitter_contract_version": "2",
         "identity_block": build_identity_block(
             qds_id,
             structure_id,
@@ -3081,7 +3454,22 @@ def emit_qds(
     emitter or live registries to reinterpret an earlier contract.
     """
     if emitter_contract_version == "1":
-        return _emit_qds_contract_1(
+        return qds_emit_contract_v1._emit_qds_contract_1(
+            eval_paths,
+            qds_id,
+            structure_id,
+            structure_method,
+            subject_ref,
+            coverage_scope,
+            scope_notes,
+            resolution_a,
+            space_group,
+            issued_at,
+            structure_description,
+            require_pinned_tool_snapshot,
+        )
+    if emitter_contract_version == "2":
+        return _emit_qds_contract_2(
             eval_paths,
             qds_id,
             structure_id,

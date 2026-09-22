@@ -10,13 +10,14 @@
   <circle cx="132" cy="575" r="6" fill="#1f4e8c"/>
   <text x="158" y="582" font-size="24" fill="#1a1a2e">The round-7 coordinates are absent from the archive entirely</text>
   <circle cx="132" cy="627" r="6" fill="#1f4e8c"/>
-  <text x="158" y="634" font-size="24" fill="#1a1a2e">So the reported R-free of 0.199 is real — it rounds from round 7's 0.1989</text>
+  <text x="158" y="634" font-size="24" fill="#1a1a2e">The agent log attributes R-free 0.1989 (reported as 0.199) to round 7</text>
   <circle cx="132" cy="679" r="6" fill="#1f4e8c"/>
   <text x="158" y="686" font-size="24" fill="#1a1a2e">Five earlier review passes compared the report against the wrong model</text>
   <rect x="120" y="780" width="1680" height="150" rx="10" ry="10" fill="#f5d6d4"/>
 
-  <text x="150" y="832" font-size="26" font-weight="700" fill="#a8201a">The defect is packaging, not reporting. An artefact that cannot substantiate its own</text>
-  <text x="150" y="868" font-size="26" font-weight="700" fill="#a8201a">report is indistinguishable, from the coordinates alone, from one that lies.</text>
+  <text x="150" y="832" font-size="26" font-weight="700" fill="#a8201a">The archive establishes a packaging mismatch; without the round-7 model or raw result</text>
+  <text x="150" y="868" font-size="26" font-weight="700" fill="#a8201a">it cannot adjudicate same-model reporting accuracy. The log still exposes internal</text>
+  <text x="150" y="904" font-size="26" font-weight="700" fill="#a8201a">defects.</text>
 
-  <text x="120" y="1010" font-size="20" fill="#5a6071">openscientist artefact cdba2c07-daff-4f60-ae96-12452b3a5fbb · protstruct_review · 2026-09-07</text>
+  <text x="120" y="1010" font-size="20" fill="#5a6071">openscientist artefact cdba2c07-daff-4f60-ae96-12452b3a5fbb · protstruct_review · audit 2026-09-07 · revised 2026-09-22</text>
 </svg>

@@ -1,8 +1,9 @@
-# Tolerance benchmark — independent-code-path R offset (gemmi sfcalc vs phenix.model_vs_data)
+# Tolerance benchmark — independent-code-path R-work offset (gemmi sfcalc vs phenix.model_vs_data)
 
-Settles the only tolerance in `ref/thresholds_and_standards.md` whose row admitted its own
+Settles the R-work tolerance in `ref/thresholds_and_standards.md` whose row admitted its own
 magnitude was **unbenchmarked**: "an independent R re-derivation may differ *by a small amount* from
-scaling / resolution-binning differences (magnitude **unbenchmarked**)".
+scaling / resolution-binning differences (magnitude **unbenchmarked**)". Every value in this
+benchmark is summed over the **work set**; it does not establish an R-free offset band.
 
 Reproduce with:
 
@@ -80,11 +81,12 @@ free-flag column.
 offset of 3–6 % of the value being checked. Large enough that an agent's R re-derivation landing
 0.01 from PHENIX is *expected*, not evidence of a modelling error.
 
-**2. The offset is one-sided.** gemmi is higher in 15/15, with no sign changes. The structural
-reason is in the table above: PHENIX refits k_iso, k_aniso and k_mask **per resolution bin**, while
-`gemmi sfcalc` applies one global scale and one anisotropic tensor. A per-bin fit cannot do worse
-than a global one on the same data, so PHENIX's R is systematically the lower number. This is a
-fitting-freedom difference, not an accuracy difference — neither R is "the true R".
+**2. The observed offset is one-sided; the criterion is not.** gemmi is higher in 15/15, with no
+sign changes. PHENIX refits k_iso, k_aniso and k_mask per resolution bin, while `gemmi sfcalc`
+applies one global scale and one anisotropic tensor, but the paths also differ in Fcalc
+implementation, objective details and outlier rejection. The sample therefore establishes a useful
+sign diagnostic, not a mathematical guarantee. A non-positive offset merits configuration review;
+it does not fail an otherwise close absolute agreement by itself. Neither R is "the true R".
 
 **3. Mask convention is worth as much as the code difference.** Running gemmi with its own default
 `vdw` radii instead of `--radii-set=cctbx` adds a **median +0.0043 and up to +0.014** — comparable
@@ -97,9 +99,11 @@ with the largest mask effect, so the driver looks like solvent content rather th
 
 ## Applied tolerance
 
-> **|Δ R| ≤ 0.02**, `gemmi sfcalc --radii-set=cctbx` vs `phenix.model_vs_data`, on the same model,
-> the same MTZ and the same work set. Expect gemmi to read **high** — a negative Δ is
-> off-distribution. Matching the mask radii set is a **precondition**, not a refinement.
+> Define ΔR_work = R_work(gemmi) − R_work(PHENIX). Require **|ΔR_work| ≤ 0.02** for directly summed
+> `gemmi sfcalc --radii-set=cctbx` FC values vs `phenix.model_vs_data`, on the same model, the same
+> MTZ and the same work set. gemmi at or below PHENIX is off the observed 15-entry distribution and
+> triggers investigation, not automatic failure. Matching the mask radii set is a **precondition**,
+> not a refinement.
 
 The tightest envelope covering all 15 is 0.016; rounded to 0.02 for margin at n = 15. This replaces
 an unquantified "small amount", and it is deliberately not tighter: the two programs differ in
@@ -119,3 +123,9 @@ scaling freedom by design.
   offsets, but it is part of the measured offset. Reproducing PHENIX's rejection criterion on the
   gemmi side was rejected as a fix: it would import the code path under test.
 - One version pair: PHENIX 2.0-5936 and gemmi 0.7.5.
+- **R-work only.** No R-free values entered the tolerance calculation. Applying this envelope to
+  R-free would be an unbenchmarked extrapolation; an R-free offset remains informational until a
+  test-set-specific benchmark is run.
+- **Estimator-specific.** The benchmark directly summed the globally scaled FC values emitted by
+  `gemmi sfcalc`. It does not govern `scripts/gemmi_rfactor.py`, which adds work-fitted bin-wise
+  isotropic rescaling; that estimator needs its own benchmark before receiving a verdict.

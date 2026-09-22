@@ -28,6 +28,7 @@ from typing import Any
 import yaml
 
 import qds_emit_contract_v1
+import qds_emit_contract_v2
 
 
 # These immutable artifacts predate source-derived committed-QDS enforcement.
@@ -251,7 +252,7 @@ def _canonical_qds_text(qds: dict[str, Any]) -> str:
     )
 
 
-def _validate_contract_1_pin(
+def _validate_contract_pin(
     path: Path,
     qds: dict[str, Any],
     refs: list[Any],
@@ -261,8 +262,11 @@ def _validate_contract_1_pin(
     source_recommendations: list[dict[str, Any]],
     source_assumptions: list[dict[str, Any]],
     source_runs: list[dict[str, Any]],
+    *,
+    contract_version: str,
+    contract_emitter: Any,
 ) -> list[str]:
-    """Validate contract 1 through its source-owned, content-addressed boundary.
+    """Validate one retained contract at its content-addressed boundary.
 
     The output digest protects the complete canonical sheet. The other digests
     bind the frozen implementation and source-owned snapshots. Full replay proves
@@ -277,13 +281,15 @@ def _validate_contract_1_pin(
     }
     if len(unique) != 1:
         return [
-            f"{path.name}: contract 1 requires exactly one source-owned replay "
+            f"{path.name}: contract {contract_version} requires exactly one "
+            "source-owned replay "
             f"pin for {qds_id!r}; found {len(unique)}"
         ]
     pin = next(iter(unique.values()))
-    if str(pin.get("emitter_contract_version") or "") != "1":
+    if str(pin.get("emitter_contract_version") or "") != contract_version:
         errors.append(
-            f"{path.name}: replay pin contract version does not match QDS contract 1"
+            f"{path.name}: replay pin contract version does not match QDS "
+            f"contract {contract_version}"
         )
     if [str(ref) for ref in pin.get("source_evaluation_run_refs", []) or []] != [
         str(ref) for ref in refs
@@ -300,7 +306,7 @@ def _validate_contract_1_pin(
 
     actual_inputs = {
         "emitter_source_sha256": hashlib.sha256(
-            Path(qds_emit_contract_v1.__file__).read_bytes()
+            Path(contract_emitter.__file__).read_bytes()
         ).hexdigest(),
         "source_tools_sha256": _snapshot_digest("tools", source_tools),
         "source_tool_recommendations_sha256": _snapshot_digest(
@@ -343,7 +349,7 @@ def _validate_contract_1_pin(
             eval_path.write_text(
                 yaml.safe_dump(replay_doc, sort_keys=False, allow_unicode=True)
             )
-            replayed = qds_emit_contract_v1._emit_qds_contract_1(
+            replayed = contract_emitter.emit_qds(
                 [eval_path],
                 qds_id=str(qds.get("id") or ""),
                 structure_id=str(qds.get("structure_ref") or ""),
@@ -351,20 +357,45 @@ def _validate_contract_1_pin(
                 coverage_scope=qds.get("coverage_scope"),
                 scope_notes=qds.get("scope_notes"),
                 issued_at=qds.get("issued_at"),
+                emitter_contract_version=contract_version,
                 require_pinned_tool_snapshot=True,
             )
         if replayed != qds:
             errors.append(
                 f"{path.name}: committed QDS differs from deterministic frozen "
-                "contract-1 replay of its source snapshots"
+                f"contract-{contract_version} replay of its source snapshots"
             )
-    except (qds_emit_contract_v1.QdsCompletenessError, SystemExit) as exc:
-        errors.append(f"{path.name}: frozen contract-1 replay failed: {exc}")
+    except (contract_emitter.QdsCompletenessError, SystemExit) as exc:
+        errors.append(
+            f"{path.name}: frozen contract-{contract_version} replay failed: {exc}"
+        )
     return errors
 
 
-REPLAY_CONTRACT_VALIDATORS = {"1": _validate_contract_1_pin}
-REPLAY_CONTRACT_EMITTERS = {"1": qds_emit_contract_v1}
+def _validate_contract_1_pin(*args: Any) -> list[str]:
+    return _validate_contract_pin(
+        *args,
+        contract_version="1",
+        contract_emitter=qds_emit_contract_v1,
+    )
+
+
+def _validate_contract_2_pin(*args: Any) -> list[str]:
+    return _validate_contract_pin(
+        *args,
+        contract_version="2",
+        contract_emitter=qds_emit_contract_v2,
+    )
+
+
+REPLAY_CONTRACT_VALIDATORS = {
+    "1": _validate_contract_1_pin,
+    "2": _validate_contract_2_pin,
+}
+REPLAY_CONTRACT_EMITTERS = {
+    "1": qds_emit_contract_v1,
+    "2": qds_emit_contract_v2,
+}
 
 
 def _rebuild_coverage(
@@ -448,7 +479,8 @@ def _rebuild_coverage(
             return None, errors
         if not source_tools:
             raise contract_emitter.QdsCompletenessError(
-                "QDS contract-1 replay requires a source-pinned Tool snapshot"
+                f"QDS contract-{contract_version} replay requires a source-pinned "
+                "Tool snapshot"
             )
         tool_families = contract_emitter._tool_families_from_rows(
             source_tools, source_name="source Tool snapshot"

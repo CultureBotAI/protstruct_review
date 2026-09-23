@@ -606,7 +606,11 @@ class Container(ConfiguredBaseModel):
     nmr_ensemble_qualities: Optional[list[NmrEnsembleQuality]] = Field(default=[], json_schema_extra = { "linkml_meta": {'domain_of': ['Container', 'EvaluationRun', 'NmrValidationSummary']} })
     prediction_ensemble_qualities: Optional[list[PredictionEnsembleQuality]] = Field(default=[], json_schema_extra = { "linkml_meta": {'domain_of': ['Container', 'EvaluationRun', 'PredictionEnsembleSummary']} })
     ligands: Optional[list[Ligand]] = Field(default=[], json_schema_extra = { "linkml_meta": {'domain_of': ['Container', 'EvaluationRun']} })
-    assumptions: Optional[list[Assumption]] = Field(default=[], description="""Container-level Assumption catalog. Used as a lookup target when a Tool's assumptions[] block needs to reference a shared assumption rather than inline it.""", json_schema_extra = { "linkml_meta": {'domain_of': ['Container', 'Tool', 'MeasurementValue', 'EvaluationRun']} })
+    assumptions: Optional[list[Assumption]] = Field(default=[], description="""Container-level Assumption catalog. Used as a lookup target when a Tool's assumptions[] block needs to reference a shared assumption rather than inline it.""", json_schema_extra = { "linkml_meta": {'domain_of': ['Container',
+                       'Tool',
+                       'MeasurementValue',
+                       'HeadlineFinding',
+                       'EvaluationRun']} })
 
 
 class Finding(ConfiguredBaseModel):
@@ -784,7 +788,11 @@ class Tool(ConfiguredBaseModel):
     install_path: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Tool']} })
     family: ToolFamily = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Tool']} })
     catalog_tasks_served: Optional[list[CatalogTaskId]] = Field(default=[], json_schema_extra = { "linkml_meta": {'domain_of': ['Tool']} })
-    assumptions: Optional[list[Assumption]] = Field(default=[], description="""Implicit and explicit assumptions baked into this tool's default behaviour: reference distribution, scaling model, hyper-parameter defaults, etc. Surfaced into the QDS via measurement.oracle_tool_ref → tool.assumptions.""", json_schema_extra = { "linkml_meta": {'domain_of': ['Container', 'Tool', 'MeasurementValue', 'EvaluationRun']} })
+    assumptions: Optional[list[Assumption]] = Field(default=[], description="""Implicit and explicit assumptions baked into this tool's default behaviour: reference distribution, scaling model, hyper-parameter defaults, etc. Surfaced into the QDS via measurement.oracle_tool_ref → tool.assumptions.""", json_schema_extra = { "linkml_meta": {'domain_of': ['Container',
+                       'Tool',
+                       'MeasurementValue',
+                       'HeadlineFinding',
+                       'EvaluationRun']} })
 
 
 class MetricDefinition(ConfiguredBaseModel):
@@ -1433,7 +1441,11 @@ class MeasurementValue(Finding):
                        'ToolRecommendation',
                        'InterfaceQuality',
                        'Assumption']} })
-    assumptions: Optional[list[Assumption]] = Field(default=[], description="""Assumptions specific to this measurement (parameter choices that differ from tool defaults, interpretive flags, etc.). Tool-level assumptions are NOT duplicated here; the QDS report aggregates both via the oracle_tool_ref join.""", json_schema_extra = { "linkml_meta": {'domain_of': ['Container', 'Tool', 'MeasurementValue', 'EvaluationRun']} })
+    assumptions: Optional[list[Assumption]] = Field(default=[], description="""Assumptions specific to this measurement (parameter choices that differ from tool defaults, interpretive flags, etc.). Tool-level assumptions are NOT duplicated here; the QDS report aggregates both via the oracle_tool_ref join.""", json_schema_extra = { "linkml_meta": {'domain_of': ['Container',
+                       'Tool',
+                       'MeasurementValue',
+                       'HeadlineFinding',
+                       'EvaluationRun']} })
 
 
 class TypedMeasurementValue(ConfiguredBaseModel):
@@ -1629,6 +1641,11 @@ class HeadlineFinding(Finding):
                        'Assumption',
                        'CoordinationContact']} })
     supporting_measurement_refs: Optional[list[str]] = Field(default=[], json_schema_extra = { "linkml_meta": {'domain_of': ['HeadlineFinding']} })
+    assumptions: Optional[list[Assumption]] = Field(default=[], description="""Explicit validity assumptions carried by this headline finding.""", json_schema_extra = { "linkml_meta": {'domain_of': ['Container',
+                       'Tool',
+                       'MeasurementValue',
+                       'HeadlineFinding',
+                       'EvaluationRun']} })
 
 
 class EvaluationRun(ConfiguredBaseModel):
@@ -1723,7 +1740,11 @@ class EvaluationRun(ConfiguredBaseModel):
     refinements: Optional[list[Refinement]] = Field(default=[], description="""Per-round refinement trajectory. One Refinement record per round (start / round_1 / round_2 / ... / final). Carries the per-round R-factors, geometry, water count, mean B etc. so the agent's per-round table can be independently re-measured and stored in canonical form.""", json_schema_extra = { "linkml_meta": {'domain_of': ['EvaluationRun']} })
     criteria_met_count: Optional[int] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['EvaluationRun']} })
     criteria_total: Optional[int] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['EvaluationRun']} })
-    assumptions: Optional[list[Assumption]] = Field(default=[], description="""Run-level assumptions — typically the agentic-framework's reporting / interpretation / aggregation conventions (e.g. \"R-factors read from refine in-run log, not re-derived\"). The QDS surfaces these alongside tool and measurement assumptions in assumptions_report[].""", json_schema_extra = { "linkml_meta": {'domain_of': ['Container', 'Tool', 'MeasurementValue', 'EvaluationRun']} })
+    assumptions: Optional[list[Assumption]] = Field(default=[], description="""Run-level assumptions — typically the agentic-framework's reporting / interpretation / aggregation conventions (e.g. \"R-factors read from refine in-run log, not re-derived\"). The QDS surfaces these alongside tool and measurement assumptions in assumptions_report[].""", json_schema_extra = { "linkml_meta": {'domain_of': ['Container',
+                       'Tool',
+                       'MeasurementValue',
+                       'HeadlineFinding',
+                       'EvaluationRun']} })
     superseded_assumption_refs: Optional[list[str]] = Field(default=[], description="""Assumption ids from earlier input EvaluationRuns that this run explicitly withdraws. The QDS emitter omits those ids from a cumulative assumptions_report; the superseding run's own evidence and headline must explain why.""", json_schema_extra = { "linkml_meta": {'domain_of': ['EvaluationRun']} })
     headline_verdict: Optional[str] = Field(default=None, description="""One-paragraph human summary of the eval outcome.""", json_schema_extra = { "linkml_meta": {'domain_of': ['EvaluationRun', 'QdsEmissionContext', 'QualityDataSheet']} })
 

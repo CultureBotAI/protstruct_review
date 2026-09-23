@@ -513,6 +513,10 @@ For waters specifically: do NOT declare every HOH as a Ligand. Use a single scop
    Auxiliary replacement applicability follows exact correction ancestry even when its carrier
    also contains another subject's measurements. Reject conflicting active assumption payloads
    sharing an ID across registry, measurement, run and headline origins.
+   Embedded assumptions require exact parent-measurement ancestry. Explicit original
+   `measurement_ref` bindings additionally constrain run, embedded and registry assumptions:
+   resolve raw references local-owner first, otherwise globally unique. A successor's changed
+   or removed reference cannot reset foreign original applicability.
 
    A measurement replacement corrects an existing observation, including transcription or
    interpretation; it never makes that observation newly executed. For recency, follow the
@@ -534,6 +538,11 @@ For waters specifically: do NOT declare every HOH as a Ligand. Use a single scop
     outrank unlabelled fallback. Never relabel reflections as coordinates. Surface all admitted
     T13 diagnostic values and unavailable flags in `data_quality_summary.diagnostics`, alongside
     any routed summary scalar. A source association is not an automatic scientific quality pass.
+    Validate historical bindings against raw owner/selector evidence even when corrections retire
+    that evidence or its owner. Keep these bindings in the pinned source context for ancestry;
+    emitted associations contain only surviving owners and selectors.
+    Check surviving same-dataset rows strictly before subject filtering. Retired out-of-scope
+    rows neither veto valid siblings nor establish an assumption's applicability.
 
 `scripts/test_qds_emit.py` preserves explicit retained-contract regressions. Current-contract
 coverage in `scripts/test_qds_contract_v4.py` exercises the corrected synthetic active-site

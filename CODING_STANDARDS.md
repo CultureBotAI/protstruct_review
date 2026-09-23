@@ -176,7 +176,11 @@ Where this file and the handbook overlap, they must agree; if they drift, that i
     Headline support may cite an unambiguous surviving measurement in another input run;
     computational delta/derived operands retain their same-run requirements. Auxiliary
     replacements inherit their exact correction ancestry, not an unrelated measurement in the
-    correcting carrier. Conflicting active assumption payloads sharing an ID fail across registry,
+    correcting carrier. Embedded assumptions require their exact parent-measurement ancestry;
+    explicit original `measurement_ref` bindings additionally constrain run, embedded and registry
+    assumptions. Resolve raw references local-owner first, otherwise globally unique; changing or
+    removing a successor reference cannot reset a foreign original binding. Conflicting active
+    assumption payloads sharing an ID fail across registry,
     run, measurement and headline origins; identical duplicates may be deduplicated.
 
     A measurement replacement corrects existing evidence; its publication date is not a new
@@ -212,6 +216,11 @@ Where this file and the handbook overlap, they must agree; if they drift, that i
     in summaries and coverage. Unassociated datasets cannot enter a model sheet. All admitted
     T13 diagnostic values are surfaced in `DataQualitySummary.diagnostics`; scalar routing alone
     (currently including Wilson B) is not a substitute for retaining diagnostic availability.
+    Historical bindings validate against raw owner/selector evidence, including retired owners,
+    and remain in the pinned source context as ancestry anchors. Emitted associations contain
+    only surviving owners and selectors; successor bindings cannot substitute for missing history.
+    Surviving same-dataset rows must satisfy the association before subject filtering. Retired
+    out-of-scope rows neither veto valid siblings nor supply historical applicability anchors.
 14. **Behaviour-preserving refactors must be proven so.** After touching the emitter, regenerate a
     committed QDS and diff it: only `issued_at` may differ.
 

@@ -10,11 +10,16 @@ from __future__ import annotations
 
 import copy
 import itertools
+from pathlib import Path
+import sys
 import unittest
 
-import qds_emit_contract_v4 as v4
-from qds_correction_projection import canonical_sha256
-from test_qds_contract_v4 import QDS, fixture
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import qds_emit_contract_v4 as v4  # noqa: E402
+from qds_correction_projection import canonical_sha256  # noqa: E402
+from test_qds_contract_v4 import QDS, fixture  # noqa: E402
+from protstruct_review.models import Container  # noqa: E402
 
 
 def ancestry_documents(pattern: tuple[str, ...], relevant: bool) -> list[dict]:
@@ -25,7 +30,7 @@ def ancestry_documents(pattern: tuple[str, ...], relevant: bool) -> list[dict]:
     old["run_date"] = "2026-09-17"
     middle = [
         {"id": f"EVAL_chain_{day}", "run_date": f"2026-09-{day}",
-         "structure_ref": "synth4", "measurements": []}
+         "structure_ref": "synth4", "catalog_tasks_applied": ["T05"], "measurements": []}
         for day in range(18, 23)
     ]
     runs = [old, *middle, new]
@@ -69,8 +74,11 @@ class AncestryMatrixTests(unittest.TestCase):
                 with self.subTest(pattern=pattern, relevant=relevant):
                     documents = ancestry_documents(pattern, relevant)
                     before = copy.deepcopy(documents)
+                    for document in documents:
+                        Container.model_validate(document)
                     projection = v4.prepare_projection(documents, QDS, "synth4")
                     qds = v4.emit_projection(projection)
+                    Container.model_validate({"quality_data_sheets": [qds]})
                     self.assertEqual(
                         [row["id"] for row in qds.get("assumptions_report", [])],
                         ["A_6"] if relevant else [],

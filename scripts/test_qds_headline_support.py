@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import copy
+from pathlib import Path
+import sys
 import unittest
 
-import qds_emit_contract_v4 as v4
-from qds_correction_projection import canonical_sha256
-from test_qds_contract_v4 import NEW, OLD, QDS, fixture, measurement
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import qds_emit_contract_v4 as v4  # noqa: E402
+from qds_correction_projection import canonical_sha256  # noqa: E402
+from test_qds_contract_v4 import NEW, OLD, QDS, fixture, measurement  # noqa: E402
+from protstruct_review.models import Container  # noqa: E402
 
 
 def assumption(row_id: str) -> dict:
@@ -65,6 +70,8 @@ def refresh_parent_digest(documents: list[dict]) -> None:
 
 
 def emit(documents: list[dict]) -> dict:
+    for document in documents:
+        Container.model_validate(document)
     return v4.emit_projection(v4.prepare_projection(documents, QDS, "synth4"))
 
 

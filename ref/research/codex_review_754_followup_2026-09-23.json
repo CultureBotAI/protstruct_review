@@ -1,0 +1,42 @@
+{
+  "review_id": "review-mueih58y-yeahkx",
+  "review_thread_id": "01a0cfcb-e40d-7451-84e0-9f274db53768",
+  "reviewed_head": "71fb1f6654813d5166e17ff32959e941850b6a38",
+  "target": "working tree: #755 fix",
+  "reviewed_emitter_sha256": "d7f3afe5b3f39391039b47e188c65951740f3ea900b945d369d3ec26dc1d53ae",
+  "provider": "installed openai-codex plugin, adversarial-review",
+  "transfer_authorization": "User explicitly approved repository-content transfer for read-only review.",
+  "result": {
+    "verdict": "needs-attention",
+    "summary": "Do not ship: explicit measurement references still allow foreign verification to leak, and whole dataset corrections can lose applicable assumptions.",
+    "findings": [
+      {
+        "severity": "high",
+        "title": "Include explicit measurement references in assumption ancestry",
+        "body": "Admission ignores the original assumption’s measurement_ref. In a schema-valid mixed-subject run, an assumption referencing model B becomes eligible because its owner also contains model A. Replacing it with an assumption referencing A emits status: verified after B’s measurement is excluded. Embedded assumptions similarly bypass isolation when their containing measurement belongs to A but measurement_ref identifies B. Live emission, corpus reference checks and pinned replay all accept these reproductions.",
+        "file": "scripts/qds_emit_contract_v4.py",
+        "line_start": 270,
+        "line_end": 276,
+        "confidence": 0.99,
+        "recommendation": "Resolve original assumptions’ measurement_ref using exact raw-owner rules and enforce that measurement’s subject ancestry throughout applicability propagation, alongside containment checks. Add mixed-subject run-level and embedded regressions."
+      },
+      {
+        "severity": "medium",
+        "title": "Preserve historical dataset bindings for whole-replacement ancestry",
+        "body": "Replacing an old owner’s sole associated dataset measurement leaves no usable historical anchor: retaining its association fails _dataset_associations with 'no exact active evidence', while removing it excludes the original from measurement_anchors. With identical MTZ subjects and a valid successor association, the working tree silently drops A_corrected_dataset while emitting its measurement; committed admission retains the assumption. Legitimate corrections therefore cannot preserve these assumptions through retirement.",
+        "file": "scripts/qds_emit_contract_v4.py",
+        "line_start": 240,
+        "line_end": 244,
+        "confidence": 0.98,
+        "recommendation": "Validate historical dataset bindings against raw targets for ancestry separately from active association admission, preserving exact owner and selector checks. Add whole-replacement and retired-owner dataset regressions."
+      }
+    ],
+    "next_steps": [
+      "Fix both admission gaps and exercise them through live emission, corpus checks and pinned replay. The reported test counts, old-admission mutation failures and real byte-identical output were independently reproduced; file-writing tests used in-memory I/O."
+    ]
+  },
+  "filed_issues": [
+    756,
+    757
+  ]
+}

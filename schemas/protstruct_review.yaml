@@ -1020,6 +1020,11 @@ classes:
       supporting_measurement_refs:
         range: MeasurementValue
         multivalued: true
+      assumptions:
+        range: Assumption
+        multivalued: true
+        inlined_as_list: true
+        description: Explicit validity assumptions carried by this headline finding.
 
   # -------------------------------------------------------- evaluation run
 

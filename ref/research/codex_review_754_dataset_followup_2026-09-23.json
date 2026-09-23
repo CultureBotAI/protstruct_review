@@ -1,0 +1,31 @@
+{
+  "review_id": "review-muej0b9e-g1g6un",
+  "review_thread_id": "01a0cfd9-88bf-7542-bdae-5fc2625475ef",
+  "reviewed_head": "71fb1f6654813d5166e17ff32959e941850b6a38",
+  "target": "working tree: #755-758 fixes",
+  "reviewed_emitter_sha256": "e662451157b744628ec1de25862541f0413b8b4e22706f42d07adfff0590c9e5",
+  "provider": "installed openai-codex plugin, adversarial-review",
+  "transfer_authorization": "User explicitly approved repository-content transfer for read-only review.",
+  "result": {
+    "verdict": "needs-attention",
+    "summary": "Do not ship: #757 introduces a reproducible dataset-correction regression despite all 53 focused tests passing.",
+    "findings": [
+      {
+        "severity": "medium",
+        "title": "Retired malformed dataset rows block valid surviving evidence",
+        "body": "Passing raw_runs into _dataset_associations applies its all-same-subject validation to retired rows. A schema-valid reproduction replaces an old Wilson-B row incorrectly marked stage: final with a correct stage: all row, while retaining a valid Aimless sibling in the old owner. HEAD emits both surviving diagnostics; this tree rejects live emission, corpus validation and pinned replay because the retired row falls outside its association. Adding its selector cannot fix the stage mismatch. Removing the old association instead drops the valid sibling from output.",
+        "file": "scripts/qds_emit_contract_v4.py",
+        "line_start": 418,
+        "line_end": 419,
+        "confidence": 0.99,
+        "recommendation": "Separate active-binding validation from historical anchoring. Preserve strict checks on surviving evidence and exact raw anchors, but prevent retired out-of-scope rows from vetoing valid siblings or establishing assumption applicability."
+      }
+    ],
+    "next_steps": [
+      "Add a regression with a corrected malformed dataset row and an unchanged valid sibling in the same historical owner, covering live emission, corpus validation and replay."
+    ]
+  },
+  "filed_issues": [
+    759
+  ]
+}

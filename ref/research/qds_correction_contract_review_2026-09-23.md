@@ -299,3 +299,121 @@ All changes remain uncommitted/unmerged. These acceptance checks and authoring
 assistance are not the required independent Codex-plugin escalation, which has
 no result and still awaits explicit approval for external repository-content
 transfer. No issue is closed and no merge is justified by local checks alone.
+
+## Approved independent escalation: PR #754
+
+The preceding statements describe pre-commit checkpoints. The branch was committed
+as `71fb1f6` and opened as draft PR #754; the local gate and Ubuntu/macOS CI passed.
+The user then explicitly approved repository-content transfer. The installed
+Codex plugin completed a read-only adversarial review of that commit against main
+`c71682d`, job `review-muei06pg-2rrjlg`, thread
+`01a0cfbf-d3ab-78d2-b0ac-4d6715e4b635`. Its structured result is retained in
+[`codex_review_754_2026-09-23.json`](codex_review_754_2026-09-23.json), with only
+the finding's absolute file path normalized to a repository-relative path.
+
+The verdict is **needs-attention**, with one high-severity finding, filed as #755
+before fixing. Embedded measurement-assumption replacements bypassed the subject
+ancestry checks applied to run/headline assumptions. Root independently reproduced
+schema-valid input where the only active measurement belongs to model A, but its
+QDS carries the replacement of an assumption originally embedded in model B's
+excluded measurement. The reviewer additionally exercised live emission, corpus
+reference validation and pinned replay. Independent coordinate/data/log checks
+matched the examined scientific claims; that is not approval of the contract.
+
+The local fix admits embedded assumption replacements through their exact raw
+parent-measurement identity and correction ancestry. An unrelated selected-model
+measurement in the same owner cannot supply eligibility. Filtering occurs before
+dependency validation, selection and aggregation; the admitted measurement itself
+is preserved, along with applicable or fresh sibling assumptions. Existing 16
+contract tests, all 128 ancestry cases and ten headline-support tests pass. Direct
+and mixed-owner foreign-assumption reproductions now exclude the imported claim.
+The dedicated 12-test regression suite also passes, including 32 three-hop
+whole/nested cases, exact mixed-owner and dataset-parent admission, live emission,
+corpus checks and pinned replay tampering. Root restored the pre-fix admission
+function from `71fb1f6` in memory: 25 assertion failures and no errors demonstrate
+that the new controls detect the defect. Independent re-review remains pending.
+
+The actual real 1SAR QDS still re-emits byte-for-byte identically. Only the draft
+September 23 source's emitter implementation pin changes; its scientific rows,
+raw-source pins and the QDS bytes do not. All pre-existing main-branch carriers
+and retained contracts 1–3 remain unchanged.
+
+## Independent follow-up and sibling checks: #756–758
+
+The next installed-plugin review of the #755 working-tree fix completed as
+`review-mueih58y-yeahkx`, thread `01a0cfcb-e40d-7451-84e0-9f274db53768`.
+Its unchanged structured result is retained in
+[`codex_review_754_followup_2026-09-23.json`](codex_review_754_followup_2026-09-23.json).
+It returned **needs-attention**, not approval. Root reproduced both findings
+before filing and implementing:
+
+- **#756 (P1):** an explicit original assumption `measurement_ref` could point at
+  excluded model B while its container/owner also held model A. Replacing the
+  assumption with one referencing A still emitted `verified`. Exact raw reference
+  resolution now additionally constrains ancestry, local-owner first and otherwise
+  globally unique. Embedded, run and registry forms are covered; changing or
+  removing the successor reference cannot reset applicability. Thirteen dedicated
+  tests cover actual projected arrays, live emission, corpus checks and replay.
+  Disabling only that reference constraint in memory causes 30 assertion failures
+  and no errors.
+- **#757 (P2):** wholly replacing an owner's sole dataset measurement made the
+  historical association fail active-only validation; dropping that association
+  then silently lost applicable assumptions. Bindings now validate against raw
+  owner/selector evidence and remain pinned in the source context. Only surviving
+  owner/selector bindings are emitted. Nine regressions include all eight three-hop
+  whole/nested patterns, retired owners, exact binding negatives and replay.
+- **#758 (P2, local sibling check):** the schema rejected headline assumptions
+  even though the correction contract and its tests used them. The canonical
+  `HeadlineFinding` now has a typed `Assumption` list, and models were regenerated
+  with the pinned LinkML generator. The 128-case ancestry matrix and ten
+  headline-support tests now validate their source Containers, not just emitters.
+
+The real 1SAR QDS again re-emits identically (SHA-256
+`4548cb4c36355938687ffef840ecb0b3a9b91c9eacad2157bc1124d962d82db2`).
+All 21 actual-record acceptance tests pass; the draft source refreshes only its
+implementation hash. These are code/retained-output checks, not new scientific
+oracle runs. The next independent review and final full gate remain pending at
+this checkpoint; no issue is closed and no merge has occurred.
+
+## Dataset-validation follow-up: #759
+
+The full hermetic gate passed for #755–758. The third installed-plugin review
+(`review-muej0b9e-g1g6un`, thread `01a0cfd9-88bf-7542-bdae-5fc2625475ef`)
+nevertheless returned **needs-attention** after 53 focused tests passed. Its result
+is retained in
+[`codex_review_754_dataset_followup_2026-09-23.json`](codex_review_754_dataset_followup_2026-09-23.json).
+Root reproduced and filed #759 before fixing: a retired, mis-staged Wilson-B row
+blocked its valid surviving dataset sibling because raw-history validation still
+applied the old all-same-subject veto. Removing that owner's association discarded
+the legitimate sibling instead.
+
+Historical anchoring now uses only exact matching raw rows. Separately, active
+binding validation examines every surviving same-dataset row **before** subject
+filtering and rejects scope mismatches. Thus an invalid retired row cannot veto
+valid evidence or grant assumption eligibility. The real 1SAR output remains
+byte-identical; only the draft emitter implementation hash changes. Independent
+re-review and a fresh full gate remain required after this fix.
+
+## Final independent approval and validation
+
+The fourth installed-plugin pass, `review-muejawzp-e7in3c` (thread
+`01a0cfe1-162c-7182-bc61-87e540dad072`), returned **approve** with no material
+findings. The unchanged structured result is retained in
+[`codex_review_754_approval_2026-09-23.json`](codex_review_754_approval_2026-09-23.json).
+It independently verified emitter SHA-256
+`5bcf2cb60f61a7b3fb920381d596e97bc475a6bce990f3cad8c5fe47cab59e1b`,
+55 focused tests, 20 additional live/corpus/replay cases (including repinned
+forgeries), and byte-identical real 1SAR output.
+
+Root's fresh full hermetic gate after #759 completed with exit 0. The historical
+dataset suite now has 15 tests; restoring the retired-row veto in memory yields
+six errors in the positive correction paths, not a false green. The new headline
+schema suite has eight tests covering typed input, whole/nested authoring, live
+emission, corpus checks and pinned replay. The original #755 and #756 mutation
+controls remain sensitive. No production changes were made during plugin review.
+
+All five escalation/sibling findings (#755–759) were filed before their fixes.
+Earlier needs-attention results remain retained rather than replaced by the
+approval. This is the pre-merge checkpoint: commit/push, exact-head CI, authorized
+merge and issue/branch cleanup follow separately. Scientific scope remains a
+retained-evidence correction, not a new full quality assessment.

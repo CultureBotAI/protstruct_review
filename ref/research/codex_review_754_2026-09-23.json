@@ -1,0 +1,30 @@
+{
+  "review_id": "review-muei06pg-2rrjlg",
+  "review_thread_id": "01a0cfbf-d3ab-78d2-b0ac-4d6715e4b635",
+  "reviewed_head": "71fb1f6654813d5166e17ff32959e941850b6a38",
+  "base_commit": "c71682dd94d482f8f1d4882d238add0776ae5c3d",
+  "target": "branch diff against main",
+  "provider": "installed openai-codex plugin, adversarial-review",
+  "transfer_authorization": "User explicitly approved repository-content transfer for read-only review.",
+  "path_normalization": "The finding file path is repository-relative; other structured review-result fields are unchanged.",
+  "result": {
+    "verdict": "needs-attention",
+    "summary": "Do not ship: contract 4 leaks corrected measurement assumptions across subjects, and admission/replay guards accept it. Independently checked 1SAR coordinate statistics, MTZ observations, and retained-log claims matched.",
+    "findings": [
+      {
+        "severity": "high",
+        "title": "Enforce subject ancestry for embedded measurement-assumption replacements",
+        "body": "Ancestry filtering handles run/headline assumptions but leaves measurement assumptions untouched before this aggregation. In a schema-valid reproduction, a correction targets an assumption embedded in model B’s measurement, with its replacement stored under model A’s measurement. B is excluded from active runs, yet A’s QDS emits the replacement as `status: verified`. Normal live emission, corpus reference checks, and pinned replay all accept it. This transfers subject-specific verification to an unrelated model, violating the correction contract’s isolation requirement.",
+        "file": "scripts/qds_emit_contract_v4.py",
+        "line_start": 511,
+        "line_end": 515,
+        "confidence": 0.99,
+        "recommendation": "Validate measurement-assumption replacements against their exact target and parent-measurement subject ancestry during projection. Reject or exclude incompatible successors before selection and aggregation."
+      }
+    ],
+    "next_steps": [
+      "Add the two-subject reproduction as a regression covering live admission, corpus validation, and pinned replay before freezing contract 4."
+    ]
+  },
+  "filed_issue": 755
+}

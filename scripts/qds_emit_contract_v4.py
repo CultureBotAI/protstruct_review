@@ -116,7 +116,7 @@ def _dataset_associations(
             _fail("dataset association repeats a selector/evidence ref")
         owner = row["owner_evaluation_run_ref"]
         if owner not in run_map:
-            _fail("dataset association owner is not an active input EvaluationRun")
+            _fail("dataset association owner is not a raw input EvaluationRun")
         binding = (owner, row["dataset_subject_ref"])
         if binding in bindings:
             _fail("duplicate dataset/owner association")
@@ -136,17 +136,38 @@ def _dataset_associations(
             _fail(f"dataset_path is unavailable or escapes the repository: {exc}")
         if actual != digest:
             _fail("dataset_path bytes do not match dataset_sha256")
+        # Historical applicability is exact positive evidence, not a veto by
+        # every same-dataset raw row. A retired mislabelled row may be the very
+        # reason for the correction; it cannot anchor an assumption (#759).
         measured = [m for m in run_map[owner].get("measurements", [])
-                    if m.get("subject_ref") == row["dataset_subject_ref"]]
+                    if _association_admits(row, m, owner)]
         if not measured:
-            _fail("dataset association has no exact active evidence in its owner")
-        for measurement in measured:
-            if not _association_admits(row, measurement, owner):
-                _fail(f"dataset evidence {measurement.get('id')!r} falls outside its association")
+            _fail("dataset association has no exact raw evidence in its owner")
         if not set(selectors).issubset({m.get("scope_selector") for m in measured}):
             _fail("dataset association declares an unused selector")
         out.append(copy.deepcopy(row))
     return sorted(out, key=lambda row: row["id"])
+
+
+def _active_dataset_associations(
+    associations: list[dict[str, Any]], runs: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Validate surviving evidence strictly, then publish only active bindings."""
+    run_map = {run["id"]: run for run in runs}
+    active = []
+    for association in associations:
+        owner = association["owner_evaluation_run_ref"]
+        measured = [row for row in run_map.get(owner, {}).get("measurements", [])
+                    if row.get("subject_ref") == association["dataset_subject_ref"]]
+        for row in measured:
+            if not _association_admits(association, row, owner):
+                _fail(f"active dataset evidence {row.get('id')!r} falls outside its association")
+        if measured:
+            selectors = {row["scope_selector"] for row in measured}
+            active.append({**copy.deepcopy(association), "scope_selectors": [
+                selector for selector in association["scope_selectors"] if selector in selectors
+            ]})
+    return active
 
 
 def _association_admits(association: dict[str, Any], row: dict[str, Any], owner: str) -> bool:
@@ -230,6 +251,47 @@ def _headline_support_anchors(
     return anchored, declared
 
 
+def _assumption_reference_anchors(
+    raw_runs: list[dict[str, Any]], subject: str, associations: list[dict[str, Any]],
+    registry_rows: list[dict[str, Any]] | None = None, registry_owner: str | None = None,
+) -> tuple[set[tuple[str, str, str]], set[tuple[str, str, str]]]:
+    """Explicit references constrain historical applicability, not just survival.
+
+    Resolve the raw binding local-first, otherwise globally unique, exactly as
+    active dependency validation does. A selected sibling or a successor's new
+    reference cannot supply missing/foreign/ambiguous original evidence.
+    """
+    raw_by_id: dict[str, list[tuple[str, str]]] = {}
+    eligible: set[tuple[str, str]] = set()
+    entries = []
+    for run in raw_runs:
+        owner = run["id"]
+        for measurement in run.get("measurements", []):
+            raw_by_id.setdefault(measurement["id"], []).append((owner, measurement["id"]))
+        admitted = _subject_evidence(run, subject, associations)
+        if admitted is not None:
+            eligible.update((owner, m["id"]) for m in admitted["measurements"])
+        entries.extend((("assumptions", owner, row["id"]), row)
+                       for row in run.get("assumptions", []))
+        for collection, parent in (("measurement_assumptions", "measurements"),
+                                   ("headline_assumptions", "headline_findings")):
+            entries.extend(((collection, owner, row["id"]), row)
+                           for container in run.get(parent, []) for row in container.get("assumptions", []))
+    entries.extend((("tool_assumptions", registry_owner, row["id"]), row)
+                   for row in registry_rows or [])
+    declared, anchored = set(), set()
+    for key, row in entries:
+        if not row.get("measurement_ref"):
+            continue
+        declared.add(key)
+        candidates = raw_by_id.get(row["measurement_ref"], [])
+        local = [candidate for candidate in candidates if candidate[0] == key[1]]
+        candidates = local or candidates
+        if len(candidates) == 1 and candidates[0] in eligible:
+            anchored.add(key)
+    return declared, anchored
+
+
 def _admit_runs(
     runs: list[dict[str, Any]], subject: str, associations: list[dict[str, Any]],
     raw_runs: list[dict[str, Any]],
@@ -237,8 +299,14 @@ def _admit_runs(
     """Preserve applicable terminal replacements, even across retired owners."""
     active = {run["id"]: admitted for run in runs
               if (admitted := _subject_evidence(run, subject, associations)) is not None}
-    raw_owners = {run["id"] for run in raw_runs
-                  if _subject_evidence(run, subject, associations) is not None}
+    raw_admitted = {run["id"]: admitted for run in raw_runs
+                    if (admitted := _subject_evidence(run, subject, associations)) is not None}
+    raw_owners = set(raw_admitted)
+    measurement_anchors = {("measurements", owner, row["id"])
+                           for owner, run in raw_admitted.items() for row in run["measurements"]}
+    reference_declared, reference_anchors = _assumption_reference_anchors(
+        raw_runs, subject, associations,
+    )
     # Follow exact successor identities back to original evidence. Intermediate
     # correction-only owners may correctly have no surviving evidence of their
     # own; using active-owner membership here would lose the terminal successor.
@@ -252,6 +320,10 @@ def _admit_runs(
         ("headline_assumptions", run["id"], a["id"]): ("headline_findings", run["id"], f["id"])
         for run in raw_runs for f in run.get("headline_findings", []) for a in f.get("assumptions", [])
     }
+    parents.update({
+        ("measurement_assumptions", run["id"], a["id"]): ("measurements", run["id"], m["id"])
+        for run in raw_runs for m in run.get("measurements", []) for a in m.get("assumptions", [])
+    })
     support_anchors, support_declared = _headline_support_anchors(
         raw_runs, subject, associations, set(predecessors),
     )
@@ -260,14 +332,24 @@ def _admit_runs(
         parent = parents.get(key, key)
         return parent not in support_declared or parent in support_anchors
 
+    def original_subject_allows(key: tuple[str, str, str]) -> bool:
+        if key in reference_declared and key not in reference_anchors:
+            return False
+        parent = parents.get(key, key)
+        if parent[0] == "measurements":
+            # A matching sibling in the same run is not evidence about this
+            # measurement or its embedded assumptions (#755).
+            return parent in measurement_anchors
+        return key[1] in raw_owners and original_support_allows(key)
+
     # Whole/nested replacements can alternate in either direction. A fixed
     # point handles container/descendant ownership without recursive cycles or
     # requiring an intermediate correction-only run to contribute current data.
     keys = set(predecessors) | set(predecessors.values()) | set(parents) | set(parents.values())
     derived_containers = {parent for child, parent in parents.items() if child in predecessors}
-    applicable = {key for key in keys if key[1] in raw_owners
+    applicable = {key for key in keys if original_subject_allows(key)
                   and key not in predecessors and parents.get(key) not in predecessors
-                  and key not in derived_containers and original_support_allows(key)}
+                  and (key not in derived_containers or key in measurement_anchors)}
     applicable.update(support_anchors)
     while True:
         before = len(applicable)
@@ -275,9 +357,12 @@ def _admit_runs(
             if target in applicable:
                 applicable.add(successor)
         for child, parent in parents.items():
-            if child in applicable and parent not in predecessors:
+            if (child in applicable and parent not in predecessors
+                    and (parent[0] != "measurements" or parent in measurement_anchors)):
                 applicable.add(parent)
-            if (parent in predecessors or parent in support_anchors) and parent in applicable and child not in predecessors:
+            if ((parent in predecessors or parent in support_anchors or parent in measurement_anchors)
+                    and parent in applicable and child not in predecessors
+                    and (child not in reference_declared or child in reference_anchors)):
                 # Explicit child corrections retain their own ancestry; a
                 # container cannot relabel an unrelated-subject replacement.
                 applicable.add(child)
@@ -292,10 +377,23 @@ def _admit_runs(
         substantive = owner in active
         auxiliary = active.get(owner) or {k: copy.deepcopy(source[k]) for k in
                      ("id", "run_date", "structure_ref", "catalog_tasks_applied") if k in source}
+        for measurement in auxiliary.get("measurements", []):
+            if "assumptions" not in measurement:
+                continue
+            parent = ("measurements", owner, measurement["id"])
+            original_parent = parent in measurement_anchors and parent not in predecessors
+            measurement["assumptions"] = [
+                copy.deepcopy(row) for row in measurement["assumptions"]
+                if applies(("measurement_assumptions", owner, row["id"]))
+                or ((original_parent or parent in applicable)
+                    and ("measurement_assumptions", owner, row["id"]) not in predecessors
+                    and original_subject_allows(("measurement_assumptions", owner, row["id"])))
+            ]
         for collection in ("assumptions", "cross_tool_waivers"):
             auxiliary[collection] = [copy.deepcopy(row) for row in source.get(collection, [])
                                      if applies((collection, owner, row["id"]))
-                                     or (substantive and (collection, owner, row["id"]) not in predecessors)]
+                                     or (substantive and (collection, owner, row["id"]) not in predecessors
+                                         and original_subject_allows((collection, owner, row["id"])))]
         headlines = []
         for finding in source.get("headline_findings", []):
             parent = ("headline_findings", owner, finding["id"])
@@ -303,7 +401,9 @@ def _admit_runs(
                              or (substantive and parent not in predecessors and original_support_allows(parent)))
             kept = [copy.deepcopy(a) for a in finding.get("assumptions", [])
                     if applies(("headline_assumptions", owner, a["id"]))
-                    or (whole_applies and ("headline_assumptions", owner, a["id"]) not in predecessors)]
+                    or (whole_applies and ("headline_assumptions", owner, a["id"]) not in predecessors
+                        and (("headline_assumptions", owner, a["id"]) not in reference_declared
+                             or ("headline_assumptions", owner, a["id"]) in reference_anchors))]
             if whole_applies or kept:
                 headlines.append({**copy.deepcopy(finding), "assumptions": kept})
         auxiliary["headline_findings"] = headlines
@@ -318,7 +418,9 @@ def prepare_projection(
 ) -> dict[str, Any]:
     projection = _projection_module().project_sources(documents, qds_id, structure_id)
     context = projection["context"]
-    associations = _dataset_associations(context, projection["runs"], repo_root or REPO)
+    associations = _dataset_associations(context, projection["raw_runs"], repo_root or REPO)
+    # Validate before subject filtering could silently drop a bad surviving row.
+    active_associations = _active_dataset_associations(associations, projection["runs"])
     runs = _admit_runs(projection["runs"], context["subject_ref"], associations, projection["raw_runs"])
     _projection_module().validate_active_dependencies(runs, projection["raw_runs"])
     families = _v1._tool_families_from_rows(projection["tools"], source_name="v4 snapshot")
@@ -329,7 +431,8 @@ def prepare_projection(
         )
         _validate_active_measurements(run)
     projection["runs"] = _v1._annotated_runs(runs, None)
-    projection["dataset_associations"] = associations
+    projection["dataset_associations"] = active_associations
+    projection["historical_dataset_associations"] = associations
     projection["tool_families"] = families
     projection["measurement_evidence_origins"] = _measurement_evidence_origins(projection)
     return projection
@@ -500,11 +603,28 @@ def _collect_assumptions_report(projection: dict[str, Any]) -> list[dict[str, An
     runs = projection["runs"]
     tools = {m.get("oracle_tool_ref") for run in runs for m in run.get("measurements", [])}
     withdrawn = set(projection.get("withdrawn_registry_ids", {}).get("tool_assumptions", []))
+    snapshot_owner = projection["context"]["snapshot_owner_evaluation_run_ref"]
+    declared, anchored = _assumption_reference_anchors(
+        projection["raw_runs"], projection["context"]["subject_ref"],
+        projection["historical_dataset_associations"], projection["assumptions"], snapshot_owner,
+    )
+    predecessors = {
+        c["replacement_ref"]: c["target_ref"] for c in projection["corrections"]
+        if c["target_collection"] == "tool_assumptions" and c["action"] == "replace"
+    }
+
+    def registry_origin_allows(row: dict[str, Any]) -> bool:
+        origin = row["id"]
+        while origin in predecessors:
+            origin = predecessors[origin]
+        key = ("tool_assumptions", snapshot_owner, origin)
+        return key not in declared or key in anchored
+
     selected_registry = [
         row for row in projection["active_registry_tool_assumptions"]
         if row.get("tool_ref") and row["tool_ref"] in tools and row["id"] not in withdrawn
+        and registry_origin_allows(row)
     ]
-    snapshot_owner = projection["context"]["snapshot_owner_evaluation_run_ref"]
     entries: list[tuple[dict[str, Any], str]] = [
         (row, f"registry snapshot {snapshot_owner}") for row in selected_registry
     ]

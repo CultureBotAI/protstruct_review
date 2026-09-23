@@ -1,5 +1,21 @@
 # Open-issue review — 2026-09-23
 
+Final pre-merge checkpoint: PR #754 contains initial correction `71fb1f6` plus
+the reviewed follow-up fixes. The user approved external repository-content
+transfer. Installed-plugin reviews returned #755 (high), then #756 (high) and
+#757 (medium), then the #757 follow-up regression #759 (medium); all were filed
+before their fixes. A schema/positive-test gap found during sibling checks was
+filed as #758. The #755–758 gate passed, but the next review still found #759.
+The final installed-plugin review approved emitter `5bcf2cb6`, with no material
+findings after 55 focused tests and 20 independent live/corpus/replay cases; the
+fresh full hermetic gate also passed. Its unchanged result is retained in
+`codex_review_754_approval_2026-09-23.json`. The full queue at this checkpoint is **36 open issues**,
+matching GraphQL; main remains `c71682d`, and draft #754 is the sole open PR, based
+directly on main. Every current body/comment was reread. No issue is delivered
+merely because its local test passes. The earlier uncommitted/transfer-blocked checkpoints below
+remain historical, not current status. No issue has been closed by this update;
+the PR and individual closure comments record subsequent delivery.
+
 ## Revision and scope
 
 Applied the requested `review-open-issues` skill to this structural-biology
@@ -18,7 +34,7 @@ independently reproduced and filed #749. Its local fix exposed the integrity-che
 integration defect #750 in the full gate. That checkpoint had **28** open issues.
 The subsequent complete-queue review read all 29 bodies/comments after #751;
 real-record acceptance then filed #752/#753 before their fixes. The latest queue
-has **31** open issues, matching GraphQL, with the same main revision and no open
+had **31** open issues, matching GraphQL, with the same main revision and no open
 PRs, rechecked against every issue body/comment at September 23 18:31 UTC.
 No issue was closed, no
 PR merged, and no branch deleted during this review.

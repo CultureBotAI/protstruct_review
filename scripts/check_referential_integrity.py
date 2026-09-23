@@ -102,6 +102,7 @@ class RefTarget:
     source_tool_families: tuple[tuple[str, str], ...] = ()
     source_tool_tasks: tuple[tuple[str, tuple[str, ...]], ...] = ()
     source_metric_tasks: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    source_document: dict[str, Any] | None = None
 
 
 CorpusIndices = dict[str, dict[str, list[RefTarget]]]
@@ -150,38 +151,22 @@ QDS_COPIED_ROW_SOURCE_KEYS = {
 # parsed row. Grouping row digests below only removes repeated path/run literals;
 # the materialized keys retain all four coordinates. Any content change must be
 # published as a new dated record rather than silently inheriting an exemption.
+# #753: 24 tool_task exemptions for phenix.model_vs_data T03/T13 and standalone
+# reduce T05 were retired after registering their actual producer/task links.
+# This does not validate those frozen rows' metrics, grades or interpretations;
+# unrelated semantic exceptions and stale-exception enforcement remain intact.
 _LEGACY_TOOL_TASK_ROW_DIGESTS = (
     (
         "data/coscientists/openscientist/EVAL_1sar_cdba2c07_2026-04-24.yaml",
         "EVAL_1sar_cdba2c07_2026-04-24",
         {
-            "EVAL_1sar_cdba2c07_2026-04-24_M_004": "a3cfa5310976ab2aa0e98bff380f6fd0b962f5ed59b4cec89ded9420c1ee3985",
-            "EVAL_1sar_cdba2c07_2026-04-24_M_005": "da49abc6dd6766ee403bc0b970d3089015bbf083661707deb451daad670e79c2",
-            "EVAL_1sar_cdba2c07_2026-04-24_M_006": "4ec860b5e1d2ccd867b0a9cd4d1752c501acb4a2d957f71b9a9fe71fe25c4c52",
             "EVAL_1sar_cdba2c07_2026-04-24_M_007": "5722a0f869d8be38546244f8526115e46798e00155cbd91d35f7079833431584",
-            "EVAL_1sar_cdba2c07_2026-04-24_M_008": "884c6ac7cb0e1c234c9899c71f2ddeb2aff56e26a750b0a6024743f29cc490a2",
             "EVAL_1sar_cdba2c07_2026-04-24_M_009": "93ae20f14dd833363435adab1cc7b62d4e379f38ce77e49627eafc4c7b6f88fc",
-            "EVAL_1sar_cdba2c07_2026-04-24_M_010": "3cccd357e17ab1bbd80dc053abe02a34338f0cae47847280505d2586eeda2a39",
             "EVAL_1sar_cdba2c07_2026-04-24_M_011": "af89f85407d946ada7bebb29b3159a275fccbd532ce0ff579d8a9f151ccffbfd",
-            "EVAL_1sar_cdba2c07_2026-04-24_M_013": "4497acf71e90a57fcf980944e6d8ba89293e3f122e1b77202a1a2750a4320a6b",
-            "EVAL_1sar_cdba2c07_2026-04-24_M_018": "73194e8be2b8aa13cdf5e93018bfd0a14f41aca9b97a88fd51c20aea0d26eecb",
-            "EVAL_1sar_cdba2c07_2026-04-24_M_030": "e2750b8e5ba17f1610aca5a072c47f75342f193b9373d32126ff640fee33b651",
             "EVAL_1sar_cdba2c07_2026-04-24_M_ca_b_vs_mean_ratio": "f21f4c015e1c446f028811d4c5234827e9a1238705095b655cf2bca7c7b02359",
             "EVAL_1sar_cdba2c07_2026-04-24_M_mean_b": "01e53f6517114a024431bfc3ec3a7ae05aae3f6c66fb115e03f2551a36707816",
             "EVAL_1sar_cdba2c07_2026-04-24_M_per_residue_displacement_summary": "1a20b0d87b7cfb505af8d226486abf3e69e9699f64097ee4effbd7ebf3f6a3bb",
             "EVAL_1sar_cdba2c07_2026-04-24_M_prosmart_global_rmsd": "7dc9b9c3f742b8d3c271dfeba66d18a6a626af85ddc5aec4135e66f2717c657d",
-            "EVAL_1sar_cdba2c07_2026-04-24_M_round0_rfree": "27c229debd6c3ab2cfa0a6ab4d4b1c5292f077734577d3f964614374f0824d27",
-            "EVAL_1sar_cdba2c07_2026-04-24_M_round0_rwork": "08d9c11916e2a8c32bab81320a5256ceb81786c3cb6a8e29e8d5693b6898f06a",
-            "EVAL_1sar_cdba2c07_2026-04-24_M_round2_rfree": "716cd3e25e65e6cd3b99ff91236c808b2985c964be2562b8d029a80a3b9b29d4",
-            "EVAL_1sar_cdba2c07_2026-04-24_M_round2_rwork": "7fc9891ca8f04ccb08faa4cc6b6a3377e7b6ef5f974d05778c4ae1bbe99cddef",
-            "EVAL_1sar_cdba2c07_2026-04-24_M_round3_rfree": "a9d3ee62a56c4f95f705a63f18b969a2cc70ec91e9c00e8ca8221366d4de901c",
-            "EVAL_1sar_cdba2c07_2026-04-24_M_round3_rwork": "9713810eb10a659ef90dc75c0c46a520c2c0d8300bcebdd67178d70b38d93b64",
-            "EVAL_1sar_cdba2c07_2026-04-24_M_round5_rfree": "79773645d0435de546439b422a3cbfab3dfbe72ce7b9476d4b5be94bde70aed7",
-            "EVAL_1sar_cdba2c07_2026-04-24_M_round5_rwork": "ff116858375657bcd71fba1b3d7741f1349a0dfb175aefc32fe652a955b92155",
-            "EVAL_1sar_cdba2c07_2026-04-24_M_round6_rfree": "e3cb6c5a506008279f9934ecd7d961dd9c4dd45e1959123be6fa781750023e5a",
-            "EVAL_1sar_cdba2c07_2026-04-24_M_round6_rwork": "9d475e18e5d91f2b9f88c0d4a8a007921ec7fd834e453585383c82ae92ceff28",
-            "EVAL_1sar_cdba2c07_2026-04-24_M_round7_rfree": "d0583db91fe4736bb9cf07148bb5176eee207a19faa3902e28b6bf90edb563c7",
-            "EVAL_1sar_cdba2c07_2026-04-24_M_round7_rwork": "e878c127033602ca32683bfa391ac54e9afac312cc57bfe05b8c97e806aa3ed4",
             "EVAL_1sar_cdba2c07_2026-04-24_M_total_atoms": "bda6294c0cf6bafd95560e2669259d9a6d917438c1108540ac7a9e78f5142e42",
             "EVAL_1sar_cdba2c07_2026-04-24_M_water_count": "c40200650b7c82d2e7bf6c827d23894e9875f23035c14a79be39f653f8032860",
         },
@@ -190,10 +175,6 @@ _LEGACY_TOOL_TASK_ROW_DIGESTS = (
         "data/coscientists/openscientist/EVAL_1sar_cdba2c07_2026-09-07.yaml",
         "EVAL_1sar_cdba2c07_2026-09-07",
         {
-            "EVAL_1sar_cdba2c07_2026-09-07_M_001": "16b74acfacca57f4232ae63d2660525160bb868815b7f272e1048dfe86247209",
-            "EVAL_1sar_cdba2c07_2026-09-07_M_002": "a1bc789619b5c75dbc32e0dc4203357da7b0e0215fcbd44e641a5ad50e198b28",
-            "EVAL_1sar_cdba2c07_2026-09-07_M_003": "ad1762e425365546335fdaaaedc66d65a8196d8cb3f54d44af60c8e3121edb1d",
-            "EVAL_1sar_cdba2c07_2026-09-07_M_004": "bd90d4960d1c9edf70d58dd629a9429f7638d2742b2ac3e975f33a3251b88f05",
             "EVAL_1sar_cdba2c07_2026-09-07_M_005": "56e23ae684fa604796cae91985bad5d95c4834db5d1b3b4441fb743cde05c0aa",
             "EVAL_1sar_cdba2c07_2026-09-07_M_006": "da6fd9d72d05a6452631e2510d225e241cb505c7c9cec9bf2f4d9eb28749a7d0",
             "EVAL_1sar_cdba2c07_2026-09-07_M_007": "58deeb81400fc40da513e30696834c121392a81b7a873dcb2a0a579e63647747",
@@ -262,6 +243,13 @@ def _qds_contract_routing(
     Missing/unsupported contracts are diagnosed by the QDS trust guard.
     """
     version = str((qds or {}).get("emitter_contract_version") or "")
+    if version == "4":
+        # Import lazily: retained contracts never depend on the new projection
+        # implementation, and there is still only one emitter-owned route table.
+        import qds_emit_contract_v4
+
+        slots = _routed_scalar_slots(qds_emit_contract_v4.METRIC_TO_QDS_SLOT)
+        return slots, frozenset(block for block, _slot in slots)
     slots = QDS_ROUTED_SCALAR_SLOTS_BY_CONTRACT.get(version, frozenset())
     return slots, frozenset(block for block, _slot in slots)
 
@@ -377,6 +365,7 @@ def build_corpus_indices(records: Sequence[tuple[Path, Any]]) -> CorpusIndices:
         "qds_replay_pin_target": {},
         "qds_emission_context": {},
         "qds_emission_context_target": {},
+        "correction": {},
     }
 
     def add_assumptions(node: Any, path: str, run: dict[str, Any], file: Path) -> None:
@@ -456,6 +445,7 @@ def build_corpus_indices(records: Sequence[tuple[Path, Any]]) -> CorpusIndices:
                 file=file,
                 pointer=f"$.qds_emission_contexts[{i}]",
                 node=context,
+                source_document=doc,
             )
             _add_target(
                 indices["qds_emission_context"], context.get("id"), target
@@ -499,8 +489,22 @@ def build_corpus_indices(records: Sequence[tuple[Path, Any]]) -> CorpusIndices:
                     source_tool_families=source_tool_families,
                     source_tool_tasks=source_tool_tasks,
                     source_metric_tasks=source_metric_tasks,
+                    source_document=doc,
                 ),
             )
+            for j, correction in enumerate(run.get("corrections") or []):
+                if isinstance(correction, dict):
+                    _add_target(
+                        indices["correction"],
+                        correction.get("id"),
+                        RefTarget(
+                            file=file,
+                            pointer=f"{run_path}.corrections[{j}]",
+                            owner_run_id=run.get("id"),
+                            run_date=run.get("run_date"),
+                            node=correction,
+                        ),
+                    )
             for j, measurement in enumerate(run.get("measurements") or []):
                 if not isinstance(measurement, dict):
                     continue
@@ -548,6 +552,7 @@ def check_duplicate_ids(indices: CorpusIndices) -> list[str]:
         "assumption": "Assumption",
         "qds_replay_pin": "QdsReplayPin",
         "qds_emission_context": "QdsEmissionContext",
+        "correction": "EvidenceCorrection",
     }
     violations: list[str] = []
     for kind, label in labels.items():
@@ -1766,6 +1771,98 @@ def _check_evidence_path(
     return [], True
 
 
+def _contract4_projection(
+    context: dict[str, Any],
+    indices: CorpusIndices,
+    rel: Path,
+    path: str,
+    violations: list[str],
+) -> dict[str, Any] | None:
+    """Validate the exact source graph with the retained contract-4 projector.
+
+    Original carrier snapshots, including withdrawn rows, are passed intact.
+    Resolving only surviving output rows would let a bad correction hide its
+    target or let old sources acquire today's registry metadata.
+    """
+    refs = context.get("source_evaluation_run_refs")
+    if not isinstance(refs, list) or not refs:
+        return None  # The context relationship checks report this malformed list.
+    documents: list[dict[str, Any]] = []
+    seen_files: set[Path] = set()
+    for ref in refs:
+        if not isinstance(ref, str):
+            return None
+        targets = indices["evaluation_run"].get(ref, [])
+        if len(targets) != 1:
+            return None  # The caller resolves the same refs with precise paths.
+        target = targets[0]
+        if not isinstance(target.source_document, dict):
+            violations.append(
+                f"{rel}: {path} source run {ref!r} has no original source carrier"
+            )
+            return None
+        file = target.file.absolute()
+        if file not in seen_files:
+            seen_files.add(file)
+            documents.append(target.source_document)
+    try:
+        from qds_emit_contract_v4 import prepare_projection
+
+        return prepare_projection(
+            documents,
+            qds_id=str(context.get("qds_ref") or ""),
+            structure_id=str(context.get("structure_ref") or ""),
+            repo_root=REPO,
+        )
+    except (ImportError, OSError, ValueError, TypeError, KeyError, SystemExit) as exc:
+        violations.append(f"{rel}: {path} invalid contract-4 source projection: {exc}")
+        return None
+
+
+def _contract4_tool_families(
+    qds: dict[str, Any], indices: CorpusIndices
+) -> tuple[tuple[str, str], ...]:
+    """Find the source-owned authority, never a live fallback, for v4 payloads."""
+    contexts = indices["qds_emission_context"].get(qds.get("emission_context_ref"), [])
+    if len(contexts) != 1 or not isinstance(contexts[0].node, dict):
+        return ()
+    owner = contexts[0].node.get("snapshot_owner_evaluation_run_ref")
+    targets = indices["evaluation_run"].get(owner, [])
+    if len(targets) != 1:
+        return ()
+    return targets[0].source_tool_families
+
+
+def _check_corrected_qds_refs(
+    context: dict[str, Any], indices: CorpusIndices, rel: Path, path: str,
+    violations: list[str],
+) -> None:
+    refs = context.get("corrected_qds_refs", [])
+    if not isinstance(refs, list):
+        violations.append(f"{rel}: {path}.corrected_qds_refs must be a list")
+        return
+    seen: set[str] = set()
+    issued = _canonical_datetime_text(context.get("issued_at"))
+    for index, ref in enumerate(refs):
+        ref_path = f"{path}.corrected_qds_refs[{index}]"
+        if not isinstance(ref, str) or not ref.strip():
+            violations.append(f"{rel}: {ref_path} must name an earlier QualityDataSheet")
+            continue
+        if ref in seen:
+            violations.append(f"{rel}: {ref_path} duplicates {ref!r}")
+        seen.add(ref)
+        target = _resolve(ref, "quality_data_sheet", indices, rel, ref_path, violations)
+        if target is None or not isinstance(target.node, dict):
+            continue
+        previous = target.node
+        previous_time = _canonical_datetime_text(previous.get("issued_at"))
+        if (ref == context.get("qds_ref") or issued is None or previous_time is None
+                or datetime.fromisoformat(previous_time) >= datetime.fromisoformat(issued)):
+            violations.append(f"{rel}: {ref_path} must name a strictly earlier QualityDataSheet")
+        if previous.get("structure_ref") != context.get("structure_ref"):
+            violations.append(f"{rel}: {ref_path} names a QualityDataSheet for another structure")
+
+
 def check_corpus_refs(doc: Any, rel: Path, indices: CorpusIndices) -> list[str]:
     """Resolve references whose targets can live in another YAML document."""
     violations: list[str] = []
@@ -1791,6 +1888,33 @@ def check_corpus_refs(doc: Any, rel: Path, indices: CorpusIndices) -> list[str]:
         for run in doc.get("evaluation_runs", []) or []
         if isinstance(run, dict) and run.get("id")
     }
+    for run_i, run in enumerate(doc.get("evaluation_runs", []) or []):
+        if not isinstance(run, dict) or not run.get("corrections"):
+            continue
+        run_id = run.get("id")
+        owned_contexts = [
+            target.node
+            for targets in indices["qds_emission_context"].values()
+            for target in targets
+            if isinstance(target.node, dict)
+            and run_id in (target.node.get("source_evaluation_run_refs") or [])
+            and any(
+                isinstance(qds_target.node, dict)
+                and str(qds_target.node.get("emitter_contract_version")) == "4"
+                for qds_target in indices["quality_data_sheet"].get(
+                    target.node.get("qds_ref"), []
+                )
+            )
+        ]
+        if not owned_contexts:
+            violations.append(
+                f"{rel}: $.evaluation_runs[{run_i}].corrections is orphaned: "
+                "its owning run must be an input to a source-owned contract-4 context"
+            )
+        # Validate here too when the owner and the context have different carriers.
+        for context in owned_contexts:
+            _contract4_projection(context, indices, rel,
+                                  f"$.evaluation_runs[{run_i}].corrections", violations)
     for context_i, context in enumerate(doc.get("qds_emission_contexts", []) or []):
         if not isinstance(context, dict):
             continue
@@ -1854,15 +1978,31 @@ def check_corpus_refs(doc: Any, rel: Path, indices: CorpusIndices) -> list[str]:
                 f"{rel}: {context_path}.owner_evaluation_run_ref must resolve in "
                 "the same document"
             )
-        if context.get("coverage_scope") != "partial":
+        target_contract = (
+            str(qds_target.node.get("emitter_contract_version") or "")
+            if qds_target is not None and isinstance(qds_target.node, dict) else ""
+        )
+        if target_contract != "4" and context.get("coverage_scope") != "partial":
             violations.append(
                 f"{rel}: {context_path}.coverage_scope must be 'partial'"
             )
+        if target_contract == "4":
+            if context.get("snapshot_owner_evaluation_run_ref") != owner_ref:
+                violations.append(
+                    f"{rel}: {context_path}.snapshot_owner_evaluation_run_ref must "
+                    "name the context's owning source EvaluationRun"
+                )
+            _check_corrected_qds_refs(context, indices, rel, context_path, violations)
+            _contract4_projection(context, indices, rel, context_path, violations)
+        elif any(key in context for key in (
+            "snapshot_owner_evaluation_run_ref", "corrected_qds_refs", "dataset_associations"
+        )):
+            violations.append(f"{rel}: {context_path} carries contract-4-only context fields")
         if qds_target is not None and isinstance(qds_target.node, dict):
             qds = qds_target.node
-            if str(qds.get("emitter_contract_version") or "") != "3":
+            if target_contract not in {"3", "4"}:
                 violations.append(
-                    f"{rel}: {context_path}.qds_ref must target emitter contract 3"
+                    f"{rel}: {context_path}.qds_ref must target emitter contract 3 or 4"
                 )
             expected_pairs = (
                 ("emission_context_ref", context_id),
@@ -1962,15 +2102,17 @@ def check_corpus_refs(doc: Any, rel: Path, indices: CorpusIndices) -> list[str]:
                 )
             pin_context_ref = pin.get("qds_emission_context_ref")
             qds_context_ref = qds_target.node.get("emission_context_ref")
-            contract_3_partial = (
-                pin_contract == "3"
-                and qds_target.node.get("coverage_scope") == "partial"
+            context_required = (
+                pin_contract == "4" or (
+                    pin_contract == "3"
+                    and qds_target.node.get("coverage_scope") == "partial"
+                )
             )
-            if contract_3_partial:
+            if context_required:
                 if not isinstance(pin_context_ref, str):
                     violations.append(
                         f"{rel}: {pin_path}.qds_emission_context_ref is required "
-                        "for a partial emitter-contract-3 QDS"
+                        "for partial contract-3 and every contract-4 QDS"
                     )
                 else:
                     context_target = _resolve(
@@ -2001,8 +2143,8 @@ def check_corpus_refs(doc: Any, rel: Path, indices: CorpusIndices) -> list[str]:
                 ):
                     violations.append(
                         f"{rel}: {pin_path}.source_qds_emission_context_sha256 "
-                        "must be a lowercase SHA-256 digest for a partial "
-                        "emitter-contract-3 QDS"
+                        "must be a lowercase SHA-256 digest for partial "
+                        "contract-3 and every contract-4 QDS"
                     )
             elif pin_context_ref is not None or pin.get(
                 "source_qds_emission_context_sha256"
@@ -2012,6 +2154,16 @@ def check_corpus_refs(doc: Any, rel: Path, indices: CorpusIndices) -> list[str]:
                     f"fields under contract/scope {pin_contract!r}/"
                     f"{qds_target.node.get('coverage_scope')!r}"
                 )
+            for field in ("source_evaluation_runs_sha256", "source_structures_sha256"):
+                digest = pin.get(field)
+                if pin_contract == "4":
+                    if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
+                        violations.append(
+                            f"{rel}: {pin_path}.{field} must be a lowercase SHA-256 "
+                            "digest for contract 4"
+                        )
+                elif field in pin:
+                    violations.append(f"{rel}: {pin_path}.{field} is only permitted for contract 4")
 
     def check(
         node: Any,
@@ -2123,10 +2275,19 @@ def check_corpus_refs(doc: Any, rel: Path, indices: CorpusIndices) -> list[str]:
                     source_measurement.owner_run_id == source_run_ref
                     and isinstance(source_node, dict)
                 ):
+                    source_families = source_measurement.source_tool_families
+                    if (current_qds is not None
+                            and str(current_qds.get("emitter_contract_version")) == "4"):
+                        source_families = _contract4_tool_families(current_qds, indices)
+                        if not source_families:
+                            violations.append(
+                                f"{rel}: {path} has no contract-4 snapshot-owner "
+                                "Tool authority for source comparison"
+                            )
                     expected = _expected_wrapped_measurement(
                         source_node,
                         source_run_ref,
-                        source_measurement.source_tool_families,
+                        source_families,
                     )
                     if node != expected:
                         differing = sorted(
@@ -2184,6 +2345,17 @@ def check_corpus_refs(doc: Any, rel: Path, indices: CorpusIndices) -> list[str]:
 
             for key, value in node.items():
                 child = f"{path}.{key}"
+                if (
+                    node is current_qds
+                    and str(current_qds.get("emitter_contract_version")) == "4"
+                    and re.fullmatch(r"\$\.quality_data_sheets\[\d+\]", path)
+                    and key == "measurement_evidence_origins"
+                ):
+                    # This exact schema-owned field is derived audit metadata,
+                    # not a collection of copied scalar values. Compare its
+                    # complete ordered payload against the source projection
+                    # below; similarly named/nested fields receive no exemption.
+                    continue
                 if key == "evaluation_runs" and isinstance(value, list):
                     for i, run in enumerate(value):
                         check(
@@ -2323,6 +2495,14 @@ def check_corpus_refs(doc: Any, rel: Path, indices: CorpusIndices) -> list[str]:
                         child_qds_block is not None
                         and (child_qds_block, key) in qds_routed_slots
                     )
+                    if (current_qds is not None
+                            and str(current_qds.get("emitter_contract_version")) == "4"
+                            and child_qds_block == "data_quality_summary"
+                            and key == "diagnostics"):
+                        # Unlike singleton mapped slots this is a list of wrappers.
+                        # The obligation propagates to each item even if an attacker
+                        # deletes all of its self-describing provenance fields.
+                        child_is_routed_scalar = True
                     child_source_key = (
                         QDS_COPIED_ROW_SOURCE_KEYS.get(key)
                         if current_qds is not None and isinstance(value, list)
@@ -2363,11 +2543,12 @@ def check_corpus_refs(doc: Any, rel: Path, indices: CorpusIndices) -> list[str]:
         qds_contract = str(qds.get("emitter_contract_version") or "")
         qds_scope = qds.get("coverage_scope")
         context_ref = qds.get("emission_context_ref")
-        if qds_contract == "3" and qds_scope == "partial":
+        context_target = None
+        if qds_contract == "4" or (qds_contract == "3" and qds_scope == "partial"):
             if not isinstance(context_ref, str) or not context_ref.strip():
                 violations.append(
                     f"{rel}: {qds_path}.emission_context_ref is required for a "
-                    "partial emitter-contract-3 QDS"
+                    "partial contract-3 or any contract-4 QDS"
                 )
             else:
                 context_target = _resolve(
@@ -2390,8 +2571,44 @@ def check_corpus_refs(doc: Any, rel: Path, indices: CorpusIndices) -> list[str]:
         elif context_ref is not None:
             violations.append(
                 f"{rel}: {qds_path}.emission_context_ref is only permitted on a "
-                "partial emitter-contract-3 QDS"
+                "partial contract-3 or any contract-4 QDS"
             )
+        v4_fields = (
+            "active_evaluation_run_refs", "applied_corrections",
+            "dataset_associations", "corrected_qds_refs", "measurement_evidence_origins",
+        )
+        if qds_contract == "4":
+            if context_target is not None and isinstance(context_target.node, dict):
+                context = context_target.node
+                _check_corrected_qds_refs(context, indices, rel, qds_path, violations)
+                projection = _contract4_projection(context, indices, rel, qds_path, violations)
+                for key in ("dataset_associations", "corrected_qds_refs"):
+                    expected = context.get(key, [])
+                    if key == "dataset_associations" and projection is not None:
+                        expected = projection["dataset_associations"]
+                    if qds.get(key, []) != expected:
+                        violations.append(
+                            f"{rel}: {qds_path}.{key} differs from its source-owned context"
+                        )
+                if projection is not None:
+                    expected_active = [run["id"] for run in projection["runs"]]
+                    if qds.get("active_evaluation_run_refs") != expected_active:
+                        violations.append(
+                            f"{rel}: {qds_path}.active_evaluation_run_refs differs "
+                            "from the corrected, subject-eligible source projection"
+                        )
+                    if qds.get("applied_corrections", []) != projection["corrections"]:
+                        violations.append(
+                            f"{rel}: {qds_path}.applied_corrections differs from "
+                            "the exact source-owned correction operations"
+                        )
+                    if qds.get("measurement_evidence_origins", []) != projection["measurement_evidence_origins"]:
+                        violations.append(
+                            f"{rel}: {qds_path}.measurement_evidence_origins differs from "
+                            "the exact ordered source-derived measurement lineage"
+                        )
+        elif any(field in qds for field in v4_fields):
+            violations.append(f"{rel}: {qds_path} carries contract-4-only evidence fields")
         refs = qds.get("derived_from_evaluation_run_refs") or []
         seen_refs: set[str] = set()
         qds_structure = qds.get("structure_ref")

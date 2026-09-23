@@ -497,6 +497,83 @@ check("all oracle_family-bearing classes are covered",
 check("the enum itself still admits exactly the two families",
       sorted(_schema["enums"]["ToolFamily"]["permissible_values"]), ["cctbx", "non_cctbx"])
 
+# #739: Allowed rotamers are outside Favored but are not OUTLIERs. Keep the
+# canonical enum descriptive, not a second numeric classification threshold.
+_rotamer_description = _schema["enums"]["ResidueOutlierKind"]["permissible_values"]["rotamer"]["description"]
+check("rotamer outlier kind names the tool-reported classification",
+      "OUTLIER classification reported by the validation tool" in _rotamer_description, True)
+check("rotamer enum does not classify Allowed or Favored as outliers",
+      "Allowed and Favored conformations are not outliers" in _rotamer_description, True)
+_rotamer_registry_rows = [line for line in (REPO / "ref/thresholds_and_standards.md").read_text().splitlines()
+                          if line.startswith("| Rotamer outlier |")]
+check("threshold registry has one rotamer outlier definition", len(_rotamer_registry_rows), 1)
+_rotamer_registry = " ".join(_rotamer_registry_rows).replace("**", "")
+check("rotamer registry uses the same reported classification as the schema",
+      "OUTLIER classification reported by the validation tool" in _rotamer_registry, True)
+check("rotamer registry does not turn Allowed into outlier",
+      "Allowed and Favored conformations are not outliers" in _rotamer_registry
+      and "98th" not in _rotamer_registry, True)
+
+# #748: a ligand B-ratio is descriptive, not an occupancy/quality classifier.
+# Keep the checks local to active ligand guidance, not frozen records or the
+# separate water/metal policies. Injecting each retired claim must fail even
+# when all of the new cautions remain present beside it.
+def _ligand_b_guidance_errors(text: str, start: str, end: str) -> list[str]:
+    before, marker, after = text.partition(start)
+    if not marker:
+        return ["missing ligand B-factor guidance"]
+    section, marker, after = after.partition(end)
+    if not marker:
+        return ["missing ligand B-factor guidance boundary"]
+    normalized = " ".join(section.casefold().split())
+    retired = (
+        "< 1.5", "consistent with full occupancy",
+        "partial occupancy or weak binding", "signals a fit into noise",
+    )
+    errors = [f"retired ligand B-ratio claim: {claim}" for claim in retired
+              if claim in normalized]
+    required = (
+        "informational", "atom populations", "local shell", "global protein mean",
+        "ratio alone does not establish occupancy, weak binding or a fit into noise",
+        "no fixed quality classification",
+    )
+    return errors + [f"missing {claim}" for claim in required if claim not in normalized]
+
+
+_ligand_b_guidance = (
+    (
+        ".claude/skills/protstruct-eval/SKILL.md", "3. **B-factor", "\n4.",
+        "3. **B-factor vs surroundings** — compute the ratio `B(ligand) / mean_B(protein)`. "
+        "< 1.5× = consistent with full occupancy. 1.5–3× = partial occupancy or weak binding. "
+        "> 3× = very weak; investigate alternative interpretations.",
+    ),
+    (
+        "ref/quality_reporting.md", "| **Ligand B", "\n### Outlier reporting",
+        "| **Ligand B vs. surrounding protein B** | ratio < 1.5 | phenix.b_factor_statistics |",
+    ),
+    (
+        "ref/driving_example_T10.md", "4. **B-factor", "\n## Notes",
+        "4. **B-factor sanity.** The ligand's mean B relative to its surroundings is recorded — "
+        "a ligand B far above its contacts signals a fit into noise even at acceptable RSCC.",
+    ),
+)
+for _relative, _start, _end, _retired_claim in _ligand_b_guidance:
+    _guidance = (REPO / _relative).read_text()
+    check(f"{_relative} keeps ligand B-ratio interpretation scoped and informational",
+          _ligand_b_guidance_errors(_guidance, _start, _end), [])
+    _boundary = _guidance.index(_end, _guidance.index(_start))
+    _mutated_guidance = (
+        _guidance[:_boundary] + "\n" + _retired_claim + "\n" + _guidance[_boundary:]
+    )
+    check(f"{_relative} rejects its original ligand B-ratio claim reintroduced in memory",
+          any(error.startswith("retired ligand B-ratio claim:") for error in
+              _ligand_b_guidance_errors(_mutated_guidance, _start, _end)), True)
+    for _required_scope in ("atom populations", "local shell", "global protein mean"):
+        _mutated_guidance = _guidance.replace(_required_scope, "unspecified selection")
+        check(f"{_relative} requires explicit {_required_scope}",
+              f"missing {_required_scope}" in
+              _ligand_b_guidance_errors(_mutated_guidance, _start, _end), True)
+
 
 # --- Round 26, pass 6: the partitions an input-space enumeration found -------------
 # #151/#152. Every prior fix here was tested against the construct that motivated it
@@ -851,6 +928,15 @@ check(
     set(integrity.QDS_ROUTED_SCALAR_SLOTS_BY_CONTRACT),
     {"1", "2", "3"},
 )
+_v4_slots, _v4_blocks = integrity._qds_contract_routing(
+    {"emitter_contract_version": "4"}
+)
+check(
+    "referential routing separately resolves the current contract-4 table",
+    ("data_quality_summary", "wilson_b") in _v4_slots
+    and "data_quality_summary" in _v4_blocks,
+    True,
+)
 _downgraded_qds_doc = {"quality_data_sheets": [{
     "id": "QDS_new_contract_2",
     "issued_at": "2026-09-22T12:00:00+00:00",
@@ -868,14 +954,25 @@ check(
     True,
 )
 _current_qds_doc = copy.deepcopy(_downgraded_qds_doc)
-_current_qds_doc["quality_data_sheets"][0]["emitter_contract_version"] = "3"
+_current_qds_doc["quality_data_sheets"][0]["emitter_contract_version"] = "4"
 check(
     "referential contract floor permits the current emitter contract",
     integrity.check_qds_contract_floor(
         _current_qds_doc,
-        REPO / "data/provider/QDS_new_contract_3.yaml",
+        REPO / "data/provider/QDS_new_contract_4.yaml",
     ),
     [],
+)
+_downgraded_v3_doc = copy.deepcopy(_current_qds_doc)
+_downgraded_v3_doc["quality_data_sheets"][0]["emitter_contract_version"] = "3"
+check(
+    "the current floor also rejects a newly issued contract-3 sheet",
+    any("must use current emitter contract 4" in row
+        for row in integrity.check_qds_contract_floor(
+            _downgraded_v3_doc,
+            REPO / "data/provider/QDS_new_contract_3.yaml",
+        )),
+    True,
 )
 _retained_qds_path = (
     REPO
@@ -887,6 +984,17 @@ check(
     integrity.check_qds_contract_floor(_retained_qds_doc, _retained_qds_path),
     [],
 )
+for _v3_rel in (
+    "data/coscientists/openscientist/QDS_1sar_cdba2c07_2026-09-22.yaml",
+    "data/examples/qds/QDS_synth_active_site_2026-09-23.yaml",
+):
+    _v3_path = REPO / _v3_rel
+    _v3_doc = integrity.strict_yaml_load(_v3_path.read_text())
+    check(
+        f"contract floor permits the exact retained v3 sheet {_v3_path.name}",
+        integrity.check_qds_contract_floor(_v3_doc, _v3_path),
+        [],
+    )
 check(
     "referential contract floor rejects a renamed copy of retained QDS data",
     any(
@@ -949,7 +1057,7 @@ with tempfile.TemporaryDirectory() as _carrier_tmp:
         "quality_data_sheets:\n"
         "- id: QDS_upper\n"
         "  issued_at: '2026-09-22T12:00:00+00:00'\n"
-        "  emitter_contract_version: '3'\n"
+        "  emitter_contract_version: '4'\n"
         "  coverage_scope: cumulative\n"
     )
     _mixed_eval_path = _carrier_root / "data/x/EVAL_mixed.Yml"

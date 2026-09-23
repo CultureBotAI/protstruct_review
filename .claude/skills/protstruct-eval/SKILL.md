@@ -365,7 +365,7 @@ For every Ligand record in the eval:
 
 1. **Position vs the claimed subject** — verify quoted coordinates against the exact model/version the report names, identified by digest, to within ≤ 0.05 Å (gemmi audit script). A comparison with a deposition or differently packaged round answers a different question. In 1SAR the 0.215 Å report-to-package difference crosses round identities and cannot diagnose initial-versus-final templating.
 2. **Density support** — assess accuracy and precision with independent `edstats` RSZD/RSZO when available, following registry §2's “Real-space density fit (ligand/loop)” rule. Retain RSCC/RSR as informational diagnostics; RSCC corroboration across tools requires a matched limiting-radius convention. Neither statistic has a fixed quality cutoff. If RSZD/RSZO or matched-radius metadata are absent, state the gap rather than grading absolute RSCC/RSR values.
-3. **B-factor vs surroundings** — compute the ratio `B(ligand) / mean_B(protein)`. < 1.5× = consistent with full occupancy. 1.5–3× = partial occupancy or weak binding. > 3× = very weak; investigate alternative interpretations.
+3. **B-factor comparison (informational)** — report the ligand and comparison mean B values, their ratio and atom counts for the exact coordinate subject. Define both atom populations, including residue/atom membership, hydrogen, solvent and alternate-conformer handling, and any weighting. A local comparison requires an explicit local shell: distance rule/cutoff, ligand atoms used, eligible neighbouring atoms and symmetry handling. A global protein mean or all-model mean is a different denominator; label it explicitly and do not call it local surroundings. The ratio alone does not establish occupancy, weak binding or a fit into noise, and supplies no fixed quality classification.
 4. **Coordination geometry** (metals) — inner-sphere bonds 2.0–2.6 Å for hard metals (Ca²⁺, Mg²⁺, Zn²⁺); coordination number 6–8 for Ca²⁺. Use `gemmi contact` or a small gemmi script.
 5. **Element identity** (metals) — does the data type allow it to be cross-checked?
    - **Anomalous data present** (e.g. multi-wavelength MAD, peak/edge/remote) → run anomalous Fourier; check anomalous map peak height at the metal site. Tools: `phenix.anomalous_signal`, CCP4 `fft` with anomalous coefficients.
@@ -485,7 +485,7 @@ For waters specifically: do NOT declare every HOH as a Ligand. Use a single scop
    no context and retains run-level headline concatenation. Never infer summary prose from input
    file order, “latest run,” or stale per-run retraction language.
 
-   Retained v1/v2 emitters are replay-only, not authoring alternatives. Every new committed QDS
+   Retained v1/v2/v3 emitters are replay-only, not authoring alternatives. Every new committed QDS
    uses the current contract. The only exception is an already-issued artifact whose repository
    path, QDS id, timestamp, contract, and complete carrier digest match the immutable guard
    allowlist; that artifact still has to pass its ordinary source-pin replay.
@@ -499,7 +499,47 @@ For waters specifically: do NOT declare every HOH as a Ligand. Use a single scop
    repository-local archive and member. The wrapper derives the canonical `artifact:<id>#<member>`
    subject from that pair or rejects a conflicting `--subject-ref` before invoking any oracle.
 
-Regression tests at `scripts/test_qds_emit.py` enforce that the 1SAR example has every expected geometry slot populated, the synthetic active-site eval (`data/examples/eval/EVAL_synth_active_site_*.yaml`) populates per_residue_quality / site_qualities / ligand_quality / pairwise_comparisons / tool_recommendations_applied, and the negative test confirms the fail-hard behaviour. `scripts/validate.sh` runs all of this in sequence.
+9. **Contract 4 applies corrections before every builder.** New partial and cumulative sheets
+   require one source-owned context and a complete context-owner snapshot of Structure, Tools,
+   recommendations and assumptions. Typed `corrections[]` withdraw or replace exact source
+   collection/row identities with target hashes and retained evidence; replacement rows retain
+   their new identities. Validate the whole lineage and all surviving dependencies before any
+   summary, assumption, recommendation, waiver or coverage is built. All raw source runs remain
+   in audit lineage; active contributors are listed separately. Pin raw runs, including withdrawn
+   evidence, and the complete Structure/registry/context snapshots. Preserve older contracts and
+   issued artifacts byte-for-byte. The source context supplies one current headline in both scopes.
+   Live authoring requires exact applicable dated registry rows plus their supersession ancestors
+   in the raw owner snapshot before explicit corrections; replay never consults live registries.
+   Auxiliary replacement applicability follows exact correction ancestry even when its carrier
+   also contains another subject's measurements. Reject conflicting active assumption payloads
+   sharing an ID across registry, measurement, run and headline origins.
+
+   A measurement replacement corrects an existing observation, including transcription or
+   interpretation; it never makes that observation newly executed. For recency, follow the
+   exact raw replacement chain to its oldest owning run's declared date, including withdrawn
+   intermediates. Keep the correcting row's source IDs and carrier date unchanged and surface
+   every active measurement's `measurement_evidence_origins` entry on the QDS. Its
+   `origin_run_date` is an original-record ordering proxy, not a verified execution timestamp.
+   Original owner is also part of bundle coherence and scientific equality, so separate old
+   runs cannot become a fictitious shared invocation merely by entering one correction file.
+   Record genuinely new execution as a new standalone row backed by execution evidence, with
+   an optional separate withdrawal of obsolete evidence. Re-parsing an old log today does not
+   refresh its scientific measurement; a new coordinate recount is a new observation only if
+   its actual method/input/output provenance is retained. Notes and numeric changes do not
+   override these typed semantics.
+
+10. **Admit reflection-data diagnostics explicitly.** A typed model/dataset association declares
+    the retained MTZ path/digest, exact dataset subject, owning run, T13/all/dataset scope,
+    selectors and evidence. Associated rows keep their MTZ subjects throughout emission and
+    outrank unlabelled fallback. Never relabel reflections as coordinates. Surface all admitted
+    T13 diagnostic values and unavailable flags in `data_quality_summary.diagnostics`, alongside
+    any routed summary scalar. A source association is not an automatic scientific quality pass.
+
+`scripts/test_qds_emit.py` preserves explicit retained-contract regressions. Current-contract
+coverage in `scripts/test_qds_contract_v4.py` exercises the corrected synthetic active-site
+fixture and correction/dataset/replay boundaries. Projection and referential-integrity mutation
+tests separately check lineage and dependency closure. `scripts/validate.sh` discovers and runs
+all of these suites.
 
 ## Common pitfalls
 

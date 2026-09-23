@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Regression tests for scripts/qds_emit.py.
+"""Retained-contract regression tests for scripts/qds_emit.py.
+
+Default emissions here explicitly replay contract 3; current contract-4
+source/context/correction boundaries are tested in test_qds_contract_v4.py.
 
 Closes the regression hole Codex flagged: previously the QDS emitter used
 substring matching that silently dropped half the geometry slots from the
@@ -58,6 +61,12 @@ EXPECTED_GEOMETRY_SLOTS_1SAR = {
     "bond_rmsd_a",
     "angle_rmsd_deg",
 }
+
+
+def emit_retained_qds(*args, **kwargs) -> dict:
+    """Keep historical builder regressions explicitly on their original contract."""
+    kwargs.setdefault("emitter_contract_version", "3")
+    return qds_emit.emit_qds(*args, **kwargs)
 
 
 def _quality_doc_with_governed_bundles() -> dict:
@@ -180,7 +189,7 @@ def test_1sar_geometry_slots_all_present() -> None:
 
 
 def test_synth_local_blocks_present() -> None:
-    qds = qds_emit.emit_qds(
+    qds = emit_retained_qds(
         [EVAL_SYNTH], qds_id=SYNTH_QDS_ID, structure_id="synth1",
     )
 
@@ -257,13 +266,14 @@ def test_corrected_synth_scientific_contract_and_replay() -> None:
     _check(pair.get("tm_score") and pair.get("lddt"), "pairwise reporting includes TM-score and lDDT")
     _check("OpenStructure" in pair["lddt"].get("notes", ""), "lDDT scorer must be distinct from alignment method")
 
-    live = qds_emit.emit_qds([EVAL_SYNTH], qds_id=SYNTH_QDS_ID, structure_id="synth1")
-    replay = qds_emit.emit_qds(
+    retained = emit_retained_qds([EVAL_SYNTH], qds_id=SYNTH_QDS_ID, structure_id="synth1")
+    replay = emit_retained_qds(
         [EVAL_SYNTH], qds_id=SYNTH_QDS_ID, structure_id="synth1",
         emitter_contract_version="3", require_pinned_tool_snapshot=True,
     )
     committed = yaml.safe_load(QDS_SYNTH.read_text())["quality_data_sheets"][0]
-    _check(live == replay == committed, "corrected QDS must equal live emission and pinned replay")
+    _check(retained == replay == committed,
+           "corrected historical QDS must equal explicit v3 emission and pinned replay")
     _check(QDS_SYNTH.read_text() == yaml.safe_dump(
         {"quality_data_sheets": [replay]}, sort_keys=False, allow_unicode=True,
         default_flow_style=False,
@@ -313,7 +323,7 @@ def test_negative_site_scope_without_site_decl_fails() -> None:
         bad_path.write_text(yaml.safe_dump(bad, sort_keys=False))
 
         assert_raises_completeness(
-            lambda: qds_emit.emit_qds(
+            lambda: emit_retained_qds(
                 [bad_path], qds_id=SYNTH_QDS_ID, structure_id="synth1",
             ),
             ["scope=site", "declared Site"],
@@ -329,7 +339,7 @@ def _emit_mutated_synth(mutator: Callable[[dict], None], name: str) -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         bad_path = Path(tmpdir) / f"{name}.yaml"
         bad_path.write_text(yaml.safe_dump(doc, sort_keys=False, allow_unicode=True))
-        qds_emit.emit_qds(
+        emit_retained_qds(
             [bad_path], qds_id=SYNTH_QDS_ID, structure_id="synth1",
         )
 
@@ -412,7 +422,7 @@ def test_quality_indicator_extensions_present() -> None:
         path.write_text(
             yaml.safe_dump(_quality_doc_with_governed_bundles(), sort_keys=False)
         )
-        qds = qds_emit.emit_qds(
+        qds = emit_retained_qds(
             [path], qds_id="QDS_quality_test", structure_id="synth_quality",
             coverage_scope="cumulative",
         )
@@ -481,7 +491,7 @@ def test_negative_structured_scopes_without_rows_fail() -> None:
         bad_path.write_text(yaml.safe_dump(missing_interface, sort_keys=False))
 
         assert_raises_completeness(
-            lambda: qds_emit.emit_qds(
+            lambda: emit_retained_qds(
                 [bad_path], qds_id="QDS_bad_structured_test",
                 structure_id="synth_quality", coverage_scope="cumulative",
             ),
@@ -497,7 +507,7 @@ def test_negative_structured_scopes_without_rows_fail() -> None:
             run["nmr_ensemble_qualities"] = []
         bad_path.write_text(yaml.safe_dump(missing_other_rows, sort_keys=False))
         assert_raises_completeness(
-            lambda: qds_emit.emit_qds(
+            lambda: emit_retained_qds(
                 [bad_path], qds_id="QDS_bad_structured_test",
                 structure_id="synth_quality", coverage_scope="cumulative",
             ),
@@ -609,7 +619,7 @@ def test_derived_coverage_uses_only_validated_source_families() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "derived.yaml"
         _write_eval(path, [run])
-        qds = qds_emit.emit_qds(
+        qds = emit_retained_qds(
             [path],
             qds_id="QDS_T14_DERIVED",
             structure_id="synth",
@@ -839,9 +849,9 @@ def test_contract_v2_replays_full_september_eval_and_preserves_v1() -> None:
         "frozen contract-1 source changed while adding contract 2",
     )
     _check(
-        qds_emit.QDS_EMITTER_CONTRACT_VERSION == "3"
-        and qds_emit.SUPPORTED_QDS_EMITTER_CONTRACT_VERSIONS == {"1", "2", "3"},
-        "live emitter does not default to v3 while retaining v1/v2 dispatch",
+        qds_emit.QDS_EMITTER_CONTRACT_VERSION == "4"
+        and qds_emit.SUPPORTED_QDS_EMITTER_CONTRACT_VERSIONS == {"1", "2", "3", "4"},
+        "live emitter does not default to v4 while retaining v1/v2/v3 dispatch",
     )
 
     subject = (
@@ -856,7 +866,7 @@ def test_contract_v2_replays_full_september_eval_and_preserves_v1() -> None:
         "scope_notes": "Full September audit contract-v2 regression.",
         "issued_at": "2026-09-22T00:00:00+00:00",
     }
-    live = qds_emit.emit_qds(
+    live = emit_retained_qds(
         [EVAL_1SAR.parent / "EVAL_1sar_cdba2c07_2026-09-07.yaml"],
         emitter_contract_version="2",
         **kwargs,
@@ -907,7 +917,7 @@ def test_contract_v2_replays_full_september_eval_and_preserves_v1() -> None:
             "coverage_scope": "cumulative",
             "issued_at": "2026-09-22T00:00:00+00:00",
         }
-        live_v1 = qds_emit.emit_qds(
+        live_v1 = emit_retained_qds(
             [path], emitter_contract_version="1", **v1_kwargs
         )
         frozen_v1 = qds_emit_contract_v1.emit_qds([path], **v1_kwargs)
@@ -981,7 +991,7 @@ def test_contract_v3_uses_typed_partial_sheet_context() -> None:
             "issued_at": context["issued_at"],
         }
         kwargs.update(overrides)
-        return qds_emit.emit_qds(paths, **kwargs)
+        return emit_retained_qds(paths, **kwargs)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         old_path = Path(tmpdir) / "EVAL_old.yaml"
@@ -1103,7 +1113,7 @@ def test_contract_v3_uses_typed_partial_sheet_context() -> None:
         old_path.write_text(yaml.safe_dump(old_doc, sort_keys=False))
         new_path.write_text(yaml.safe_dump(new_doc, sort_keys=False))
 
-        cumulative = qds_emit.emit_qds(
+        cumulative = emit_retained_qds(
             [new_path, old_path],
             qds_id="QDS_context_cumulative",
             structure_id="synth",
@@ -1119,7 +1129,7 @@ def test_contract_v3_uses_typed_partial_sheet_context() -> None:
         )
 
         assert_raises_completeness(
-            lambda: qds_emit.emit_qds(
+            lambda: emit_retained_qds(
                 [old_path, new_path],
                 qds_id="QDS_missing_context",
                 structure_id="synth",
@@ -1304,7 +1314,7 @@ def _emit_legacy_1sar(
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "legacy_1sar.yaml"
         path.write_text(yaml.safe_dump(doc, sort_keys=False, allow_unicode=True))
-        return qds_emit.emit_qds(
+        return emit_retained_qds(
             [path], qds_id=qds_id, structure_id="1sar", coverage_scope="cumulative",
             issued_at="2026-09-21T00:00:00+00:00",
         )
@@ -1372,8 +1382,8 @@ def test_subject_selection_preserves_provenance_and_is_order_independent() -> No
                       structure_method="xray", subject_ref=package,
                       coverage_scope="cumulative", resolution_a=2.5,
                       space_group="P 21 21 21", issued_at="2026-09-21T00:00:00+00:00")
-        qds = qds_emit.emit_qds([first], **kwargs)
-        qds_reversed = qds_emit.emit_qds([reverse], **kwargs)
+        qds = emit_retained_qds([first], **kwargs)
+        qds_reversed = emit_retained_qds([reverse], **kwargs)
 
         _check(qds == qds_reversed, "measurement order cannot change subject-selected QDS output")
         agreement = qds["classification_summary"]["secondary_structure_agreement"]
@@ -1403,7 +1413,7 @@ def test_subject_selection_preserves_provenance_and_is_order_independent() -> No
                "issued_at can be pinned for reproducible immutable output")
 
         assert_raises_completeness(
-            lambda: qds_emit.emit_qds([first], qds_id="QDS_ambiguous",
+            lambda: emit_retained_qds([first], qds_id="QDS_ambiguous",
                                       structure_id="1sar", coverage_scope="cumulative"),
             ["multiple explicit measurement or structured-row subjects", "--subject-ref"],
             "multiple explicit subjects were supplied without a QDS subject",
@@ -1437,7 +1447,7 @@ def test_refinement_triple_is_one_code_path() -> None:
         p_old, p_new = Path(tmpdir) / "old.yaml", Path(tmpdir) / "new.yaml"
         _write_eval(p_old, [old])
         _write_eval(p_new, [new])
-        qds = qds_emit.emit_qds([p_new, p_old], qds_id="QDS_bundle", structure_id="1sar",
+        qds = emit_retained_qds([p_new, p_old], qds_id="QDS_bundle", structure_id="1sar",
                                 coverage_scope="cumulative",
                                 issued_at="2026-09-21T00:00:00+00:00")
         refn = qds["refinement_summary"]
@@ -1456,7 +1466,7 @@ def test_refinement_triple_is_one_code_path() -> None:
         p_broken = Path(tmpdir) / "broken.yaml"
         _write_eval(p_broken, [broken])
         assert_raises_completeness(
-            lambda: qds_emit.emit_qds([p_broken], qds_id="QDS_broken",
+            lambda: emit_retained_qds([p_broken], qds_id="QDS_broken",
                                       structure_id="1sar", coverage_scope="cumulative"),
             ["refinement-summary coherence", "no single evaluation run/tool/family/subject"],
             "an R-factor summary required mixing code paths",
@@ -1549,7 +1559,7 @@ def test_pinned_source_snapshots_deduplicate_and_reject_conflicts() -> None:
         second.write_text(
             yaml.safe_dump(source_document("EVAL_snapshot_second"), sort_keys=False)
         )
-        qds = qds_emit.emit_qds(
+        qds = emit_retained_qds(
             [first, second],
             qds_id="QDS_snapshot_deduplication",
             structure_id="synth",
@@ -1584,7 +1594,7 @@ def test_pinned_source_snapshots_deduplicate_and_reject_conflicts() -> None:
             conflicting[field][0][changed_key] = changed_value
             second.write_text(yaml.safe_dump(conflicting, sort_keys=False))
             assert_raises_completeness(
-                lambda: qds_emit.emit_qds(
+                lambda: emit_retained_qds(
                     [first, second],
                     qds_id="QDS_snapshot_conflict",
                     structure_id="synth",
@@ -1762,7 +1772,7 @@ def test_subject_inference_includes_structured_rows_and_rejects_typos() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "structured.yaml"
         _write_eval(path, [run])
-        qds = qds_emit.emit_qds(
+        qds = emit_retained_qds(
             [path], qds_id="QDS_structured", structure_id="synth",
             coverage_scope="cumulative",
             issued_at="2026-09-21T00:00:00+00:00",
@@ -1775,7 +1785,7 @@ def test_subject_inference_includes_structured_rows_and_rejects_typos() -> None:
             "structured subject row survives the inferred filter",
         )
         assert_raises_completeness(
-            lambda: qds_emit.emit_qds(
+            lambda: emit_retained_qds(
                 [path], qds_id="QDS_typo", structure_id="synth",
                 subject_ref="artifact:typo", coverage_scope="cumulative",
             ),
@@ -1831,7 +1841,7 @@ def test_subject_filter_reaches_every_downstream_builder() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "subjects.yaml"
         _write_eval(path, [run_a, run_b])
-        qds = qds_emit.emit_qds(
+        qds = emit_retained_qds(
             [path], qds_id="QDS_A", structure_id="synth",
             structure_method="predicted_model", subject_ref=subject_a,
             coverage_scope="cumulative",
@@ -1987,7 +1997,7 @@ def test_equal_priority_semantic_conflicts_fail() -> None:
         path = Path(tmpdir) / "status.yaml"
         _write_eval(path, [run])
         assert_raises_completeness(
-            lambda: qds_emit.emit_qds(
+            lambda: emit_retained_qds(
                 [path], qds_id="QDS_status", structure_id="synth",
                 coverage_scope="cumulative",
             ),
@@ -2063,7 +2073,7 @@ def test_refinement_exact_subject_context_and_arithmetic() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "exact.yaml"
         _write_eval(path, [run])
-        qds = qds_emit.emit_qds(
+        qds = emit_retained_qds(
             [path], qds_id="QDS_exact", structure_id="synth", subject_ref=subject,
             coverage_scope="cumulative",
             issued_at="2026-09-21T00:00:00+00:00",
@@ -2079,7 +2089,7 @@ def test_refinement_exact_subject_context_and_arithmetic() -> None:
         mismatch["measurements"][1]["scope_selector"] = "mapping B"
         _write_eval(path, [mismatch])
         assert_raises_completeness(
-            lambda: qds_emit.emit_qds(
+            lambda: emit_retained_qds(
                 [path], qds_id="QDS_context", structure_id="synth",
                 subject_ref=subject, coverage_scope="cumulative",
             ),
@@ -2096,7 +2106,7 @@ def test_refinement_exact_subject_context_and_arithmetic() -> None:
         ]
         _write_eval(path, [bad_gap])
         assert_raises_completeness(
-            lambda: qds_emit.emit_qds(
+            lambda: emit_retained_qds(
                 [path], qds_id="QDS_gap", structure_id="synth",
                 subject_ref=subject, coverage_scope="cumulative",
             ),
@@ -2111,7 +2121,7 @@ def test_refinement_exact_subject_context_and_arithmetic() -> None:
         }
         _write_eval(path, [bad_units])
         assert_raises_completeness(
-            lambda: qds_emit.emit_qds(
+            lambda: emit_retained_qds(
                 [path], qds_id="QDS_units", structure_id="synth",
                 subject_ref=subject, coverage_scope="cumulative",
             ),
@@ -2194,7 +2204,7 @@ def test_emission_contract_requires_scope_notes_and_pinned_file_time() -> None:
         path = Path(tmpdir) / "scope.yaml"
         _write_eval(path, [run])
         assert_raises_completeness(
-            lambda: qds_emit.emit_qds(
+            lambda: emit_retained_qds(
                 [path], qds_id="QDS_scope", structure_id="synth",
                 coverage_scope="partial", scope_notes="",
             ),
@@ -2239,7 +2249,7 @@ def test_non_results_cannot_populate_summary_slots() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "non_results.yaml"
         _write_eval(path, [run])
-        qds = qds_emit.emit_qds(
+        qds = emit_retained_qds(
             [path], qds_id="QDS_non_results", structure_id="synth",
             coverage_scope="cumulative",
         )
@@ -2345,7 +2355,7 @@ def test_typed_value_carriers_are_exactly_one() -> None:
             }
             _write_eval(path, [run])
             assert_raises_completeness(
-                lambda: qds_emit.emit_qds(
+                lambda: emit_retained_qds(
                     [path], qds_id="QDS_bad_typed_carrier",
                     structure_id="synth", coverage_scope="cumulative",
                 ),
@@ -2363,7 +2373,7 @@ def test_typed_value_carriers_are_exactly_one() -> None:
             "measurements": [missing_oracle],
         }])
         assert_raises_completeness(
-            lambda: qds_emit.emit_qds(
+            lambda: emit_retained_qds(
                 [path], qds_id="QDS_missing_oracle_payload",
                 structure_id="synth", coverage_scope="cumulative",
             ),
@@ -2411,7 +2421,7 @@ def test_typed_value_carriers_are_exactly_one() -> None:
                 collection: [row],
             }])
             assert_raises_completeness(
-                lambda: qds_emit.emit_qds(
+                lambda: emit_retained_qds(
                     [path], qds_id=f"QDS_bad_{collection}",
                     structure_id="synth", coverage_scope="cumulative",
                 ),
@@ -2445,7 +2455,7 @@ def test_label_verdicts_and_cross_family_disagreements_fail() -> None:
         path = Path(tmpdir) / "categorical.yaml"
         _write_eval(path, [run])
         assert_raises_completeness(
-            lambda: qds_emit.emit_qds(
+            lambda: emit_retained_qds(
                 [path], qds_id="QDS_categorical", structure_id="synth",
                 coverage_scope="cumulative",
             ),
@@ -2465,7 +2475,7 @@ def test_label_verdicts_and_cross_family_disagreements_fail() -> None:
                 else ["label-valued", "value_text only", "value_numeric"]
             )
             assert_raises_completeness(
-                lambda: qds_emit.emit_qds(
+                lambda: emit_retained_qds(
                     [path], qds_id="QDS_categorical_numeric",
                     structure_id="synth", coverage_scope="cumulative",
                 ),
@@ -2491,7 +2501,7 @@ def test_label_verdicts_and_cross_family_disagreements_fail() -> None:
         })
         _write_eval(path, [run])
         assert_raises_completeness(
-            lambda: qds_emit.emit_qds(
+            lambda: emit_retained_qds(
                 [path], qds_id="QDS_disagreement", structure_id="synth",
                 coverage_scope="cumulative",
             ),
@@ -2528,7 +2538,7 @@ def test_t15_content_agreement_is_one_governed_bundle() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "t15.yaml"
         _write_eval(path, [run("EVAL_content_only", [content("content", 0.10)])])
-        content_only_qds = qds_emit.emit_qds(
+        content_only_qds = emit_retained_qds(
             [path], qds_id="QDS_t15_content_only", structure_id="synth",
             coverage_scope="cumulative",
         )
@@ -2547,7 +2557,7 @@ def test_t15_content_agreement_is_one_governed_bundle() -> None:
             [content("content", 0.40, status="pass")],
         )])
         assert_raises_completeness(
-            lambda: qds_emit.emit_qds(
+            lambda: emit_retained_qds(
                 [path], qds_id="QDS_t15_graded_content_only", structure_id="synth",
                 coverage_scope="cumulative",
             ),
@@ -2559,7 +2569,7 @@ def test_t15_content_agreement_is_one_governed_bundle() -> None:
         criterion_only["pass_criterion"] = "DSSP H+E content >= 0.20"
         _write_eval(path, [run("EVAL_content_criterion_only", [criterion_only])])
         assert_raises_completeness(
-            lambda: qds_emit.emit_qds(
+            lambda: emit_retained_qds(
                 [path], qds_id="QDS_t15_content_criterion_only", structure_id="synth",
                 coverage_scope="cumulative",
             ),
@@ -2571,7 +2581,7 @@ def test_t15_content_agreement_is_one_governed_bundle() -> None:
             content("content", 1.01)
         ])])
         assert_raises_completeness(
-            lambda: qds_emit.emit_qds(
+            lambda: emit_retained_qds(
                 [path], qds_id="QDS_t15_content_out_of_range", structure_id="synth",
                 coverage_scope="cumulative",
             ),
@@ -2581,7 +2591,7 @@ def test_t15_content_agreement_is_one_governed_bundle() -> None:
 
         _write_eval(path, [run("EVAL_agreement_only", [agreement("agreement")])])
         assert_raises_completeness(
-            lambda: qds_emit.emit_qds(
+            lambda: emit_retained_qds(
                 [path], qds_id="QDS_t15_missing", structure_id="synth",
                 coverage_scope="cumulative",
             ),
@@ -2597,7 +2607,7 @@ def test_t15_content_agreement_is_one_governed_bundle() -> None:
             ],
         )
         assert_raises_completeness(
-            lambda: qds_emit.emit_qds(
+            lambda: emit_retained_qds(
                 [path], qds_id="QDS_t15_mixed", structure_id="synth",
                 coverage_scope="cumulative",
             ),
@@ -2612,7 +2622,7 @@ def test_t15_content_agreement_is_one_governed_bundle() -> None:
             content("content", 0.40),
         ])])
         assert_raises_completeness(
-            lambda: qds_emit.emit_qds(
+            lambda: emit_retained_qds(
                 [path], qds_id="QDS_t15_failed", structure_id="synth",
                 coverage_scope="cumulative",
             ),
@@ -2625,7 +2635,7 @@ def test_t15_content_agreement_is_one_governed_bundle() -> None:
             content("content", 0.40, status="pass"),
         ])])
         assert_raises_completeness(
-            lambda: qds_emit.emit_qds(
+            lambda: emit_retained_qds(
                 [path], qds_id="QDS_t15_content_grade", structure_id="synth",
                 coverage_scope="cumulative",
             ),
@@ -2638,7 +2648,7 @@ def test_t15_content_agreement_is_one_governed_bundle() -> None:
             [run("EVAL_consistent", [agreement("agreement"),
                                       content("content", 0.10)])],
         )
-        qds = qds_emit.emit_qds(
+        qds = emit_retained_qds(
             [path], qds_id="QDS_t15_consistent", structure_id="synth",
             coverage_scope="cumulative",
         )
@@ -2667,7 +2677,7 @@ def test_t15_content_agreement_is_one_governed_bundle() -> None:
             [run("EVAL_mismatched_bundle", [mismatched_agreement, mismatched_content])],
         )
         assert_raises_completeness(
-            lambda: qds_emit.emit_qds(
+            lambda: emit_retained_qds(
                 [path], qds_id="QDS_t15_mismatched_bundle", structure_id="synth",
                 coverage_scope="cumulative",
             ),
@@ -2758,7 +2768,7 @@ def test_t16_interface_summary_is_one_consistent_bundle() -> None:
             path, [run([bsa, dockq, wrong_interface_capri], mixed_interfaces)]
         )
         assert_raises_completeness(
-            lambda: qds_emit.emit_qds(
+            lambda: emit_retained_qds(
                 [path], qds_id="QDS_t16_mixed", structure_id="synth",
                 coverage_scope="cumulative",
             ),
@@ -2780,7 +2790,7 @@ def test_t16_interface_summary_is_one_consistent_bundle() -> None:
             path, [run([bsa, dockq_same, capri_wrong], identity_interface)]
         )
         assert_raises_completeness(
-            lambda: qds_emit.emit_qds(
+            lambda: emit_retained_qds(
                 [path], qds_id="QDS_t16_capri", structure_id="synth",
                 coverage_scope="cumulative",
             ),
@@ -2805,7 +2815,7 @@ def test_t16_interface_summary_is_one_consistent_bundle() -> None:
                 [run([bsa, dockq_same, capri_high], contradictory_interfaces)],
             )
             assert_raises_completeness(
-                lambda: qds_emit.emit_qds(
+                lambda: emit_retained_qds(
                     [path], qds_id=f"QDS_t16_payload_{field}", structure_id="synth",
                     coverage_scope="cumulative",
                 ),
@@ -2820,7 +2830,7 @@ def test_t16_interface_summary_is_one_consistent_bundle() -> None:
             [run([missing_bsa_evidence, dockq_same, capri_high], interfaces)],
         )
         assert_raises_completeness(
-            lambda: qds_emit.emit_qds(
+            lambda: emit_retained_qds(
                 [path], qds_id="QDS_t16_bsa_no_evidence", structure_id="synth",
                 coverage_scope="cumulative",
             ),
@@ -2835,7 +2845,7 @@ def test_t16_interface_summary_is_one_consistent_bundle() -> None:
             [run([bsa, dockq_same, capri_high], bsa_evidence_not_retained)],
         )
         assert_raises_completeness(
-            lambda: qds_emit.emit_qds(
+            lambda: emit_retained_qds(
                 [path], qds_id="QDS_t16_bsa_evidence_not_retained",
                 structure_id="synth", coverage_scope="cumulative",
             ),
@@ -2844,7 +2854,7 @@ def test_t16_interface_summary_is_one_consistent_bundle() -> None:
             "a structured row omitted the BSA scalar's evidence",
         )
         _write_eval(path, [run([bsa, dockq_same, capri_high], interfaces)])
-        qds = qds_emit.emit_qds(
+        qds = emit_retained_qds(
             [path], qds_id="QDS_t16_consistent", structure_id="synth",
             coverage_scope="cumulative",
         )
@@ -2861,7 +2871,7 @@ def test_t16_interface_summary_is_one_consistent_bundle() -> None:
             row["subject_ref"] = "artifact:model"
         _write_eval(path, [run(half_labelled_rows, interfaces)])
         assert_raises_completeness(
-            lambda: qds_emit.emit_qds(
+            lambda: emit_retained_qds(
                 [path], qds_id="QDS_t16_half_labelled", structure_id="synth",
                 subject_ref="artifact:model", coverage_scope="cumulative",
             ),
@@ -2877,7 +2887,7 @@ def test_t16_interface_summary_is_one_consistent_bundle() -> None:
             [run(copy.deepcopy([bsa, dockq_same, capri_high]), half_labelled_interfaces)],
         )
         assert_raises_completeness(
-            lambda: qds_emit.emit_qds(
+            lambda: emit_retained_qds(
                 [path], qds_id="QDS_t16_inverse_half_labelled",
                 structure_id="synth", subject_ref="artifact:model",
                 coverage_scope="cumulative",
@@ -2901,14 +2911,14 @@ def test_programmatic_source_admission_contract() -> None:
         path = Path(tmpdir) / "source.yaml"
         _write_eval(path, [base])
         assert_raises_completeness(
-            lambda: qds_emit.emit_qds(
+            lambda: emit_retained_qds(
                 [path], qds_id="QDS_no_scope", structure_id="synth"
             ),
             ["coverage_scope is required"],
             "the API omitted its coverage scope",
         )
         assert_raises_completeness(
-            lambda: qds_emit.emit_qds(
+            lambda: emit_retained_qds(
                 [path, path], qds_id="QDS_duplicate_run", structure_id="synth",
                 coverage_scope="cumulative",
             ),
@@ -2920,7 +2930,7 @@ def test_programmatic_source_admission_contract() -> None:
         missing.pop("id")
         _write_eval(path, [missing])
         assert_raises_completeness(
-            lambda: qds_emit.emit_qds(
+            lambda: emit_retained_qds(
                 [path], qds_id="QDS_missing_run", structure_id="synth",
                 coverage_scope="cumulative",
             ),
@@ -2932,7 +2942,7 @@ def test_programmatic_source_admission_contract() -> None:
         mismatched["structure_ref"] = "other"
         _write_eval(path, [mismatched])
         assert_raises_completeness(
-            lambda: qds_emit.emit_qds(
+            lambda: emit_retained_qds(
                 [path], qds_id="QDS_wrong_structure", structure_id="synth",
                 coverage_scope="cumulative",
             ),
@@ -2977,7 +2987,7 @@ def test_structure_identity_comes_from_pinned_eval_source() -> None:
                 sort_keys=False,
             )
         )
-        qds = qds_emit.emit_qds(
+        qds = emit_retained_qds(
             [path],
             qds_id="QDS_identity_source",
             structure_id="synth",
@@ -2998,7 +3008,7 @@ def test_structure_identity_comes_from_pinned_eval_source() -> None:
         )
 
         assert_raises_completeness(
-            lambda: qds_emit.emit_qds(
+            lambda: emit_retained_qds(
                 [path],
                 qds_id="QDS_identity_method_conflict",
                 structure_id="synth",
@@ -3009,7 +3019,7 @@ def test_structure_identity_comes_from_pinned_eval_source() -> None:
             "an explicit method overrode the pinned Structure source",
         )
         assert_raises_completeness(
-            lambda: qds_emit.emit_qds(
+            lambda: emit_retained_qds(
                 [path],
                 qds_id="QDS_identity_description_conflict",
                 structure_id="synth",
@@ -3036,7 +3046,7 @@ def test_duplicate_yaml_keys_fail_before_emission() -> None:
         )
         for contract_version in ("1", "2"):
             assert_raises_completeness(
-                lambda version=contract_version: qds_emit.emit_qds(
+                lambda version=contract_version: emit_retained_qds(
                     [path],
                     qds_id="QDS_duplicate",
                     structure_id="1abc",
@@ -3058,7 +3068,7 @@ def test_duplicate_yaml_keys_fail_before_emission() -> None:
         qds_emit.qds_emit_contract_v1.CATALOG_PATH = duplicate_catalog
         try:
             assert_raises_completeness(
-                lambda: qds_emit.emit_qds(
+                lambda: emit_retained_qds(
                     [valid_source],
                     qds_id="QDS_duplicate_catalog",
                     structure_id="1abc",
@@ -3073,7 +3083,7 @@ def test_duplicate_yaml_keys_fail_before_emission() -> None:
         invalid_utf8 = Path(tmp) / "EVAL_invalid_utf8.yaml"
         invalid_utf8.write_bytes(b"evaluation_runs:\n\xff")
         assert_raises_completeness(
-            lambda: qds_emit.emit_qds(
+            lambda: emit_retained_qds(
                 [invalid_utf8],
                 qds_id="QDS_invalid_utf8",
                 structure_id="1abc",

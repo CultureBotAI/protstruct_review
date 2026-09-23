@@ -185,11 +185,19 @@ For bound ligands the catalog T10 metrics are load-bearing:
 | **RSCC** (real-space correlation) | Corroboration only, with a matched limiting-radius convention; no fixed quality cutoff | phenix.real_space_correlation; CCP4 `edstats`; registry §2, “Real-space density fit (ligand/loop)”. |
 | **RSR** (real-space R-factor) | Informational density-fit diagnostic; no fixed quality cutoff | same |
 | **RSZD / RSZO** | Assess density accuracy / precision using registry §2, “Real-space density fit (ligand/loop)”, when these statistics and their inputs are available | CCP4 `edstats`; PDB-REDO `density-fitness` |
-| **Ligand B vs. surrounding protein B** | ratio < 1.5 | phenix.b_factor_statistics |
+| **Ligand B vs. surrounding protein B** | Informational; define the exact ligand and comparison atom populations and the local shell, if used; no fixed quality classification | coordinate B-factor extraction with retained selections |
 | **Protein-ligand H-bond count** | informational | gemmi `contact`; PLIP |
 | **Pose RMSD to deposited reference** | Informational pending a ligand-specific registry criterion; record reference, matched atom mapping, symmetry handling and common receptor frame | independent coordinate comparison; fitting the ligand alone measures conformation, not binding-site pose |
 
 Report ligand RSCC when a ligand is structurally important, alongside the limiting-radius convention and available density diagnostics. RSCC and RSR do not supply B-factor-independent significance criteria (Tickle 2012); a high RSCC alone cannot establish a correct ligand. When RSZD/RSZO are unavailable, retain that evidence gap and keep RSCC/RSR informational instead of substituting an absolute cutoff. The same restriction applies to waters and loops.
+
+**Ligand B-factor comparison.** Retain the exact coordinate subject, both atom populations
+(residue/atom membership, hydrogen, solvent and alternate-conformer handling, and weighting),
+their counts and mean B values, and the resulting ratio. If reporting local surroundings,
+define the local shell's distance rule/cutoff, ligand atoms used, eligible neighbouring atoms
+and symmetry handling. A global protein mean or all-model mean is not a local-surroundings
+measurement; name that denominator explicitly. The ratio alone does not establish occupancy,
+weak binding or a fit into noise; those interpretations require additional evidence.
 
 ### Outlier reporting
 

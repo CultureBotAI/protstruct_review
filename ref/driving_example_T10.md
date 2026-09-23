@@ -51,8 +51,13 @@ the uncalibrated pose criterion remains an explicit assessment gap.
    itself measures conformation, not binding-site pose. Independent agreement on an RMSD
    confirms the calculation, not a correct pose. No ligand-specific tolerance is registered;
    do not transfer registry §3's Cα-superposition calibration to ligand atoms.
-4. **B-factor sanity.** The ligand's mean B relative to its surroundings is recorded — a ligand B far
-   above its contacts signals a fit into noise even at acceptable RSCC.
+4. **B-factor comparison (informational).** Record the exact coordinate subject, both atom populations
+   (residue/atom membership, hydrogen, solvent and alternate-conformer handling, and weighting),
+   their counts and mean B values, and the ratio. A local comparison requires an explicit local shell:
+   distance rule/cutoff, ligand atoms used, eligible neighbouring atoms and symmetry handling.
+   A global protein mean or all-model mean is a different denominator, not local surroundings.
+   The ratio alone does not establish occupancy, weak binding or a fit into noise, and supplies
+   no fixed quality classification; additional evidence is required for those interpretations.
 
 ## Notes
 

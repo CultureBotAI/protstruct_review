@@ -45,6 +45,7 @@ import yaml
 
 import qds_emit_contract_v1
 import qds_emit_contract_v3
+import qds_emit_contract_v4
 
 try:
     from strict_yaml import strict_yaml_load
@@ -56,8 +57,8 @@ REPO = Path(__file__).resolve().parent.parent
 CATALOG_PATH = REPO / "ref" / "catalog.yaml"
 TOOL_RECS_PATH = REPO / "ref" / "tool_recommendations.yaml"
 TOOL_ASSUMPTIONS_PATH = REPO / "ref" / "tool_assumptions.yaml"
-QDS_EMITTER_CONTRACT_VERSION = "3"
-SUPPORTED_QDS_EMITTER_CONTRACT_VERSIONS = frozenset({"1", "2", "3"})
+QDS_EMITTER_CONTRACT_VERSION = "4"
+SUPPORTED_QDS_EMITTER_CONTRACT_VERSIONS = frozenset({"1", "2", "3", "4"})
 
 
 # ---------------------------------------------------------------------------
@@ -3604,6 +3605,16 @@ def emit_qds(
                 require_pinned_tool_snapshot,
             )
         except qds_emit_contract_v3.QdsCompletenessError as exc:
+            raise QdsCompletenessError(str(exc)) from None
+    if emitter_contract_version == "4":
+        try:
+            return qds_emit_contract_v4.emit_qds(
+                eval_paths, qds_id, structure_id, structure_method, subject_ref,
+                coverage_scope, scope_notes, resolution_a, space_group, issued_at,
+                structure_description, emitter_contract_version="4",
+                require_pinned_tool_snapshot=require_pinned_tool_snapshot,
+            )
+        except qds_emit_contract_v4.QdsCompletenessError as exc:
             raise QdsCompletenessError(str(exc)) from None
     supported = ", ".join(sorted(SUPPORTED_QDS_EMITTER_CONTRACT_VERSIONS))
     raise QdsCompletenessError(

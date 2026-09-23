@@ -64,6 +64,15 @@ its required binaries, data downloads, and command line.
 See [`ref/README.md`](ref/README.md) for the reference-material map and [`schemas/README.md`](schemas/README.md)
 for schema authoring and regeneration details.
 
+## Current 1SAR evidence correction
+
+The [September 23 correction](data/coscientists/openscientist/EVAL_1sar_cdba2c07_2026-09-23.md)
+and its [cumulative QDS](data/coscientists/openscientist/QDS_1sar_cdba2c07_2026-09-23.yaml)
+correct earlier 1SAR interpretations without rewriting frozen records. They concern the packaged
+round-4 ribonuclease Sa model, not the missing reported round-7 coordinates. This is a retained-evidence
+correction with fresh coordinate recounts and saved-log parsing, not a full scientific rerun or
+an overall model-quality pass. Historical numbers with unavailable raw output are identified explicitly.
+
 ## Reuse, provenance, and citation
 
 Code is licensed under BSD-3-Clause ([`LICENSE`](LICENSE)); documentation, the LinkML schema and

@@ -63,6 +63,7 @@ def oracle_measurement(
         "oracle_tool_ref": tool,
         "oracle_family": family,
         "oracle_measure": {"value_numeric": 0.2},
+        "pass_status": "informational",
         "stage": "final",
         "scope": "complex",
         "subject_ref": "artifact:test-model",
@@ -105,6 +106,11 @@ def write_fixture(
     with_context: bool = False,
     contract_version: str = qds_emit.QDS_EMITTER_CONTRACT_VERSION,
 ) -> tuple[Path, Path]:
+    # Contract 4 owns every recipe, including cumulative sheets. Retained
+    # versions remain explicit test inputs and still face the real floor.
+    with_context = with_context or contract_version == "4"
+    if contract_version == "4" and coverage_scope == "cumulative" and scope_notes is None:
+        scope_notes = "Synthetic fixture covering only the declared source measurements."
     write_catalog(root)
     eval_run = {
         "id": "EVAL_fixture",
@@ -161,6 +167,10 @@ def write_fixture(
             "identity_description": "Pinned fixture context identity.",
             "headline_verdict": "Pinned fixture context headline.",
         }]
+        if contract_version == "4":
+            source_document["qds_emission_contexts"][0][
+                "snapshot_owner_evaluation_run_ref"
+            ] = "EVAL_fixture"
     measured_ids = {
         str(row.get("metric_definition_ref"))
         for row in measurements
@@ -182,6 +192,21 @@ def write_fixture(
         for row in assumptions_doc.get("assumptions", []) or []
         if row.get("tool_ref") in used_tools
     ]
+    if contract_version == "4":
+        # The complete snapshot must also resolve alternative recommended tools,
+        # not merely the tools that happened to make these measurements.
+        snapshot_tool_ids = used_tools | {
+            str(row["tool_ref"])
+            for key in ("tool_recommendations", "assumptions")
+            for row in source_document[key]
+            if row.get("tool_ref")
+        }
+        tool_snapshot = [
+            copy.deepcopy(tool)
+            for tool in catalog_doc.get("tools", []) or []
+            if tool.get("id") in snapshot_tool_ids
+        ]
+        source_document["tools"] = tool_snapshot
     eval_path.write_text(yaml.safe_dump(source_document, sort_keys=False))
 
     old_catalog = qds_emit.CATALOG_PATH
@@ -263,6 +288,15 @@ def write_fixture(
             "source_qds_emission_context_sha256": snapshot_digest(
                 "qds_emission_contexts",
                 source_document["qds_emission_contexts"],
+            ),
+        })
+    if contract_version == "4":
+        replay_pin.update({
+            "source_evaluation_runs_sha256": snapshot_digest(
+                "evaluation_runs", source_document["evaluation_runs"]
+            ),
+            "source_structures_sha256": snapshot_digest(
+                "structures", source_document["structures"]
             ),
         })
     source_document["qds_replay_pins"] = [replay_pin]
@@ -406,7 +440,9 @@ with tempfile.TemporaryDirectory() as tmp:
     eval_path.write_text(yaml.safe_dump(doc, sort_keys=False))
     code, out = run_guard(root)
     check("QDS-only fabricated waiver fails", code, 1)
-    check("fabricated waiver drift is diagnosed", "waivers rebuilt" in out, True)
+    check("fabricated waiver cannot satisfy source-derived trust",
+          "source-derived contract-4 trust check failed" in out
+          and "no unambiguous cross_tool_waiver" in out, True)
 
 with tempfile.TemporaryDirectory() as tmp:
     root = Path(tmp)
@@ -416,7 +452,8 @@ with tempfile.TemporaryDirectory() as tmp:
     qds_path.write_text(yaml.safe_dump(doc, sort_keys=False))
     code, out = run_guard(root)
     check("omitted source-owned waiver fails", code, 1)
-    check("omitted waiver drift is diagnosed", "waivers rebuilt" in out, True)
+    check("omitted source waiver diverges from immutable replay",
+          "frozen contract-4 replay" in out, True)
 
 with tempfile.TemporaryDirectory() as tmp:
     root = Path(tmp)
@@ -537,10 +574,10 @@ with tempfile.TemporaryDirectory() as tmp:
     })
     write_fixture(root, [first, second])
     code, out = run_guard(root)
-    check("retained replay rejects collapsed criterion bindings", code, 1)
+    check("current replay rejects collapsed criterion bindings", code, 1)
     check(
-        "retained semantic conflict is diagnosed before replay",
-        "retained contract selection cannot safely choose" in out,
+        "current semantic conflict is diagnosed before replay",
+        "scientifically ambiguous" in out,
         True,
     )
 
@@ -550,7 +587,7 @@ with tempfile.TemporaryDirectory() as tmp:
     nested["oracle_measure"]["pass_status"] = "pass"
     write_fixture(root, [nested])
     code, out = run_guard(root)
-    check("retained replay rejects nested source verdict metadata", code, 1)
+    check("current replay rejects nested source verdict metadata", code, 1)
     check("nested source verdict is diagnosed",
           "nested QDS lineage/verdict" in out, True)
 
@@ -562,7 +599,7 @@ with tempfile.TemporaryDirectory() as tmp:
     check("a noncanonical EvaluationRun carrier is not trusted", code, 1)
     check(
         "the renamed trust source resolves zero times",
-        "source EvaluationRun 'EVAL_fixture' resolves 0 times" in out,
+        "raw source 'EVAL_fixture' does not resolve to exactly one canonical carrier" in out,
         True,
     )
 
@@ -577,7 +614,7 @@ with tempfile.TemporaryDirectory() as tmp:
     root = Path(tmp)
     _eval_path, qds_path = write_fixture(root, T14_DERIVED)
     code, out = run_guard(root)
-    check("contract-2 derived T14 coverage passes full pinned replay", code, 0)
+    check("contract-4 derived T14 coverage passes full pinned replay", code, 0)
     check("derived T14 replay has no trust failure", "FAIL" not in out, True)
     qds = yaml.safe_load(qds_path.read_text())["quality_data_sheets"][0]
     conflict_coverage = next(
@@ -612,7 +649,7 @@ with tempfile.TemporaryDirectory() as tmp:
         with_context=True,
     )
     code, out = run_guard(root)
-    check("typed partial contract-3 context passes pinned replay", code, 0)
+    check("typed partial contract-4 context passes pinned replay", code, 0)
     check("typed context replay is clean", "FAIL" not in out, True)
 
     eval_doc = yaml.safe_load(eval_path.read_text())
@@ -651,7 +688,7 @@ with tempfile.TemporaryDirectory() as tmp:
     check("repinned context drift still fails deterministic replay", code, 1)
     check(
         "repinned context drift is diagnosed as replay divergence",
-        "frozen contract-3 replay" in out,
+        "frozen contract-4 replay" in out,
         True,
     )
 
@@ -668,7 +705,7 @@ with tempfile.TemporaryDirectory() as tmp:
     del eval_doc["qds_replay_pins"][0]["source_qds_emission_context_sha256"]
     eval_path.write_text(yaml.safe_dump(eval_doc, sort_keys=False))
     code, out = run_guard(root)
-    check("contract-3 partial pin requires a context digest", code, 1)
+    check("contract-4 partial pin requires a context digest", code, 1)
     check(
         "missing context digest is explicit",
         "source_qds_emission_context_sha256" in out,
@@ -709,21 +746,25 @@ with tempfile.TemporaryDirectory() as tmp:
     def omit_subject(qds: dict[str, Any]) -> None:
         del qds["subject_ref"]
 
-    write_fixture(root, measurements, mutate_qds=omit_subject)
+    # The original selected-subject sheet must be valid before deleting its
+    # subject; another model's independent oracle cannot satisfy this waiver.
+    write_fixture(root, measurements, waivers=[waiver()], mutate_qds=omit_subject)
     code, out = run_guard(root)
     check("multi-subject QDS cannot omit subject_ref", code, 1)
-    check("multi-subject ambiguity is diagnosed", "multiple explicit" in out, True)
+    check("missing selected subject diverges from source-owned context",
+          "frozen contract-4 replay" in out, True)
 
 with tempfile.TemporaryDirectory() as tmp:
     root = Path(tmp)
 
-    def omit_inferred_subject(qds: dict[str, Any]) -> None:
+    def omit_context_subject(qds: dict[str, Any]) -> None:
         del qds["subject_ref"]
 
-    write_fixture(root, [NON_CCTBX], mutate_qds=omit_inferred_subject)
+    write_fixture(root, [NON_CCTBX], mutate_qds=omit_context_subject)
     code, out = run_guard(root)
-    check("inferred source subject must be committed", code, 1)
-    check("omitted inferred subject is diagnosed", "omits subject_ref" in out, True)
+    check("explicit source-context subject must be committed", code, 1)
+    check("omitted context subject is diagnosed",
+          "frozen contract-4 replay" in out, True)
 
 with tempfile.TemporaryDirectory() as tmp:
     root = Path(tmp)
@@ -734,7 +775,8 @@ with tempfile.TemporaryDirectory() as tmp:
     write_fixture(root, [NON_CCTBX], mutate_qds=mismatch_subject)
     code, out = run_guard(root)
     check("QDS subject must have exact source evidence", code, 1)
-    check("subject mismatch is diagnosed", "has no exact evidence" in out, True)
+    check("subject mismatch is diagnosed",
+          "frozen contract-4 replay" in out, True)
 
 with tempfile.TemporaryDirectory() as tmp:
     root = Path(tmp)
@@ -759,7 +801,7 @@ with tempfile.TemporaryDirectory() as tmp:
     eval_path.write_text(yaml.safe_dump(eval_doc, sort_keys=False))
     code, out = run_guard(root)
     check("modern replay requires a source-pinned Tool snapshot", code, 1)
-    check("missing Tool snapshot is diagnosed", "Tool snapshot" in out, True)
+    check("missing Tool snapshot is diagnosed", "complete tools snapshot" in out, True)
 
 with tempfile.TemporaryDirectory() as tmp:
     root = Path(tmp)
@@ -769,7 +811,7 @@ with tempfile.TemporaryDirectory() as tmp:
     eval_path.write_text(yaml.safe_dump(eval_doc, sort_keys=False))
     code, out = run_guard(root)
     check("modern QDS requires a source-owned replay pin", code, 1)
-    check("missing replay pin is diagnosed", "source-owned replay pin" in out, True)
+    check("missing replay pin is diagnosed", "owner-carried replay pin" in out, True)
 
 with tempfile.TemporaryDirectory() as tmp:
     root = Path(tmp)
@@ -799,6 +841,46 @@ with tempfile.TemporaryDirectory() as tmp:
         True,
     )
 
+for source_key, pin_field in (
+    ("evaluation_runs", "source_evaluation_runs_sha256"),
+    ("structures", "source_structures_sha256"),
+):
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        eval_path, _ = write_fixture(root, [NON_CCTBX])
+        eval_doc = yaml.safe_load(eval_path.read_text())
+        # These source details need not alter the selected QDS scalar. They are
+        # nevertheless immutable audit inputs, not merely rendering inputs.
+        if source_key == "evaluation_runs":
+            eval_doc[source_key][0]["notes"] = "Changed raw audit annotation."
+        else:
+            eval_doc[source_key][0]["description"] = "Changed raw structure annotation."
+        eval_path.write_text(yaml.safe_dump(eval_doc, sort_keys=False))
+        code, out = run_guard(root)
+        check(f"contract-4 raw {source_key} drift fails", code, 1)
+        check(f"raw {source_key} drift identifies its immutable pin",
+              pin_field in out, True)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        eval_path, _ = write_fixture(root, [NON_CCTBX])
+        eval_doc = yaml.safe_load(eval_path.read_text())
+        del eval_doc["qds_replay_pins"][0][pin_field]
+        eval_path.write_text(yaml.safe_dump(eval_doc, sort_keys=False))
+        code, out = run_guard(root)
+        check(f"contract-4 requires {pin_field}", code, 1)
+        check(f"missing {pin_field} is explicit", pin_field in out, True)
+
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    eval_path, _ = write_fixture(root, [NON_CCTBX])
+    eval_doc = yaml.safe_load(eval_path.read_text())
+    del eval_doc["qds_emission_contexts"]
+    eval_path.write_text(yaml.safe_dump(eval_doc, sort_keys=False))
+    code, out = run_guard(root)
+    check("cumulative contract-4 sheets require a source-owned context", code, 1)
+    check("missing cumulative context is diagnosed", "context" in out, True)
+
 check(
     "contract 1 is retained in a module distinct from the current emitter",
     Path(qds_emit_contract_v1.__file__).resolve()
@@ -818,9 +900,9 @@ check(
     True,
 )
 check(
-    "trust guard registers all retained emitter contracts",
+    "trust guard registers current and retained emitter contracts",
     set(trust_guard.REPLAY_CONTRACT_EMITTERS),
-    {"1", "2", "3"},
+    {"1", "2", "3", "4"},
 )
 
 _retained_qds_rel = Path(
@@ -867,7 +949,7 @@ check(
     False,
 )
 
-for retained_version in ("1", "2"):
+for retained_version in ("1", "2", "3"):
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         write_fixture(
@@ -876,6 +958,7 @@ for retained_version in ("1", "2"):
             coverage_scope="partial",
             scope_notes="Bounded downgrade-regression fixture.",
             contract_version=retained_version,
+            with_context=retained_version == "3",
         )
         code, out = run_guard(root)
     check(
@@ -886,7 +969,7 @@ for retained_version in ("1", "2"):
     check(
         f"contract-{retained_version} downgrade has a replay-only diagnostic",
         "retained contracts are replay-only" in out
-        and "must use current emitter contract 3" in out,
+        and "must use current emitter contract 4" in out,
         True,
     )
 
@@ -922,7 +1005,7 @@ with tempfile.TemporaryDirectory() as tmp:
         for name, implementation in originals.items():
             setattr(qds_emit, name, implementation)
     check(
-        "retained-contract validation ignores divergent current-emitter helpers",
+        "contract-4 validation ignores divergent mutable-emitter helpers",
         failures,
         [],
     )
@@ -931,7 +1014,7 @@ with tempfile.TemporaryDirectory() as tmp:
 def run_projection_mutation(
     mutate: Callable[[dict[str, Any], dict[str, Any]], None] | None,
 ) -> tuple[int, str]:
-    """Run the guard on the live modern fixture after an in-memory mutation."""
+    """Run the guard on a retained historical fixture after an in-memory mutation."""
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         write_catalog(root)
@@ -961,7 +1044,7 @@ def run_projection_mutation(
 
 
 code, out = run_projection_mutation(None)
-check("source-owned projection accepts the unmodified modern QDS", code, 0)
+check("source-owned projection accepts the exact retained historical QDS", code, 0)
 check("unmodified source projection has no failure", "FAIL" not in out, True)
 
 

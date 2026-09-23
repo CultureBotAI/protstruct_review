@@ -1,0 +1,339 @@
+{
+  "archive": {
+    "member_count": 241,
+    "path": "data/coscientists/openscientist/cdba2c07-daff-4f60-ae96-12452b3a5fbb_artifacts.zip",
+    "sha256": "9fc5352284b7ffa7763c633a3eb4d3d0db96b8c25a1be9bcea361722d2c53054"
+  },
+  "audit_kind": "retained-coordinate recount and saved-log parsing; no external oracle invocation",
+  "audit_source_sha256": "8ed22c08212174057c3dea1d1ece57fb525c211fc9c4507add055f39f10fb7b5",
+  "coordinate_selections": {
+    "all_heavy_atoms_b_a2": {
+      "count": 1641,
+      "max": 80.68,
+      "mean": 15.981413772090189,
+      "min": 3.83,
+      "population_std_dev": 8.942857928772892
+    },
+    "ligands": [
+      {
+        "atom_count": 1,
+        "atoms": [
+          {
+            "b_factor": 42.73,
+            "element": "Ca",
+            "key": [
+              "A",
+              "98",
+              "",
+              "CA",
+              "CA"
+            ],
+            "occupancy": 1.0,
+            "xyz": [
+              66.752,
+              3.733,
+              13.397
+            ]
+          }
+        ],
+        "chain": "A",
+        "mean_b_factor_a2": 42.73,
+        "mean_b_over_global_protein_mean": 2.7595033069038535,
+        "modelled_component": "CA",
+        "residue_number": 98
+      },
+      {
+        "atom_count": 1,
+        "atoms": [
+          {
+            "b_factor": 22.85,
+            "element": "Na",
+            "key": [
+              "B",
+              "98",
+              "",
+              "NA",
+              "NA"
+            ],
+            "occupancy": 1.0,
+            "xyz": [
+              37.743,
+              11.865,
+              11.598
+            ]
+          }
+        ],
+        "chain": "B",
+        "mean_b_factor_a2": 22.85,
+        "mean_b_over_global_protein_mean": 1.4756529502165472,
+        "modelled_component": "NA",
+        "residue_number": 98
+      },
+      {
+        "atom_count": 5,
+        "atoms": [
+          {
+            "b_factor": 18.33,
+            "element": "O",
+            "key": [
+              "A",
+              "97",
+              "",
+              "SO4",
+              "O1"
+            ],
+            "occupancy": 1.0,
+            "xyz": [
+              69.397,
+              17.652,
+              18.229
+            ]
+          },
+          {
+            "b_factor": 16.77,
+            "element": "O",
+            "key": [
+              "A",
+              "97",
+              "",
+              "SO4",
+              "O2"
+            ],
+            "occupancy": 1.0,
+            "xyz": [
+              69.69,
+              19.747,
+              17.066
+            ]
+          },
+          {
+            "b_factor": 15.81,
+            "element": "O",
+            "key": [
+              "A",
+              "97",
+              "",
+              "SO4",
+              "O3"
+            ],
+            "occupancy": 1.0,
+            "xyz": [
+              71.529,
+              18.88,
+              18.42
+            ]
+          },
+          {
+            "b_factor": 18.7,
+            "element": "O",
+            "key": [
+              "A",
+              "97",
+              "",
+              "SO4",
+              "O4"
+            ],
+            "occupancy": 1.0,
+            "xyz": [
+              69.491,
+              19.73,
+              19.5
+            ]
+          },
+          {
+            "b_factor": 18.33,
+            "element": "S",
+            "key": [
+              "A",
+              "97",
+              "",
+              "SO4",
+              "S"
+            ],
+            "occupancy": 1.0,
+            "xyz": [
+              70.034,
+              19.002,
+              18.311
+            ]
+          }
+        ],
+        "chain": "A",
+        "mean_b_factor_a2": 17.588,
+        "mean_b_over_global_protein_mean": 1.1358330016809028,
+        "modelled_component": "SO4",
+        "residue_number": 97
+      }
+    ],
+    "policy": "All non-H/D fixed-column atoms; protein means standard amino-acid residues only, not all ATOM records. No altlocs, no occupancy weighting.",
+    "ratio_interpretation": "Global protein denominator, not a local surrounding shell; no element-identity, occupancy or quality inference.",
+    "standard_amino_acid_atoms_b_a2": {
+      "count": 1488,
+      "max": 80.68,
+      "mean": 15.484670698924731,
+      "min": 3.83,
+      "population_std_dev": 8.810525384609656
+    },
+    "water_residue_count": 146,
+    "waters_b_a2": {
+      "count": 146,
+      "max": 53.76,
+      "mean": 20.758835616438358,
+      "min": 6.62,
+      "population_std_dev": 8.778393190121715
+    }
+  },
+  "dataset": {
+    "member": "data/1sar.mtz",
+    "sha256": "f36d5fe685a3e524e8809d17d19ce12073acdf339eba2cfd3b0347a818850ab2",
+    "subject_ref": "mtz:sha256:f36d5fe685a3e524e8809d17d19ce12073acdf339eba2cfd3b0347a818850ab2"
+  },
+  "evidence_ref": "data/coscientists/openscientist/retained_evidence_2026-09-23/coordinate_and_t13_audit.json",
+  "model": {
+    "member": "data/1sar_final.pdb",
+    "sha256": "8cbc1650f8be5a3833f98833fa514ec7d490c2c3bb9aa930413abac05e2a510b",
+    "subject_ref": "artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb"
+  },
+  "replay_command": ".venv/bin/python scripts/audit_1sar_retained_evidence.py",
+  "t13": {
+    "aimless_status": "failed: hkl_unmerge_list::prepare - EMPTY",
+    "crystallographic_context_equivalence": {
+      "comparison_policy": "Exact decimal CELL/RESO, normalized SYMINF and sorted whitespace/case-normalized SYMM operators; all declared DCELLs equal CELL and all column dataset ids resolve. Dataset ids/names are not cross-file identities. No reindexing or algebraic operator equivalence is assumed.",
+      "limitation": "Together with selected-observation equality, establishes retained data/context equivalence only; does not recover the historical input file bytes or assert a new scientific execution.",
+      "normalized_context": {
+        "cell_a_b_c_alpha_beta_gamma": [
+          "64.897",
+          "78.323",
+          "38.792",
+          "9E+1",
+          "9E+1",
+          "9E+1"
+        ],
+        "resolution_limits_inverse_a2": [
+          "0.0004004509537481",
+          "0.1599971801042557"
+        ],
+        "symmetry": {
+          "lattice": "P",
+          "operator_count": 4,
+          "operators_xyz": [
+            "-X+1/2,-Y,Z+1/2",
+            "-X,Y+1/2,-Z+1/2",
+            "X+1/2,-Y+1/2,-Z",
+            "X,Y,Z"
+          ],
+          "point_group": "222",
+          "primitive_operator_count": 4,
+          "space_group_number": 19,
+          "space_group_symbol": "P212121"
+        }
+      },
+      "normalized_context_equal": true,
+      "retained_header_records": {
+        "archived_input": [
+          "CELL    64.8970   78.3230   38.7920   90.0000   90.0000   90.0000",
+          "SYMINF   4  4 P    19              'P212121'   222",
+          "SYMM X,  Y,  Z",
+          "SYMM X+1/2,  -Y+1/2,  -Z",
+          "SYMM -X,  Y+1/2,  -Z+1/2",
+          "SYMM -X+1/2,  -Y,  Z+1/2",
+          "RESO 0.0004004509537481   0.1599971801042557",
+          "COLUMN H                              H                 0                 0    1",
+          "COLUMN K                              H                 0                 0    1",
+          "COLUMN L                              H                 2                 2    1",
+          "COLUMN F-obs                          F                 0        1485.62341    1",
+          "COLUMN SIGF-obs                       Q        1.16452026        87.6973877    1",
+          "COLUMN R-free-flags                   I                 0                 1    1",
+          "COLUMN F-obs-filtered                 F        29.2324219        29.2324219    2",
+          "COLUMN SIGF-obs-filtered              Q        87.6973877        87.6973877    2",
+          "COLUMN F-model                        F        4.68510246        1288.49402    3",
+          "COLUMN PHIF-model                     P              -180               180    3",
+          "COLUMN 2FOFCWT                        F       0.554814398        750.701477    4",
+          "COLUMN PH2FOFCWT                      P       -146.864502        160.546875    4",
+          "COLUMN 2FOFCWT_no_fill                F       0.554814398       0.554814398    4",
+          "COLUMN PH2FOFCWT_no_fill              P                 0                 0    4",
+          "COLUMN FOFCWT                         F        26.5367565        26.5367565    4",
+          "COLUMN PHFOFCWT                       P               180               180    4",
+          "NDIF        4",
+          "DATASET       1 Original-experimental-data-mapped-to-asu",
+          "DCELL         1    64.8970   78.3230   38.7920   90.0000   90.0000   90.0000",
+          "DATASET       2 Experimental-data-used-in-refinement",
+          "DCELL         2    64.8970   78.3230   38.7920   90.0000   90.0000   90.0000",
+          "DATASET       3 Model-structure-factors-(bulk-solvent-and-all-scales-included)",
+          "DCELL         3    64.8970   78.3230   38.7920   90.0000   90.0000   90.0000",
+          "DATASET       4 Fourier-map-coefficients",
+          "DCELL         4    64.8970   78.3230   38.7920   90.0000   90.0000   90.0000"
+        ],
+        "ctruncate_output": [
+          "CELL    64.8970   78.3230   38.7920   90.0000   90.0000   90.0000",
+          "SYMINF   4  4 P    19           'P 21 21 21' PG222 X",
+          "SYMM X,  Y,  Z",
+          "SYMM X+1/2,  -Y+1/2,  -Z",
+          "SYMM -X,  Y+1/2,  -Z+1/2",
+          "SYMM -X+1/2,  -Y,  Z+1/2",
+          "RESO 0.0004004509537481   0.1599971801042557",
+          "COLUMN H                              H                 0                25    0",
+          "COLUMN K                              H                 0                31    0",
+          "COLUMN L                              H                 0                15    0",
+          "COLUMN F                              F                 0        1485.62341    1",
+          "COLUMN SIGF                           Q        1.16452026        87.6973877    1",
+          "NDIF        2",
+          "DATASET       0 HKL_base",
+          "DCELL         0    64.8970   78.3230   38.7920   90.0000   90.0000   90.0000",
+          "DATASET       1 Original-experimental-data-mapped-to-asu",
+          "DCELL         1    64.8970   78.3230   38.7920   90.0000   90.0000   90.0000"
+        ]
+      }
+    },
+    "ctruncate_output": {
+      "path": "data/coscientists/openscientist/t13_oracle_logs/ctruncate_out.mtz",
+      "sha256": "ce649a313ee5177ae5f0544811df93ef6be5f1da231b261e686d5b501e138519"
+    },
+    "ctruncate_parsed": {
+      "aniso_diagnostic": "explicit report",
+      "aniso_eigenvalues": [
+        10.5625,
+        17.8813,
+        14.6262
+      ],
+      "aniso_flag": "some",
+      "delta_b_aniso": 7.3187999999999995,
+      "ice_ring_count_total": 4,
+      "ice_ring_diagnostic": "recognized complete ice-ring table",
+      "ice_ring_resolutions_flagged": [
+        3.44
+      ],
+      "l_statistic": 0.505,
+      "log": "data/coscientists/openscientist/t13_oracle_logs/ctruncate.log",
+      "moment_2_acentric": 1.968,
+      "resolution_high_a": 2.5,
+      "resolution_low_a": 49.972,
+      "tncs_diagnostic": "explicit report",
+      "tncs_flag": false,
+      "twin_fraction_l": 0.03,
+      "twin_fraction_moments": 0.02,
+      "twin_operators_diagnostic": "explicit no-operator report",
+      "twin_operators_found": 0,
+      "wilson_b": 14.542,
+      "wilson_b_sigma": 21.119
+    },
+    "execution_date_in_retained_logs": "2026-05-04",
+    "logs": [
+      {
+        "path": "data/coscientists/openscientist/t13_oracle_logs/ctruncate.log",
+        "sha256": "c60f22fb4cc7facd5f2efe11d5ac2c10a9b514409f81c7a23a2c075bef613f4e"
+      },
+      {
+        "path": "data/coscientists/openscientist/t13_oracle_logs/aimless.log",
+        "sha256": "92955e79ac1af4413f1cdb3e2e0ef2a3286353c8f38135352f3af0ad6872310d"
+      }
+    ],
+    "selected_observation_equivalence": {
+      "canonical_hkl_f_sigf_sha256": "927d368a4d9d3b29588813c304b45b3c47bafa51f2cd6585cf93ebc9e61c937d",
+      "exact_selected_float_bytes_equal": true,
+      "limitation": "Proves equality of retained selected observations, not the full bytes of the unretained historical input file or a new execution.",
+      "matching_reflection_keys": 7248
+    }
+  },
+  "t13_parser_source_sha256": "9cf55c75fe51a9711f7df97138ba2404e2144dcc7c7b1c4c6c9419b78191355a"
+}

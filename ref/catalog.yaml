@@ -13,6 +13,7 @@ catalog_tasks:
   - TM-align
   - gemmi align
   - US-align
+  - OpenStructure
   metric_definition_refs:
   - T01_ca_rmsd_å
   - T01_all-atom_rmsd_å
@@ -20,6 +21,7 @@ catalog_tasks:
   - T01_tm-score
   - T01_gdt-ts
   - T01_per-residue_δca
+  - T01_per_residue_lddt
   inputs_description: fixed PDB|moving PDB|optional chain/atom selection
   gold_standard: cross-tool RMSD agreement within 0.1 Å; or deposited reference pose
   example_dataset: 1UBQ vs 1UBI; or deposited structure vs its AlphaFold model
@@ -280,6 +282,8 @@ catalog_tasks:
   - AFITT (OpenEye)
   - rhofit (Global Phasing)
   - CCP4 libcheck/acedrg
+  - edstats
+  - MolProbity (gold)
   metric_definition_refs:
   - T10_ligand_rscc
   - T10_ligand_rsr
@@ -652,6 +656,7 @@ tools:
   family: non_cctbx
   catalog_tasks_served:
   - T05
+  - T10
 - id: wwPDB validation pipeline
   family: non_cctbx
   catalog_tasks_served:

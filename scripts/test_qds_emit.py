@@ -25,6 +25,7 @@ from __future__ import annotations
 import copy
 import datetime as dt
 import hashlib
+import statistics
 import sys
 import tempfile
 from collections.abc import Callable
@@ -42,7 +43,10 @@ import qds_emit_contract_v3  # noqa: E402
 
 
 EVAL_1SAR = REPO / "data/coscientists/openscientist/EVAL_1sar_cdba2c07_2026-04-24.yaml"
-EVAL_SYNTH = REPO / "data/examples/eval/EVAL_synth_active_site_2026-04-26.yaml"
+EVAL_SYNTH = REPO / "data/examples/eval/EVAL_synth_active_site_2026-09-23.yaml"
+QDS_SYNTH = REPO / "data/examples/qds/QDS_synth_active_site_2026-09-23.yaml"
+SYNTH_QDS_ID = "QDS_synth_active_site_2026-09-23"
+SYNTH_SITE_ID = "synth1_active_site_2026-09-23"
 EVAL_QUALITY = REPO / "data/examples/eval/EVAL_synth_quality_indicators_2026-05-04.yaml"
 
 EXPECTED_GEOMETRY_SLOTS_1SAR = {
@@ -177,8 +181,7 @@ def test_1sar_geometry_slots_all_present() -> None:
 
 def test_synth_local_blocks_present() -> None:
     qds = qds_emit.emit_qds(
-        [EVAL_SYNTH], qds_id="QDS_synth_test", structure_id="synth1",
-        coverage_scope="cumulative",
+        [EVAL_SYNTH], qds_id=SYNTH_QDS_ID, structure_id="synth1",
     )
 
     _check("per_residue_quality" in qds, "synthetic QDS missing per_residue_quality")
@@ -187,13 +190,13 @@ def test_synth_local_blocks_present() -> None:
     _check(prq.get("density_peaks"), "per_residue_quality.density_peaks empty (eval has 1 peak)")
     _check(prq.get("lddt_per_residue"), "per_residue_quality.lddt_per_residue empty (eval has 5 values)")
     _check(
-        {row.get("tool_ref") for row in prq["lddt_per_residue"]} == {"TM-align"},
-        "frozen synthetic QDS no longer matches its immutable source provenance",
+        {row.get("tool_ref") for row in prq["lddt_per_residue"]} == {"OpenStructure"},
+        "active synthetic lDDT must name its intended scorer, not TM-align (#691)",
     )
 
     _check("site_qualities" in qds and qds["site_qualities"], "synthetic QDS missing site_qualities")
     sq = qds["site_qualities"][0]
-    _check(sq["site_ref"] == "synth1_active_site", f"site_ref != synth1_active_site, got {sq.get('site_ref')!r}")
+    _check(sq["site_ref"] == SYNTH_SITE_ID, f"site_ref != {SYNTH_SITE_ID}, got {sq.get('site_ref')!r}")
     _check("ligand_quality" in sq, "SiteQuality.ligand_quality missing (eval has scope=ligand measurements)")
     lq = sq["ligand_quality"]
     _check("rscc" in lq, "ligand_quality.rscc missing")
@@ -211,6 +214,91 @@ def test_synth_local_blocks_present() -> None:
     print("PASS  test_synth_local_blocks_present  (per_residue + sites + ligand + pairwise + tool_recs)")
 
 
+def test_corrected_synth_scientific_contract_and_replay() -> None:
+    """The active fixture exercises valid semantics without inventing a real run."""
+    import check_pass_status
+
+    doc = yaml.safe_load(EVAL_SYNTH.read_text())
+    run = doc["evaluation_runs"][0]
+    values = run["per_residue_values"]
+    members = run["sites"][0]["member_residue_refs"]
+    expected_members = [f"synth1:A:{number}" for number in (33, 34, 35, 36, 38)]
+    _check(members == expected_members, "corrected site membership must be the exact five residues")
+    _check([row["residue_ref"] for row in values] == members, "lDDT array must cover exactly the site")
+    _check({row["tool_ref"] for row in values} == {"OpenStructure"}, "lDDT tool provenance")
+    numbers = [row["value"]["value_numeric"] for row in values]
+    summary = next(row for row in run["measurements"]
+                   if row["metric_definition_ref"] == "T01_per_residue_lddt")
+    observed = summary["oracle_measure"]
+    _check(summary["scope_selector"] == ",".join(members), "lDDT selector must not include residue37")
+    expected_stats = {"value_numeric": statistics.mean(numbers), "mean": statistics.mean(numbers),
+                      "std_dev": statistics.pstdev(numbers), "min_value": min(numbers),
+                      "max_value": max(numbers), "count": len(numbers)}
+    _check(all(abs(observed[key] - value) < 1e-12 for key, value in expected_stats.items()),
+           "all summary statistics must be re-derived from the five values")
+    _check("population" in summary.get("notes", "").lower(), "SD convention must be explicit")
+    for row in run["measurements"]:
+        _check(row["pass_status"] == "informational", "synthetic examples must not invent quality criteria")
+        _check(not {"pass_criterion", "pass_criterion_ref", "criterion_preconditions"} & row.keys(),
+               "informational rows cannot carry criterion fields")
+        failures: list[str] = []
+        check_pass_status.check_measurement(
+            EVAL_SYNTH, EVAL_SYNTH.name, run["id"], dt.date(2026, 9, 23),
+            row, {}, False, failures, [], set(), set(),
+        )
+        _check(not failures, f"active fixture must pass without legacy exceptions: {failures}")
+    by_metric = {row["metric_definition_ref"]: row for row in run["measurements"]}
+    _check(by_metric["T10_ligand_rscc"]["oracle_tool_ref"] == "edstats", "RSCC intended scorer")
+    _check(by_metric["T10_protein-ligand_hbond_count"]["oracle_tool_ref"] == "MolProbity (gold)",
+           "H-bond count must name probe's catalog tool, not sfcalc")
+    _check(run["ligands"][0]["pdb_chemical_id"] == "ATP", "use a plausible H-bonding ligand, not Ca")
+    pair = run["pairwise_comparisons"][0]
+    _check(pair["verdict"].startswith("equivalent"), "similarity cannot imply improvement")
+    _check(pair.get("tm_score") and pair.get("lddt"), "pairwise reporting includes TM-score and lDDT")
+    _check("OpenStructure" in pair["lddt"].get("notes", ""), "lDDT scorer must be distinct from alignment method")
+
+    live = qds_emit.emit_qds([EVAL_SYNTH], qds_id=SYNTH_QDS_ID, structure_id="synth1")
+    replay = qds_emit.emit_qds(
+        [EVAL_SYNTH], qds_id=SYNTH_QDS_ID, structure_id="synth1",
+        emitter_contract_version="3", require_pinned_tool_snapshot=True,
+    )
+    committed = yaml.safe_load(QDS_SYNTH.read_text())["quality_data_sheets"][0]
+    _check(live == replay == committed, "corrected QDS must equal live emission and pinned replay")
+    _check(QDS_SYNTH.read_text() == yaml.safe_dump(
+        {"quality_data_sheets": [replay]}, sort_keys=False, allow_unicode=True,
+        default_flow_style=False,
+    ), "corrected QDS must use canonical bytes")
+    _check("synthetic" in committed["headline_verdict"].lower(), "headline must disclaim real measurement")
+    rec_ids = {row["id"] for row in committed["tool_recommendations_applied"]}
+    assumption_ids = {row["id"] for row in committed["assumptions_report"]}
+    _check("REC_T05_clashscore_top_performing_2026_09_23" in rec_ids
+           and "REC_T05_clashscore_top_performing" not in rec_ids,
+           "current recommendation must retire the old H-builder explanation (#727)")
+    _check("ASSUM_molprobity_h_atom_placement_2026_09_23" in assumption_ids
+           and "ASSUM_molprobity_h_atom_placement" not in assumption_ids,
+           "current assumption must retire the old H-builder explanation (#727)")
+    corrected_recommendation = next(row for row in committed["tool_recommendations_applied"]
+                                    if row["id"] == "REC_T05_clashscore_top_performing_2026_09_23")
+    corrected_assumption = next(row for row in committed["assumptions_report"]
+                                if row["id"] == "ASSUM_molprobity_h_atom_placement_2026_09_23")
+    for text in (corrected_recommendation["justification"], corrected_assumption["description"]):
+        _check("unresolved" in text and "separately" in text,
+               "#728 pipeline residual must not be promoted to an isolated counting mechanism")
+        _check("residual comes from" not in text and "different H-build / water handling" not in text,
+               "#727/#728 retired causal attribution must not reappear in current QDS")
+    rotamer_id = "ASSUM_molprobity_rotamer_library_discreteness_2026_09_23"
+    _check(rotamer_id in assumption_ids
+           and "ASSUM_molprobity_rotamer_library_discreteness" not in assumption_ids,
+           "#729 current assumption must retire the favored/outlier equivalence")
+    rotamer = next(row for row in committed["assumptions_report"] if row["id"] == rotamer_id)
+    _check("Allowed" in rotamer["description"] and "does not imply an outlier" in rotamer["description"],
+           "#729 emitted rotamer assumption must retain the Allowed category")
+    outlier = next(row for row in run["residue_outliers"] if row["outlier_kind"] == "rotamer")
+    _check("Invented OUTLIER" in outlier["details"] and "Allowed" in outlier["details"],
+           "#729 invented rotamer annotation must not infer classification from an angular offset")
+    print("PASS  corrected synthetic scope/statistics/provenance/status and immutable replay")
+
+
 def test_negative_site_scope_without_site_decl_fails() -> None:
     """Drop the Site declaration but keep a scope=site measurement; expect failure."""
     doc = yaml.safe_load(EVAL_SYNTH.read_text())
@@ -226,8 +314,7 @@ def test_negative_site_scope_without_site_decl_fails() -> None:
 
         assert_raises_completeness(
             lambda: qds_emit.emit_qds(
-                [bad_path], qds_id="QDS_bad_test", structure_id="synth1",
-                coverage_scope="cumulative",
+                [bad_path], qds_id=SYNTH_QDS_ID, structure_id="synth1",
             ),
             ["scope=site", "declared Site"],
             "site-scope measurement had no Site declared",
@@ -243,8 +330,7 @@ def _emit_mutated_synth(mutator: Callable[[dict], None], name: str) -> None:
         bad_path = Path(tmpdir) / f"{name}.yaml"
         bad_path.write_text(yaml.safe_dump(doc, sort_keys=False, allow_unicode=True))
         qds_emit.emit_qds(
-            [bad_path], qds_id=f"QDS_{name}", structure_id="synth1",
-            coverage_scope="cumulative",
+            [bad_path], qds_id=SYNTH_QDS_ID, structure_id="synth1",
         )
 
 
@@ -282,7 +368,7 @@ def test_negative_missing_ligand_declaration_fails() -> None:
 
     assert_raises_completeness(
         lambda: _emit_mutated_synth(mutate, "missing_ligand"),
-        ["ligand_ref", "synth1:A:CA33", "not declared"],
+        ["ligand_ref", "synth1:A:ATP201", "not declared"],
         "a Site referred to an undeclared Ligand",
     )
     print("PASS  test_negative_missing_ligand_declaration_fails")
@@ -3006,6 +3092,7 @@ def main() -> int:
     test_contract_v3_uses_typed_partial_sheet_context()
     test_1sar_geometry_slots_all_present()
     test_synth_local_blocks_present()
+    test_corrected_synth_scientific_contract_and_replay()
     test_negative_site_scope_without_site_decl_fails()
     test_negative_unknown_site_selector_fails()
     test_negative_unknown_ligand_selector_fails()

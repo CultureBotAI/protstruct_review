@@ -69,6 +69,41 @@ assumptions:
     evidence_refs:
       - EVAL_1sar_cdba2c07_2026-04-24
 
+  - id: ASSUM_molprobity_h_atom_placement_2026_09_23
+    as_of_date: '2026-09-23'
+    effective_at: '2026-09-23T06:55:50+00:00'
+    supersedes_assumption_ref: ASSUM_molprobity_h_atom_placement
+    kind: explicit
+    scope: tool
+    title: Separate hydrogen placement from clash-counting conventions
+    description: >-
+      Clashscore depends on H coordinates and the counting implementation.
+      The retained matched-H-convention benchmark reports a pipeline
+      residual, but the two paths build hydrogens separately and do not
+      demonstrate identical H coordinates or hetero dictionaries. Its causal
+      decomposition is unresolved. Electron-cloud versus nuclear placement
+      deliberately changes H geometry, while distinct hetero dictionaries
+      can change construction even for the same reduce version. None of
+      these observations establishes the cause of the unmatched historical
+      1SAR headline difference (3.13 versus 3.63).
+    consequences: >-
+      A clashscore difference alone cannot identify a hydrogen-placement
+      defect. Same-builder agreement is not independent confirmation of
+      hydrogen construction, and the old headline difference must not be
+      presented as a measured H-builder effect.
+    mitigation: >-
+      Bind comparisons to the exact coordinate subject, H-build version,
+      flags, and hetero dictionary. Check the resulting H coordinates and
+      report the clash-counting paths separately. Apply registry agreement
+      criteria only when their matched-convention preconditions are met.
+    status: unchecked
+    tool_ref: MolProbity (gold)
+    evidence_refs:
+      - ref/research/tolerance_benchmark_clashscore_h.md
+      - ref/research/tolerance_benchmark_flip_sets.md
+      - scripts/bench_t05_clashscore_h.py
+    notes: Registry correction from retained benchmark evidence; no new oracle run.
+
   - id: ASSUM_molprobity_water_altloc
     as_of_date: '2026-04-30'
     effective_at: '2026-04-30T00:00:00+00:00'
@@ -100,6 +135,29 @@ assumptions:
     mitigation: >-
       Surface the residue ids of all outliers via PerResidueQuality.
       outliers[] with the actual χ deviation as metric_value.
+    status: mitigated
+    tool_ref: MolProbity (gold)
+
+  - id: ASSUM_molprobity_rotamer_library_discreteness_2026_09_23
+    as_of_date: '2026-09-23'
+    effective_at: '2026-09-23T06:55:50+00:00'
+    supersedes_assumption_ref: ASSUM_molprobity_rotamer_library_discreteness
+    kind: implicit
+    scope: tool
+    title: Rotamer classification includes an Allowed region
+    description: >-
+      MolProbity distinguishes Favored, Allowed, and OUTLIER classifications.
+      Outside the favored region does not imply an outlier. Classification
+      depends on the residue-specific joint torsion-library score, not one
+      χ angle's distance from a favored boundary.
+    consequences: >-
+      A headline outlier percentage does not distinguish borderline from severe
+      outliers; an angular offset alone cannot establish the classification.
+    mitigation: >-
+      Retain residue identity and the reported classification and score when
+      available. Do not infer OUTLIER from a not-favored label or a single-angle
+      deviation. See scripts/bench_vs_deposited.py's three-category score
+      definitions and ref/research/tolerance_benchmark_round7.md.
     status: mitigated
     tool_ref: MolProbity (gold)
 

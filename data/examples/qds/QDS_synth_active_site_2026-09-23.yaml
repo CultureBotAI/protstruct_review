@@ -1,0 +1,618 @@
+quality_data_sheets:
+- id: QDS_synth_active_site_2026-09-23
+  structure_ref: synth1
+  derived_from_evaluation_run_refs:
+  - EVAL_synth_active_site_2026-09-23
+  issued_at: '2026-09-23T06:58:00+00:00'
+  emitter_contract_version: '3'
+  emission_context_ref: QDS_synth_active_site_2026-09-23_emission_context
+  identity_block:
+    id: QDS_synth_active_site_2026-09-23_identity
+    pdb_id: synth1
+    description: Fictional ATP-binding protein used only as a synthetic QDS rendering
+      fixture. synth1 is a test identifier, not a deposited PDB accession. All numeric
+      values and annotations are invented; no coordinate model, map, experimental
+      measurement, or oracle execution exists.
+  subject_ref: synthetic:active-site:2026-09-23
+  coverage_scope: partial
+  scope_notes: 'Partial synthetic rendering coverage of selected T01/T05/T10 fields
+    only: six illustrative scalar rows, five per-residue scores, one ATP-binding site,
+    one fictional ligand, two outliers, one density peak, and one pairwise comparison.
+    This is neither a measured protein-quality assessment nor complete task or pipeline
+    validation; no other historical measurements are carried forward.'
+  geometry_summary:
+    id: QDS_synth_active_site_2026-09-23_geometry
+    clashscore:
+      value_numeric: 3.0
+      source_measurement_ref: EVAL_synth_active_site_2026-09-23_M_001
+      source_evaluation_run_ref: EVAL_synth_active_site_2026-09-23
+      metric_definition_ref: T05_clashscore
+      oracle_tool_ref: MolProbity (gold)
+      oracle_family: non_cctbx
+      pass_status: informational
+      subject_ref: synthetic:active-site:2026-09-23
+      stage: final
+      scope: complex
+      notes: Invented whole-model MolProbity-style clashscore for rendering coverage;
+        no geometry validation was executed and no criterion is applied.
+  pairwise_comparisons:
+  - id: EVAL_synth_active_site_2026-09-23_pair_001
+    candidate_ref: synth1
+    reference_ref: synth1_starting
+    reference_kind: starting_model
+    alignment_method: TM-align
+    atoms_aligned: Cα
+    residues_aligned: 96
+    tm_score:
+      value_numeric: 0.987
+      notes: Illustrative TM-align score normalized to the fictional 96-residue starting
+        reference; no alignment was executed.
+    ca_rmsd_a:
+      value_numeric: 0.41
+      unit: Å
+      notes: Illustrative TM-align Cα RMSD for the fictional 96-residue whole-structure
+        pair; no alignment was executed.
+    verdict: equivalent (illustrative structural preservation only; these invented
+      similarity values establish neither measured quality nor improvement)
+    subject_ref: synthetic:active-site:2026-09-23
+    reference_subject_ref: synthetic:active-site:starting:2026-09-23
+    lddt:
+      value_numeric: 0.96
+      unit: fraction
+      notes: Illustrative OpenStructure-style global Cα lDDT for the entire fictional
+        96-residue pair, with 15 Å inclusion radius and 0.5/1/2/4 Å distance cutoffs.
+        This score is invented, not measured by TM-align or OpenStructure, and is
+        independent of the arithmetic mean 0.892 over the five listed site residues;
+        the full reference-distance weights are not supplied.
+    source_evaluation_run_ref: EVAL_synth_active_site_2026-09-23
+    source_row_ref: EVAL_synth_active_site_2026-09-23_pair_001
+  per_residue_quality:
+    id: QDS_synth_active_site_2026-09-23_per_residue
+    lddt_per_residue:
+    - id: EVAL_synth_active_site_2026-09-23_lddt_001
+      residue_ref: synth1:A:33
+      value:
+        value_numeric: 0.91
+        unit: fraction
+        notes: Invented OpenStructure-style per-residue Cα lDDT against the fictional
+          starting subject; no oracle was executed.
+      metric_definition_ref: T01_per_residue_lddt
+      tool_ref: OpenStructure
+      subject_ref: synthetic:active-site:2026-09-23
+      source_evaluation_run_ref: EVAL_synth_active_site_2026-09-23
+      source_row_ref: EVAL_synth_active_site_2026-09-23_lddt_001
+    - id: EVAL_synth_active_site_2026-09-23_lddt_002
+      residue_ref: synth1:A:34
+      value:
+        value_numeric: 0.88
+        unit: fraction
+        notes: Invented OpenStructure-style per-residue Cα lDDT against the fictional
+          starting subject; no oracle was executed.
+      metric_definition_ref: T01_per_residue_lddt
+      tool_ref: OpenStructure
+      subject_ref: synthetic:active-site:2026-09-23
+      source_evaluation_run_ref: EVAL_synth_active_site_2026-09-23
+      source_row_ref: EVAL_synth_active_site_2026-09-23_lddt_002
+    - id: EVAL_synth_active_site_2026-09-23_lddt_003
+      residue_ref: synth1:A:35
+      value:
+        value_numeric: 0.93
+        unit: fraction
+        notes: Invented OpenStructure-style per-residue Cα lDDT against the fictional
+          starting subject; no oracle was executed.
+      metric_definition_ref: T01_per_residue_lddt
+      tool_ref: OpenStructure
+      subject_ref: synthetic:active-site:2026-09-23
+      source_evaluation_run_ref: EVAL_synth_active_site_2026-09-23
+      source_row_ref: EVAL_synth_active_site_2026-09-23_lddt_003
+    - id: EVAL_synth_active_site_2026-09-23_lddt_004
+      residue_ref: synth1:A:36
+      value:
+        value_numeric: 0.79
+        unit: fraction
+        notes: Invented OpenStructure-style per-residue Cα lDDT against the fictional
+          starting subject; no oracle was executed.
+      metric_definition_ref: T01_per_residue_lddt
+      tool_ref: OpenStructure
+      subject_ref: synthetic:active-site:2026-09-23
+      source_evaluation_run_ref: EVAL_synth_active_site_2026-09-23
+      source_row_ref: EVAL_synth_active_site_2026-09-23_lddt_004
+    - id: EVAL_synth_active_site_2026-09-23_lddt_005
+      residue_ref: synth1:A:38
+      value:
+        value_numeric: 0.95
+        unit: fraction
+        notes: Invented OpenStructure-style per-residue Cα lDDT against the fictional
+          starting subject; no oracle was executed.
+      metric_definition_ref: T01_per_residue_lddt
+      tool_ref: OpenStructure
+      subject_ref: synthetic:active-site:2026-09-23
+      source_evaluation_run_ref: EVAL_synth_active_site_2026-09-23
+      source_row_ref: EVAL_synth_active_site_2026-09-23_lddt_005
+    outliers:
+    - id: EVAL_synth_active_site_2026-09-23_outlier_001
+      residue_ref: synth1:A:39
+      outlier_kind: ramachandran
+      severity: moderate
+      tool_ref: MolProbity (gold)
+      details: Illustrative MolProbity-style φ,ψ outside 99.95th percentile region;
+        invented fixture annotation, not an executed validation result.
+      subject_ref: synthetic:active-site:2026-09-23
+      source_evaluation_run_ref: EVAL_synth_active_site_2026-09-23
+      source_row_ref: EVAL_synth_active_site_2026-09-23_outlier_001
+    - id: EVAL_synth_active_site_2026-09-23_outlier_002
+      residue_ref: synth1:A:8
+      outlier_kind: rotamer
+      severity: low
+      tool_ref: MolProbity (gold)
+      details: Invented OUTLIER classification for rendering only; no torsion-library
+        score was calculated and no validation tool was executed. This is not inferred
+        from being outside the favored region, which can also mean Allowed.
+      subject_ref: synthetic:active-site:2026-09-23
+      source_evaluation_run_ref: EVAL_synth_active_site_2026-09-23
+      source_row_ref: EVAL_synth_active_site_2026-09-23_outlier_002
+    density_peaks:
+    - id: EVAL_synth_active_site_2026-09-23_peak_001
+      sigma_level: 5.2
+      coordinates_xyz:
+      - 12.34
+      - 8.97
+      - 21.05
+      nearest_atom_residue_ref: synth1:A:33
+      nearest_atom_distance_a: 2.65
+      interpretation: Illustrative unmodelled-water annotation attributed to the phenix.find_peaks_holes
+        path; no map or oracle run exists for this fixture.
+      tool_ref: phenix.find_peaks_holes
+      subject_ref: synthetic:active-site:2026-09-23
+      source_evaluation_run_ref: EVAL_synth_active_site_2026-09-23
+      source_row_ref: EVAL_synth_active_site_2026-09-23_peak_001
+  site_qualities:
+  - id: QDS_synth_active_site_2026-09-23_site_quality_synth1_active_site_2026-09-23
+    site_ref: synth1_active_site_2026-09-23
+    site_clashscore:
+      value_numeric: 7.2
+      source_measurement_ref: EVAL_synth_active_site_2026-09-23_M_002
+      source_evaluation_run_ref: EVAL_synth_active_site_2026-09-23
+      metric_definition_ref: T05_clashscore
+      oracle_tool_ref: MolProbity (gold)
+      oracle_family: non_cctbx
+      pass_status: informational
+      subject_ref: synthetic:active-site:2026-09-23
+      stage: final
+      scope: site
+      scope_selector: synth1_active_site_2026-09-23
+      notes: Invented site-restricted MolProbity-style clashscore over the five declared
+        members. Its contrast with the illustrative global value exercises local rendering;
+        it is not an observed regression or a criterion failure.
+    site_rmsd_to_reference_a:
+      value_numeric: 0.62
+      unit: Å
+      source_measurement_ref: EVAL_synth_active_site_2026-09-23_M_003
+      source_evaluation_run_ref: EVAL_synth_active_site_2026-09-23
+      metric_definition_ref: T01_ca_rmsd_å
+      oracle_tool_ref: TM-align
+      oracle_family: non_cctbx
+      pass_status: informational
+      subject_ref: synthetic:active-site:2026-09-23
+      reference_subject_ref: synthetic:active-site:starting:2026-09-23
+      stage: final
+      scope: site
+      scope_selector: synth1_active_site_2026-09-23
+      notes: Invented TM-align-style site Cα RMSD for the five declared members against
+        the fictional starting subject; no superposition was executed and no quality-improvement
+        claim is made.
+    ligand_quality:
+      id: QDS_synth_active_site_2026-09-23_ligand_quality_synth1:A:ATP201
+      ligand_ref: synth1:A:ATP201
+      rscc:
+        value_numeric: 0.78
+        source_measurement_ref: EVAL_synth_active_site_2026-09-23_M_004
+        source_evaluation_run_ref: EVAL_synth_active_site_2026-09-23
+        metric_definition_ref: T10_ligand_rscc
+        oracle_tool_ref: edstats
+        oracle_family: non_cctbx
+        pass_status: informational
+        subject_ref: synthetic:active-site:2026-09-23
+        stage: final
+        scope: ligand
+        scope_selector: synth1:A:ATP201
+        notes: Invented edstats-style ATP RSCC for rendering coverage. No maps or
+          density calculation exist; this value has no fixed quality threshold and
+          does not establish marginal or acceptable ligand fit.
+      protein_ligand_hbond_count:
+        value_numeric: 2.0
+        unit: count
+        source_measurement_ref: EVAL_synth_active_site_2026-09-23_M_005
+        source_evaluation_run_ref: EVAL_synth_active_site_2026-09-23
+        metric_definition_ref: T10_protein-ligand_hbond_count
+        oracle_tool_ref: MolProbity (gold)
+        oracle_family: non_cctbx
+        pass_status: informational
+        subject_ref: synthetic:active-site:2026-09-23
+        stage: final
+        scope: ligand
+        scope_selector: synth1:A:ATP201
+        notes: Invented standalone MolProbity/probe-style protein–ATP hydrogen-bond
+          count; ATP is a fictional molecular ligand, not a calcium ion. No contact
+          calculation was executed.
+  cross_tool_coverage:
+    id: QDS_synth_active_site_2026-09-23_coverage
+    task_coverage:
+    - id: QDS_synth_active_site_2026-09-23_coverage_T01_T01_ca_rmsd_7c73d457425f
+      catalog_task_ref: T01
+      cctbx_oracles: []
+      non_cctbx_oracles:
+      - TM-align
+      gap_status: non-cctbx only
+      metric_definition_ref: T01_ca_rmsd_å
+      subject_ref: synthetic:active-site:2026-09-23
+      reference_subject_ref: synthetic:active-site:starting:2026-09-23
+      stage: final
+      scope: site
+      scope_selector: synth1_active_site_2026-09-23
+    - id: QDS_synth_active_site_2026-09-23_coverage_T01_T01_per_residue_lddt_27ae1d1cfa30
+      catalog_task_ref: T01
+      cctbx_oracles: []
+      non_cctbx_oracles:
+      - OpenStructure
+      gap_status: non-cctbx only
+      metric_definition_ref: T01_per_residue_lddt
+      subject_ref: synthetic:active-site:2026-09-23
+      reference_subject_ref: synthetic:active-site:starting:2026-09-23
+      stage: final
+      scope: residue
+      scope_selector: synth1:A:33,synth1:A:34,synth1:A:35,synth1:A:36,synth1:A:38
+    - id: QDS_synth_active_site_2026-09-23_coverage_T05_T05_clashscore_b14ddf14c4a1
+      catalog_task_ref: T05
+      cctbx_oracles: []
+      non_cctbx_oracles:
+      - MolProbity (gold)
+      gap_status: non-cctbx only
+      metric_definition_ref: T05_clashscore
+      subject_ref: synthetic:active-site:2026-09-23
+      stage: final
+      scope: complex
+    - id: QDS_synth_active_site_2026-09-23_coverage_T05_T05_clashscore_b068f02c9a2e
+      catalog_task_ref: T05
+      cctbx_oracles: []
+      non_cctbx_oracles:
+      - MolProbity (gold)
+      gap_status: non-cctbx only
+      metric_definition_ref: T05_clashscore
+      subject_ref: synthetic:active-site:2026-09-23
+      stage: final
+      scope: site
+      scope_selector: synth1_active_site_2026-09-23
+    - id: QDS_synth_active_site_2026-09-23_coverage_T10_T10_ligand_rscc_98d512819df9
+      catalog_task_ref: T10
+      cctbx_oracles: []
+      non_cctbx_oracles:
+      - edstats
+      gap_status: non-cctbx only
+      metric_definition_ref: T10_ligand_rscc
+      subject_ref: synthetic:active-site:2026-09-23
+      stage: final
+      scope: ligand
+      scope_selector: synth1:A:ATP201
+    - id: QDS_synth_active_site_2026-09-23_coverage_T10_T10_protein_ligand_hbond_count_4fb431eb95c7
+      catalog_task_ref: T10
+      cctbx_oracles: []
+      non_cctbx_oracles:
+      - MolProbity (gold)
+      gap_status: non-cctbx only
+      metric_definition_ref: T10_protein-ligand_hbond_count
+      subject_ref: synthetic:active-site:2026-09-23
+      stage: final
+      scope: ligand
+      scope_selector: synth1:A:ATP201
+  tool_recommendations_applied:
+  - id: REC_T01_ca_rmsd_alternative
+    metric_definition_ref: T01_ca_rmsd_å
+    tool_ref: gemmi align
+    role: alternative
+    rank: 2
+    justification: Lightweight, scriptable second oracle. Use when TM-align is unavailable
+      or when a non-Zhang-lab implementation is needed.
+    as_of_date: '2026-04-25'
+    effective_at: '2026-04-25T00:00:00+00:00'
+  - id: REC_T01_ca_rmsd_top_considered
+    metric_definition_ref: T01_ca_rmsd_å
+    tool_ref: TM-align
+    role: top_considered
+    rank: 1
+    justification: Sequence-independent superposition; CASP/community gold-standard
+      for pair-of-structures RMSD when alignment quality matters.
+    evidence_refs:
+    - Zhang2004
+    as_of_date: '2026-04-25'
+    effective_at: '2026-04-25T00:00:00+00:00'
+  - id: REC_T01_ca_rmsd_top_performing
+    metric_definition_ref: T01_ca_rmsd_å
+    tool_ref: TM-align
+    role: top_performing
+    rank: 1
+    justification: Matched phenix.superpose_models within 0.03 Å on the 1SAR eval
+      (TM-align 0.41 Å vs PHENIX 0.43 Å vs agent-reported 0.438 Å).
+    evidence_refs:
+    - EVAL_1sar_cdba2c07_2026-04-24
+    as_of_date: '2026-04-25'
+    effective_at: '2026-04-25T00:00:00+00:00'
+  - id: REC_T01_per_residue_lddt_top_considered
+    metric_definition_ref: T01_per_residue_lddt
+    tool_ref: OpenStructure
+    role: top_considered
+    rank: 1
+    justification: OST `lddt` CLI emits per-residue lDDT in one invocation. Closes
+      the per-residue lDDT cctbx-only gap.
+    evidence_refs:
+    - Mariani2013
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
+  - id: REC_T05_clashscore_alternative_phenix
+    metric_definition_ref: T05_clashscore
+    tool_ref: mmtbx.validation_summary
+    role: alternative
+    rank: 2
+    justification: cctbx wrapper. Acceptable as a second opinion but does not satisfy
+      the trust model on its own (PHENIX-grading-PHENIX). Use with the Richardson-lab
+      standalone pipeline alongside.
+    as_of_date: '2026-04-25'
+    effective_at: '2026-04-25T00:00:00+00:00'
+  - id: REC_T05_clashscore_top_considered
+    metric_definition_ref: T05_clashscore
+    tool_ref: MolProbity (gold)
+    role: top_considered
+    rank: 1
+    justification: Standalone Richardson-lab pipeline (probe + reduce) is the catalog
+      gold standard. Same code that powers the wwPDB validation report.
+    evidence_refs:
+    - Davis2007
+    - Williams2018
+    as_of_date: '2026-04-25'
+    effective_at: '2026-04-25T00:00:00+00:00'
+  - id: REC_T05_clashscore_top_performing_2026_09_23
+    metric_definition_ref: T05_clashscore
+    tool_ref: MolProbity (gold)
+    role: top_performing
+    rank: 1
+    justification: The retained matched-H-convention benchmark reports a pipeline
+      residual between the cctbx path and standalone reduce/probe. Both paths build
+      hydrogens separately; identical H coordinates and hetero dictionaries were not
+      demonstrated, so the cause of the residual is unresolved. The historical 1SAR
+      headline difference (3.13 versus 3.63) likewise does not isolate an H-builder
+      or counting effect. Its causal explanation is withdrawn; this registry correction
+      claims no new run.
+    evidence_refs:
+    - ref/research/tolerance_benchmark_clashscore_h.md
+    - ref/research/tolerance_benchmark_flip_sets.md
+    - scripts/bench_t05_clashscore_h.py
+    as_of_date: '2026-09-23'
+    effective_at: '2026-09-23T06:55:50+00:00'
+    supersedes_recommendation_ref: REC_T05_clashscore_top_performing
+  - id: REC_T10_ligand_rscc_top_considered
+    metric_definition_ref: T10_ligand_rscc
+    tool_ref: edstats
+    role: top_considered
+    rank: 1
+    justification: 'CCP4 edstats: per-residue/per-ligand real-space correlation (RSCC)
+      and RSR, independent of PHENIX.'
+    as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
+  - id: REC_T10_protein-ligand_hbond_count_top_considered
+    metric_definition_ref: T10_protein-ligand_hbond_count
+    tool_ref: MolProbity (gold)
+    role: top_considered
+    rank: 1
+    justification: 'Richardson-lab MolProbity: gold standard for clash/Ramachandran/rotamer/Cβ,
+      probe-based contacts and H-bonds.'
+    as_of_date: '2026-07-21'
+    effective_at: '2026-07-21T00:00:00+00:00'
+  assumptions_report:
+  - id: ASSUM_edstats_needs_2fofc_dfofc_in_mtz
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
+    kind: explicit
+    scope: tool
+    title: edstats requires both 2mFo-DFc AND mFo-DFc in the input MTZ
+    description: '`edstats` reads weighted map coefficients (FWT/PHWT for 2mFo-DFc,
+      DELFWT/PHDELWT for mFo-DFc) from the input MTZ. Refining with REFMAC NCYC=0
+      produces both columns; `phenix.refine` with `output.map_coefficients` does the
+      same.'
+    consequences: Running edstats on a plain F-obs MTZ will fail with cryptic "ERROR(S)
+      in input" without naming the missing column.
+    mitigation: Pre-stage by running REFMAC NCYC=0 on the model+data first; use that
+      output MTZ as edstats input. Already in the pipeline for 1SAR.
+    status: unchecked
+    tool_ref: edstats
+    notes: The 1SAR refmac NCYC=0 run wrote refmac_out.mtz with FWT/PHWT/ DELFWT/PHDELWT
+      — the right input shape. Specific keyword-input syntax is the remaining wiring
+      task.
+  - id: ASSUM_molprobity_h_atom_placement_2026_09_23
+    as_of_date: '2026-09-23'
+    effective_at: '2026-09-23T06:55:50+00:00'
+    supersedes_assumption_ref: ASSUM_molprobity_h_atom_placement
+    kind: explicit
+    scope: tool
+    title: Separate hydrogen placement from clash-counting conventions
+    description: Clashscore depends on H coordinates and the counting implementation.
+      The retained matched-H-convention benchmark reports a pipeline residual, but
+      the two paths build hydrogens separately and do not demonstrate identical H
+      coordinates or hetero dictionaries. Its causal decomposition is unresolved.
+      Electron-cloud versus nuclear placement deliberately changes H geometry, while
+      distinct hetero dictionaries can change construction even for the same reduce
+      version. None of these observations establishes the cause of the unmatched historical
+      1SAR headline difference (3.13 versus 3.63).
+    consequences: A clashscore difference alone cannot identify a hydrogen-placement
+      defect. Same-builder agreement is not independent confirmation of hydrogen construction,
+      and the old headline difference must not be presented as a measured H-builder
+      effect.
+    mitigation: Bind comparisons to the exact coordinate subject, H-build version,
+      flags, and hetero dictionary. Check the resulting H coordinates and report the
+      clash-counting paths separately. Apply registry agreement criteria only when
+      their matched-convention preconditions are met.
+    status: unchecked
+    tool_ref: MolProbity (gold)
+    evidence_refs:
+    - ref/research/tolerance_benchmark_clashscore_h.md
+    - ref/research/tolerance_benchmark_flip_sets.md
+    - scripts/bench_t05_clashscore_h.py
+    notes: Registry correction from retained benchmark evidence; no new oracle run.
+  - id: ASSUM_molprobity_rotamer_library_discreteness_2026_09_23
+    as_of_date: '2026-09-23'
+    effective_at: '2026-09-23T06:55:50+00:00'
+    supersedes_assumption_ref: ASSUM_molprobity_rotamer_library_discreteness
+    kind: implicit
+    scope: tool
+    title: Rotamer classification includes an Allowed region
+    description: MolProbity distinguishes Favored, Allowed, and OUTLIER classifications.
+      Outside the favored region does not imply an outlier. Classification depends
+      on the residue-specific joint torsion-library score, not one χ angle's distance
+      from a favored boundary.
+    consequences: A headline outlier percentage does not distinguish borderline from
+      severe outliers; an angular offset alone cannot establish the classification.
+    mitigation: Retain residue identity and the reported classification and score
+      when available. Do not infer OUTLIER from a not-favored label or a single-angle
+      deviation. See scripts/bench_vs_deposited.py's three-category score definitions
+      and ref/research/tolerance_benchmark_round7.md.
+    status: mitigated
+    tool_ref: MolProbity (gold)
+  - id: ASSUM_molprobity_top8000_reference
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
+    kind: implicit
+    scope: tool
+    title: Top8000 reference distribution is high-resolution
+    description: MolProbity's percentile rankings and outlier definitions come from
+      Top8000, a corpus of high-resolution (≤ 2.0 Å) deposited structures. Applying
+      these to a 3.0 Å model still produces a percentile, but the threshold for "outlier"
+      was set against tighter geometry than the model can deliver.
+    consequences: Mid-resolution models (2.5–3.5 Å) accumulate "outliers" that are
+      not actual modelling errors but resolution-driven coordinate uncertainty. The
+      published rate can look worse than the model is.
+    mitigation: Pair every MolProbity number with the model's resolution; cite the
+      resolution-bin percentile (wwPDB validation report's column) rather than the
+      all-archive percentile when comparing across datasets.
+    status: unchecked
+    tool_ref: MolProbity (gold)
+    evidence_refs:
+    - Williams2018
+  - id: ASSUM_molprobity_water_altloc
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
+    kind: implicit
+    scope: tool
+    title: probe water + altloc filter (`ogt33`)
+    description: '`probe`''s default selection — occupancy > 33% — determines which
+      atoms are eligible to clash. Disordered residues at 30% occupancy drop out of
+      the calculation entirely.'
+    consequences: Clashscore can hide real geometry problems at low-occupancy altlocs
+      — exactly the regions a refinement most needs scrutiny.
+    mitigation: Re-run probe with `--noaltloc` or relaxed occupancy thresholds.
+    status: unchecked
+    tool_ref: MolProbity (gold)
+  - id: ASSUM_ost_lddt_cα_only_mode
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
+    kind: explicit
+    scope: tool
+    title: -c flag computes Cα-only lDDT
+    description: Running `lddt -c` restricts the calculation to Cα atoms (faster,
+      backbone-only). Without -c the full all-atom lDDT is computed. The -c variant
+      is what AlphaFold's pLDDT predicts.
+    consequences: lDDT-Cα is more permissive than all-atom lDDT (it ignores side-chain
+      placement quality entirely).
+    mitigation: 'State which mode was used. For the project: -c is acceptable when
+      the structure is at moderate resolution (≥ 2.5 Å) where side-chain placement
+      is itself uncertain.'
+    status: mitigated
+    tool_ref: OpenStructure
+    evidence_refs:
+    - EVAL_1sar_cdba2c07_2026-04-24
+  - id: ASSUM_ost_lddt_inclusion_radius
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
+    kind: explicit
+    scope: tool
+    title: lDDT inclusion radius (default 15 Å)
+    description: OST's `lddt` CLI defaults to a 15 Å distance inclusion radius. Reducing
+      the radius rewards local fidelity; increasing it rewards extended geometry.
+      Two lDDT scores produced with different radii are not directly comparable.
+    consequences: A 0.97 lDDT at 15 Å is not the same as a 0.97 lDDT at 10 Å. Cross-tool
+      comparisons must use the same radius.
+    mitigation: Always quote the radius in PairwiseComparison.notes when reporting
+      lDDT. Default 15 Å for the project; document any deviation.
+    status: mitigated
+    tool_ref: OpenStructure
+    evidence_refs:
+    - Mariani2013
+  - id: ASSUM_ost_lddt_thresholds
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
+    kind: explicit
+    scope: tool
+    title: lDDT cutoff thresholds (0.5, 1, 2, 4 Å)
+    description: lDDT counts a distance as "preserved" if it falls within any of four
+      cutoffs (0.5 / 1 / 2 / 4 Å). The score is the unweighted mean of the four pass-fractions.
+    consequences: A model can score 0.97 at 4 Å tolerance but <0.5 at the strict 0.5
+      Å cutoff. The headline lDDT averages over all four; sites with sub-Å precision
+      needs need the per-cutoff breakdown.
+    mitigation: OST emits per-cutoff fractions if requested; surface them when the
+      structure claims sub-Å accuracy.
+    status: unchecked
+    tool_ref: OpenStructure
+    evidence_refs:
+    - Mariani2013
+  - id: ASSUM_ost_no_built_in_rama_contour
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
+    kind: implicit
+    scope: tool
+    title: No built-in Top8000 Ramachandran contour
+    description: OST exposes φ/ψ extraction via residue.GetPhiTorsion() / GetPsiTorsion()
+      but does not ship Top8000 contour data for Ramachandran outlier classification.
+      Outlier classification via OST requires either external contour data files or
+      a custom coarse classifier (which mis-fires on the boundary).
+    consequences: OST is not a drop-in replacement for MolProbity's Rama outlier analysis.
+      It IS a drop-in replacement for lDDT, structural comparison, and Cα displacement
+      analysis.
+    mitigation: Do not use OST for headline Rama outlier % numbers. Use it as a φ/ψ
+      extractor where needed; defer outlier classification to MolProbity or a future
+      OST plugin that ships contour data.
+    status: known_violation
+    tool_ref: OpenStructure
+  - id: ASSUM_tmalign_optimal_alignment_drops_residues
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
+    kind: explicit
+    scope: tool
+    title: Sequence-independent — optimal Cα subset
+    description: TM-align finds the optimal Cα subset by dynamic programming and drops
+      residues from the score that don't fit the alignment. The `Aligned length` field
+      tells you how many were used.
+    consequences: For near-identical structures TM-align produces a more generous
+      alignment than LSQ-based superposition. RMSD reported next to a TM-align alignment
+      is over a different atom set than RMSD reported next to a phenix.superpose_models
+      alignment.
+    mitigation: Quote `aligned_length` in PairwiseComparison.residues_aligned. Quote
+      both LSQ and TM-align RMSD when reporting both.
+    status: mitigated
+    tool_ref: TM-align
+  - id: ASSUM_tmalign_tm_score_normaliser
+    as_of_date: '2026-04-30'
+    effective_at: '2026-04-30T00:00:00+00:00'
+    kind: implicit
+    scope: tool
+    title: TM-score is normalised by the FIRST input length
+    description: '`TMalign A.pdb B.pdb` normalises TM-score by the length of A. Swapping
+      arguments swaps the normaliser and produces a slightly different score.'
+    consequences: Reporting "TM-score = 0.987" without identifying which input was
+      first leaves a 0.5–2 % ambiguity.
+    mitigation: Always state which structure was the reference (the normaliser); record
+      both TM-scores when chains have different lengths.
+    status: mitigated
+    tool_ref: TM-align
+  headline_verdict: 'Synthetic rendering fixture only: no real structure, map, coordinate
+    comparison, or oracle measurement was performed. Invented global/site clashscores,
+    ATP RSCC and hydrogen bonds, residue-level lDDT, outliers, one density peak, and
+    pairwise similarity exercise selected QDS branches. Every scalar is informational;
+    no criterion outcome or quality improvement is asserted.'

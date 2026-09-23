@@ -118,6 +118,7 @@ catalog_tasks:
   - RosettaHoles2
   - ProSA
   - Verify3D
+  - protstruct retained-coordinate audit
   metric_definition_refs:
   - T05_clashscore
   - T05_ramachandran_favored
@@ -134,6 +135,9 @@ catalog_tasks:
   - T05_packing_z_score
   - T05_unsatisfied_buried_hbond_count
   - T05_b_factor_outlier_z
+  - T05_total_atoms
+  - T05_waters_count
+  - T05_overall_b_mean
   inputs_description: model (PDB/mmCIF)
   gold_standard: MolProbity report; wwPDB validation for deposited comparator
   example_dataset: any PDB; 3NIR as clean ultra-high-res baseline
@@ -284,6 +288,7 @@ catalog_tasks:
   - CCP4 libcheck/acedrg
   - edstats
   - MolProbity (gold)
+  - protstruct local metal geometry screen
   metric_definition_refs:
   - T10_ligand_rscc
   - T10_ligand_rsr
@@ -505,6 +510,16 @@ tools:
   family: non_cctbx
   catalog_tasks_served:
   - T10
+- id: protstruct retained-coordinate audit
+  install_path: scripts/audit_1sar_retained_evidence.py
+  family: non_cctbx
+  catalog_tasks_served:
+  - T05
+- id: protstruct local metal geometry screen
+  install_path: scripts/checkmymetal_local.py
+  family: non_cctbx
+  catalog_tasks_served:
+  - T10
 - id: gemmi blobs
   family: non_cctbx
   catalog_tasks_served:
@@ -668,7 +683,9 @@ tools:
 - id: phenix.model_vs_data
   family: cctbx
   catalog_tasks_served:
+  - T03
   - T06
+  - T13
 - id: phenix.mtriage
   family: cctbx
   catalog_tasks_served:
@@ -929,6 +946,7 @@ tools:
 - id: reduce (standalone, Richardson)
   family: non_cctbx
   catalog_tasks_served:
+  - T05
   - T14
 - id: mmtbx.reduce2
   family: cctbx

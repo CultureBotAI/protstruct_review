@@ -68,6 +68,21 @@ The committed `protstruct_review/models.py` is the pinned API surface for downst
   `data/**/EVAL_*.yaml` and `data/**/QDS_*.yaml` carriers, even though the generic schema
   `Container` can parse them elsewhere. Case-variant suffixes and symlink aliases are rejected;
   immutable authorization uses the lexical carrier path.
+- **Contract 4 separates audit history from active evidence.** Every new sheet has a typed
+  context with a complete owner-designated snapshot, even when importing legacy runs without
+  snapshots. Run-owned `EvidenceCorrection` rows name exact target collections/IDs and raw
+  SHA-256s. Projection validates original ownership and surviving dependencies before every
+  builder. `derived_from_evaluation_run_refs` preserves all audit inputs;
+  `active_evaluation_run_refs` records contributors after correction and subject admission.
+  Replay pins also bind complete raw runs and Structure snapshots. `ModelDatasetAssociation`
+  admits exact retained T13 MTZ subjects without converting them to model subjects; all admitted
+  diagnostics retain their source context in `DataQualitySummary.diagnostics`.
+  `measurement_evidence_origins` records exact current and original measurement ownership plus
+  the original declared run date for all active MeasurementValues. Replacement chains retain
+  that original date for recency without changing current source identities or claiming a new
+  execution. Original owning run also constrains coupled bundles and scientific equality.
+  Genuinely new execution uses a standalone observation with retained evidence, optionally
+  withdrawing obsolete evidence separately; publication or re-parsing alone is not execution.
 
 ## Evolving the schema
 

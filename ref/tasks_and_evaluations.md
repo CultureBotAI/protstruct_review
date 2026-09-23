@@ -65,6 +65,8 @@ terms. TSV form with the same rows: `ref/tasks_and_evaluations.tsv`.
 - **PHENIX tool(s):** `phenix.holton_geometry_validation`, `phenix.validation` (GUI), `phenix.cablam`, `mmtbx.validation_summary`
 - **Doc paths:** `reference/holton_geometry_validation.html`, `reference/validation.html`, `reference/cablam_validation.html`
 - **Independent oracle(s):** **MolProbity** (web/standalone — gold standard for geometry), wwPDB validation pipeline, iotbx-independent parsers via gemmi, RosettaHoles2 (packing), ProSA, Verify3D
+- **Retained-coordinate audit:** `protstruct retained-coordinate audit` identifies the stdlib fixed-column method in `scripts/audit_1sar_retained_evidence.py`. It recounts atoms/waters and B-factor distributions on the pinned packaged 1SAR model, not geometry quality or a new crystallographic validation run. Record the exact selected population and method/input/output hashes; do not attribute coordinate arithmetic to `gemmi sfcalc`.
+- **Auxiliary provenance:** standalone Richardson `reduce` also serves T05 by producing the historical hydrogen-built model/atom-count denominator used by `probe`. That does not make its atom count an independent geometry-quality verdict.
 - **Typical inputs:** model (PDB/mmCIF)
 - **Metrics:** clashscore, Ramachandran favored %, Ramachandran outlier %, rotamer outlier %, CBeta outliers, bond-length RMSD, bond-angle RMSD, planarity RMSD, chirality outliers, MolProbity composite score, CaBLAM outliers, Ramachandran-Z score, packing Z-score (complex), unsatisfied buried H-bond count (complex), B-factor outlier Z-score (per-residue)
 - **Gold standard:** MolProbity report; wwPDB validation report for deposited comparator
@@ -76,6 +78,7 @@ terms. TSV form with the same rows: `ref/tasks_and_evaluations.tsv`.
 - **Doc paths:** `reference/model_vs_data.html`, `reference/mtriage.html`, `reference/map_correlations.html`
 - **Independent oracle(s):** CCP4 `sfcheck` / `refmac -hklin`, Servalcat, `gemmi` (`gemmi sfcalc`, `gemmi validate`), PDB-REDO, FSC-Q
 - **Typical inputs:** model + experimental data (MTZ for X-ray, map(s) for cryo-EM)
+- **Auxiliary task coverage:** `phenix.model_vs_data` can supply T03 R-factor diagnostics and T13 completeness observations in addition to T06 model/data statistics. It remains cctbx and does not implement an independent refinement or data-quality oracle; these auxiliary task links do not add it to the independent-oracle lists or authorize same-family grades.
 - **Metrics:** R-work, R-free, CC_work, CC_free, CC*, map-model FSC (global + per-resolution-shell), d_FSC_model, overall B, Wilson B, residue RSCC (per-residue), RSCC outlier fraction (complex), diffraction precision index (complex)
 - **Gold standard:** values reported in the deposition header for that PDB/EMDB pair
 - **Example dataset:** PDB `1YQV` + deposited MTZ; PDB `7a4m` + EMDB-`11668` half-maps
@@ -115,6 +118,7 @@ terms. TSV form with the same rows: `ref/tasks_and_evaluations.tsv`.
 - **PHENIX tool(s):** `phenix.ligandfit`, `phenix.ligand_pipeline`, `phenix.find_all_ligands`, `phenix.eLBOW` (restraint generation), `phenix.REEL` (restraint editing), `phenix.guided_ligand_replacement`
 - **Doc paths:** `reference/ligandfit.html`, `reference/ligand_pipeline.html`, `reference/find_all_ligands.html`, `reference/elbow.html`, `reference/reel.html`, `reference/guided_ligand_replacement.html`
 - **Independent oracle(s):** Coot `Find Ligand`, AFITT (OpenEye), rhofit (Global Phasing), CCP4 `libcheck` / `acedrg` for restraints; EDSTATS for RSCC/RSR and MolProbity `probe` for protein–ligand contacts / hydrogen-bond counts
+- **Historical local metal screen:** `protstruct local metal geometry screen` names `scripts/checkmymetal_local.py`, not canonical CheckMyMetal. Its direct-coordinate neighborhood and candidate-normalized distance scores are informational local diagnostics. They do not establish calibrated significance, element exclusion, occupancy or a biological role; naming the actual producer does not turn a historical transcription into a new execution.
 - **Typical inputs:** apo (or ligand-free) model, map / MTZ, ligand SMILES or coordinates
 - **Metrics:** ligand RSCC (real-space correlation coefficient), ligand RSR (real-space R), ligand B-factor vs surroundings, protein-ligand hbond count, RMSD to deposited ligand pose
 - **Gold standard:** deposited holo structure for the same complex (PDB co-crystal entry)

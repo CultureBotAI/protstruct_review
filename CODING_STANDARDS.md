@@ -164,6 +164,63 @@ Where this file and the handbook overlap, they must agree; if they drift, that i
     The `.yaml` suffix is exact and lowercase. Repository-wide admission discovers case variants
     only to reject them, forbids YAML symlink carriers, and compares lexical paths so an alias can
     never inherit a target's historical authorization.
+13h. **Contract-4 corrections precede every builder.** Every new partial or cumulative sheet
+    has a source-owned `QdsEmissionContext` naming the complete ordered audit inputs and its
+    authoritative snapshot owner (the context owner). That carrier supplies complete Structure,
+    Tool, recommendation and assumption snapshots; legacy inputs are never edited to add them.
+    `EvidenceCorrection` rows explicitly withdraw or replace an exact owning-run/collection/id
+    target, pin its original canonical SHA-256, and state a reason and evidence. Replacements
+    retain their own new source identities. Self/future targets, reused replacement IDs,
+    ambiguous references and incompatible lineage fail. A surviving dependency must still name
+    its exact original active target; removing an operand or a Site cannot silently retarget it.
+    Headline support may cite an unambiguous surviving measurement in another input run;
+    computational delta/derived operands retain their same-run requirements. Auxiliary
+    replacements inherit their exact correction ancestry, not an unrelated measurement in the
+    correcting carrier. Embedded assumptions require their exact parent-measurement ancestry;
+    explicit original `measurement_ref` bindings additionally constrain run, embedded and registry
+    assumptions. Resolve raw references local-owner first, otherwise globally unique; changing or
+    removing a successor reference cannot reset a foreign original binding. Conflicting active
+    assumption payloads sharing an ID fail across registry,
+    run, measurement and headline origins; identical duplicates may be deduplicated.
+
+    A measurement replacement corrects existing evidence; its publication date is not a new
+    observation date. Scalar and coupled-bundle priority inherit the exact oldest replacement
+    target's declared `EvaluationRun.run_date`, including withdrawn intermediates. Keep the
+    correcting source IDs and carrier dates unchanged, and emit `measurement_evidence_origins`
+    for every active MeasurementValue, selected or not. This recorded-source ordering proxy
+    does not verify the actual tool-execution time. Original owner also participates in bundle
+    coherence and scientific equality: one correcting carrier cannot fuse separate original
+    runs into a purported shared invocation. A genuinely new execution is a new standalone
+    measurement with retained execution evidence, optionally accompanied by withdrawal of the
+    obsolete row; neither changed numbers nor free-text notes refresh a typed replacement.
+
+    Live authoring checks that the raw owner snapshots contain exact applicable registry rows
+    active at issue time and their complete supersession ancestry. Relevant subsets are allowed;
+    omission or mutation of applicable guidance is not. Apply explicit registry corrections only
+    after that admission check. Replay remains exclusively snapshot-driven and never substitutes
+    today's registry rows into an issued sheet.
+
+    Apply this view before scientific selection, structured summaries, assumptions, waivers,
+    recommendations and coverage. Keep all raw source runs in `derived_from_evaluation_run_refs`,
+    even when fully withdrawn; `active_evaluation_run_refs` separately records contributors.
+    The QDS surfaces applied corrections and corrected-sheet references. Its replay boundary
+    pins raw EvaluationRuns (including withdrawn evidence), Structure/registry snapshots and
+    the complete context, in addition to canonical output bytes and retained implementation.
+    The context owns the current headline for both scopes; retained contract 3 keeps its own
+    historical partial/cumulative rules from 13f.
+13i. **Dataset evidence keeps its dataset identity.** A contract-4 `ModelDatasetAssociation`
+    binds the model subject to a retained MTZ path, exact SHA-256 dataset subject, owning run,
+    selectors and evidence. Current admission is explicitly T13/all/dataset. Validate the
+    retained bytes and every row's declared scope before admission. Associated dataset rows
+    receive exact-evidence priority over unlabelled fallback, but keep their original MTZ subject
+    in summaries and coverage. Unassociated datasets cannot enter a model sheet. All admitted
+    T13 diagnostic values are surfaced in `DataQualitySummary.diagnostics`; scalar routing alone
+    (currently including Wilson B) is not a substitute for retaining diagnostic availability.
+    Historical bindings validate against raw owner/selector evidence, including retired owners,
+    and remain in the pinned source context as ancestry anchors. Emitted associations contain
+    only surviving owners and selectors; successor bindings cannot substitute for missing history.
+    Surviving same-dataset rows must satisfy the association before subject filtering. Retired
+    out-of-scope rows neither veto valid siblings nor supply historical applicability anchors.
 14. **Behaviour-preserving refactors must be proven so.** After touching the emitter, regenerate a
     committed QDS and diff it: only `issued_at` may differ.
 

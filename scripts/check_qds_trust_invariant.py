@@ -32,6 +32,7 @@ import yaml
 import qds_emit_contract_v1
 import qds_emit_contract_v2
 import qds_emit_contract_v3
+import qds_emit_contract_v4
 
 try:
     from strict_yaml import strict_yaml_load
@@ -92,6 +93,18 @@ LEGACY_QDS: dict[str, tuple[str, str, str]] = {
 # September 21 sheet under full modern replay validation while binding its old
 # contract declaration to one exact historical artifact.
 RETAINED_CONTRACT_QDS: dict[str, tuple[str, str, str, str]] = {
+    "data/coscientists/openscientist/QDS_1sar_cdba2c07_2026-09-22.yaml": (
+        "QDS_1sar_cdba2c07_2026-09-22",
+        "2026-09-22T22:42:26+00:00",
+        "3",
+        "05cf267f0dec1bb60c66cf56a82dc3f8ee4c59fc92280165023f8dd41f3bc6b0",
+    ),
+    "data/examples/qds/QDS_synth_active_site_2026-09-23.yaml": (
+        "QDS_synth_active_site_2026-09-23",
+        "2026-09-23T06:58:00+00:00",
+        "3",
+        "cf29708c070671ea5033d9404d6cdc26802922c59cd2a9fcd9ce186fddeefb17",
+    ),
     "data/coscientists/openscientist/QDS_1sar_cdba2c07_2026-09-21.yaml": (
         "QDS_1sar_cdba2c07_2026-09-21",
         "2026-09-22T09:14:00+00:00",
@@ -101,7 +114,7 @@ RETAINED_CONTRACT_QDS: dict[str, tuple[str, str, str, str]] = {
 }
 
 CURRENT_QDS_EMITTER_CONTRACT_VERSION = (
-    qds_emit_contract_v3.QDS_EMITTER_CONTRACT_VERSION
+    qds_emit_contract_v4.QDS_EMITTER_CONTRACT_VERSION
 )
 
 
@@ -186,6 +199,7 @@ class EvalRunSource:
     has_tool_recommendations: bool
     has_assumptions: bool
     qds_replay_pins: tuple[dict[str, Any], ...]
+    source_document: dict[str, Any] | None = None
 
 
 def _load_eval_runs(root: Path, failures: list[str]) -> dict[str, list[EvalRunSource]]:
@@ -219,6 +233,7 @@ def _load_eval_runs(root: Path, failures: list[str]) -> dict[str, list[EvalRunSo
                         has_tool_recommendations="tool_recommendations" in doc,
                         has_assumptions="assumptions" in doc,
                         qds_replay_pins=tuple(doc.get("qds_replay_pins", []) or []),
+                        source_document=copy.deepcopy(doc),
                     )
                 )
     for run_id, matches in sorted(runs.items()):
@@ -616,15 +631,95 @@ def _validate_contract_3_pin(*args: Any) -> list[str]:
     )
 
 
+def _validate_contract_4_pin(
+    path: Path, qds: dict[str, Any], projection: dict[str, Any],
+    source_pins: list[dict[str, Any]],
+) -> list[str]:
+    """Contract 4 pins raw audit sources, not only surviving measurements."""
+    errors: list[str] = []
+    matches = [p for p in source_pins if p.get("qds_ref") == qds.get("id")]
+    if len(matches) != 1:
+        return [f"{path.name}: contract 4 requires exactly one owner-carried replay pin"]
+    pin = matches[0]
+    context = projection["context"]
+    if str(pin.get("emitter_contract_version")) != "4":
+        errors.append(f"{path.name}: replay pin contract version differs from contract 4")
+    if pin.get("qds_emission_context_ref") != context["id"]:
+        errors.append(f"{path.name}: replay pin emission context differs from source context")
+    refs = [run["id"] for run in projection["raw_runs"]]
+    if pin.get("source_evaluation_run_refs") != refs:
+        errors.append(f"{path.name}: replay pin source refs differ from complete raw audit inputs")
+    inputs = {
+        "emitter_source_sha256": hashlib.sha256(Path(qds_emit_contract_v4.__file__).read_bytes()).hexdigest(),
+        "source_tools_sha256": _snapshot_digest("tools", projection["tools"]),
+        "source_structures_sha256": _snapshot_digest("structures", projection["structures"]),
+        "source_tool_recommendations_sha256": _snapshot_digest("tool_recommendations", projection["tool_recommendations"]),
+        "source_tool_assumptions_sha256": _snapshot_digest("assumptions", projection["assumptions"]),
+        "source_qds_emission_context_sha256": _snapshot_digest("qds_emission_contexts", [context]),
+        "source_evaluation_runs_sha256": _snapshot_digest("evaluation_runs", projection["raw_runs"]),
+    }
+    for field, actual in inputs.items():
+        if pin.get(field) != actual:
+            errors.append(f"{path.name}: replay pin {field} differs from retained raw/source snapshot")
+    if path.read_text() != _canonical_qds_text(qds):
+        errors.append(f"{path.name}: committed QDS is not independently canonical YAML")
+    if pin.get("canonical_qds_sha256") != hashlib.sha256(path.read_bytes()).hexdigest():
+        errors.append(f"{path.name}: committed QDS differs from source-owned canonical byte pin")
+    return errors
+
+
+def _rebuild_coverage_v4(
+    path: Path, qds: dict[str, Any], eval_runs: dict[str, list[EvalRunSource]],
+    root: Path,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    errors: list[str] = []
+    refs = qds.get("derived_from_evaluation_run_refs")
+    if not isinstance(refs, list) or not refs or not all(isinstance(ref, str) for ref in refs):
+        return None, [f"{path.name}: contract 4 requires raw source EvaluationRun refs"]
+    if len(refs) != len(set(refs)):
+        return None, [f"{path.name}: contract 4 repeats a raw source EvaluationRun ref"]
+    documents: list[dict[str, Any]] = []
+    seen_documents: set[str] = set()
+    for ref in refs:
+        matches = eval_runs.get(ref, [])
+        if len(matches) != 1 or matches[0].source_document is None:
+            errors.append(f"{path.name}: raw source {ref!r} does not resolve to exactly one canonical carrier")
+            continue
+        doc = matches[0].source_document
+        token = yaml.safe_dump(doc, sort_keys=True, allow_unicode=True)
+        if token not in seen_documents:
+            seen_documents.add(token)
+            documents.append(copy.deepcopy(doc))
+    if errors:
+        return None, errors
+    try:
+        projection = qds_emit_contract_v4.prepare_projection(
+            documents, str(qds.get("id") or ""), str(qds.get("structure_ref") or ""), repo_root=root,
+        )
+        replayed = qds_emit_contract_v4.emit_projection(projection)
+        context = projection["context"]
+        owner = str(context["snapshot_owner_evaluation_run_ref"])
+        source_pins = list(eval_runs[owner][0].qds_replay_pins)
+        errors.extend(_validate_contract_4_pin(path, qds, projection, source_pins))
+        if replayed != qds:
+            errors.append(f"{path.name}: committed QDS differs from deterministic frozen contract-4 replay")
+        return replayed["cross_tool_coverage"], errors
+    except (SystemExit, ValueError, TypeError, KeyError) as exc:
+        errors.append(f"{path.name}: source-derived contract-4 trust check failed: {exc}")
+        return None, errors
+
+
 REPLAY_CONTRACT_VALIDATORS = {
     "1": _validate_contract_1_pin,
     "2": _validate_contract_2_pin,
     "3": _validate_contract_3_pin,
+    "4": _validate_contract_4_pin,
 }
 REPLAY_CONTRACT_EMITTERS = {
     "1": qds_emit_contract_v1,
     "2": qds_emit_contract_v2,
     "3": qds_emit_contract_v3,
+    "4": qds_emit_contract_v4,
 }
 
 
@@ -632,7 +727,10 @@ def _rebuild_coverage(
     path: Path,
     qds: dict[str, Any],
     eval_runs: dict[str, list[EvalRunSource]],
+    root: Path | None = None,
 ) -> tuple[dict[str, Any] | None, list[str]]:
+    if str(qds.get("emitter_contract_version")) == "4":
+        return _rebuild_coverage_v4(path, qds, eval_runs, root or Path(__file__).resolve().parent.parent)
     errors: list[str] = []
     refs = qds.get("derived_from_evaluation_run_refs") or []
     if not isinstance(refs, list) or not refs:
@@ -871,7 +969,7 @@ def check_sheet(
     # immutable sheets; the live catalog must not redefine an old artifact.
     failures.extend(_canonical_row_errors(path, rows, None))
 
-    expected, rebuild_errors = _rebuild_coverage(path, qds, eval_runs)
+    expected, rebuild_errors = _rebuild_coverage(path, qds, eval_runs, root)
     failures.extend(rebuild_errors)
     if expected is not None and actual != expected:
         failures.append(

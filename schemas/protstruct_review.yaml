@@ -109,6 +109,39 @@ enums:
       partial:
         description: Covers only the tasks or measurements declared in scope_notes.
 
+  EvidenceCorrectionAction:
+    description: An append-only withdrawal or replacement of identified source evidence.
+    permissible_values:
+      withdraw:
+      replace:
+
+  EvidenceCorrectionCollection:
+    description: Exact source collection or singleton addressed by a correction.
+    permissible_values:
+      measurements:
+      headline_findings:
+      residue_outliers:
+      density_peaks:
+      flagged_regions:
+      per_residue_values:
+      secondary_structure_assignments:
+      domain_assignments:
+      sites:
+      ligands:
+      interface_qualities:
+      prediction_ensemble_qualities:
+      nmr_ensemble_qualities:
+      pairwise_comparisons:
+      refinements:
+      assumptions:
+      measurement_assumptions:
+      headline_assumptions:
+      cross_tool_waivers:
+      headline_verdict:
+      evaluation_run:
+      tool_recommendations:
+      tool_assumptions:
+
   StructureIdKind:
     description: Which database scheme the structure id follows.
     permissible_values:
@@ -177,7 +210,9 @@ enums:
       ramachandran:
         description: Backbone φ,ψ outside the 99.95th percentile region (MolProbity Top8000).
       rotamer:
-        description: Side-chain χ angles outside the 98th percentile favored region.
+        description: >-
+          Residue-specific rotamer OUTLIER classification reported by the validation
+          tool. Allowed and Favored conformations are not outliers.
       c_beta:
         description: Cβ deviation > 0.25 Å from ideal.
       clash:
@@ -985,6 +1020,11 @@ classes:
       supporting_measurement_refs:
         range: MeasurementValue
         multivalued: true
+      assumptions:
+        range: Assumption
+        multivalued: true
+        inlined_as_list: true
+        description: Explicit validity assumptions carried by this headline finding.
 
   # -------------------------------------------------------- evaluation run
 
@@ -1016,6 +1056,14 @@ classes:
         range: MeasurementValue
         multivalued: true
         inlined_as_list: true
+      corrections:
+        range: EvidenceCorrection
+        multivalued: true
+        inlined_as_list: true
+        description: >-
+          Append-only corrections to identified evidence in earlier source runs.
+          Contract 4 projects these operations before selection, coverage and
+          presentation; historical source carriers are never rewritten.
       cross_tool_waivers:
         range: CrossToolWaiver
         multivalued: true
@@ -1155,12 +1203,130 @@ classes:
 
   # ---------------------------------------------------- quality data sheet
 
+  EvidenceCorrection:
+    description: >-
+      A typed, content-addressed operation owned by a later EvaluationRun.
+      target_collection plus target_evaluation_run_ref and target_ref identifies
+      one exact raw source value. Replacement evidence is a separately declared
+      row of the same class owned by the correcting run; withdrawals have no
+      replacement_ref. A correction never changes the original source bytes.
+      A MeasurementValue replacement corrects existing evidence and inherits
+      its exact oldest target's declared run date for recency; publication is
+      not a new measurement. Record genuinely new execution as a new standalone
+      MeasurementValue, optionally withdrawing obsolete evidence separately.
+    attributes:
+      id:
+        identifier: true
+        required: true
+      action:
+        range: EvidenceCorrectionAction
+        required: true
+      target_collection:
+        range: EvidenceCorrectionCollection
+        required: true
+      target_evaluation_run_ref:
+        range: EvaluationRun
+        required: true
+      target_ref:
+        range: string
+        required: true
+      target_sha256:
+        required: true
+        pattern: '^[0-9a-f]{64}$'
+        description: Canonical SHA-256 of the exact raw source target, before projection.
+      replacement_ref:
+        range: string
+        description: Required only for replace; resolves in the correcting source run.
+      reason:
+        required: true
+      evidence_refs:
+        range: string
+        multivalued: true
+        required: true
+
+  MeasurementEvidenceOrigin:
+    description: >-
+      Contract-4 derived audit lineage for one active MeasurementValue, whether
+      or not selected as a summary scalar. Original ownership follows the exact
+      validated measurement-replacement chain, including withdrawn predecessors.
+      The correcting row keeps its new source identity. The original run's
+      declared date governs evidence recency and original ownership also governs
+      coupled-bundle coherence; it is not proof of the actual execution date.
+    attributes:
+      source_evaluation_run_ref:
+        range: EvaluationRun
+        required: true
+      source_measurement_ref:
+        range: MeasurementValue
+        required: true
+      origin_evaluation_run_ref:
+        range: EvaluationRun
+        required: true
+      origin_measurement_ref:
+        range: MeasurementValue
+        required: true
+      origin_run_date:
+        range: date
+        required: true
+        description: >-
+          Original owning EvaluationRun.run_date, not the correction date or a
+          verified tool-execution timestamp. A non-replacement row is its own
+          origin. Optional unresolved MeasurementProvenance.run_at does not
+          override this source-record ordering proxy.
+
+  ModelDatasetAssociation:
+    description: >-
+      Explicit evidence-backed admission of dataset measurements to a model-subject
+      QDS without relabelling the measured subject. Contract 4 admits only T13,
+      stage all, scope dataset rows from the named owning source run, with an
+      exact scope selector listed here. The retained repository-relative MTZ path
+      must match dataset_sha256 and the mtz:sha256:<digest> dataset subject.
+    attributes:
+      id:
+        identifier: true
+        required: true
+      model_subject_ref:
+        range: string
+        required: true
+      dataset_subject_ref:
+        range: string
+        required: true
+      dataset_path:
+        range: string
+        required: true
+      dataset_sha256:
+        required: true
+        pattern: '^[0-9a-f]{64}$'
+      owner_evaluation_run_ref:
+        range: EvaluationRun
+        required: true
+      catalog_task_ref:
+        range: CatalogTaskId
+        required: true
+      stage:
+        range: Stage
+        required: true
+      scope:
+        range: MeasurementScope
+        required: true
+      scope_selectors:
+        range: string
+        multivalued: true
+        required: true
+        description: Exact admitted column selector or all-input-reflections selector.
+      evidence_refs:
+        range: string
+        multivalued: true
+        required: true
+
   QdsEmissionContext:
     description: >-
       Source-owned, QDS-specific presentation and scope recipe. It binds one
       immutable sheet to the exact ordered EvaluationRuns, structure, subject,
       issue time, coverage boundary, identity description, and headline used by
-      emitter contract 3. It does not alter or supersede source measurements.
+      emitter contract 3 (partial sheets) or 4 (all sheets). Contract 4 also
+      names the snapshot owner, corrected sheets and dataset associations;
+      source evidence changes only through typed EvidenceCorrection operations.
     attributes:
       id:
         identifier: true
@@ -1173,6 +1339,20 @@ classes:
         required: true
         description: >-
           The one EvaluationRun whose canonical source document owns this context.
+      snapshot_owner_evaluation_run_ref:
+        range: EvaluationRun
+        description: >-
+          Required by contract 4 and equal to owner_evaluation_run_ref. Its source
+          carrier owns the complete Structure, Tool, recommendation and assumption
+          snapshots used to interpret all declared source runs, including history.
+      corrected_qds_refs:
+        range: QualityDataSheet
+        multivalued: true
+        description: Earlier immutable sheets explicitly corrected by this new sheet.
+      dataset_associations:
+        range: ModelDatasetAssociation
+        multivalued: true
+        inlined_as_list: true
       structure_ref:
         range: Structure
         required: true
@@ -1219,7 +1399,7 @@ classes:
         required: true
       qds_emission_context_ref:
         range: QdsEmissionContext
-        description: Required for partial emitter-contract-3 replay boundaries.
+        description: Required for partial contract-3 and every contract-4 replay boundary.
       emitter_contract_version:
         required: true
       canonical_qds_sha256:
@@ -1240,7 +1420,13 @@ classes:
       source_qds_emission_context_sha256:
         description: >-
           Canonical digest of the source-owned QdsEmissionContext snapshot.
-          Required for partial emitter-contract-3 replay boundaries.
+          Required for partial contract-3 and every contract-4 replay boundary.
+        pattern: '^[0-9a-f]{64}$'
+      source_evaluation_runs_sha256:
+        description: Required by contract 4; binds all raw source runs, including withdrawn evidence.
+        pattern: '^[0-9a-f]{64}$'
+      source_structures_sha256:
+        description: Required by contract 4; binds the source-owned Structure snapshot.
         pattern: '^[0-9a-f]{64}$'
 
   QualityDataSheet:
@@ -1264,9 +1450,37 @@ classes:
         range: EvaluationRun
         multivalued: true
         required: true
+        description: Complete ordered audit lineage, including withdrawn and correction-only runs.
+      active_evaluation_run_refs:
+        range: EvaluationRun
+        multivalued: true
+        description: Contract-4 subset of audit inputs with subject-eligible active evidence.
+      applied_corrections:
+        range: EvidenceCorrection
+        multivalued: true
+        inlined_as_list: true
+        description: Exact source-owned correction operations applied by contract 4.
+      measurement_evidence_origins:
+        range: MeasurementEvidenceOrigin
+        multivalued: true
+        inlined_as_list: true
+        description: >-
+          Exact derived origin and declared source-record date for every active
+          scalar measurement in contract 4. Distinguishes an observation's
+          original record from its current correction carrier without claiming
+          a new scientific execution.
+      dataset_associations:
+        range: ModelDatasetAssociation
+        multivalued: true
+        inlined_as_list: true
+        description: Exact validated source-context associations used for contract-4 admission.
+      corrected_qds_refs:
+        range: QualityDataSheet
+        multivalued: true
+        description: Earlier immutable sheets named in the source-owned contract-4 context.
       emission_context_ref:
         range: QdsEmissionContext
-        description: Source-owned QDS recipe required by partial emitter contract 3.
+        description: Source-owned recipe required by partial contract 3 and every contract-4 sheet.
       coverage_scope:
         range: QdsCoverageScope
         description: Cumulative sheet or explicitly bounded partial update.
@@ -1650,6 +1864,15 @@ classes:
       id:
         identifier: true
         required: true
+      diagnostics:
+        range: TypedMeasurementValue
+        multivalued: true
+        inlined_as_list: true
+        description: >-
+          Contract-4 T13 diagnostics retained with exact source measurement,
+          original dataset subject, stage, scope, selector, status and evidence.
+          Dataset association admits these values without relabelling them as
+          model measurements or interpreting informational diagnostics as grades.
       completeness_overall_pct:
         range: TypedMeasurementValue
         inlined: true

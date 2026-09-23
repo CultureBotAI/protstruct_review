@@ -53,7 +53,7 @@ Richardson-lab Top8000 reference set (high-resolution ≤ 2.0 Å structures).
 | Outlier | Definition | Provenance |
 |---|---|---|
 | Ramachandran outlier | backbone φ,ψ outside the **99.95th** percentile region | `[schema]` `[MolProbity]` |
-| Rotamer outlier | side-chain χ outside the **98th** percentile favored region | `[schema]` `[MolProbity]` |
+| Rotamer outlier | residue-specific **OUTLIER** classification reported by the validation tool; **Allowed** and **Favored** conformations are not outliers | `[schema]` `[MolProbity]` |
 | Cβ deviation | > **0.25 Å** from ideal | `[schema]` |
 | Clash | steric overlap ≥ **0.4 Å** | `[schema]` |
 | Bad geometry | bond / angle / planarity > **4σ** | `[schema]` |

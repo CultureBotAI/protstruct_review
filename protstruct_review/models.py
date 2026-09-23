@@ -2261,7 +2261,7 @@ class MapSummary(ConfiguredBaseModel):
     local_resolution_std_a: Optional[TypedMeasurementValue] = Field(default=None, description="""Standard deviation of local-resolution distribution.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MapSummary']} })
     directional_resolution_anisotropy: Optional[TypedMeasurementValue] = Field(default=None, description="""Directional resolution anisotropy from 3DFSC-style analysis.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MapSummary']} })
     local_model_map_fsc_q: Optional[TypedMeasurementValue] = Field(default=None, description="""Local FSC-Q or equivalent per-model-map agreement summary.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MapSummary']} })
-    rscc_outlier_fraction: Optional[TypedMeasurementValue] = Field(default=None, description="""Fraction of residues with poor real-space correlation.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MapSummary']} })
+    rscc_outlier_fraction: Optional[TypedMeasurementValue] = Field(default=None, description="""Informational fraction below an explicitly stated RSCC reporting cutoff, with limiting-radius convention and denominator recorded. The legacy name does not imply significant outliers or a quality verdict; see the threshold registry's real-space density-fit rule.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MapSummary']} })
 
 
 class CrossToolCoverage(ConfiguredBaseModel):
@@ -4467,8 +4467,8 @@ class LigandQuality(ConfiguredBaseModel):
                        'Site',
                        'SiteQuality']} })
     ligand_ref: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['LigandQuality', 'CoordinationContact', 'Site']} })
-    rscc: Optional[TypedMeasurementValue] = Field(default=None, description="""Real-space correlation coefficient. > 0.85 = good fit.""", json_schema_extra = { "linkml_meta": {'domain_of': ['LigandQuality']} })
-    rsr: Optional[TypedMeasurementValue] = Field(default=None, description="""Real-space R. < 0.20 = good fit at typical resolutions.""", json_schema_extra = { "linkml_meta": {'domain_of': ['LigandQuality']} })
+    rscc: Optional[TypedMeasurementValue] = Field(default=None, description="""Real-space correlation coefficient. Informational corroboration only; comparisons require a matched limiting-radius convention. No fixed quality cutoff; see the threshold registry's real-space density-fit rule.""", json_schema_extra = { "linkml_meta": {'domain_of': ['LigandQuality']} })
+    rsr: Optional[TypedMeasurementValue] = Field(default=None, description="""Real-space R-factor. Informational diagnostic without a fixed quality cutoff; assess significance using available RSZD/RSZO evidence under the threshold registry's real-space density-fit rule.""", json_schema_extra = { "linkml_meta": {'domain_of': ['LigandQuality']} })
     ligand_b_factor_mean: Optional[TypedMeasurementValue] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['LigandQuality']} })
     ligand_b_factor_vs_surroundings: Optional[TypedMeasurementValue] = Field(default=None, description="""Ratio of ligand mean B to surrounding-protein mean B. > 1.5 can indicate partial occupancy or weak binding.""", json_schema_extra = { "linkml_meta": {'domain_of': ['LigandQuality']} })
     protein_ligand_hbond_count: Optional[TypedMeasurementValue] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['LigandQuality']} })

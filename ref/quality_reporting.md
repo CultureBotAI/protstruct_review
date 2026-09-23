@@ -182,13 +182,14 @@ For bound ligands the catalog T10 metrics are load-bearing:
 
 | Metric | Threshold | Tool |
 |---|---|---|
-| **RSCC** (real-space correlation) | > 0.85 = good fit at typical resolutions | phenix.real_space_correlation; CCP4 `edstats`; Tickle (2012, *Acta D*) for thresholds. |
-| **RSR** (real-space R-factor) | < 0.20 = good fit | same |
+| **RSCC** (real-space correlation) | Corroboration only, with a matched limiting-radius convention; no fixed quality cutoff | phenix.real_space_correlation; CCP4 `edstats`; registry §2, “Real-space density fit (ligand/loop)”. |
+| **RSR** (real-space R-factor) | Informational density-fit diagnostic; no fixed quality cutoff | same |
+| **RSZD / RSZO** | Assess density accuracy / precision using registry §2, “Real-space density fit (ligand/loop)”, when these statistics and their inputs are available | CCP4 `edstats`; PDB-REDO `density-fitness` |
 | **Ligand B vs. surrounding protein B** | ratio < 1.5 | phenix.b_factor_statistics |
 | **Protein-ligand H-bond count** | informational | gemmi `contact`; PLIP |
-| **Pose RMSD to deposited reference** | < 0.5 Å for refined-against-same-data | phenix.superpose_models on ligand atoms only |
+| **Pose RMSD to deposited reference** | Informational pending a ligand-specific registry criterion; record reference, matched atom mapping, symmetry handling and common receptor frame | independent coordinate comparison; fitting the ligand alone measures conformation, not binding-site pose |
 
-Ligand RSCC alone has flagged thousands of mismodelled ligands across the PDB (Pozharski et al. 2013, *Acta D*; Smart et al. 2018, *Acta D*); reporting it is mandatory when a ligand is structurally important.
+Report ligand RSCC when a ligand is structurally important, alongside the limiting-radius convention and available density diagnostics. RSCC and RSR do not supply B-factor-independent significance criteria (Tickle 2012); a high RSCC alone cannot establish a correct ligand. When RSZD/RSZO are unavailable, retain that evidence gap and keep RSCC/RSR informational instead of substituting an absolute cutoff. The same restriction applies to waters and loops.
 
 ### Outlier reporting
 
@@ -277,7 +278,7 @@ site_qualities:     one entry per site with:
                       site_ramachandran_outlier_count
                       site_density_peaks (Δρ peaks within the site)
                       ligand_quality (when ligand_ref is set)
-ligand_quality:     RSCC (>0.85), RSR (<0.20),
+ligand_quality:     RSCC and RSR (informational; matched-radius RSCC corroboration),
                     ligand_b_factor_vs_surroundings,
                     protein_ligand_hbond_count,
                     pose_rmsd_to_deposited_a
@@ -313,7 +314,7 @@ These are the citable sources for every threshold and rule above. The reference 
 17. **Kidmose, R. T. et al. (2019).** Namdinator — automatic molecular dynamics flexible fitting of structural models into cryo-EM and crystallography experimental maps. *IUCrJ* 6, 526–531. [orthogonal cryo-EM refinement oracle, listed here for completeness]
 18. **Pintilie, G. et al. (2020).** Measurement of atom-resolvability in cryo-EM maps with Q-scores. *Nature Methods* 17, 328–334. [Q-score]
 19. **Read, R. J. et al. (2011).** A new generation of crystallographic validation tools for the Protein Data Bank. *Structure* 19, 1395–1412. [wwPDB validation report design; per-residue RSRZ]
-20. **Tickle, I. J. (2012).** Statistical quality indicators for electron-density maps. *Acta Cryst. D* 68, 454–467. [RSCC / RSR thresholds for ligands and residues]
+20. **Tickle, I. J. (2012).** Statistical quality indicators for electron-density maps. *Acta Cryst. D* 68, 454–467. [RSZD/RSZO significance and limitations of RSCC/RSR]
 21. **Pozharski, E. et al. (2013).** Techniques, tools and best practices for ligand electron-density analysis and results from their application to deposited crystal structures. *Acta Cryst. D* 69, 150–167. [Mismodelled ligands flagged by RSCC across the PDB]
 22. **Smart, O. S. et al. (2018).** Validation of ligands in macromolecular structures determined by X-ray crystallography. *Acta Cryst. D* 74, 228–236. [Ligand validation pipeline; pose-RMSD and RSCC standards]
 

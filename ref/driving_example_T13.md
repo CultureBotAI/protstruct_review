@@ -40,6 +40,11 @@ with CCP4 `ctruncate` (and `aimless` when unmerged intensities exist) and checks
 - **CCP4 `aimless`** — the canonical source for CC½, ⟨I/σ⟩ outer, and R-merge/R-meas, but **only
   when unmerged intensities (M/ISYM column) are present**. `[oracle_tools]`
 - Wrapper `scripts/t13_data_quality.py` runs both and emits parsed measurement rows.
+  Its output is single-oracle **informational** diagnostics, not the paired
+  `xtriage`/CCP4 agreement grades below. Rows identify the input MTZ by SHA-256,
+  state the selected columns, and cite retained logs using portable repository
+  paths. Use a fresh repository-local `--logdir`;
+  missing or unrecognized flag evidence is unavailable, not a negative result.
 
 ## Scoring rubric
 

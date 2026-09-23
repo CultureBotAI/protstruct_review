@@ -80,7 +80,7 @@ Every oracle in this harness rests on assumptions that determine what it sees an
 ### CCP4 `aimless` and `ctruncate` (T13 data-quality oracle)
 - **`aimless` requires unmerged intensities** (M/ISYM column). On a merged-only MTZ (e.g. F-obs / SIGF-obs only — the 1SAR case) it aborts immediately with `hkl_unmerge_list::prepare - EMPTY`. CC½, ⟨I/σ⟩ outer, and Rmerge / Rmeas all flow from unmerged data and are **unobtainable** if the artefact does not ship it. Document this as a known gap rather than substituting unrelated metrics.
 - **`ctruncate` is the merged-data fallback** for the T13 metrics that *are* recoverable from amplitudes alone: Wilson B, L-test twin fraction (+ moments), ΔB anisotropy, tNCS via Patterson search, ice-ring summary. These are CCP4 / non-cctbx and close the T13 cross-tool gap when aimless can't run.
-- **`scripts/t13_data_quality.py`** wraps both: it tries aimless first (so the limitation is captured as a provenance row), then runs ctruncate and parses out the scalars into ready-to-paste EvaluationMeasurement rows. Pass `--columns 'F-obs,SIGF-obs'` for typical phenix-refined MTZs; logs and output MTZs are persisted under `<mtz_dir>/t13_oracle_logs/` for QDS evidence_refs.
+- **`scripts/t13_data_quality.py`** wraps both using the configured CCP4 environment: it tries aimless first (captured as a provenance row), then runs ctruncate and emits informational EvaluationMeasurement rows bound to the input MTZ digest. Pass `--columns 'F-obs,SIGF-obs'` for typical phenix-refined MTZs and a fresh repository-local `--logdir` (default `<mtz_dir>/t13_oracle_logs/`); retained logs/output MTZs are never overwritten, and evidence refs are portable repository-relative paths. Missing or unrecognized flag evidence is unavailable, not false. Paired agreement grading still requires the corresponding agent measurement and registry preconditions.
 - **Twinning thresholds.** L-test fraction < 0.05 = effectively untwinned; 0.05–0.20 = mild / borderline; > 0.20 = strong. ctruncate's "first-principles operator search" is independent of the L-test and reports zero operators when the lattice/symmetry permits no twin laws.
 - **Anisotropy ΔB rule of thumb.** Eigenvalue spread (max − min) < ~20 Å² on the orthogonal-coords B-tensor is acceptable for general refinement; ctruncate's "some anisotropy detect" message fires at much lower thresholds and is informational unless ΔB is large.
 
@@ -125,7 +125,7 @@ When evaluating a new OpenScientist artefact:
 5. **For ion identity claims**, ask whether anomalous data was used; if not, downgrade the verdict.
 6. **For Δ-claims between rounds**, run the oracle on each round's PDB+MTZ (we have the MTZs in the artefact zip) and confirm the direction of change.
 7. **Quote `oracle_family`** on every measurement; require ≥ 1 non-cctbx confirmation for every load-bearing finding.
-8. **Run the T13 data-quality oracle** with `python scripts/t13_data_quality.py <mtz> --eval-id <EVAL-id>`. Wilson B, twinning, anisotropy ΔB, tNCS, and ice-ring flags all come from a single ctruncate pass; aimless will be tried first so the unmerged-data limitation is captured as a provenance row. Without this step the cross-tool coverage for T13 stays "open — cctbx only".
+8. **Run the T13 data-quality oracle** with `python scripts/t13_data_quality.py <mtz> --eval-id <EVAL-id> --logdir <new-dir>`. Wilson B, twinning, anisotropy ΔB, tNCS, and ice-ring flags are retained as informational ctruncate diagnostics where recognized; aimless is tried first to capture its status. This supplies independent-family evidence, not an automatic T13 pass: paired agreement checks still require the same dataset, agent measurements, and registry preconditions.
 
 ## Repo layout (the parts that matter for this skill)
 
@@ -364,14 +364,14 @@ Catalog T10 (ligand fitting) declares the metrics; the skill version below makes
 For every Ligand record in the eval:
 
 1. **Position vs the claimed subject** — verify quoted coordinates against the exact model/version the report names, identified by digest, to within ≤ 0.05 Å (gemmi audit script). A comparison with a deposition or differently packaged round answers a different question. In 1SAR the 0.215 Å report-to-package difference crosses round identities and cannot diagnose initial-versus-final templating.
-2. **Density support — RSCC** — `phenix.real_space_correlation` (cctbx) and ideally a non-cctbx confirmation (`edstats` from CCP4, or `gemmi sfcalc` + custom RSCC script). Threshold: > 0.85 for ligands at typical resolutions; document any deviation in `notes`.
+2. **Density support** — assess accuracy and precision with independent `edstats` RSZD/RSZO when available, following registry §2's “Real-space density fit (ligand/loop)” rule. Retain RSCC/RSR as informational diagnostics; RSCC corroboration across tools requires a matched limiting-radius convention. Neither statistic has a fixed quality cutoff. If RSZD/RSZO or matched-radius metadata are absent, state the gap rather than grading absolute RSCC/RSR values.
 3. **B-factor vs surroundings** — compute the ratio `B(ligand) / mean_B(protein)`. < 1.5× = consistent with full occupancy. 1.5–3× = partial occupancy or weak binding. > 3× = very weak; investigate alternative interpretations.
 4. **Coordination geometry** (metals) — inner-sphere bonds 2.0–2.6 Å for hard metals (Ca²⁺, Mg²⁺, Zn²⁺); coordination number 6–8 for Ca²⁺. Use `gemmi contact` or a small gemmi script.
 5. **Element identity** (metals) — does the data type allow it to be cross-checked?
    - **Anomalous data present** (e.g. multi-wavelength MAD, peak/edge/remote) → run anomalous Fourier; check anomalous map peak height at the metal site. Tools: `phenix.anomalous_signal`, CCP4 `fft` with anomalous coefficients.
    - **No anomalous data** → element identity cannot be cross-validated by oracle. Downgrade verdict to "consistent with X — alternatives not excluded". For 1SAR's `1sar.mtz` (only F-obs / SIGF-obs / R-free flags) this is the case.
    - **CheckMyMetal web service** (<https://checkmymetal.research.uchicago.edu/>) — geometry-based heuristic check: classifies modelled element by coordination geometry against expected. No anomalous data needed; web-only, no install. Useful when the only choice is "downgrade to consistent-with" or "submit for an external sanity check".
-6. **Pose RMSD to deposited reference** (small-molecule ligands) — `phenix.superpose_models` on the ligand atoms only. Threshold < 0.5 Å for "good fit" against a deposited co-crystal.
+6. **Pose RMSD to deposited reference** (small-molecule ligands) — informational pending a ligand-specific registry criterion. Identify both coordinate subjects, matched ligand atom mapping, symmetry-equivalent atom handling and common receptor frame. Fitting the ligand itself measures conformation, not its placement at the binding site. Cross-tool agreement confirms a calculation, not a correct pose; do not borrow the Cα-superposition tolerance.
 7. **H-bond network** — `gemmi contact` or PLIP. Count protein–ligand H-bonds; compare to expected for the ligand class.
 
 ### Per-water audit (whole-structure, not per-residue)
@@ -380,8 +380,8 @@ For the water set as a whole:
 
 1. **Count** waters in the exact claimed model (`grep -cE '^HETATM.* HOH ' model.pdb` or `gemmi residues`) and record its digest. A deposition or stale packaged round is a separate subject. In 1SAR the packaged round-4 count is 146 and the round-7 report says 159; this is a package/claim gap, not a same-model count error.
 2. **B-factor distribution** — mean, std, min, max. Mean ~1.5–2× protein-mean is typical for surface waters. Flag waters with B > 60 Å² as `density_misfit` candidates.
-3. **RSCC distribution** — `phenix.real_space_correlation` outputs RSCC per HOH. Expect mean ~0.85, range 0.65–0.99. Flag waters with RSCC < 0.7 as **density_misfit ResidueOutliers**. 1SAR had 3 such waters (HOH S 680, 707, 729) with RSCC 0.658–0.691.
-4. **Per-water summary on the QDS** — populate `TypedMeasurementValue.mean / std_dev / min_value / max_value / count` on a single scope=complex measurement. Add `ResidueOutlier` rows for the worst N waters (not all N=146).
+3. **Density-fit distribution** — retain per-water RSCC values and their radius convention as informational diagnostics. Apply registry §2's density-fit rule to available RSZD/RSZO evidence. Do not infer a `density_misfit` outlier or a water-quality verdict from an absolute RSCC cutoff. The historical 1SAR RSCC-only water flags require a new dated correction before reuse as density-misfit findings.
+4. **Per-water summary on the QDS** — populate `TypedMeasurementValue.mean / std_dev / min_value / max_value / count` on a single scope=complex measurement. Ranking may identify waters for review, but add `density_misfit` ResidueOutlier rows only when retained significance evidence supports that classification.
 
 ### Tools — what we have and what's missing
 
@@ -407,7 +407,7 @@ Each per-ligand check populates a `MeasurementValue` at `scope: ligand`, `scope_
 
 The QDS emitter joins via `Site.ligand_ref` → `LigandQuality` so every ligand bound at a Site has its quality block in `site_qualities[].ligand_quality`. Declare the Site (kind: `binding_site`, `metal_coordination`, etc.) explicitly in the eval — without it, scope=ligand measurements will trigger `_check_implied_blocks` to fail the QDS emit.
 
-For waters specifically: do NOT declare every HOH as a Ligand (146 records would explode the YAML). Use a single scope=complex measurement carrying the water B and RSCC distribution stats (mean/std/min/max/count), plus ResidueOutlier rows only for the worst N. The 1SAR eval shows the pattern — 4 outliers (1 Asn A 39 + 3 waters) explicitly listed; 146 waters summarised in two scope=complex rows.
+For waters specifically: do NOT declare every HOH as a Ligand. Use a single scope=complex measurement carrying the water B and RSCC distribution stats (mean/std/min/max/count). Add `density_misfit` ResidueOutlier rows only when retained significance evidence supports that classification; rank-only or RSCC-only review candidates remain informational observations. The historical 1SAR water flags are not a validated template for assigning outlier status.
 
 ## QDS emitter contract (schema v5)
 

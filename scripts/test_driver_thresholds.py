@@ -50,6 +50,35 @@ def main() -> int:
           m.stale_hits("|Δ| ≤ 0.03 Å per §3", ["≤ 0.10 Å"]),
           [])
 
+    # #694: preserve the exact bad authoring examples as regression inputs.
+    # These are policy contradictions, not a newly defined numeric cutoff.
+    density = m.CHECKS_BY_METRIC["Real-space density-fit interpretation (§2)"]
+    for old_text in (
+        "Real-space correlation coefficient. > 0.85 = good fit.",
+        "Real-space R. < 0.20 = good fit at typical resolutions.",
+        "ligand_quality: RSCC (>0.85), RSR (<0.20),",
+        "Density support — RSCC. Threshold: > 0.85 for ligands.",
+        "Flag waters with RSCC < 0.7 as density_misfit ResidueOutliers.",
+        "Add `ResidueOutlier` rows for the worst N waters (not all N=146).",
+        "matched radii between tools before any ±0.05 comparison is meaningful",
+        "Fraction of residues below the configured RSCC quality threshold.",
+        "Fraction of residues with poor real-space correlation.",
+        "RSCC outlier fraction | Fraction of weakly supported residues",
+    ):
+        check(f"#694 rejects original active guidance {old_text!r}",
+              bool(m.stale_hits(old_text, density["retired"])), True)
+    for rel in density["consumers"]:
+        check(f"#694 active consumer has no retired fixed bars: {rel}",
+              m.stale_hits((REPO / rel).read_text(), density["retired"]), [])
+
+    pose = m.CHECKS_BY_METRIC["CA RMSD domain boundary (§3)"]
+    for old_text in pose["retired"]:
+        check(f"#723 rejects unsupported ligand-pose instruction {old_text!r}",
+              bool(m.stale_hits(old_text, pose["retired"])), True)
+    for rel in pose["consumers"]:
+        check(f"#723 active consumer has no unsupported pose bars: {rel}",
+              m.stale_hits((REPO / rel).read_text(), pose["retired"]), [])
+
     # registry_value extracts the current figure, and detects a changed one.
     check("registry_value extracts the current CA RMSD",
           m.registry_value(m.CHECKS_BY_METRIC["CA RMSD agreement (§3)"]["registry"], "| CA RMSD | \\|Δ\\| ≤ **0.03 Å**"),

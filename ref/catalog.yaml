@@ -1717,7 +1717,11 @@ metric_definitions:
 
 - id: T06_rscc_outlier_fraction
   name: RSCC outlier fraction
-  description: Fraction of residues below the configured RSCC quality threshold.
+  description: >-
+    Informational fraction of residues below an explicitly stated RSCC reporting
+    cutoff; record the limiting-radius convention and denominator. The legacy
+    name does not establish significant outliers or a quality verdict: RSCC has
+    no B-factor-independent significance criterion (threshold registry §2).
   applicable_task_refs:
   - T06
   scope: complex

@@ -1543,7 +1543,11 @@ classes:
       rscc_outlier_fraction:
         range: TypedMeasurementValue
         inlined: true
-        description: Fraction of residues with poor real-space correlation.
+        description: >-
+          Informational fraction below an explicitly stated RSCC reporting cutoff,
+          with limiting-radius convention and denominator recorded. The legacy
+          name does not imply significant outliers or a quality verdict; see
+          the threshold registry's real-space density-fit rule.
 
   CrossToolCoverage:
     description: >-
@@ -2397,11 +2401,17 @@ classes:
       rscc:
         range: TypedMeasurementValue
         inlined: true
-        description: Real-space correlation coefficient. > 0.85 = good fit.
+        description: >-
+          Real-space correlation coefficient. Informational corroboration only;
+          comparisons require a matched limiting-radius convention. No fixed
+          quality cutoff; see the threshold registry's real-space density-fit rule.
       rsr:
         range: TypedMeasurementValue
         inlined: true
-        description: Real-space R. < 0.20 = good fit at typical resolutions.
+        description: >-
+          Real-space R-factor. Informational diagnostic without a fixed quality
+          cutoff; assess significance using available RSZD/RSZO evidence under
+          the threshold registry's real-space density-fit rule.
       ligand_b_factor_mean:
         range: TypedMeasurementValue
         inlined: true

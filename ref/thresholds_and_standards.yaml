@@ -12,6 +12,44 @@
 # current (the value the pattern must yield today), registry_pattern, consumers,
 # retired. Metrics must be unique.
 governed:
+  - metric: "CA RMSD domain boundary (§3)"
+    section: 3
+    current: "only when both aligners report the same aligned-residue count"
+    registry_pattern: '\| CA RMSD \|.*\*\*(only when both aligners report the same aligned-residue count)\*\*'
+    consumers:
+      - ref/driving_example_T10.md
+      - ref/quality_reporting.md
+      - .claude/skills/protstruct-eval/SKILL.md
+    retired:
+      - "RMSD to the deposited ligand pose is within **± 0.10 Å**"
+      - "< 0.5 Å for refined-against-same-data"
+      - 'Threshold < 0.5 Å for "good fit"'
+
+  - metric: "Real-space density-fit interpretation (§2)"
+    section: 2
+    current: "no B-factor-independent significance criterion"
+    registry_pattern: '\| Real-space density fit \(ligand/loop\) \|.*\*(no B-factor-independent significance criterion)\*'
+    consumers:
+      - ref/quality_reporting.md
+      - schemas/protstruct_review.yaml
+      - protstruct_review/models.py
+      - .claude/skills/protstruct-eval/SKILL.md
+      - ref/driving_example_T10.md
+      - ref/catalog.yaml
+      - ref/protein_structure_quality_refinement_indicators.md
+    retired:
+      - "> 0.85 = good fit"
+      - "< 0.20 = good fit"
+      - "RSCC (>0.85)"
+      - "RSR (<0.20)"
+      - "Threshold: > 0.85"
+      - "Flag waters with RSCC < 0.7"
+      - "Add `ResidueOutlier` rows for the worst N waters"
+      - "before any ±0.05 comparison is meaningful"
+      - "configured RSCC quality threshold"
+      - "Fraction of residues with poor real-space correlation"
+      - "Fraction of weakly supported residues"
+
   - metric: "CA RMSD agreement (§3)"
     section: 3
     current: "0.03"

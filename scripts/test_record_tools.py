@@ -13,6 +13,9 @@ wrong reason, and would have gone on looking right until the input changed.
         `qds_emit._strongest()` ranks numeric above text, so a real measurement lost to
         a weaker text-only one from another tool.
 
+  #721  missing or contradictory twin-operator sections must remain unavailable;
+        absence of a parsed report is not a negative scientific result.
+
 No network, no CCP4; safe to run anywhere.
 """
 from __future__ import annotations
@@ -69,18 +72,19 @@ check("a reworded first-principles line does not flip the flag", operators(_rewo
 _with_table = REAL.replace("No operators found", "  h,-k,-l      0.021      0.019")
 check("an actual operator table does set the flag", operators(_with_table), 1)
 
-check("a log with no twinning section at all reports none",
-      operators("Resolution range of data: 50.0 - 1.5 A\n"), 0)
+check("a log with no twinning section at all reports unavailable (#721)",
+      operators("Resolution range of data: 50.0 - 1.5 A\n"), None)
 
 # #137: the section is checked at EVERY occurrence. A first section saying "No
-# operators found" must not mask a later one carrying a real table.
+# operators found" must not mask a later one carrying a real table. Such a
+# contradiction is unavailable, not a cherry-picked positive result (#721).
 _twice = REAL.replace(
     "Twin fraction estimates by twinning operator\n\nNo operators found",
     "Twin fraction estimates by twinning operator\n\nNo operators found\n\n"
     "Twin fraction estimates by twinning operator\n\n  h,-k,-l      0.021      0.019",
     1)
-check("a later section with a real table is not masked by an earlier empty one",
-      operators(_twice), 1)
+check("contradictory operator sections are unavailable rather than cherry-picked (#721)",
+      operators(_twice), None)
 check("and two empty sections still report none",
       operators(REAL.replace(
           "Twin fraction estimates by twinning operator\n\nNo operators found",

@@ -203,6 +203,27 @@ tool_recommendations:
     as_of_date: '2026-04-25'
     effective_at: '2026-04-25T00:00:00+00:00'
 
+  - id: REC_T05_clashscore_top_performing_2026_09_23
+    metric_definition_ref: T05_clashscore
+    tool_ref: MolProbity (gold)
+    role: top_performing
+    rank: 1
+    justification: >-
+      The retained matched-H-convention benchmark reports a pipeline
+      residual between the cctbx path and standalone reduce/probe. Both
+      paths build hydrogens separately; identical H coordinates and hetero
+      dictionaries were not demonstrated, so the cause of the residual is
+      unresolved. The historical 1SAR headline difference (3.13 versus 3.63)
+      likewise does not isolate an H-builder or counting effect. Its causal
+      explanation is withdrawn; this registry correction claims no new run.
+    evidence_refs:
+      - ref/research/tolerance_benchmark_clashscore_h.md
+      - ref/research/tolerance_benchmark_flip_sets.md
+      - scripts/bench_t05_clashscore_h.py
+    as_of_date: '2026-09-23'
+    effective_at: '2026-09-23T06:55:50+00:00'
+    supersedes_recommendation_ref: REC_T05_clashscore_top_performing
+
   - id: REC_T05_clashscore_alternative_phenix
     metric_definition_ref: T05_clashscore
     tool_ref: mmtbx.validation_summary

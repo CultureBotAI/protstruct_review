@@ -203,7 +203,10 @@ _LEGACY_TOOL_TASK_ROW_DIGESTS = (
         "data/examples/eval/EVAL_synth_active_site_2026-04-26.yaml",
         "EVAL_synth_active_site_2026-04-26",
         {
-            "EVAL_synth_active_site_2026-04-26_M_004": "ebb78ed816028c4ed31e3757f678e9bf8cc069dbd74f4cddc8d5ec4a685d0a1c",
+            # MolProbity now legitimately serves T10 H-bond counting (#691),
+            # so this task-only exception for old M_004 is obsolete. That does
+            # not validate its false MolProbity/RSCC attribution; the frozen
+            # source remains historical and the new dated fixture uses edstats.
             "EVAL_synth_active_site_2026-04-26_M_005": "b97f1bf63f0d492eca72b463b115a562abf36fd006ada98b3c51377cd92191e2",
         },
     ),

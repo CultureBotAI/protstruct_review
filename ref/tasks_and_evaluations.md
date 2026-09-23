@@ -24,9 +24,9 @@ terms. TSV form with the same rows: `ref/tasks_and_evaluations.tsv`.
 
 - **PHENIX tool(s):** `phenix.superpose_models` (LSQ / SSM), `phenix.chain_comparison`
 - **Doc paths:** `reference/superpose_models.html`, `reference/chain_comparison.html`
-- **Independent oracle(s):** ChimeraX `matchmaker`, PyMOL `align` / `super` / `cealign`, TM-align, gemmi `align`, US-align
+- **Independent oracle(s):** ChimeraX `matchmaker`, PyMOL `align` / `super` / `cealign`, TM-align, gemmi `align`, US-align; OpenStructure for per-residue lDDT (not an output of TM-align)
 - **Typical inputs:** fixed PDB, moving PDB; optional chain/atom selection
-- **Metrics:** CA RMSD (Å), all-atom RMSD (Å), number of aligned residues, TM-score, GDT-TS, per-residue ΔCA
+- **Metrics:** CA RMSD (Å), all-atom RMSD (Å), number of aligned residues, TM-score, GDT-TS, per-residue ΔCA, per-residue lDDT
 - **Gold standard:** cross-tool RMSD agreement (PHENIX vs ChimeraX within ≤ 0.1 Å on aligned atoms); or deposition-time reference pose
 - **Example dataset:** any pair of near-identical structures, e.g. `1UBQ` vs `1UBI` (ubiquitin redeterminations), or a held-out deposited structure vs its AlphaFold model
 
@@ -114,7 +114,7 @@ terms. TSV form with the same rows: `ref/tasks_and_evaluations.tsv`.
 
 - **PHENIX tool(s):** `phenix.ligandfit`, `phenix.ligand_pipeline`, `phenix.find_all_ligands`, `phenix.eLBOW` (restraint generation), `phenix.REEL` (restraint editing), `phenix.guided_ligand_replacement`
 - **Doc paths:** `reference/ligandfit.html`, `reference/ligand_pipeline.html`, `reference/find_all_ligands.html`, `reference/elbow.html`, `reference/reel.html`, `reference/guided_ligand_replacement.html`
-- **Independent oracle(s):** Coot `Find Ligand`, AFITT (OpenEye), rhofit (Global Phasing), CCP4 `libcheck` / `acedrg` for restraints
+- **Independent oracle(s):** Coot `Find Ligand`, AFITT (OpenEye), rhofit (Global Phasing), CCP4 `libcheck` / `acedrg` for restraints; EDSTATS for RSCC/RSR and MolProbity `probe` for protein–ligand contacts / hydrogen-bond counts
 - **Typical inputs:** apo (or ligand-free) model, map / MTZ, ligand SMILES or coordinates
 - **Metrics:** ligand RSCC (real-space correlation coefficient), ligand RSR (real-space R), ligand B-factor vs surroundings, protein-ligand hbond count, RMSD to deposited ligand pose
 - **Gold standard:** deposited holo structure for the same complex (PDB co-crystal entry)

@@ -6,7 +6,7 @@ for what is open; this file carries execution detail and context, and names ever
 
 **Last reconciled: 2026-09-26**, against `main` at `121d088` (PR #754) and the issue tracker. At that
 point the queue was empty; this reconciliation filed #760–#767 for the untracked items it found, and its
-review filed #769–#777 (#769–#773 fixed in the same PR). The live ledger is [Open](#open) below. Covered since the previous reconciliation (2026-08-29): the
+review filed #769–#779 (#769–#773, #778 and #779 fixed in the same PR). The live ledger is [Open](#open) below. Covered since the previous reconciliation (2026-08-29): the
 gate-consolidation close-out (#293), the toolchain/CI hardening after the transfer, and the September
 [QDS integrity and 1SAR evidence correction](#qds-integrity-and-the-1sar-evidence-correction-2026-09-09--2026-09-23)
 track. **Check the issue tracker for open issues; this file does not mirror it in real time.**
@@ -23,9 +23,9 @@ the PR. CI runs it with `--extra benchmark`, which the no-extra local command do
 External-tool and online benchmarks remain manual.
 
 **Date conventions differ by section, so two dates for one PR can differ by a day.** The negative-control
-table and its close-out notes use GitHub (UTC) merge dates, checked against the squash commits within
-±1 day by `scripts/check_next_tasks_dates.py`; the tolerance table uses round dates (that guard does not
-check it); the gate-consolidation and QDS-track prose use squash-commit dates; issue closures are GitHub
+table and its close-out notes use GitHub (UTC) merge dates — only the table **rows** are checked, against
+the squash commits within ±1 day, by `scripts/check_next_tasks_dates.py`; the close-out prose is not; the
+tolerance table uses round dates (also unchecked); the gate-consolidation and QDS-track prose use squash-commit dates; issue closures are GitHub
 UTC close dates.
 
 ## The negative-control track (2026-08-08 → 2026-08-26)
@@ -335,7 +335,7 @@ here, and say so.
   - **T05 rule 6's 1SAR ≈ 0.5 builder-shift figure** ([#774](https://github.com/CultureBotAI/protstruct_review/issues/774), P2).
   - **T14 and the flip-set record repeat the unsupported "same H build" basis**
     ([#776](https://github.com/CultureBotAI/protstruct_review/issues/776), P2); fix with #763.
-  - #769–#773 were wording defects in this file, fixed in the same PR.
+  - #769–#773, #778 and #779 were wording defects in this file, fixed in the same PR.
 
 ### Open questions and optional work (no issue)
 
@@ -350,11 +350,13 @@ here, and say so.
   Optional.
 - **A same-subject 1SAR reassessment** — optional and partly blocked. Two different gaps: a same-model
   rerun with retained raw output would close the missing raw-output gap (M_001–M_003) but stays
-  cctbx-only and informational, so it closes **no** waiver; closing the 11 cctbx-only waivers needs
-  retained **independent** outputs on the exact packaged round-4 subject (standalone MolProbity
-  classifiers, CCP4 EDSTATS for the three ligand sites, an independent completeness calculation), and no
-  retained independent implementation of the Holton energy ratio exists, so nothing currently closes that
-  one. Adjudicating the reported round-7 model needs coordinates that were never retained (see
+  cctbx-only and informational, so it closes **no** waiver. Closing the 11 cctbx-only waivers needs
+  retained **independent** outputs, per the sheet's `cross_tool_waivers`: a non-cctbx starting-to-packaged
+  R-free delta with matched reflections, free flags and estimator (WAIVER_001); standalone MolProbity
+  classifiers and composite on the packaged model (002–006); an independent completeness calculation on the
+  pinned MTZ (008); and CCP4 EDSTATS RSZD/RSZO plus a matched limiting-radius RSCC comparison for the three
+  ligand sites (009–011). No retained independent implementation of the Holton energy ratio exists, so
+  nothing currently closes WAIVER_007. Adjudicating the reported round-7 model needs coordinates that were never retained (see
   [Not actionable](#not-actionable-in-this-repo-listed-so-the-gaps-are-explained-not-recommended)). Worth
   doing only if 1SAR becomes load-bearing.
 - **T10 ligand assessment** — no registered ligand-specific pose criterion (pose RMSD stays informational,

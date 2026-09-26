@@ -5,8 +5,8 @@ for what is open; this file carries execution detail and context, and names ever
 **no** issue as such, so an empty queue is never mistaken for an empty backlog.
 
 **Last reconciled: 2026-09-26**, against `main` at `121d088` (PR #754) and the issue tracker. At that
-point the queue was empty and this reconciliation filed #760–#767 for the untracked items it found; the
-live ledger is [Open](#open) below. Covered since the previous reconciliation (2026-08-29): the
+point the queue was empty; this reconciliation filed #760–#767 for the untracked items it found, and its
+review filed #769–#777 (#769–#773 fixed in the same PR). The live ledger is [Open](#open) below. Covered since the previous reconciliation (2026-08-29): the
 gate-consolidation close-out (#293), the toolchain/CI hardening after the transfer, and the September
 [QDS integrity and 1SAR evidence correction](#qds-integrity-and-the-1sar-evidence-correction-2026-09-09--2026-09-23)
 track. **Check the issue tracker for open issues; this file does not mirror it in real time.**
@@ -20,8 +20,13 @@ Licensing and citation landed in #479 (2026-08-26). The local gate is
 `uv run --locked -- bash scripts/validate.sh`; it must exit 0 before a merge, and CI must be green on
 the PR. CI runs it with `--extra benchmark`, which the no-extra local command does not install — see
 [#762](https://github.com/CultureBotAI/protstruct_review/issues/762) for what that difference skips.
-External-tool and online benchmarks remain manual. Dates for PRs are squash-commit dates (the arbiter
-`scripts/check_next_tasks_dates.py` uses); dates for issue closures are GitHub's UTC close dates.
+External-tool and online benchmarks remain manual.
+
+**Date conventions differ by section, so two dates for one PR can differ by a day.** The negative-control
+table and its close-out notes use GitHub (UTC) merge dates, checked against the squash commits within
+±1 day by `scripts/check_next_tasks_dates.py`; the tolerance table uses round dates (that guard does not
+check it); the gate-consolidation and QDS-track prose use squash-commit dates; issue closures are GitHub
+UTC close dates.
 
 ## The negative-control track (2026-08-08 → 2026-08-26)
 
@@ -69,7 +74,7 @@ separate design question (listed under [Open](#open), no issue). The inventory's
 state before consolidation and predate the September guards (`check_pass_status.py`, `strict_yaml.py`).
 
 **NC-11 closeout and the registry:** the stopping/consolidation checklist promised by #292 landed as
-`ref/research/stopping_criteria.md` ([#427](https://github.com/CultureBotAI/protstruct_review/pull/427), merged 2026-08-25; #292 closed at merge). Phase 5 of #295 — the promised
+`ref/research/stopping_criteria.md` ([#427](https://github.com/CultureBotAI/protstruct_review/pull/427), merged 2026-08-26; #292 closed at merge). Phase 5 of #295 — the promised
 registry treatment — is `ref/thresholds_and_standards.md` §6 (negative-control verdict rules, guarded
 against `bench_recover_leg`'s record-derived constants in validate 3b; #433), with 3b now opening every
 committed record family (#434) and this table reconciled (#435).
@@ -122,7 +127,9 @@ interpretations by design and are listed in that sheet's `corrected_qds_refs` (9
 - **Synthetic active-site correction** (#731, 2026-09-23). A new, explicitly fictional contract-3
   example pair with corrected tool provenance; dated registry successors stop attributing the historical
   1SAR clashscore gap to hydrogen building (cause unresolved) and stop treating Allowed rotamers as
-  outliers. The drivers were not all updated to match (#761, #763).
+  outliers. The drivers were not all updated to match (#761, #774, #775), and the clashscore benchmark
+  records and the registry's H-placement basis still describe an H-build comparison that was never made
+  (#763, #776).
 - **Correction-aware contract 4 and the dated 1SAR correction** (#754, 2026-09-23). Typed, hash-pinned
   corrections withdraw or replace exact historical targets before every builder; a typed model-to-dataset
   association admits retained T13 diagnostics; a `measurement_evidence_origins` ledger keeps a correction's
@@ -290,8 +297,11 @@ here, and say so.
   [`tolerance_benchmark_round43_preregistration.md`](ref/research/tolerance_benchmark_round43_preregistration.md)
   (PR #273 — a merged registration, not a tracker). **Unblock condition:** a second, newer PHENIX build
   licensed and installed; only `phenix-2.0-5936` exists. Then point `PROTSTRUCT_PHENIX_BIN` at it (the
-  benchmark environment report flags the version divergence), fetch the round-38 panel again (14 of its 17
-  pairs have committed baselines), canary one entry, and run under the registered decision rule. **Not
+  benchmark environment report flags the version divergence) and run the round-38 panel (14 of its 17
+  pairs have committed baselines; the input cache is not committed) under the registered decision rule,
+  canarying one entry first. **Fix [#777](https://github.com/CultureBotAI/protstruct_review/issues/777) first:** the benchmark's output caches
+  are not keyed by PHENIX build, so a run that reuses the round-38 work directory silently adopts the
+  pinned outputs and reports no version shift. **Not
   retired:** [`stopping_criteria.md`](ref/research/stopping_criteria.md) closes a question for lack of
   power, not lack of access, and the registration has no stop clause.
 - **Drivers contradict the corrected registry**
@@ -317,20 +327,34 @@ here, and say so.
 - **One-entry CCP4 canary for the hardened T13 wrapper**
   ([#767](https://github.com/CultureBotAI/protstruct_review/issues/767), P2 — manual, licensed; its tests
   mock execution).
+- **Found by the review of this reconciliation (PR #768)**, all filed before any fix:
+  - **Cross-version cache collision** ([#777](https://github.com/CultureBotAI/protstruct_review/issues/777), P1): `bench_refinement_deltas.py`
+    caches outputs by file name without the PHENIX build — a prerequisite for #760.
+  - **T05 rules 3 and 4 grade against retired tolerances** ([#775](https://github.com/CultureBotAI/protstruct_review/issues/775), P1):
+    Ramachandran favored ±1.0 pp and bond-length RMSD ±0.003 Å with `gemmi validate`; fix with #761.
+  - **T05 rule 6's 1SAR ≈ 0.5 builder-shift figure** ([#774](https://github.com/CultureBotAI/protstruct_review/issues/774), P2).
+  - **T14 and the flip-set record repeat the unsupported "same H build" basis**
+    ([#776](https://github.com/CultureBotAI/protstruct_review/issues/776), P2); fix with #763.
+  - #769–#773 were wording defects in this file, fixed in the same PR.
 
 ### Open questions and optional work (no issue)
 
 - **Is an R-free cross-tool offset band wanted?** Undecided as of 2026-09-26. #576 and #669 closed with
   only the scoping half done: the §3 agreement row governs directly summed R-work, while R-free offsets
   and `gemmi_rfactor.py`'s bin-rescaled estimator stay informational "pending matched benchmarks", so T03
-  has no gradeable independent R-free check. If wanted, it is a preregistered PHENIX benchmark on the
+  has no gradeable same-model cross-tool R-free offset band. (Rule 1's ±0.02 comparison against the
+  deposited value and a REFMAC5 re-refinement is a separate, graded check.) If wanted, it is a preregistered PHENIX benchmark on the
   r_offset set; if not, record it as intentional scope.
 - **Partial-record ledger sidecar** — the example that motivated #293, deferred by the gate inventory as a
   separate design question. It has no machine-readable source today, so it would have to be created.
   Optional.
-- **A same-subject 1SAR reassessment** — optional and partly blocked. Closing the 11 cctbx-only waivers and
-  the missing raw-output gaps needs a licensed rerun of the packaged round-4 model with retained output;
-  adjudicating the reported round-7 model needs coordinates that were never retained (see
+- **A same-subject 1SAR reassessment** — optional and partly blocked. Two different gaps: a same-model
+  rerun with retained raw output would close the missing raw-output gap (M_001–M_003) but stays
+  cctbx-only and informational, so it closes **no** waiver; closing the 11 cctbx-only waivers needs
+  retained **independent** outputs on the exact packaged round-4 subject (standalone MolProbity
+  classifiers, CCP4 EDSTATS for the three ligand sites, an independent completeness calculation), and no
+  retained independent implementation of the Holton energy ratio exists, so nothing currently closes that
+  one. Adjudicating the reported round-7 model needs coordinates that were never retained (see
   [Not actionable](#not-actionable-in-this-repo-listed-so-the-gaps-are-explained-not-recommended)). Worth
   doing only if 1SAR becomes load-bearing.
 - **T10 ligand assessment** — no registered ligand-specific pose criterion (pose RMSD stays informational,
@@ -401,8 +425,9 @@ detail lives in `ref/research/tolerance_benchmark_round40.md` and the memo #258.
 - **Two rows carry `⚠ partial record`, both RETAIN by nature** (rounds 42/44 resolved the ΔRMSD and
   geometry rows; rounds 45–46 resolved both vs-deposited geometry-% rows, #284; rounds 47–48 resolved the
   H-placement flip-set row, #287). The two that remain — #2 L-test and #6 EM map-model — are RETAIN
-  (honest disclosed limits, not resolvable by re-measurement), so **every *resolvable* partial record is
-  now resolved.** Round 21 showed one route
+  (honest disclosed limits, not resolvable by re-measurement), so **through round 48 every *resolvable*
+  partial record was resolved** — #613's T15 requalification has since reopened one (#765/#766). Round 21
+  showed one route
   out (re-measure on a committed subset) and round 22 showed its limit: **it works only when the lost
   members were unremarkable.** For the flip-set row it is established *not* to work — the five missing
   models are the zero-disagreement ones, so a 12-model re-run would report a higher rate than the

@@ -134,6 +134,7 @@ governed:
       - "**±1.0** on the same model"
       - "`[template check 7]`"
       - "(Non-agreement indicates a reporting / parameterisation bug on the agent side.)"
+      - "≈ 0.5 on 1SAR here"
 
   - metric: "Rotamer outlier definition (§1)"
     section: 1
@@ -204,3 +205,33 @@ governed:
       - ref/driving_example_T05.md
     retired:
       - "bond-length RMSD within **±0.003 Å**"
+
+  # #763/#774/#776: the clashscore precondition is settled once. The benchmark
+  # built hydrogens separately on each path with the same reduce binary, so the
+  # registry requires the same binary/version and a matched convention, and no
+  # longer claims identical H coordinates.
+  - metric: "Clashscore builder precondition (§3)"
+    section: 3
+    current: "hydrogens from the same `reduce` binary and version"
+    registry_pattern: '\| Clashscore \|.*\*\*with a matched H-build convention\*\* and \*\*(hydrogens from the same `reduce` binary and version)\*\*'
+    consumers:
+      - ref/driving_example.md
+      - ref/driving_example_T03.md
+      - ref/driving_example_T04.md
+      - ref/driving_example_T05.md
+      - ref/driving_example_T11.md
+      - ref/driving_example_T14.md
+    retired:
+      - "with a matched H-build convention (a mismatched convention is"
+      - "convention; a mismatched convention (nuclear vs electron-cloud H) makes the comparison"
+      - "makes the comparison **void, not failed** (record each tool's H convention)."
+
+  - metric: "Clashscore check precondition, H-placement row (§3)"
+    section: 3
+    current: "built by the same Richardson `reduce` binary and version"
+    registry_pattern: '\*\*Clashscore check:\*\* apply .*? only when both counters score hydrogens \*\*(built by the same Richardson `reduce` binary and version)\*\*'
+    consumers:
+      - ref/driving_example_T14.md
+    retired:
+      - "only when two counters score the **same H-built coordinates**"
+      - "same Richardson H build;"

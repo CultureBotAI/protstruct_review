@@ -108,6 +108,25 @@ def main() -> int:
           bool(m.stale_hits(
               "convention. (Non-agreement indicates a reporting / parameterisation bug on the agent side.) `[registry §3 — clashscore]`",
               m.CHECKS_BY_METRIC["Clashscore agreement envelope (§3)"]["retired"])), True)
+    # #763/#774/#776: the unsupported "same H-built coordinates" basis, the
+    # withdrawn builder-shift figure and the pre-settlement clauses stay rejected.
+    for metric, old_text in (
+        ("Clashscore check precondition, H-placement row (§3)",
+         "   only when two counters score the **same H-built coordinates** under the same electron-cloud or"),
+        ("Clashscore check precondition, H-placement row (§3)",
+         "   same Richardson H build; it did not benchmark changes between `reduce` and `mmtbx.reduce2`"),
+        ("Clashscore agreement envelope (§3)",
+         "   rule 2's pass/fail/void outcome depends on the convention — since clashscore can shift between builds (≈ 0.5 on 1SAR here — not a general figure). Absence of the"),
+        ("Clashscore builder precondition (§3)",
+         "   the mean, whichever is larger, with a matched H-build convention (a mismatched convention is"),
+    ):
+        check(f"#763/#774/#776 rejects retired clashscore wording: {old_text.strip()[:50]!r}",
+              bool(m.stale_hits(old_text, m.CHECKS_BY_METRIC[metric]["retired"])), True)
+    for metric in ("Clashscore builder precondition (§3)", "Clashscore check precondition, H-placement row (§3)"):
+        for rel in m.CHECKS_BY_METRIC[metric]["consumers"]:
+            check(f"#763/#776 consumer is current for {metric}: {rel}",
+                  m.stale_hits((REPO / rel).read_text(), m.CHECKS_BY_METRIC[metric]["retired"]), [])
+
     # #784: a registry edit to any clause T05 restates must not pass silently.
     registry_text = (REPO / "ref/thresholds_and_standards.md").read_text()
     for metric, old, new in (
@@ -115,6 +134,13 @@ def main() -> int:
         ("Bond-length RMSD matched-library bound (§3)", "barely tighter: **|Δ| ≤ 0.006 Å**", "barely tighter: **|Δ| ≤ 0.004 Å**"),
         ("Rotamer favored-% band (§3)", "**Rotamer favored %: ± 1.0 pp retained", "**Rotamer favored %: ± 2.0 pp retained"),
         ("Bond-length RMSD agreement (§3)", "| Bond-length RMSD | \\|Δ\\| ≤ **0.008 Å**", "| Bond-length RMSD | \\|Δ\\| ≤ **0.010 Å**"),
+        # #776: reverting either row to the unsupported basis must fail.
+        ("Clashscore builder precondition (§3)",
+         "**with a matched H-build convention** and **hydrogens from the same `reduce` binary and version**",
+         "**with a matched H-build convention**"),
+        ("Clashscore check precondition, H-placement row (§3)",
+         "only when both counters score hydrogens **built by the same Richardson `reduce` binary and version**",
+         "only when two counters score the **same H-built coordinates**"),
     ):
         entry = m.CHECKS_BY_METRIC[metric]
         assert registry_text.count(old) == 1, (metric, old)

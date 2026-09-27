@@ -68,11 +68,13 @@ to either a pass or a fail.
    `[benchmark — H-placement agreement, round 48]`
 3. **Clashscore agreement.** Report each builder's pre→post clashscore change informationally. Apply
    the registered Clashscore envelope — **|Δ| ≤ 1.0, or 20 % of the mean, whichever is larger** —
-   only when two counters score the **same H-built coordinates** under the same electron-cloud or
-   nuclear convention. The benchmark compared cctbx clash counting with standalone probe after the
-   same Richardson H build; it did not benchmark changes between `reduce` and `mmtbx.reduce2`
-   models. It measured PHENIX 2.0-5936, `reduce 4.16.250520`, and `probe 2.26.021123`; a counter-version,
-   convention, or coordinate mismatch makes the governed comparison **void**, not failed.
+   only when both counters score hydrogens built by the **same `reduce` binary and version** under the
+   same electron-cloud or nuclear convention. The benchmark compared `phenix.clashscore` with standalone
+   `probe`, each on hydrogens built separately by that binary; it did not establish identical H
+   coordinates, did not separate H construction from clash counting, and did not benchmark changes
+   between `reduce` and `mmtbx.reduce2` models. It measured PHENIX 2.0-5936, `reduce 4.16.250520`, and
+   `probe 2.26.021123`; a builder, version, or convention mismatch makes the governed comparison
+   **void**, not failed.
    `[benchmark — Clashscore]`
 4. **Build configuration disclosed.** State the add-H/flip-mover settings, H convention, executable
    version, and hetero dictionary provenance. `reduce -build`, plain add-H, and

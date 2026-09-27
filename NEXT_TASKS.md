@@ -128,9 +128,10 @@ interpretations by design and are listed in that sheet's `corrected_qds_refs` (9
   example pair with corrected tool provenance; dated registry successors stop attributing the historical
   1SAR clashscore gap to hydrogen building (cause unresolved) and stop treating Allowed rotamers as
   outliers. The drivers had not been updated to match; #761 and #775 fixed them and put those rows under
-  the driver-threshold guard (T05 rule 6 remains, #774), and the clashscore benchmark
-  records and the registry's H-placement basis still describe an H-build comparison that was never made
-  (#763, #776).
+  the driver-threshold guard, and #763, #774 and #776 withdrew the remaining "identical H coordinates"
+  basis from the registry, T05, T14 and the two benchmark records, settling one clashscore
+  precondition (matched convention, same `reduce` binary and version). Decomposing the residual is
+  optional work (#790).
 - **Correction-aware contract 4 and the dated 1SAR correction** (#754, 2026-09-23). Typed, hash-pinned
   corrections withdraw or replace exact historical targets before every builder; a typed model-to-dataset
   association admits retained T13 diagnostics; a `measurement_evidence_origins` ledger keeps a correction's
@@ -315,10 +316,6 @@ here, and say so.
   ([#762](https://github.com/CultureBotAI/protstruct_review/issues/762), P1): `prompts/backlog-loop-goal.md`
   says "there is no CI" and runs unlocked invocations; the documented local gate differs from CI's
   `--extra benchmark` run.
-- **Clashscore basis claim unsupported**
-  ([#763](https://github.com/CultureBotAI/protstruct_review/issues/763), P1): the benchmark record keeps
-  the attribution #728 withdrew, and the registry row claims an "identical H coordinates" basis the
-  benchmark never established.
 - **Registry header vs the requalified T15 row**
   ([#766](https://github.com/CultureBotAI/protstruct_review/issues/766), P2), and the **T15
   secondary-structure benchmark rerun** that would settle it
@@ -327,15 +324,15 @@ here, and say so.
 - **T03 rubric rules 1 and 3 undefined** for depositions without a free R and for padded or NaN
   reflection sets ([#764](https://github.com/CultureBotAI/protstruct_review/issues/764), P2 — a design
   decision the 1SAR audit exposed).
+- **Decompose the matched-convention clashscore residual**
+  ([#790](https://github.com/CultureBotAI/protstruct_review/issues/790), P2 — optional, opt-in, licensed PHENIX): feed both counters
+  the same H-built file to separate H construction, dictionaries and counting.
 - **One-entry CCP4 canary for the hardened T13 wrapper**
   ([#767](https://github.com/CultureBotAI/protstruct_review/issues/767), P2 — manual, licensed; its tests
   mock execution).
 - **Found by the reviews of this reconciliation (PR #768)**, each filed before its fix:
   - **Cross-version cache collision** ([#777](https://github.com/CultureBotAI/protstruct_review/issues/777), P1): `bench_refinement_deltas.py`
     caches outputs by file name without the PHENIX build — a prerequisite for #760.
-  - **T05 rule 6's 1SAR ≈ 0.5 builder-shift figure** ([#774](https://github.com/CultureBotAI/protstruct_review/issues/774), P2).
-  - **T14 and the flip-set record repeat the unsupported "same H build" basis**
-    ([#776](https://github.com/CultureBotAI/protstruct_review/issues/776), P2); fix with #763.
   - #769–#773 (first review) and #778–#780 (reviews of the fix commits) were wording defects in this
     file, fixed in the same PR.
 

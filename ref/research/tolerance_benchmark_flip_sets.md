@@ -84,6 +84,14 @@ convention, and left the cause open. Since both paths build hydrogens with the *
 `scripts/bench_t05_clashscore_h.py`). The H-build convention still dominates when it is
 *mismatched* (median 9.95); it is the matched-case residual that is now attributed correctly.
 
+> **Correction (2026-09-26, #776; the attribution was withdrawn in #728).** Point 3 is withdrawn.
+> The 0-disagreement flip result shows the two names reach the same `reduce` binary; it does not show
+> that the clashscore benchmark's two paths scored the same hydrogens. `phenix.clashscore` builds its
+> own H internally (`-oh -his -flip -keep -allalt`) while the benchmark ran standalone
+> `reduce -build`, and the H coordinates and hetero dictionaries were never compared. The 0.115
+> residual therefore cannot be assigned to the clash-counting step; see the matching correction in
+> `tolerance_benchmark_clashscore_h.md` and `ASSUM_molprobity_h_atom_placement_2026_09_23`.
+
 **4. The H-count half of the tolerance was measured on the wrong pair, and fails on the right one.**
 PR #28 set "H-atom count within ± 0.1 %" from a comparison of *one builder in two conventions*
 (standalone `reduce` electron-cloud vs nuclear). The tolerance names a different pair — standalone

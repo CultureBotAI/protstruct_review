@@ -48,7 +48,7 @@ Each bullet is pass/fail; all must pass for green.
 4. **Geometry did not degrade.** clashscore and Ramachandran favored stay within the refinement
    Δ-tolerances (registry §4); MolProbity vs PHENIX clashscore agree within the registry §3 envelope — |Δ| ≤ 1.0, or 20 % of
    the mean, whichever is larger, with a matched H-build convention (a mismatched convention is
-   void, not failed). `[registry §3 — clashscore]`
+   void, not failed; record each tool's H convention). `[registry §3 — clashscore]`
 
 ## Notes
 

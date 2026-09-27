@@ -41,7 +41,7 @@ Each bullet is pass/fail; all must pass for green.
 2. **Loop geometry is clean.** Ramachandran-favored within the loop meets the geometry Δ-tolerance
    (registry §4); MolProbity vs PHENIX clashscore agree within the registry §3 envelope — |Δ| ≤ 1.0, or 20 % of
    the mean, whichever is larger, with a matched H-build convention (a mismatched convention is
-   void, not failed). `[registry §3 — clashscore]`
+   void, not failed; record each tool's H convention). `[registry §3 — clashscore]`
 3. **Correct rebuild vs reference.** Where a reference loop exists, RMSD of the rebuilt loop is within
    **± 0.10 Å** of an independent `gemmi align` superposition. `[template — CA RMSD]`
 4. **No collateral damage.** The rebuild introduces **no new outliers** elsewhere in the model — a

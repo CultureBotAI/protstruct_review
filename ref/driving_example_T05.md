@@ -34,8 +34,9 @@ The harness independently re-runs MolProbity on the same model and checks the tw
 
 1. Run `phenix.holton_geometry_validation model.pdb` (and/or `mmtbx.validation_summary model.pdb`).
 2. Record: clashscore, Ramachandran favored %, Ramachandran outlier %, rotamer favored %, rotamer
-   outlier %, Cβ outlier count, bond-length RMSD, bond-angle RMSD, MolProbity composite, and the
-   rotamer library each tool used.
+   outlier %, Cβ outlier count, bond-length RMSD, bond-angle RMSD, MolProbity composite; and the
+   rotamer library, the number of residues scored, and the H-build program, flags and convention
+   (electron-cloud or nuclear) behind the clashscore. The harness records the same for its oracle run.
 3. Expected artefacts: the validation log and a parsed metrics table.
 
 ## Independent cross-checks (harness, not agent)
@@ -64,11 +65,14 @@ Each bullet is pass/fail; all must pass for green. Log the numeric delta that tr
 3. **Ramachandran / rotamer agreement.** The load-bearing check is **per-shared-residue
    classification agreement**: for the residues both tools evaluate, they assign the same Ramachandran
    verdict and the same rotamer OUTLIER verdict; name every residue whose verdict differs. **Rotamer
-   favored %** stays a pass/fail band, |Δ| ≤ **1.0 pp**, which the registry notes assumes both tools use
-   the same rotamer library (record each tool's library). The other raw percentages are **reported
-   diagnostics, not gates** — Ramachandran favored % |Δ| ≤ 0.2 pp, rotamer outlier % |Δ| ≤ 0.5 pp,
-   Ramachandran outlier % (≤ 0.11 pp observed) — because they are denominator-sensitive: altloc or
-   completeness differences change how many residues each tool scores. The registry benchmarked the
+   favored %** stays a pass/fail band, |Δ| ≤ **1.0 pp**, because registry row 89 retains it: round 46
+   re-scoped only the three rows it could measure against deposited reports, and this one is not
+   directly measurable. The registry notes the band assumes both tools use the same rotamer library,
+   and it is exposed to the same residue-count difference as the other percentages — altloc or
+   completeness handling changes how many residues each tool scores — so record both counts. The other
+   raw percentages are **reported diagnostics, not gates**, as round 46 registered — Ramachandran
+   favored % |Δ| ≤ 0.2 pp, rotamer outlier % |Δ| ≤ 0.5 pp, Ramachandran outlier % (≤ 0.11 pp
+   observed). The registry benchmarked the
    classification check as `phenix.ramalyze`/`phenix.rotalyze` vs the wwPDB validation report (round 46,
    #284). `[registry §3 — Ramachandran / rotamer favored % and outlier %]`
 4. **Bond/angle RMSD agreement.** PHENIX `model_statistics` vs `gemmi rmsz` bond-length RMSD within
@@ -81,7 +85,8 @@ Each bullet is pass/fail; all must pass for green. Log the numeric delta that tr
    A clean 0.48 Å structure scoring otherwise means the pipeline itself is miscalibrated, not the
    model. `[calibration — 3NIR ultra-high-res]`
 6. **H-build disclosure.** If clashscore is reported, the hydrogen-addition step (`reduce -build`
-   vs `phenix.reduce`) must be recorded, since clashscore can shift between builds (≈ 0.5 on 1SAR here — not a general figure). Absence of the
+   vs `phenix.reduce`), its flags and its convention (electron-cloud or nuclear) must be recorded —
+   rule 2's pass/fail/void outcome depends on the convention — since clashscore can shift between builds (≈ 0.5 on 1SAR here — not a general figure). Absence of the
    disclosure is a fail. `[schema/handbook — MolProbity tool assumptions]`
 
 ## Notes

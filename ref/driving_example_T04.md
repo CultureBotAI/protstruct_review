@@ -43,7 +43,9 @@ Each bullet is pass/fail; all must pass for green.
    **0.5**; both tools must use the same crossing, or the numbers are not comparable.
    `[literature — model-map FSC 0.5]`
 4. **Geometry did not degrade.** clashscore / Ramachandran within the refinement Δ-tolerances (§4);
-   MolProbity vs PHENIX clashscore agree within **± 1.0**. `[template]`
+   MolProbity vs PHENIX clashscore agree within the registry §3 envelope — |Δ| ≤ 1.0, or 20 % of
+   the mean, whichever is larger, with a matched H-build convention (a mismatched convention is
+   void, not failed). `[registry §3 — clashscore]`
 
 ## Notes
 

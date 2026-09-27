@@ -127,7 +127,8 @@ interpretations by design and are listed in that sheet's `corrected_qds_refs` (9
 - **Synthetic active-site correction** (#731, 2026-09-23). A new, explicitly fictional contract-3
   example pair with corrected tool provenance; dated registry successors stop attributing the historical
   1SAR clashscore gap to hydrogen building (cause unresolved) and stop treating Allowed rotamers as
-  outliers. The drivers were not all updated to match (#761, #774, #775), and the clashscore benchmark
+  outliers. The drivers had not been updated to match; #761 and #775 fixed them and put those rows under
+  the driver-threshold guard (T05 rule 6 remains, #774), and the clashscore benchmark
   records and the registry's H-placement basis still describe an H-build comparison that was never made
   (#763, #776).
 - **Correction-aware contract 4 and the dated 1SAR correction** (#754, 2026-09-23). Typed, hash-pinned
@@ -304,10 +305,6 @@ here, and say so.
   pinned outputs and reports no version shift. **Not
   retired:** [`stopping_criteria.md`](ref/research/stopping_criteria.md) closes a question for lack of
   power, not lack of access, and the registration has no stop clause.
-- **Drivers contradict the corrected registry**
-  ([#761](https://github.com/CultureBotAI/protstruct_review/issues/761), P1): T05 keeps the retired
-  rotamer-outlier definition; T03/T04/T05/T11 keep a flat ±1.0 clashscore rule without the registry's
-  relative envelope or matched-H precondition.
 - **Workflow documentation misdescribes the gate**
   ([#762](https://github.com/CultureBotAI/protstruct_review/issues/762), P1): `prompts/backlog-loop-goal.md`
   says "there is no CI" and runs unlocked invocations; the documented local gate differs from CI's
@@ -330,8 +327,6 @@ here, and say so.
 - **Found by the reviews of this reconciliation (PR #768)**, each filed before its fix:
   - **Cross-version cache collision** ([#777](https://github.com/CultureBotAI/protstruct_review/issues/777), P1): `bench_refinement_deltas.py`
     caches outputs by file name without the PHENIX build — a prerequisite for #760.
-  - **T05 rules 3 and 4 grade against retired tolerances** ([#775](https://github.com/CultureBotAI/protstruct_review/issues/775), P1):
-    Ramachandran favored ±1.0 pp and bond-length RMSD ±0.003 Å with `gemmi validate`; fix with #761.
   - **T05 rule 6's 1SAR ≈ 0.5 builder-shift figure** ([#774](https://github.com/CultureBotAI/protstruct_review/issues/774), P2).
   - **T14 and the flip-set record repeat the unsupported "same H build" basis**
     ([#776](https://github.com/CultureBotAI/protstruct_review/issues/776), P2); fix with #763.

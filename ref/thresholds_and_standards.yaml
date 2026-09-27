@@ -113,3 +113,65 @@ governed:
       - scripts/bench_round10.py
       - scripts/bench_round11.py
     retired: ["0.01220", "0.01090", "0.00540"]
+
+  # #761 / #775: the per-task drivers restated retired cross-tool tolerances and a
+  # retired outlier definition. The registry rows had moved; nothing tied the
+  # drivers to them. Each entry below reads the row's current wording and bans the
+  # exact retired driver text.
+  - metric: "Clashscore agreement envelope (§3)"
+    section: 3
+    current: "with a matched H-build convention"
+    registry_pattern: '\| Clashscore \| \\\|Δ\\\| ≤ \*\*1\.0\*\*, or \*\*20 % of the mean, whichever is larger\*\*, \*\*(with a matched H-build convention)\*\*'
+    consumers:
+      - ref/driving_example.md
+      - ref/driving_example_T03.md
+      - ref/driving_example_T04.md
+      - ref/driving_example_T05.md
+      - ref/driving_example_T11.md
+      - ref/driving_example_T14.md
+    retired:
+      - "clashscore agree within **± 1.0**. `[template]`"
+      - "**±1.0** on the same model"
+      - "`[template check 7]`"
+
+  - metric: "Rotamer outlier definition (§1)"
+    section: 1
+    current: "residue-specific **OUTLIER** classification reported by the validation tool"
+    registry_pattern: '\| Rotamer outlier \| (residue-specific \*\*OUTLIER\*\* classification reported by the validation tool)'
+    consumers:
+      - ref/driving_example_T05.md
+      - schemas/protstruct_review.yaml
+      - protstruct_review/models.py
+      - .claude/skills/protstruct-eval/SKILL.md
+    retired:
+      - "χ outside the 98th percentile"
+      - "outside the 98th percentile favored region"
+
+  - metric: "Ramachandran favored-% diagnostic (§3)"
+    section: 3
+    current: "0.2"
+    registry_pattern: '\| Ramachandran / rotamer favored % \| \*\*Ramachandran: ± ([\d.]+) pp\*\*'
+    consumers:
+      - ref/driving_example_T05.md
+    retired:
+      - "Favored % agree within **±1.0 percentage point**"
+      - "`[template check 5, tolerance direction]`"
+
+  - metric: "Outlier-% load-bearing check (§3)"
+    section: 3
+    current: "per-shared-residue classification agreement"
+    registry_pattern: '\| Ramachandran / rotamer outlier % \|.*making the \*\*load-bearing check (per-shared-residue classification agreement)\*\*'
+    consumers:
+      - ref/driving_example_T05.md
+    retired:
+      - "% within **±0.5 pp**. `[template"
+
+  - metric: "Bond-length RMSD agreement (§3)"
+    section: 3
+    current: "0.008"
+    registry_pattern: '\| Bond-length RMSD \| \\\|Δ\\\| ≤ \*\*([\d.]+) Å\*\*'
+    consumers:
+      - ref/driving_example_T05.md
+    retired:
+      - "bond-length RMSD within **±0.003 Å**"
+      - "vs `gemmi validate` bond-length"

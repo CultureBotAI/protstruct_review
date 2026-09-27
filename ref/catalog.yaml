@@ -415,8 +415,9 @@ catalog_tasks:
     where reduce made a confident F/K call and applying the <= 10% band only to
     a preregistered cohort aggregate. H-count agreement is exact only for
     protein-only models and void with non-water hetero components; the registered
-    clashscore comparison requires identical H-built coordinates and a matched H
-    convention, not pre/post deltas from distinct builders. A neutron structure is the
+    clashscore comparison requires a matched H convention and hydrogens from the same
+    Richardson reduce release (each path may build its own; identical coordinates are
+    not required), not pre/post deltas from distinct builders. A neutron structure is the
     experimental tiebreaker where available.
   example_dataset: PDB 1HQ1; PDB 5E5V (neutron pair)
 - id: T15

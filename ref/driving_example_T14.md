@@ -70,7 +70,8 @@ to either a pass or a fail.
    the registered Clashscore envelope — **|Δ| ≤ 1.0, or 20 % of the mean, whichever is larger** —
    only when both counters score hydrogens built by the **same `reduce` binary and version** under the
    same electron-cloud or nuclear convention. The benchmark compared `phenix.clashscore` with standalone
-   `probe`, each on hydrogens built separately by that binary; it did not establish identical H
+   `probe`, each on hydrogens built separately by that release (PHENIX's internal build disables
+   Asn/Gln/His flips by default and uses its own het dictionary); it did not establish identical H
    coordinates, did not separate H construction from clash counting, and did not benchmark changes
    between `reduce` and `mmtbx.reduce2` models. It measured PHENIX 2.0-5936, `reduce 4.16.250520`, and
    `probe 2.26.021123`; a builder, version, or convention mismatch makes the governed comparison

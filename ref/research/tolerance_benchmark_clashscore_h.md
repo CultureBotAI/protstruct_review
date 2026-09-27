@@ -105,17 +105,23 @@ being held to an unreasonably tight absolute band.
   `probe` summation here). The mismatched-convention result (median 9.95) is unaffected — that
   comparison deliberately changes the H geometry.
 
-> **Correction (2026-09-26, #763/#776; the attribution was withdrawn in #728).** The re-attribution
-> in the bullet above is withdrawn. Sharing the `reduce` binary does not make the two paths score the
-> same hydrogens: each path builds its own — `phenix.clashscore` calls `reduce` internally on the
-> H-free model with `-oh -his -flip -keep -allalt` (PHENIX 2.0-5936,
-> `mmtbx/validation/clashscore.py`), while this benchmark ran standalone `reduce -build` before
-> `probe` — and neither the resulting H coordinates nor the hetero dictionaries were compared. So
-> the matched-convention residual (median 0.115) cannot be assigned to the clash-counting step; its
-> split between H construction, dictionaries and counting is unresolved
-> (`ASSUM_molprobity_h_atom_placement_2026_09_23` in `ref/tool_assumptions.yaml`). The tolerance
-> itself is unaffected: it bounds the benchmarked pipeline, and the registry states its precondition
-> as the same `reduce` binary and version under a matched convention.
+> **Correction (2026-09-26, #763/#776/#793/#794; the attribution was withdrawn in #728).** The
+> re-attribution in the bullet above is withdrawn. Sharing the `reduce` release does not make the two
+> paths score the same hydrogens, or even the same side-chain orientations. In PHENIX 2.0-5936,
+> `phenix.clashscore` defaults to `do_flips=False`: it trims, then runs `molprobity.reduce` — PHENIX's
+> build with PHENIX's het dictionary (`-DB … -ALLALT`) — with `-oh -his -flip -keep -allalt -limit120
+> -pen9999`, and the 9999 penalty in effect disables Asn/Gln/His flips (`mmtbx/programs/clashscore.py`,
+> `mmtbx/validation/clashscore.py`). This benchmark ran the standalone build as `reduce -build`
+> (`-build` is the same as `-FLIP`), with its own dictionary, before `probe`. The two distributions'
+> het dictionaries are known to differ (`tolerance_benchmark_flip_sets.md` findings 1 and 4), and five
+> of the ten models here — 24MR, 37AP, 37AS, 37BG, 28SZ — are ligand-bearing models whose H counts
+> diverge between them; 24MR, which sets the 2.27 maximum, also carries 49 of the 56 flips in that
+> record. The H coordinates themselves were not compared. So the matched-convention residual (median
+> 0.115) cannot be assigned to the clash-counting step: it mixes flip policy, dictionary-driven H
+> construction and counting in unknown proportions (`ASSUM_molprobity_h_atom_placement_2026_09_23`
+> in `ref/tool_assumptions.yaml`). The tolerance itself is unaffected: it bounds the benchmarked
+> pipeline, differences included, and the registry states its precondition as the same `reduce`
+> release under a matched convention.
 
 - Standalone clashscore is summed by this script from probe output rather than by MolProbity's own
   `clashscore` wrapper (not installed); it was validated against `phenix.clashscore` on 1SAR to

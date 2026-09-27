@@ -119,6 +119,14 @@ def main() -> int:
          "   rule 2's pass/fail/void outcome depends on the convention — since clashscore can shift between builds (≈ 0.5 on 1SAR here — not a general figure). Absence of the"),
         ("Clashscore builder precondition (§3)",
          "   the mean, whichever is larger, with a matched H-build convention (a mismatched convention is"),
+        # #796: the other two pre-settlement clauses (T05 rule 2, base driver rule 7).
+        ("Clashscore builder precondition (§3)",
+         "   convention; a mismatched convention (nuclear vs electron-cloud H) makes the comparison **void, not"),
+        ("Clashscore builder precondition (§3)",
+         "a mismatched convention (nuclear vs electron-cloud H) makes the comparison **void, not failed** (record each tool's H convention). Both tools score the same model,"),
+        # #792: the catalog / task-view / recommendation form of the withdrawn gate.
+        ("Clashscore check precondition, H-placement row (§3)",
+         "    clashscore comparison requires identical H-built coordinates and a matched H"),
     ):
         check(f"#763/#774/#776 rejects retired clashscore wording: {old_text.strip()[:50]!r}",
               bool(m.stale_hits(old_text, m.CHECKS_BY_METRIC[metric]["retired"])), True)
@@ -141,6 +149,13 @@ def main() -> int:
         ("Clashscore check precondition, H-placement row (§3)",
          "only when both counters score hydrogens **built by the same Richardson `reduce` binary and version**",
          "only when two counters score the **same H-built coordinates**"),
+        # #797: the oracle column and the section 3 note.
+        ("Clashscore basis, H-placement oracle column (§3)",
+         "counter vs standalone `probe`, each on hydrogens built separately by the same `reduce` binary and convention",
+         "counter vs standalone `probe` on identical H coordinates"),
+        ("Clashscore method-dependence note (§3)",
+         "requires both counters to score hydrogens built by the same `reduce` binary and",
+         "requires two counters to score the same H-built coordinates and"),
     ):
         entry = m.CHECKS_BY_METRIC[metric]
         assert registry_text.count(old) == 1, (metric, old)

@@ -84,12 +84,13 @@ convention, and left the cause open. Since both paths build hydrogens with the *
 `scripts/bench_t05_clashscore_h.py`). The H-build convention still dominates when it is
 *mismatched* (median 9.95); it is the matched-case residual that is now attributed correctly.
 
-> **Correction (2026-09-26, #776; the attribution was withdrawn in #728).** Point 3 is withdrawn.
-> The 0-disagreement flip result shows the two names reach the same `reduce` binary; it does not show
-> that the clashscore benchmark's two paths scored the same hydrogens. `phenix.clashscore` builds its
-> own H internally (`-oh -his -flip -keep -allalt`) while the benchmark ran standalone
-> `reduce -build`, and the H coordinates and hetero dictionaries were never compared. The 0.115
-> residual therefore cannot be assigned to the clash-counting step; see the matching correction in
+> **Correction (2026-09-26, #776/#793/#794; the attribution was withdrawn in #728).** Point 3 is
+> withdrawn. The 0-disagreement flip result shows the two names reach the same `reduce` release; it
+> does not show that the clashscore benchmark's two paths scored the same hydrogens. `phenix.clashscore`
+> builds its own H internally with flips disabled by default (`-pen9999`) and PHENIX's het dictionary,
+> while the benchmark ran standalone `reduce -build` (flips enabled) with its own dictionary — and
+> finding 1 above already shows those dictionaries differ. The H coordinates were not compared, so the
+> 0.115 residual cannot be assigned to the clash-counting step; see the matching correction in
 > `tolerance_benchmark_clashscore_h.md` and `ASSUM_molprobity_h_atom_placement_2026_09_23`.
 
 **4. The H-count half of the tolerance was measured on the wrong pair, and fails on the right one.**

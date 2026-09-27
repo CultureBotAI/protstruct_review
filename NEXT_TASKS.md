@@ -324,9 +324,12 @@ here, and say so.
 - **T03 rubric rules 1 and 3 undefined** for depositions without a free R and for padded or NaN
   reflection sets ([#764](https://github.com/CultureBotAI/protstruct_review/issues/764), P2 — a design
   decision the 1SAR audit exposed).
+- **Should the general clashscore row pin the benchmarked versions?**
+  ([#798](https://github.com/CultureBotAI/protstruct_review/issues/798), P2 — needs a decision): row 88 and its drivers require the same `reduce`
+  release; row 102 and T14 also require the benchmarked PHENIX/`reduce`/`probe` versions.
 - **Decompose the matched-convention clashscore residual**
   ([#790](https://github.com/CultureBotAI/protstruct_review/issues/790), P2 — optional, opt-in, licensed PHENIX): feed both counters
-  the same H-built file to separate H construction, dictionaries and counting.
+  the same H-built file to separate flip policy, H construction, dictionaries and counting.
 - **One-entry CCP4 canary for the hardened T13 wrapper**
   ([#767](https://github.com/CultureBotAI/protstruct_review/issues/767), P2 — manual, licensed; its tests
   mock execution).

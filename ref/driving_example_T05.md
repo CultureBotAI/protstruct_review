@@ -36,8 +36,8 @@ The harness independently re-runs MolProbity on the same model and checks the tw
 2. Record: clashscore, Ramachandran favored %, Ramachandran outlier %, rotamer favored %, rotamer
    outlier %, Cβ outlier count, bond-length RMSD, bond-angle RMSD, MolProbity composite; and the
    rotamer library, the number of residues scored, and the H-build program, flags and convention
-   (electron-cloud or nuclear) and `reduce` version behind the clashscore. The harness records the same
-   for its oracle run.
+   (electron-cloud or nuclear), `reduce` version, whether Asn/Gln/His flips were allowed, and het
+   dictionary behind the clashscore. The harness records the same for its oracle run.
 3. Expected artefacts: the validation log and a parsed metrics table.
 
 ## Independent cross-checks (harness, not agent)
@@ -60,8 +60,9 @@ Each bullet is pass/fail; all must pass for green. Log the numeric delta that tr
 2. **Clashscore agreement.** PHENIX clashscore and MolProbity-standalone clashscore agree within the
    registry §3 envelope — |Δ| ≤ 1.0, or 20 % of the mean, whichever is larger — with a matched H-build
    convention and hydrogens from the same `reduce` binary and version; a mismatch (e.g. nuclear vs
-   electron-cloud H) makes the comparison **void, not failed**. Both tools score the same model, so a disagreement is a pipeline difference, not a geometry
-   change; the clashscore difference alone does not say whether H placement, dictionaries or clash
+   electron-cloud H) makes the comparison **void, not failed**. Both tools start from the same input
+   model, so a disagreement is a pipeline difference, not a change to the model; the clashscore
+   difference alone does not say whether H placement, Asn/Gln/His flips, het dictionaries or clash
    counting caused it. `[registry §3 — clashscore]`
 3. **Ramachandran / rotamer agreement.** The load-bearing check is **per-shared-residue
    classification agreement**: for the residues both tools evaluate, they assign the same Ramachandran
@@ -86,8 +87,10 @@ Each bullet is pass/fail; all must pass for green. Log the numeric delta that tr
    A clean 0.48 Å structure scoring otherwise means the pipeline itself is miscalibrated, not the
    model. `[calibration — 3NIR ultra-high-res]`
 6. **H-build disclosure.** If clashscore is reported, the hydrogen-addition step (`reduce -build`
-   vs `phenix.reduce`), its `reduce` version, flags and convention (electron-cloud or nuclear) must be
-   recorded — rule 2's pass/fail/void outcome depends on them, and H construction can move clashscore.
+   vs `phenix.reduce`), its `reduce` version, flags (including whether Asn/Gln/His flips were allowed —
+   `phenix.clashscore` disables them by default), het dictionary and convention (electron-cloud or
+   nuclear) must be recorded — rule 2's pass/fail/void outcome depends on them, and H construction can
+   move clashscore.
    The historical 1SAR difference (3.13 cctbx vs 3.63 standalone) is not a measured builder effect:
    its cause is unresolved (`ASSUM_molprobity_h_atom_placement_2026_09_23`). Absence of the
    disclosure is a fail. `[schema/handbook — MolProbity tool assumptions]`

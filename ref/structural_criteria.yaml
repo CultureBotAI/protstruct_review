@@ -61,7 +61,7 @@ criteria:
     cross_tool_agreement:
       tolerance: "|Δ| ≤ 1.0, or 20 % of the mean, whichever is larger"
       tools: "PHENIX/cctbx vs MolProbity standalone (reduce + probe)"
-      precondition: "matched hydrogen-build convention (electron-cloud vs nuclear); a mismatched convention gives 6-23 units of disagreement and VOIDS the comparison rather than failing it"
+      precondition: "matched hydrogen-build convention (electron-cloud vs nuclear) and hydrogens from the same Richardson reduce release (each path may build its own; identical coordinates are not required); a mismatched convention gives 6-23 units of disagreement and VOIDS the comparison rather than failing it"
       provenance:
         - benchmark
       citation: "ref/research/tolerance_benchmark_clashscore_h.md — 10 models, matched median |Δ| 0.115, max 2.27; mismatched median 9.95, max 22.97 (scripts/bench_t05_clashscore_h.py)"
@@ -73,7 +73,7 @@ criteria:
         tool: MolProbity (gold)
         source: "data/coscientists/openscientist/EVAL_1sar_cdba2c07_2026-04-24.yaml"
         verdict: normal
-        interpretation: "11 clashes / 3027 atoms; in line with mmtbx 3.13 (Δ 0.5). Note the benchmark's matched-convention floor is 0.115, so this Δ is larger than implementation noise alone."
+        interpretation: "11 clashes / 3027 atoms; mmtbx reported 3.13 (Δ 0.5). The two values come from separate historical runs whose H builds were not compared, so the Δ has no established cause and is not a measured builder effect (ASSUM_molprobity_h_atom_placement_2026_09_23)."
       - structure_id: 24mr
         value_numeric: 13.61
         unit: clashes per 1000 atoms
@@ -81,7 +81,7 @@ criteria:
         source: "scripts/bench_t05_clashscore_h.py (standalone electron-cloud 11.34, Δ -2.27 = 17 %; standalone nuclear 28.54, Δ +14.93)"
         verdict: normal
         interpretation: "Worst matched-convention disagreement in the benchmark, and the reason the tolerance carries a 20 % relative term: 2.27 units is 17 % of a clashscore of 13.6. The same model under a mismatched H convention differs by 14.9 units."
-    notes: "The H-build convention is not a caveat but the dominant term: benchmarked, a nuclear-vs-electron-cloud mismatch shifts the score by a median of 9.95 units (max 22.97), while a matched convention agrees to a median of 0.115. The earlier in-repo 1SAR figure (≈ 0.5) understated this by an order of magnitude because it compared two electron-cloud builds. H-atom COUNT agreement (benchmarked max 0.013 %) does not imply H-position agreement and must not be cited as evidence that two H builds match."
+    notes: "The H-build convention is not a caveat but the dominant term: benchmarked, a nuclear-vs-electron-cloud mismatch shifts the score by a median of 9.95 units (max 22.97), while a matched convention agrees to a median of 0.115. The earlier in-repo 1SAR difference (≈ 0.5) is not a measure of this effect: its cause is unresolved (ASSUM_molprobity_h_atom_placement_2026_09_23). H-atom COUNT agreement (benchmarked max 0.013 %) does not imply H-position agreement and must not be cited as evidence that two H builds match."
 
   - id: T15_secondary_structure_content
     name: DSSP secondary-structure content

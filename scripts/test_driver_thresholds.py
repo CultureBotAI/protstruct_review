@@ -99,7 +99,28 @@ def main() -> int:
         "Bond-length RMSD agreement (§3)": (
             "4. **Bond/angle RMSD agreement.** PHENIX vs `gemmi validate` bond-length RMSD within **±0.003 Å**.",
         ),
+        # #782: the wording that demoted the rotamer favored band to a diagnostic.
+        "Rotamer favored-% band (§3)": (
+            "   favored % ± 1.0 pp, outlier % ± 0.5 pp — because they are denominator-sensitive: altloc or",
+        ),
     }
+    check("#783 rejects the base driver's agent-side causal attribution",
+          bool(m.stale_hits(
+              "convention. (Non-agreement indicates a reporting / parameterisation bug on the agent side.) `[registry §3 — clashscore]`",
+              m.CHECKS_BY_METRIC["Clashscore agreement envelope (§3)"]["retired"])), True)
+    # #784: a registry edit to any clause T05 restates must not pass silently.
+    registry_text = (REPO / "ref/thresholds_and_standards.md").read_text()
+    for metric, old, new in (
+        ("Bond-length RMSD bond-count precondition (§3)", "**same number of bonds**", "**same number of restraints**"),
+        ("Bond-length RMSD matched-library bound (§3)", "barely tighter: **|Δ| ≤ 0.006 Å**", "barely tighter: **|Δ| ≤ 0.004 Å**"),
+        ("Rotamer favored-% band (§3)", "**Rotamer favored %: ± 1.0 pp retained", "**Rotamer favored %: ± 2.0 pp retained"),
+        ("Bond-length RMSD agreement (§3)", "| Bond-length RMSD | \\|Δ\\| ≤ **0.008 Å**", "| Bond-length RMSD | \\|Δ\\| ≤ **0.010 Å**"),
+    ):
+        entry = m.CHECKS_BY_METRIC[metric]
+        assert registry_text.count(old) == 1, (metric, old)
+        mutated = registry_text.replace(old, new)
+        check(f"#784 a registry change is not silently accepted: {metric}",
+              m.registry_value(entry["registry"], mutated) != entry["current"], True)
     for metric, old_lines in retired_driver_lines.items():
         entry = m.CHECKS_BY_METRIC[metric]
         for old_text in old_lines:

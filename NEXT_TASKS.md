@@ -305,6 +305,12 @@ here, and say so.
   pinned outputs and reports no version shift. **Not
   retired:** [`stopping_criteria.md`](ref/research/stopping_criteria.md) closes a question for lack of
   power, not lack of access, and the registration has no stop clause.
+- **Active tool recommendations still name `gemmi validate`** for T05 bond/angle/planarity/chirality and
+  T03 bond angle ([#785](https://github.com/CultureBotAI/protstruct_review/issues/785), P2): the registry and T05 name `gemmi rmsz`, which is
+  not yet a catalog tool, so the fix is a catalog entry plus dated successor recommendations.
+- **Round 46's preregistered ≥ 0.99 classification-agreement floor is missing from registry rows 89/90**
+  ([#786](https://github.com/CultureBotAI/protstruct_review/issues/786), P2): the rows state the check as a question with no bar, so T05
+  rule 3 reads stricter than the registered floor.
 - **Workflow documentation misdescribes the gate**
   ([#762](https://github.com/CultureBotAI/protstruct_review/issues/762), P1): `prompts/backlog-loop-goal.md`
   says "there is no CI" and runs unlocked invocations; the documented local gate differs from CI's

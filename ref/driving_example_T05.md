@@ -33,8 +33,9 @@ The harness independently re-runs MolProbity on the same model and checks the tw
 ## What the agent must do
 
 1. Run `phenix.holton_geometry_validation model.pdb` (and/or `mmtbx.validation_summary model.pdb`).
-2. Record: clashscore, Ramachandran favored %, Ramachandran outlier %, rotamer outlier %,
-   Cβ outlier count, bond-length RMSD, bond-angle RMSD, MolProbity composite.
+2. Record: clashscore, Ramachandran favored %, Ramachandran outlier %, rotamer favored %, rotamer
+   outlier %, Cβ outlier count, bond-length RMSD, bond-angle RMSD, MolProbity composite, and the
+   rotamer library each tool used.
 3. Expected artefacts: the validation log and a parsed metrics table.
 
 ## Independent cross-checks (harness, not agent)
@@ -62,12 +63,14 @@ Each bullet is pass/fail; all must pass for green. Log the numeric delta that tr
    counting caused it. `[registry §3 — clashscore]`
 3. **Ramachandran / rotamer agreement.** The load-bearing check is **per-shared-residue
    classification agreement**: for the residues both tools evaluate, they assign the same Ramachandran
-   verdict and the same rotamer OUTLIER verdict; name every residue whose verdict differs. The raw
-   percentages are **reported diagnostics, not gates** — Ramachandran favored % |Δ| ≤ 0.2 pp, rotamer
-   favored % ± 1.0 pp, outlier % ± 0.5 pp — because they are denominator-sensitive: altloc or
-   completeness differences change how many residues each tool scores. The registry benchmarked this as
-   `phenix.ramalyze`/`phenix.rotalyze` vs the wwPDB validation report (round 46, #284).
-   `[registry §3 — Ramachandran / rotamer favored % and outlier %]`
+   verdict and the same rotamer OUTLIER verdict; name every residue whose verdict differs. **Rotamer
+   favored %** stays a pass/fail band, |Δ| ≤ **1.0 pp**, which the registry notes assumes both tools use
+   the same rotamer library (record each tool's library). The other raw percentages are **reported
+   diagnostics, not gates** — Ramachandran favored % |Δ| ≤ 0.2 pp, rotamer outlier % |Δ| ≤ 0.5 pp,
+   Ramachandran outlier % (≤ 0.11 pp observed) — because they are denominator-sensitive: altloc or
+   completeness differences change how many residues each tool scores. The registry benchmarked the
+   classification check as `phenix.ramalyze`/`phenix.rotalyze` vs the wwPDB validation report (round 46,
+   #284). `[registry §3 — Ramachandran / rotamer favored % and outlier %]`
 4. **Bond/angle RMSD agreement.** PHENIX `model_statistics` vs `gemmi rmsz` bond-length RMSD within
    |Δ| ≤ **0.008 Å** across differing restraint libraries (≤ 0.006 Å when the library matches), and
    only when both tools restrain the **same number of bonds** — otherwise report both figures, not a Δ.

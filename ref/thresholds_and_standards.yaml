@@ -133,6 +133,7 @@ governed:
       - "clashscore agree within **± 1.0**. `[template]`"
       - "**±1.0** on the same model"
       - "`[template check 7]`"
+      - "(Non-agreement indicates a reporting / parameterisation bug on the agent side.)"
 
   - metric: "Rotamer outlier definition (§1)"
     section: 1
@@ -175,3 +176,31 @@ governed:
     retired:
       - "bond-length RMSD within **±0.003 Å**"
       - "vs `gemmi validate` bond-length"
+
+  # #784: T05 restates these row-89/91 clauses too, so the guard reads them.
+  - metric: "Rotamer favored-% band (§3)"
+    section: 3
+    current: "1.0"
+    registry_pattern: '\*\*Rotamer favored %: ± ([\d.]+) pp retained'
+    consumers:
+      - ref/driving_example_T05.md
+    retired:
+      - "favored % ± 1.0 pp, outlier % ± 0.5 pp — because"
+
+  - metric: "Bond-length RMSD bond-count precondition (§3)"
+    section: 3
+    current: "same number of bonds"
+    registry_pattern: '\| Bond-length RMSD \|.*only when both tools restrain the \*\*(same number of bonds)\*\*'
+    consumers:
+      - ref/driving_example_T05.md
+    retired:
+      - "bond-length RMSD within **±0.003 Å**"
+
+  - metric: "Bond-length RMSD matched-library bound (§3)"
+    section: 3
+    current: "0.006"
+    registry_pattern: 'The \*\*matched-library\*\* case is barely tighter: \*\*\|Δ\| ≤ ([\d.]+) Å\*\*'
+    consumers:
+      - ref/driving_example_T05.md
+    retired:
+      - "bond-length RMSD within **±0.003 Å**"

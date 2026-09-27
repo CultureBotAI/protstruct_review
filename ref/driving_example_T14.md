@@ -50,8 +50,9 @@ to either a pass or a fail.
    `reduce` must add the identical number of H atoms (**Δ = 0**) only for the measured tool/version
    pair: the PHENIX redistribution and standalone build both reporting `reduce.4.16.250520`. A tool
    or version mismatch is informational pending a matched benchmark. When non-water hetero
-   components are present, the registered comparison is **void** because the two distributions
-   carry different hetero dictionaries. Even an exact count is only a same-binary
+   components are present, the registered comparison is **void**: the measured counts diverged on
+   ligand-bearing models, most likely because the standalone build loaded no het dictionary as
+   invoked (#799). Even an exact count is only a same-binary
    packaging/defaults check and says nothing about H-position agreement.
    `[benchmark — H-placement agreement]`
 2. **Confident flip-set conflicts.** Compare standalone `reduce` with `mmtbx.reduce2`, not with the
@@ -71,7 +72,8 @@ to either a pass or a fail.
    only when both counters score hydrogens built by the **same `reduce` binary and version** under the
    same electron-cloud or nuclear convention. The benchmark compared `phenix.clashscore` with standalone
    `probe`, each on hydrogens built separately by that release (PHENIX's internal build disables
-   Asn/Gln/His flips by default and uses its own het dictionary); it did not establish identical H
+   Asn/Gln/His flips by default; the standalone build, as invoked, most likely loaded no het
+   dictionary, #799); it did not establish identical H
    coordinates, did not separate H construction from clash counting, and did not benchmark changes
    between `reduce` and `mmtbx.reduce2` models. It measured PHENIX 2.0-5936, `reduce 4.16.250520`, and
    `probe 2.26.021123`; a builder, version, or convention mismatch makes the governed comparison

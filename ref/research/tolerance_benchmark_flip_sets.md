@@ -62,6 +62,17 @@ implementation run twice. But the two distributions do **not** ship the same het
 
 That difference is invisible on protein residues and decisive on ligands — see finding 4.
 
+> **Correction (2026-09-27, #799).** The two distributions' het dictionary files are **byte-identical**
+> (`~/tools/reduce-src/reduce_wwPDB_het_dict.txt` and PHENIX's `reduce/reduce_wwPDB_het_dict.txt`). The
+> standalone build's compiled default path (`/usr/local/reduce_wwPDB_het_dict.txt`) does not exist here,
+> `REDUCE_HET_DICT` is unset, the bench scripts pass no `-DB`, and `scripts/toolchain.py` discarded
+> `reduce`'s stderr — so, as invoked, the standalone path most likely loaded **no** het dictionary and
+> added no hydrogens to non-standard hetero groups (it prints `could not open` and `Hydrogens not added`
+> when run that way today; the benchmark-time configuration was not recorded). The `std=`/`adj=` values
+> are `reduce`'s hydrogen tallies, not dictionary contents. Read every attribution below to "different
+> het dictionaries" as "standalone build without a dictionary": the ligand-model divergence and the
+> void rule stand; their stated reason does not. Re-measurement with the dictionary loaded is #799.
+
 > **Superseded in part (round 6).** This section concluded that a genuine flip comparison was
 > unavailable because `mmtbx.reduce2` "reports no flip information". That was true of the *run* and
 > wrong about the tool: `add_flip_movers` defaults to **False**, so reduce2 built no flip movers and
@@ -87,9 +98,10 @@ convention, and left the cause open. Since both paths build hydrogens with the *
 > **Correction (2026-09-26, #776/#793/#794; the attribution was withdrawn in #728).** Point 3 is
 > withdrawn. The 0-disagreement flip result shows the two names reach the same `reduce` release; it
 > does not show that the clashscore benchmark's two paths scored the same hydrogens. `phenix.clashscore`
-> builds its own H internally with flips disabled by default (`-pen9999`) and PHENIX's het dictionary,
-> while the benchmark ran standalone `reduce -build` (flips enabled) with its own dictionary — and
-> finding 1 above already shows those dictionaries differ. The H coordinates were not compared, so the
+> builds its own H internally with flips disabled by default (`-pen9999`) and with the het dictionary
+> loaded, while the benchmark ran standalone `reduce -build` (flips enabled), which as invoked most
+> likely loaded no het dictionary (see the #799 correction under finding 1). The H coordinates were not
+> compared, so the
 > 0.115 residual cannot be assigned to the clash-counting step; see the matching correction in
 > `tolerance_benchmark_clashscore_h.md` and `ASSUM_molprobity_h_atom_placement_2026_09_23`.
 

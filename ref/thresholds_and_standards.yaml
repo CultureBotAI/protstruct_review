@@ -221,10 +221,15 @@ governed:
       - ref/driving_example_T05.md
       - ref/driving_example_T11.md
       - ref/driving_example_T14.md
+      - ref/structural_criteria.yaml
     retired:
       - "with a matched H-build convention (a mismatched convention is"
       - "convention; a mismatched convention (nuclear vs electron-cloud H) makes the comparison"
       - "makes the comparison **void, not failed** (record each tool's H convention)."
+      # #802: the pre-#795 structural_criteria.yaml T05_clashscore text.
+      - "matched hydrogen-build convention (electron-cloud vs nuclear); a mismatched convention gives"
+      - "so this Δ is larger than implementation noise alone"
+      - "because it compared two electron-cloud builds"
 
   - metric: "Clashscore check precondition, H-placement row (§3)"
     section: 3

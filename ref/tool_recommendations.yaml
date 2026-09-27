@@ -1799,7 +1799,8 @@ tool_recommendations:
     supersedes_recommendation_ref: REC_T03_r_free_top_performing
 
   # Corrective dated T14 revisions: same-binary dispatch is not independence,
-  # and the clashscore envelope is defined on identical H-built coordinates.
+  # and the clashscore envelope is defined on identical H-built coordinates
+  # (that clause is superseded by the 2026-09-27 entry below, #792/#801).
   - id: REC_T14_h_added_top_considered_2026_09_22
     metric_definition_ref: T14_h_added
     tool_ref: reduce (standalone, Richardson)

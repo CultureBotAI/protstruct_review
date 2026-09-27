@@ -124,6 +124,13 @@ def main() -> int:
          "   convention; a mismatched convention (nuclear vs electron-cloud H) makes the comparison **void, not"),
         ("Clashscore builder precondition (§3)",
          "a mismatched convention (nuclear vs electron-cloud H) makes the comparison **void, not failed** (record each tool's H convention). Both tools score the same model,"),
+        # #802: the exact pre-#795 structural_criteria.yaml T05_clashscore strings.
+        ("Clashscore builder precondition (§3)",
+         '      precondition: "matched hydrogen-build convention (electron-cloud vs nuclear); a mismatched convention gives 6-23 units'),
+        ("Clashscore builder precondition (§3)",
+         "in line with mmtbx 3.13 (Δ 0.5). Note the benchmark's matched-convention floor is 0.115, so this Δ is larger than implementation noise alone."),
+        ("Clashscore builder precondition (§3)",
+         "The earlier in-repo 1SAR figure (≈ 0.5) understated this by an order of magnitude because it compared two electron-cloud builds."),
         # #792: the catalog / task-view / recommendation form of the withdrawn gate.
         ("Clashscore check precondition, H-placement row (§3)",
          "    clashscore comparison requires identical H-built coordinates and a matched H"),

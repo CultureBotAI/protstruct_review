@@ -27,8 +27,10 @@ Asn/Gln/His flips, and report the clashscore change and H-bond-network consisten
    (`reduce -build` versus plain add-H), and electron-cloud versus nuclear H convention.
 2. Record H-atom count, the per-residue Asn/Gln/His decisions, clashscore before and after the
    build, and H-bond-network observations.
-3. Expected artefacts: the H-added model and complete reduce log, including `USER  MOD` dictionary
-   provenance and the residue-level flip decisions needed to audit a conflict count.
+3. Expected artefacts: the H-added model and complete reduce log, including its `USER  MOD` records
+   (H tallies and the residue-level flip decisions needed to audit a conflict count), plus the het
+   dictionary path actually loaded (`-DB` or the default). `USER  MOD` does not record the dictionary,
+   and a standalone build that cannot open one silently adds no hetero hydrogens (#799).
 
 ## Independent cross-checks (harness, not agent)
 

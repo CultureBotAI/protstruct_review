@@ -65,8 +65,8 @@ That difference is invisible on protein residues and decisive on ligands — see
 > **Correction (2026-09-27, #799).** The two distributions' het dictionary files are **byte-identical**
 > (`~/tools/reduce-src/reduce_wwPDB_het_dict.txt` and PHENIX's `reduce/reduce_wwPDB_het_dict.txt`). The
 > standalone build's compiled default path (`/usr/local/reduce_wwPDB_het_dict.txt`) does not exist here,
-> `REDUCE_HET_DICT` is unset, the bench scripts pass no `-DB`, and `scripts/toolchain.py` discarded
-> `reduce`'s stderr — so, as invoked, the standalone path most likely loaded **no** het dictionary and
+> `REDUCE_HET_DICT` is unset, the bench scripts pass no `-DB`, and they discarded `reduce`'s stderr
+> (originally with `2>/dev/null`, now through `scripts/toolchain.py`'s `run_to_file`, #805) — so, as invoked, the standalone path most likely loaded **no** het dictionary and
 > added no hydrogens to non-standard hetero groups (it prints `could not open` and `Hydrogens not added`
 > when run that way today; the benchmark-time configuration was not recorded). The `std=`/`adj=` values
 > are `reduce`'s hydrogen tallies, not dictionary contents. Read every attribution below to "different

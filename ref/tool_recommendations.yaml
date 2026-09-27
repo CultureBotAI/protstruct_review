@@ -1855,6 +1855,25 @@ tool_recommendations:
     as_of_date: '2026-09-22'
     effective_at: '2026-09-22T09:00:00+00:00'
 
+  # #804: USER MOD records carry H tallies and flip decisions, not dictionary
+  # provenance; the loaded het dictionary must be recorded separately (#799).
+  - id: REC_T14_h_added_top_considered_2026_09_27
+    metric_definition_ref: T14_h_added
+    tool_ref: reduce (standalone, Richardson)
+    role: top_considered
+    rank: 1
+    justification: >-
+      Canonical Richardson H-build record: keep the USER MOD H tallies and flip
+      decisions and record the het dictionary path actually loaded (-DB or the
+      default), which USER MOD does not show; a standalone build that cannot open
+      its dictionary adds no hetero hydrogens. When compared with phenix.reduce in
+      the measured installation this is a same-binary dispatcher/defaults check, not
+      an independent H-placement oracle. Use a distinct builder or experimental
+      neutron evidence for corroboration.
+    as_of_date: '2026-09-27'
+    effective_at: '2026-09-27T00:00:00+00:00'
+    supersedes_recommendation_ref: REC_T14_h_added_top_considered_2026_09_22
+
   - id: REC_T14_clashscore_delta_pre_vs_post_top_considered_2026_09_22
     metric_definition_ref: T14_clashscore_delta_pre_vs_post
     tool_ref: MolProbity (gold)

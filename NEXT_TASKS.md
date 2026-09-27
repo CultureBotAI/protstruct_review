@@ -328,7 +328,8 @@ here, and say so.
   ([#799](https://github.com/CultureBotAI/protstruct_review/issues/799), P1): the dictionary files are byte-identical, the standalone default
   path is missing and stderr was discarded, so ligand hydrogens were most likely absent on that path.
   The attribution text is corrected; the bench scripts still need `-DB` and a fail-on-`could not open`
-  check, and the clashscore and flip-set benchmarks an opt-in re-measurement (canary 24MR first).
+  check, and the clashscore and flip-set benchmarks an opt-in re-measurement of the standalone leg
+  (`reduce -DB … -build` plus `probe`; no PHENIX run needed, canary 24MR first).
 - **Should the general clashscore row pin the benchmarked versions?**
   ([#798](https://github.com/CultureBotAI/protstruct_review/issues/798), P2 — needs a decision): row 88 and its drivers require the same `reduce`
   release; row 102 and T14 also require the benchmarked PHENIX/`reduce`/`probe` versions.

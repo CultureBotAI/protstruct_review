@@ -79,6 +79,66 @@ def main() -> int:
         check(f"#723 active consumer has no unsupported pose bars: {rel}",
               m.stale_hits((REPO / rel).read_text(), pose["retired"]), [])
 
+    # #761/#775: the exact retired driver lines must stay rejected, and every
+    # current consumer must be clean of them.
+    retired_driver_lines = {
+        "Clashscore agreement envelope (§3)": (
+            "   Δ-tolerances (registry §4); MolProbity vs PHENIX clashscore agree within **± 1.0**. `[template]`",
+            "   **±1.0** on the same model. Disagreement signals a hydrogen-build or parameterisation difference,",
+            "   not a real geometry change. `[template check 7]`",
+        ),
+        "Rotamer outlier definition (§1)": (
+            "   outside the 99.95th percentile of Top8000; rotamer outlier = χ outside the 98th percentile",
+        ),
+        "Ramachandran favored-% diagnostic (§3)": (
+            "3. **Ramachandran / rotamer agreement.** Favored % agree within **±1.0 percentage point**; outlier",
+        ),
+        "Outlier-% load-bearing check (§3)": (
+            "   % within **±0.5 pp**. `[template check 5, tolerance direction]`",
+        ),
+        "Bond-length RMSD agreement (§3)": (
+            "4. **Bond/angle RMSD agreement.** PHENIX vs `gemmi validate` bond-length RMSD within **±0.003 Å**.",
+        ),
+        # #782: the wording that demoted the rotamer favored band to a diagnostic.
+        "Rotamer favored-% band (§3)": (
+            "   favored % ± 1.0 pp, outlier % ± 0.5 pp — because they are denominator-sensitive: altloc or",
+        ),
+    }
+    check("#783 rejects the base driver's agent-side causal attribution",
+          bool(m.stale_hits(
+              "convention. (Non-agreement indicates a reporting / parameterisation bug on the agent side.) `[registry §3 — clashscore]`",
+              m.CHECKS_BY_METRIC["Clashscore agreement envelope (§3)"]["retired"])), True)
+    # #784: a registry edit to any clause T05 restates must not pass silently.
+    registry_text = (REPO / "ref/thresholds_and_standards.md").read_text()
+    for metric, old, new in (
+        ("Bond-length RMSD bond-count precondition (§3)", "**same number of bonds**", "**same number of restraints**"),
+        ("Bond-length RMSD matched-library bound (§3)", "barely tighter: **|Δ| ≤ 0.006 Å**", "barely tighter: **|Δ| ≤ 0.004 Å**"),
+        ("Rotamer favored-% band (§3)", "**Rotamer favored %: ± 1.0 pp retained", "**Rotamer favored %: ± 2.0 pp retained"),
+        ("Bond-length RMSD agreement (§3)", "| Bond-length RMSD | \\|Δ\\| ≤ **0.008 Å**", "| Bond-length RMSD | \\|Δ\\| ≤ **0.010 Å**"),
+    ):
+        entry = m.CHECKS_BY_METRIC[metric]
+        assert registry_text.count(old) == 1, (metric, old)
+        mutated = registry_text.replace(old, new)
+        check(f"#784 a registry change is not silently accepted: {metric}",
+              m.registry_value(entry["registry"], mutated) != entry["current"], True)
+    for metric, old_lines in retired_driver_lines.items():
+        entry = m.CHECKS_BY_METRIC[metric]
+        for old_text in old_lines:
+            check(f"#761/#775 rejects retired driver text for {metric}: {old_text.strip()[:50]!r}",
+                  bool(m.stale_hits(old_text, entry["retired"])), True)
+        for rel in entry["consumers"]:
+            check(f"#761/#775 consumer is current for {metric}: {rel}",
+                  m.stale_hits((REPO / rel).read_text(), entry["retired"]), [])
+    clash = m.CHECKS_BY_METRIC["Clashscore agreement envelope (§3)"]["registry"]
+    check("#761 clashscore envelope reads its matched-H precondition",
+          m.registry_value(clash, "| Clashscore | \\|Δ\\| ≤ **1.0**, or **20 % of the mean, whichever is larger**, "
+                                  "**with a matched H-build convention**. Benchmarked"),
+          "with a matched H-build convention")
+    check("#761 a changed clashscore precondition or bar is not silently accepted",
+          m.registry_value(clash, "| Clashscore | \\|Δ\\| ≤ **1.0**, or **25 % of the mean, whichever is larger**, "
+                                  "**with a matched H-build convention**. Benchmarked"),
+          None)
+
     # registry_value extracts the current figure, and detects a changed one.
     check("registry_value extracts the current CA RMSD",
           m.registry_value(m.CHECKS_BY_METRIC["CA RMSD agreement (§3)"]["registry"], "| CA RMSD | \\|Δ\\| ≤ **0.03 Å**"),

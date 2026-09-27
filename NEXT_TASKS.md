@@ -6,7 +6,7 @@ for what is open; this file carries execution detail and context, and names ever
 
 **Last reconciled: 2026-09-26**, against `main` at `121d088` (PR #754) and the issue tracker. At that
 point the queue was empty; this reconciliation filed #760–#767 for the untracked items it found, and its
-review filed #769–#779 (#769–#773, #778 and #779 fixed in the same PR). The live ledger is [Open](#open) below. Covered since the previous reconciliation (2026-08-29): the
+reviews filed #769–#780 (#769–#773 and #778–#780 fixed in the same PR). The live ledger is [Open](#open) below. Covered since the previous reconciliation (2026-08-29): the
 gate-consolidation close-out (#293), the toolchain/CI hardening after the transfer, and the September
 [QDS integrity and 1SAR evidence correction](#qds-integrity-and-the-1sar-evidence-correction-2026-09-09--2026-09-23)
 track. **Check the issue tracker for open issues; this file does not mirror it in real time.**
@@ -327,7 +327,7 @@ here, and say so.
 - **One-entry CCP4 canary for the hardened T13 wrapper**
   ([#767](https://github.com/CultureBotAI/protstruct_review/issues/767), P2 — manual, licensed; its tests
   mock execution).
-- **Found by the review of this reconciliation (PR #768)**, all filed before any fix:
+- **Found by the reviews of this reconciliation (PR #768)**, each filed before its fix:
   - **Cross-version cache collision** ([#777](https://github.com/CultureBotAI/protstruct_review/issues/777), P1): `bench_refinement_deltas.py`
     caches outputs by file name without the PHENIX build — a prerequisite for #760.
   - **T05 rules 3 and 4 grade against retired tolerances** ([#775](https://github.com/CultureBotAI/protstruct_review/issues/775), P1):
@@ -335,7 +335,8 @@ here, and say so.
   - **T05 rule 6's 1SAR ≈ 0.5 builder-shift figure** ([#774](https://github.com/CultureBotAI/protstruct_review/issues/774), P2).
   - **T14 and the flip-set record repeat the unsupported "same H build" basis**
     ([#776](https://github.com/CultureBotAI/protstruct_review/issues/776), P2); fix with #763.
-  - #769–#773, #778 and #779 were wording defects in this file, fixed in the same PR.
+  - #769–#773 (first review) and #778–#780 (reviews of the fix commits) were wording defects in this
+    file, fixed in the same PR.
 
 ### Open questions and optional work (no issue)
 

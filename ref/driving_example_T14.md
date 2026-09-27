@@ -29,8 +29,10 @@ Asn/Gln/His flips, and report the clashscore change and H-bond-network consisten
    build, and H-bond-network observations.
 3. Expected artefacts: the H-added model and complete reduce log, including its `USER  MOD` records
    (H tallies and the residue-level flip decisions needed to audit a conflict count), plus the het
-   dictionary path actually loaded (`-DB` or the default). `USER  MOD` does not record the dictionary,
-   and a standalone build that cannot open one silently adds no hetero hydrogens (#799).
+   dictionary path actually loaded (resolved from `-DB`, then a same-named file in the working
+   directory, then `REDUCE_HET_DICT`, then the compiled default) and `reduce`'s stderr. `USER  MOD` does
+   not record the dictionary; a build that cannot open one reports `could not open` on stderr and adds
+   no hetero hydrogens, which went unnoticed in the benchmarks because stderr was discarded (#799).
 
 ## Independent cross-checks (harness, not agent)
 

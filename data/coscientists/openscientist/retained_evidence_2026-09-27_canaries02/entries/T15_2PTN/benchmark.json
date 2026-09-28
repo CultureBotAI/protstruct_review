@@ -1,0 +1,28 @@
+{
+  "rows": [
+    {
+      "pdb_id": "2PTN",
+      "agreement": 0.6906,
+      "n_concordant": 154,
+      "n_scored": 223,
+      "n_dssp": 223,
+      "n_biotite": 223,
+      "n_dropped": 0,
+      "ss_content": 0.4664,
+      "clears_provisional_content_precondition": true,
+      "meets_provisional_0_65_expectation": true
+    }
+  ],
+  "skipped": [],
+  "summary": {
+    "n_models": 1,
+    "median": 0.6906,
+    "p10": 0.6906,
+    "min": 0.6906,
+    "max": 0.6906,
+    "n_meeting_provisional_0_65_expectation": 1,
+    "below_provisional_expectation": [],
+    "n_below_provisional_content_precondition": 0,
+    "below_provisional_content_precondition": []
+  }
+}

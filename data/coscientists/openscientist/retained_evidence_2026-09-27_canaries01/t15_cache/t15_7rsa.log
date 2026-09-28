@@ -1,0 +1,41 @@
+- id: EVAL_BENCH_T15_SS_6ae4efcb62d93561_M_agreement
+  catalog_task_ref: T15
+  stage: final
+  scope: complex
+  metric_definition_ref: T15_secondary_structure_agreement
+  oracle_tool_ref: DSSP + biotite P-SEA
+  oracle_family: non_cctbx
+  bundle_ref: EVAL_BENCH_T15_SS_6ae4efcb62d93561
+  evidence_refs:
+  - data/coscientists/openscientist/retained_evidence_2026-09-27_canaries01/t15_evidence/7rsa.t15-evidence.json
+  oracle_measure:
+    value_numeric: 0.7903
+    unit: fraction
+  pass_status: informational
+  notes: 'three-state (H/E/C) agreement between two independent non-cctbx assigners, DSSP (H-bond) and
+    biotite P-SEA (Cα geometry): configured DSSP reported mkdssp version 4.6.1; biotite reported 1.7.1;
+    DSSP input was normalized with gemmi convert (gemmi 0.7.5), normalized SHA-256 d6f5d3ba77e80f7981fc80350d12a71fe6b36fdd0be195de0e2a8150b4e8e829;
+    biotite P-SEA read the original source bytes, SHA-256 d8d8a22d3260fb1c72a805d9f8a6affcc496ec65c8aadcb4d7ea8dccf6c63b5f;
+    98/124 concordant over residues scored by both (DSSP 124, biotite 124, 0 scored by only one and excluded).
+    DSSP H+E content clears the provisional 0.20 interpretability precondition, so the paired agreement
+    has useful interpretive range; this is not a model-quality verdict.'
+- id: EVAL_BENCH_T15_SS_6ae4efcb62d93561_M_content
+  catalog_task_ref: T15
+  stage: final
+  scope: complex
+  metric_definition_ref: T15_secondary_structure_content
+  oracle_tool_ref: DSSP
+  oracle_family: non_cctbx
+  bundle_ref: EVAL_BENCH_T15_SS_6ae4efcb62d93561
+  evidence_refs:
+  - data/coscientists/openscientist/retained_evidence_2026-09-27_canaries01/t15_evidence/7rsa.t15-evidence.json
+  oracle_measure:
+    value_numeric: 0.5645
+    unit: fraction
+  pass_status: informational
+  notes: 'DSSP H+E content over all DSSP-scored residues: (26 H + 44 E) / 124 = 0.5645; 54 residues are
+    coil. Configured DSSP reported mkdssp version 4.6.1. Biotite reported 1.7.1. DSSP input was normalized
+    with gemmi convert (gemmi 0.7.5), normalized SHA-256 d6f5d3ba77e80f7981fc80350d12a71fe6b36fdd0be195de0e2a8150b4e8e829;
+    biotite P-SEA read the original source bytes, SHA-256 d8d8a22d3260fb1c72a805d9f8a6affcc496ec65c8aadcb4d7ea8dccf6c63b5f.
+    DSSP H+E content clears the provisional 0.20 interpretability precondition, so the paired agreement
+    has useful interpretive range; this is not a model-quality verdict.'

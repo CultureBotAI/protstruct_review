@@ -1,0 +1,43 @@
+{
+  "acceptance": "not assessed; inspect retained evidence before any further entry",
+  "argv": [
+    "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/refinement-cache-integration/.venv/bin/python",
+    "-B",
+    "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/refinement-cache-integration/scripts/bench_t15_ss_agreement.py",
+    "1LYZ",
+    "--cache",
+    "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/refinement-cache-integration/data/coscientists/openscientist/retained_evidence_2026-09-27_canaries01/t15_cache",
+    "--evidence-dir",
+    "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/refinement-cache-integration/data/coscientists/openscientist/retained_evidence_2026-09-27_canaries01/t15_evidence",
+    "--json",
+    "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/refinement-cache-integration/data/coscientists/openscientist/retained_evidence_2026-09-27_canaries01/entries/T15_1LYZ/benchmark.json"
+  ],
+  "entry": "data/coscientists/openscientist/retained_evidence_2026-09-27_canaries01/entries/T15_1LYZ",
+  "mode": "execute",
+  "preregistration_commit": "4a150693dd64b79c38e9e57561667215994a35a1",
+  "python": "3.12.11 (main, Aug 15 2025, 11:56:45) [Clang 14.0.3 (clang-1403.0.22.14.1)]",
+  "python_packages": {
+    "DockQ": "2.1.3",
+    "PyYAML": "6.0.3",
+    "biotite": "1.7.1",
+    "gemmi": "0.7.5",
+    "numpy": "1.26.4",
+    "pydantic": "2.13.4",
+    "scipy": "1.17.1"
+  },
+  "repo": "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/refinement-cache-integration",
+  "root": "data/coscientists/openscientist/retained_evidence_2026-09-27_canaries01",
+  "source_hashes": {
+    "ref/research/t13_t15_canaries_preregistration_2026-09-27.md": "97d46d0fcfe9f17527dc3a60b4667929cec3c2646c27427824f16a5c44c38714",
+    "scripts/bench_t15_ss_agreement.py": "cb0ad3aac45f0dbc7498f603e014a57eb303bd4b79ad0b274eb953b32784637a",
+    "scripts/benchmark_environment.py": "3b8e2ed8808139f3e6b3e07f1ec194eea87984564e4401b598f26ae7a92d1377",
+    "scripts/entry_sandbox.py": "d90356b60b62c4ebb1dcfc1aae904f42e5af09ad947e5eefdf5dac8f150771f8",
+    "scripts/t13_data_quality.py": "9cf55c75fe51a9711f7df97138ba2404e2144dcc7c7b1c4c6c9419b78191355a",
+    "scripts/t15_ss_agreement.py": "42a84d759284752bcc2c8340148a1306c39cb5ca3a1da6eb85180496124a9f4f",
+    "scripts/toolchain.py": "e32dd23ba61d684edea4cf86208c6d7fec62af060898c63cba96f40bd0bc338f",
+    "uv.lock": "c80b8cd4c874a7cf46cd6d5712df4d0a5fd2e1ac755d5ab1efb07d94448fa8b9"
+  },
+  "started_at": "2026-09-28T05:03:25.895972+00:00",
+  "t13_input_sha256_before": "f36d5fe685a3e524e8809d17d19ce12073acdf339eba2cfd3b0347a818850ab2",
+  "timeout_seconds": 900
+}

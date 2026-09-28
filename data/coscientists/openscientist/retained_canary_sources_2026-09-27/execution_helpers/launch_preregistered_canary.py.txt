@@ -1,0 +1,193 @@
+#!/usr/bin/env python3
+"""Plan or explicitly launch one preregistered canary; never batch or accept science."""
+from __future__ import annotations
+
+import argparse
+from datetime import datetime, timezone
+import hashlib
+import importlib.metadata
+import json
+import os
+from pathlib import Path
+import re
+import signal
+import subprocess
+import sys
+import tomllib
+
+PREREG_COMMIT = "4a150693dd64b79c38e9e57561667215994a35a1"
+PREREG = "ref/research/t13_t15_canaries_preregistration_2026-09-27.md"
+INPUT = "data/coscientists/openscientist/retained_evidence_2026-09-23/data/1sar.mtz"
+INPUT_SHA = "f36d5fe685a3e524e8809d17d19ce12073acdf339eba2cfd3b0347a818850ab2"
+COHORT = ("1UBQ", "1LYZ", "1LZ1", "2PTN", "7RSA", "1CA2", "1MBN", "3EST",
+          "1BNI", "2CI2", "9PAP", "1HEW", "4PTI", "1CRN", "2LYZ", "1TIM")
+TIMEOUT = 900
+DISTRIBUTIONS = ("PyYAML", "pydantic", "numpy", "scipy", "gemmi", "biotite", "DockQ")
+SOURCES = (PREREG, "uv.lock", "scripts/entry_sandbox.py", "scripts/toolchain.py",
+           "scripts/benchmark_environment.py", "scripts/t13_data_quality.py",
+           "scripts/t15_ss_agreement.py", "scripts/bench_t15_ss_agreement.py")
+
+
+def digest(path: Path) -> str:
+    with path.open("rb") as handle:
+        return hashlib.file_digest(handle, "sha256").hexdigest()
+
+
+def save_new(path: Path, payload: dict) -> None:
+    with path.open("x") as handle:
+        json.dump(payload, handle, sort_keys=True, indent=2)
+        handle.write("\n")
+
+
+def contained(repo: Path, path: Path) -> Path:
+    candidate = path.resolve()
+    candidate.relative_to(repo)
+    # No symlink output components, including a dangling final symlink.
+    current = path
+    while current != repo:
+        if current.is_symlink():
+            raise ValueError(f"output path contains symlink: {current}")
+        current = current.parent
+    return candidate
+
+
+def file_inventory(root: Path) -> dict:
+    return {
+        p.relative_to(root).as_posix(): {"sha256": digest(p), "size": p.stat().st_size}
+        for p in sorted(root.rglob("*")) if p.is_file() and not p.is_symlink()
+    }
+
+
+def python_versions(repo: Path) -> dict:
+    if sys.version_info[:2] != (3, 12):
+        raise ValueError("execute with the worktree's locked Python 3.12 environment")
+    if Path(sys.prefix).resolve() != (repo / ".venv").resolve():
+        raise ValueError("execute with this worktree's .venv/bin/python; no environment is installed here")
+    normalize = lambda value: re.sub(r"[-_.]+", "-", value).lower()
+    lock = tomllib.loads((repo / "uv.lock").read_text())
+    locked: dict[str, set[str]] = {}
+    for package in lock["package"]:
+        locked.setdefault(normalize(package["name"]), set()).add(package["version"])
+    actual = {name: importlib.metadata.version(name) for name in DISTRIBUTIONS}
+    for name, version in actual.items():
+        if version not in locked.get(normalize(name), set()):
+            raise ValueError(f"installed {name}={version} does not match uv.lock")
+    return actual
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--repo", type=Path, required=True)
+    ap.add_argument("--run-id", required=True, help="safe new suffix, e.g. canaries01")
+    ap.add_argument("--kind", choices=("t13", "t15"), required=True)
+    ap.add_argument("--pdb", choices=COHORT, default="1UBQ")
+    ap.add_argument("--execute", action="store_true", help="actually execute; default prints a read-only plan")
+    args = ap.parse_args()
+    if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,63}", args.run_id):
+        ap.error("--run-id must be a short lowercase safe path suffix")
+    if args.kind == "t13" and args.pdb != "1UBQ":
+        ap.error("--pdb is only used for T15")
+    repo = args.repo.resolve(strict=True)
+    head = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"],
+                          capture_output=True, text=True, check=True).stdout.strip()
+    if head != PREREG_COMMIT:
+        raise ValueError(f"unexpected HEAD {head}; require preregistration commit {PREREG_COMMIT}")
+    subprocess.run(["git", "-C", str(repo), "diff", "--exit-code", "HEAD", "--", *SOURCES],
+                   capture_output=True, check=True)
+    hashes = {name: digest(repo / name) for name in SOURCES}
+    if digest(repo / INPUT) != INPUT_SHA:
+        raise ValueError("T13 retained input hash differs from preregistration")
+    root = contained(repo, repo / "data/coscientists/openscientist" /
+                     f"retained_evidence_2026-09-27_{args.run_id}")
+    entry_id = "T13_1SAR" if args.kind == "t13" else f"T15_{args.pdb}"
+    entry = contained(repo, root / "entries" / entry_id)
+    if entry.exists():
+        raise FileExistsError(f"entry already exists; refusing rerun or log overwrite: {entry}")
+    if args.kind == "t13":
+        argv = [sys.executable, "-B", str(repo / "scripts/t13_data_quality.py"), str(repo / INPUT),
+                "--columns", "F-obs,SIGF-obs", "--eval-id", "EVAL_T13_OPERATIONAL_CANARY",
+                "--logdir", str(entry / "tool_logs")]
+        outputs = [entry / "tool_logs"]
+    else:
+        cache, evidence = root / "t15_cache", root / "t15_evidence"
+        outputs = [cache / f"{args.pdb.lower()}.pdb", cache / f"t15_{args.pdb.lower()}.log",
+                   evidence / f"{args.pdb.lower()}.t15-evidence.json"]
+        argv = [sys.executable, "-B", str(repo / "scripts/bench_t15_ss_agreement.py"), args.pdb,
+                "--cache", str(cache), "--evidence-dir", str(evidence),
+                "--json", str(entry / "benchmark.json")]
+    for output in outputs:
+        contained(repo, output)
+        if output.exists() or output.is_symlink():
+            raise FileExistsError(f"retained output already exists: {output}")
+    identity = {"format": "preregistered-canaries-launch-root-v1",
+                "preregistration_commit": head, "source_hashes": hashes}
+    owner = root / "launch-root.json"
+    if root.exists():
+        if not owner.is_file() or json.loads(owner.read_text()) != identity:
+            raise ValueError("existing root is not owned by this exact preregistration/source snapshot")
+    plan = {
+        "mode": "execute" if args.execute else "plan_only",
+        "repo": str(repo), "root": root.relative_to(repo).as_posix(),
+        "entry": entry.relative_to(repo).as_posix(), "argv": argv,
+        "timeout_seconds": TIMEOUT, "preregistration_commit": head,
+        "source_hashes": hashes, "t13_input_sha256_before": INPUT_SHA,
+        "acceptance": "not assessed; inspect retained evidence before any further entry",
+    }
+    print(json.dumps(plan, indent=2), flush=True)
+    if not args.execute:
+        return 0
+    versions = python_versions(repo)
+    if not root.exists():
+        root.mkdir(parents=True, exist_ok=False)
+        save_new(owner, identity)
+    # Atomic reservation before EntrySandbox's intentionally reusable constructor.
+    entry.parent.mkdir(parents=True, exist_ok=True)
+    entry.mkdir(exist_ok=False)
+    sys.path.insert(0, str(repo / "scripts"))
+    from entry_sandbox import EntrySandbox
+    sandbox = EntrySandbox(entry.parent, entry_id)
+    temporary = sandbox.child("tmp")
+    temporary.mkdir()
+    environment = dict(os.environ)
+    environment.update({"PYTHONDONTWRITEBYTECODE": "1", "TMPDIR": str(temporary),
+                        "TMP": str(temporary), "TEMP": str(temporary),
+                        "MPLCONFIGDIR": str(temporary / "matplotlib"),
+                        "XDG_CACHE_HOME": str(temporary / "xdg")})
+    save_new(entry / "launch-request.json",
+             {**plan, "python": sys.version, "python_packages": versions,
+              "started_at": datetime.now(timezone.utc).isoformat()})
+    interrupted_pgids: list[int] = []
+
+    def interrupted(signum, _frame):
+        interrupted_pgids.extend(EntrySandbox.active_pgids())
+        raise KeyboardInterrupt(f"signal {signum}; terminating only owned process groups")
+
+    signal.signal(signal.SIGINT, interrupted)
+    signal.signal(signal.SIGTERM, interrupted)
+    result = None
+    error = None
+    try:
+        result = sandbox.run_logged(argv, "launcher.log", timeout=TIMEOUT, env=environment)
+    except BaseException as exc:
+        error = f"{type(exc).__name__}: {exc}"
+    after = {name: digest(repo / name) for name in SOURCES}
+    input_after = digest(repo / INPUT)
+    outcome = {
+        "completed_at": datetime.now(timezone.utc).isoformat(),
+        "process": result.to_record() if result is not None else None,
+        "launcher_error": error, "interrupted_pgids": sorted(set(interrupted_pgids)),
+        "source_hashes_after": after, "sources_unchanged": after == hashes,
+        "t13_input_sha256_after": input_after, "t13_input_unchanged": input_after == INPUT_SHA,
+        "files_before_result_manifest": file_inventory(root),
+        "acceptance": "pending manual/read-only evidence inspection; exit status is not acceptance",
+        "failure_evidence_limit": "T15 may delete normalized/raw DSSP files before publishing a bundle (#829)",
+    }
+    save_new(entry / "launch-result.json", outcome)
+    print(json.dumps({"result_manifest": str(entry / "launch-result.json"),
+                      "process": outcome["process"], "launcher_error": error}, indent=2))
+    return 0 if (result is not None and result.returncode == 0 and not result.timed_out
+                 and after == hashes and input_after == INPUT_SHA and error is None) else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

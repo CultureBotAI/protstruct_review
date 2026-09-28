@@ -125,7 +125,8 @@ interpretations by design and are listed in that sheet's `corrected_qds_refs` (9
   (see #765, #766) and moved CI to `--extra benchmark`.
 - **T13 and density guidance** (#726, 2026-09-22). The T13 wrapper emits informational single-oracle
   diagnostics with the input MTZ identified by SHA-256; live RSCC/RSR, water and ligand-pose guidance
-  now matches the registry. Its tests mock CCP4 execution (#767).
+  now matches the registry. Its tests mock CCP4 execution; PR #831 separately
+  retains a real installed-CCP4 operational canary (#767).
 - **Synthetic active-site correction** (#731, 2026-09-23). A new, explicitly fictional contract-3
   example pair with corrected tool provenance; dated registry successors stop attributing the historical
   1SAR clashscore gap to hydrogen building (cause unresolved) and stop treating Allowed rotamers as
@@ -345,11 +346,6 @@ policy delivery do not imply that the remaining scientific reruns are complete.
 - **Decompose the matched-convention clashscore residual**
   ([#790](https://github.com/CultureBotAI/protstruct_review/issues/790), P2 — optional, opt-in, licensed PHENIX): feed both counters
   the same H-built file to separate flip policy, H construction, dictionaries and counting.
-- **One-entry CCP4 canary for the hardened T13 wrapper**
-  ([#767](https://github.com/CultureBotAI/protstruct_review/issues/767), P2 — manual,
-  licensed). Execution has completed; PR #831 is retaining the invocation, real
-  logs, output hashes and replay checks for review. This is operational acceptance
-  on merged input, not an unmerged-data validation or a model-quality verdict.
 
 ### Delivered prerequisites (not open reruns)
 
@@ -369,6 +365,11 @@ policy delivery do not imply that the remaining scientific reruns are complete.
   with insertion-code keys. It does not authorize standalone MolProbity grading.
 - **#799 engineering:** PR #811 (`df011cc`) delivered the dictionary-loading/error
   checks, but the issue remains open for the scientific reruns above.
+- **#767 T13 operational acceptance:** PR #831 retains the installed-CCP4
+  invocation, real logs, output hashes and independent replay checks for one
+  merged-input canary. This does not validate unmerged-data handling, supply a
+  paired xtriage comparison, or establish a model-quality verdict. Its stopped
+  T15 rerun remains separately tracked above.
 - **Earlier reconciliation:** PR #768 fixed wording issues #769–#773 and #778–#780.
 
 ### Open questions and optional work (no issue)

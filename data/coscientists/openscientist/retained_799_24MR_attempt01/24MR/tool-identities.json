@@ -1,0 +1,17 @@
+{
+  "dictionary": {
+    "bytes": 66390773,
+    "path": "/Users/marcin/tools/reduce-src/reduce_wwPDB_het_dict.txt",
+    "sha256": "0da5ec87a909bb0eb8df480c42ce74bef92e710ff939764f960a62b0d9b38ab9"
+  },
+  "probe": {
+    "bytes": 348002,
+    "path": "/Users/marcin/tools/probe-src/probe",
+    "sha256": "9a026a9e4031a88680e7df9af3e8f1307f51992a15cbf0eae3869053430927ea"
+  },
+  "reduce": {
+    "bytes": 2399683,
+    "path": "/Users/marcin/tools/reduce-src/build/reduce_src/reduce",
+    "sha256": "9d633cc9e2ae539a7f0871fe96a8e4303448a6a5aba8adee03dd0dda63049ff4"
+  }
+}

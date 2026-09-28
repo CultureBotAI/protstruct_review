@@ -1,0 +1,80 @@
+{
+  "cohort": "clashscore",
+  "cohort_ids": [
+    "24MR",
+    "37AS",
+    "37AP",
+    "11AF",
+    "28SZ",
+    "37BG",
+    "12LO",
+    "30IZ",
+    "9LLR",
+    "9PN7"
+  ],
+  "configured_tools": {
+    "dictionary": "/Users/marcin/tools/reduce-src/reduce_wwPDB_het_dict.txt",
+    "probe": "/Users/marcin/tools/probe-src/probe",
+    "reduce": "/Users/marcin/tools/reduce-src/build/reduce_src/reduce"
+  },
+  "contract": 1,
+  "entry": "24MR",
+  "evidence_root": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/data/coscientists/openscientist/retained_799_24MR_attempt01",
+  "expected_versions": {
+    "probe": "2.26.021123",
+    "reduce": "4.16.250520"
+  },
+  "fetch_url": "https://files.rcsb.org/download/24MR.pdb",
+  "flip_policy": "standalone -build (flips enabled)",
+  "input": null,
+  "limitation": "New retained-input observation, not authenticated historical reproduction; informational only. No PHENIX comparator or independent grading is supplied.",
+  "mode": "execute",
+  "nuclear": false,
+  "parsed_flip_conclusions": "unavailable; raw USER MOD/counts only",
+  "preregistration": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/ref/research/standalone_dictionary_rerun_preregistration_2026-09-28.md",
+  "preregistration_identity": {
+    "bytes": 16083,
+    "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/ref/research/standalone_dictionary_rerun_preregistration_2026-09-28.md",
+    "sha256": "c33def07d5d355de5672a699a0614e46b21170be8d502a0925bd439b48d010ff"
+  },
+  "python": {
+    "executable": "/Users/marcin/.pyenv/versions/3.12.11/bin/python3.12",
+    "version": "3.12.11 (main, Aug 15 2025, 11:56:45) [Clang 14.0.3 (clang-1403.0.22.14.1)]"
+  },
+  "retrieved_at_asserted": null,
+  "source_files": [
+    {
+      "bytes": 34381,
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/scripts/bench_dictionary_loaded_reduce.py",
+      "sha256": "0fdc7f0193c0890058c005331941cadb283b4f30152503fc8567a95f85773d04"
+    },
+    {
+      "bytes": 4407,
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/scripts/standalone_reduce.py",
+      "sha256": "f47a37c89eb967487f196a18927a5fcbfd7c0ef03b70e1b848dd61dee3aa46dc"
+    },
+    {
+      "bytes": 13134,
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/scripts/bench_t05_clashscore_h.py",
+      "sha256": "310fe87b647f147a6190acfff035412002c251edc89d8955968dfe6150f42ae7"
+    },
+    {
+      "bytes": 17165,
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/scripts/toolchain.py",
+      "sha256": "e32dd23ba61d684edea4cf86208c6d7fec62af060898c63cba96f40bd0bc338f"
+    },
+    {
+      "bytes": 13183,
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/scripts/entry_sandbox.py",
+      "sha256": "abeeb0f2307b1ea13e4aa45057137f799a80428b0b3c5036c7b8f931bb9c50cd"
+    },
+    {
+      "bytes": 2214,
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/scripts/benchmark_environment.py",
+      "sha256": "ad16402d61ea9722ca1a21c97a67dd490dcf6e033658e0d4f834312113c3eeda"
+    }
+  ],
+  "source_url_asserted": null,
+  "timeout_seconds": 900,
+  "unknown_origin_reason": null
+}

@@ -1,0 +1,11 @@
+{
+  "argv": [
+    "/Users/marcin/tools/reduce-src/build/reduce_src/reduce",
+    "-version"
+  ],
+  "completed_at": "2026-09-28T08:22:24.500620+00:00",
+  "expected_version": "4.16.250520",
+  "returncode": 2,
+  "stderr": "reduce.4.16.250520\n",
+  "stdout": ""
+}

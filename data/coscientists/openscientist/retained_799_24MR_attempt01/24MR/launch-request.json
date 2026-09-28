@@ -1,0 +1,10 @@
+{
+  "argv": [
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.venv/bin/python",
+    "-B",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/scripts/bench_dictionary_loaded_reduce.py",
+    "--worker",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/data/coscientists/openscientist/retained_799_24MR_attempt01/24MR/request.json"
+  ],
+  "timeout_seconds": 900
+}

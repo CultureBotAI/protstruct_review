@@ -1,0 +1,38 @@
+{
+  "record_kind": "pre_execution_registration",
+  "recorded_at": "2026-09-28T08:21:42.903522+00:00",
+  "issue": 799,
+  "pr_url": "https://github.com/CultureBotAI/protstruct_review/pull/875",
+  "result_free_execution_commit": "efef43c7ba029d32a4e088202c23e8f3d9a81892",
+  "source_tree_status_before_this_record": "git status --porcelain returned empty",
+  "validation": {
+    "local_gate": "uv run --locked --extra benchmark -- bash scripts/validate.sh --quiet",
+    "local_gate_status": "passed before execution-commit creation",
+    "ci_run": 36396229776,
+    "ubuntu_job": {"id": 108843168347, "conclusion": "SUCCESS", "completed_at": "2026-09-28T08:18:44Z"},
+    "macos_job": {"id": 108843168025, "conclusion": "SUCCESS", "completed_at": "2026-09-28T08:21:00Z"}
+  },
+  "preregistration": {
+    "path": "ref/research/standalone_dictionary_rerun_preregistration_2026-09-28.md",
+    "sha256": "c33def07d5d355de5672a699a0614e46b21170be8d502a0925bd439b48d010ff"
+  },
+  "source_sha256": {
+    "scripts/bench_dictionary_loaded_reduce.py": "0fdc7f0193c0890058c005331941cadb283b4f30152503fc8567a95f85773d04",
+    "scripts/standalone_reduce.py": "f47a37c89eb967487f196a18927a5fcbfd7c0ef03b70e1b848dd61dee3aa46dc",
+    "scripts/bench_t05_clashscore_h.py": "310fe87b647f147a6190acfff035412002c251edc89d8955968dfe6150f42ae7",
+    "scripts/toolchain.py": "e32dd23ba61d684edea4cf86208c6d7fec62af060898c63cba96f40bd0bc338f",
+    "scripts/entry_sandbox.py": "abeeb0f2307b1ea13e4aa45057137f799a80428b0b3c5036c7b8f931bb9c50cd",
+    "scripts/benchmark_environment.py": "ad16402d61ea9722ca1a21c97a67dd490dcf6e033658e0d4f834312113c3eeda",
+    "scripts/recount_standalone_reduce_flips.py": "4bc811d410b104195d6159ed17fed084de7cbbc1678ddd164f3bd490ea701dd7",
+    "scripts/inventory_standalone_components.py": "dc6c7179e2f5f0a8547c321f52a919585a0e161cc6fe134dc07523383488c5b3"
+  },
+  "planned_cohorts_in_execution_order": {
+    "clashscore": ["24MR", "37AS", "37AP", "11AF", "28SZ", "37BG", "12LO", "30IZ", "9LLR", "9PN7"],
+    "flip": ["12OC", "14ZZ", "15C8", "1A0C", "1B9B", "1BDJ", "1OWJ", "1RH7", "1TIJ", "1VYJ", "1W1I", "1ZY2", "2I4M", "2IEF", "2IY0", "2QIZ", "2QTU", "2YOL", "3A01", "3G7M", "3MIU", "3ZM5", "4DYT", "4FN9", "4MH1", "4NJD", "4Q9R", "4W7P", "5DZK", "5MAC", "5T9A", "5URQ", "5X6C", "6ABT", "6LE5", "6QGY", "6TPW", "7D6N", "7LMC", "7P4U", "7PLN"]
+  },
+  "initial_state": "all 51 planned; none launched or admitted",
+  "first_launch_argv": [".venv/bin/python", "-B", "scripts/bench_dictionary_loaded_reduce.py", "--cohort", "clashscore", "--entry", "24MR", "--evidence-root", "data/coscientists/openscientist/retained_799_24MR_attempt01", "--preregistration", "ref/research/standalone_dictionary_rerun_preregistration_2026-09-28.md", "--execute"],
+  "first_launch_constraint": "24MR only; independently review full retained evidence, recount H and Probe, and admit component sidecar before any expansion",
+  "stop_rule": "sequential; stop on first execution, integrity, input-identity or required-recount failure; preserve every failed attempt unchanged",
+  "claims": "new-input standalone informational rerun only; no historical same-input reproduction, causal attribution, PHENIX execution or grading"
+}

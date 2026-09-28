@@ -125,7 +125,8 @@ interpretations by design and are listed in that sheet's `corrected_qds_refs` (9
   (see #765, #766) and moved CI to `--extra benchmark`.
 - **T13 and density guidance** (#726, 2026-09-22). The T13 wrapper emits informational single-oracle
   diagnostics with the input MTZ identified by SHA-256; live RSCC/RSR, water and ligand-pose guidance
-  now matches the registry. Its tests mock CCP4 execution (#767).
+  now matches the registry. Its tests mock CCP4 execution; PR #831 separately
+  retains a real installed-CCP4 operational canary (#767).
 - **Synthetic active-site correction** (#731, 2026-09-23). A new, explicitly fictional contract-3
   example pair with corrected tool provenance; dated registry successors stop attributing the historical
   1SAR clashscore gap to hydrogen building (cause unresolved) and stop treating Allowed rotamers as
@@ -156,12 +157,27 @@ that **two of three "blockers" were wrong** — both mis-invocations rather than
 Round 7 then found that **two bands set in rounds 5 and 6 were themselves wrong**, fitted to a narrow
 resolution range and breached by null re-refinement once low-resolution entries were included.
 
-**Where the registry stands.** Round 17 audited every `[benchmark]` row and found **7 quote a figure
+<!-- threshold-status-summary:start -->
+**Current descriptive inventory (§3/§4; not grading authorization).**
+
+21 rows; 20 benchmark-family rows (including qualified tags); 41 scoped components.
+Historical through-round48 labels: 18 reported-backed / 2 reported-partial / 1 excluded-literature rows. These are historical claims, not current scientific certification.
+
+Component policy counts: active_conditional=29; informational=6; not_evaluable=1; policy_unresolved=1; provisional_conditional=1; provisional_informational=2; suspended=1.
+
+Component evidence counts: denominator_unproven=1; external_standard_cited=1; limited_controls=1; partial_record=4; producer_mismatch=1; retained_record=23; unmeasured=9; unverified_ancillary=1.
+
+Scoped row flags (overlapping, not additive): suspended: h_placement; not_evaluable: clashscore; policy_unresolved: favored_percent; provisional_informational: secondary_structure; provisional_conditional: geometry_delta.
+
+The ledger separates active rules from retained evidence, provisional interpretation, suspension and unavailable calibration. Retained records do not by themselves establish independent calibration or complete execution provenance. Counts of components are not counts of rows or distinct benchmarks. See `ref/threshold_evidence_status.yaml`; scientific grading still requires the applicable registry criterion and evidence.
+<!-- threshold-status-summary:end -->
+
+**Historical registry narrative (through round48; not current policy).** Round 17 audited every `[benchmark]` row and found **7 quote a figure
 from a set that can no longer be reconstructed**; they are marked `⚠ partial record`. Round 18 fixed
 the cause — **every `bench_*.py` now commits the set it ran on**, and `scripts/validate.sh` fails if
-one does not. **The historical inventory reported 18 fully backed rows** (rounds 42 and 44 re-based every §4 `d_min ≥ 2.5 Å` X-ray figure — both band widths and the geometry row's clashscore null ratio / starting ceiling — off their lost sets onto the 44 named entries, fully backing the ΔRMSD and geometry rows; rounds 45–46 backed both vs-deposited geometry-% rows on the 42 named entries — **favored %** on named data, and **outlier %** by making the check per-shared-residue classification agreement rather than the denominator-sensitive raw % (#284); rounds 47–48 backed the **H-placement flip-set** row on the named set with the check made the confident-conflict rate rather than the raw disagreement rate inflated by one builder's uncertainty (#287) — the two remaining marks are both RETAIN, so every *resolvable* partial record is resolved). **That reported inventory is not current independent calibration:** #809 suspends T14 flip grading because the retained benchmark used PHENIX-distributed Reduce, not the claimed standalone producer; #613 (2026-09-22) requalified one of the 18, the §3 secondary-structure agreement row, as `[benchmark — historical denominator unproven]` — its 0.65 expectation is non-gradeable until the benchmark is rerun with exact per-assigner denominators ([#765](https://github.com/CultureBotAI/protstruct_review/issues/765)). The registry header qualifies the historical 18/2 tally; its full ledger/count reconciliation remains ([#766](https://github.com/CultureBotAI/protstruct_review/issues/766)).
+one does not. **The historical inventory reported 18 fully backed rows** (rounds 42 and 44 re-based every §4 `d_min ≥ 2.5 Å` X-ray figure — both band widths and the geometry row's clashscore null ratio / starting ceiling — off their lost sets onto the 44 named entries, fully backing the ΔRMSD and geometry rows; rounds 45–46 backed both vs-deposited geometry-% rows on the 42 named entries — **favored %** on named data, and **outlier %** by making the check per-shared-residue classification agreement rather than the denominator-sensitive raw % (#284); rounds 47–48 backed the **H-placement flip-set** row on the named set with the check made the confident-conflict rate rather than the raw disagreement rate inflated by one builder's uncertainty (#287) — the two remaining marks are both RETAIN, so every *resolvable* partial record is resolved). **That reported inventory is not current independent calibration:** #809 suspends T14 flip grading because the retained benchmark used PHENIX-distributed Reduce, not the claimed standalone producer; #613 (2026-09-22) requalified one of the 18, the §3 secondary-structure agreement row, as `[benchmark — historical denominator unproven]` — its 0.65 expectation is non-gradeable until the benchmark is rerun with exact per-assigner denominators ([#765](https://github.com/CultureBotAI/protstruct_review/issues/765)). The descriptive ledger now recounts scoped policy and evidence states (#766); it does not retire the scientific limits behind #765 or #809.
 
-**The counts, reconciled (round 18) — there are two different 21s and both are right.** §3 and §4
+**Historical count convention (round 18) — two different counting units.** §3 and §4
 hold **21 rows**, of which **20 carry `[benchmark]`**; the exception is §4's *absolute geometry
 floors*, which is `[literature]` and was never measured here. Those 20 rows carry **21 benchmarked
 tolerances**, because the map-model row holds two, CC_mask and `d_FSC_model`. So "21 rows" and "lost
@@ -289,8 +305,9 @@ Record new ones there. The operative few, for anyone about to add a tolerance or
 
 ## Open
 
-The live ledger, reconciled 2026-09-26. GitHub is authoritative; items marked **no issue** exist only
-here, and say so.
+The live ledger, reconciled 2026-09-27 against merged main through PR #837. GitHub is
+authoritative; items marked **no issue** exist only here, and say so. Engineering and
+policy delivery do not imply that the remaining scientific reruns are complete.
 
 ### Tracked on GitHub
 
@@ -303,54 +320,57 @@ here, and say so.
   licensed and installed; only `phenix-2.0-5936` exists. Then point `PROTSTRUCT_PHENIX_BIN` at it (the
   benchmark environment report flags the version divergence) and run the round-38 panel (14 of its 17
   pairs have committed baselines; the input cache is not committed) under the registered decision rule,
-  canarying one entry first. **Cache prerequisite [#777](https://github.com/CultureBotAI/protstruct_review/issues/777):**
+  canarying one entry first. **Delivered cache prerequisite [#777](https://github.com/CultureBotAI/protstruct_review/issues/777)**
+  (PRs #818 and #823):
   use the content/build-bound refinement runners described in `ref/oracle_tools.md`; legacy bare
   output caches are not accepted. Check the canary's retained invocation, measured build, input hashes,
   successful status and output hashes before fanning out. A path-version hint alone is not measured
   build evidence, and a fresh cache is still required for unversioned in-place library changes. **Not
   retired:** [`stopping_criteria.md`](ref/research/stopping_criteria.md) closes a question for lack of
   power, not lack of access, and the registration has no stop clause.
-- **Active tool recommendations still name `gemmi validate`** for T05 bond/angle/planarity/chirality and
-  T03 bond angle ([#785](https://github.com/CultureBotAI/protstruct_review/issues/785), P2): the registry and T05 name `gemmi rmsz`, which is
-  not yet a catalog tool, so the fix is a catalog entry plus dated successor recommendations.
-- **Round 46's preregistered ≥ 0.99 classification-agreement floor is missing from registry rows 89/90**
-  ([#786](https://github.com/CultureBotAI/protstruct_review/issues/786), P2): the rows state the check as a question with no bar, so T05
-  rule 3 reads stricter than the registered floor.
-- **Workflow gate and merge safeguards**
-  ([#762](https://github.com/CultureBotAI/protstruct_review/issues/762), P1): active instructions use
-  the locked Python 3.12 benchmark-extra gate and require green CI on the reviewed PR head. The
-  workflow also requires complete queue counts, a read-only review, and verification of intended
-  issue closures and outstanding issues after merge. Verify delivery on `main` and the issue tracker
-  before treating the workflow correction as closed; historical records are unchanged.
-- **Registry header vs the requalified T15 row**
-  ([#766](https://github.com/CultureBotAI/protstruct_review/issues/766), P2), and the **T15
-  secondary-structure benchmark rerun** that would settle it
+- **T15 secondary-structure benchmark rerun** (the descriptive #766 ledger does not settle the
+  denominator or authorize grading)
   ([#765](https://github.com/CultureBotAI/protstruct_review/issues/765), P2 — opt-in and online; mkdssp and
-  biotite, no PHENIX/CCP4).
-- **T03 rubric rules 1 and 3 undefined** for depositions without a free R and for padded or NaN
-  reflection sets ([#764](https://github.com/CultureBotAI/protstruct_review/issues/764), P2 — a design
-  decision the 1SAR audit exposed).
+  biotite, no PHENIX/CCP4). PR #831 retains a stopped rerun: the second execution root
+  admits 8 of 16 entries and rejects 1BNI because the assigner key sets differ; the
+  remaining seven were not launched. Failure-stream instrumentation remains
+  [#829](https://github.com/CultureBotAI/protstruct_review/issues/829). Neither a
+  successful prefix nor pooling the two execution roots completes the cohort.
 - **Standalone `reduce` in the benchmarks most likely ran with no het dictionary**
   ([#799](https://github.com/CultureBotAI/protstruct_review/issues/799), P1): the dictionary files are byte-identical, the standalone default
   path is missing and stderr was discarded, so ligand hydrogens were most likely absent on that path.
-  The attribution text is corrected; the bench scripts still need `-DB` and a fail-on-`could not open`
-  check, and the clashscore and flip-set benchmarks an opt-in re-measurement of the standalone leg
+  PR #811 delivered explicit `-DB`, retained stderr and fail-on-dictionary-error
+  handling. What remains is an opt-in re-measurement of the standalone leg for
+  the clashscore and flip-set cohorts with retained input and output provenance
   (`reduce -DB … -build` plus `probe`; no PHENIX run needed, canary 24MR first).
-- **Should the general clashscore row pin the benchmarked versions?**
-  ([#798](https://github.com/CultureBotAI/protstruct_review/issues/798), P2 — needs a decision): row 88 and its drivers require the same `reduce`
-  release; row 102 and T14 also require the benchmarked PHENIX/`reduce`/`probe` versions.
 - **Decompose the matched-convention clashscore residual**
   ([#790](https://github.com/CultureBotAI/protstruct_review/issues/790), P2 — optional, opt-in, licensed PHENIX): feed both counters
   the same H-built file to separate flip policy, H construction, dictionaries and counting.
-- **One-entry CCP4 canary for the hardened T13 wrapper**
-  ([#767](https://github.com/CultureBotAI/protstruct_review/issues/767), P2 — manual, licensed; its tests
-  mock execution).
-- **Found by the reviews of this reconciliation (PR #768)**, each filed before its fix:
-  - **Cross-version cache collision** ([#777](https://github.com/CultureBotAI/protstruct_review/issues/777), P1):
-    content/build-bound X-ray and EM caches now have hermetic regression coverage; the scientific
-    cross-version execution remains #760. See `ref/research/refinement_cache_integrity_2026-09-27.md`.
-  - #769–#773 (first review) and #778–#780 (reviews of the fix commits) were wording defects in this
-    file, fixed in the same PR.
+
+### Delivered prerequisites (not open reruns)
+
+- **#762 workflow safeguards:** PR #820 (`849535c`) delivered the locked Python 3.12
+  benchmark-extra gate, complete-queue checks, read-only review and reviewed-head
+  CI/closure safeguards.
+- **#777 cache integrity:** PR #818 (`15edb68`) and runtime follow-up PR #823
+  (`fbacb66`) delivered content/build-bound caches. Cross-version science remains #760.
+- **#785 Gemmi capability correction:** PR #832 (`f6e8722`) delivered the catalog
+  and dated successor recommendations with scoped capability claims.
+- **#798 version policy / #809 flips:** PR #835 (`fec9334`) pins both clashscore
+  rows to benchmarked versions and suspends the unsupported T14 flip grading rule.
+  Correctly attributed historical flip numbers remain informational.
+- **#764 and #786 scientific policy:** PR #837 (`5ef268c`) keeps missing deposited
+  R-free unevaluable, rejects unexplained usable-input observation loss, and adopts
+  ≥0.99 only for the benchmarked PHENIX 2.0-5936/wwPDB shared-residue comparison
+  with insertion-code keys. It does not authorize standalone MolProbity grading.
+- **#799 engineering:** PR #811 (`df011cc`) delivered the dictionary-loading/error
+  checks, but the issue remains open for the scientific reruns above.
+- **#767 T13 operational acceptance:** PR #831 retains the installed-CCP4
+  invocation, real logs, output hashes and independent replay checks for one
+  merged-input canary. This does not validate unmerged-data handling, supply a
+  paired xtriage comparison, or establish a model-quality verdict. Its stopped
+  T15 rerun remains separately tracked above.
+- **Earlier reconciliation:** PR #768 fixed wording issues #769–#773 and #778–#780.
 
 ### Open questions and optional work (no issue)
 
@@ -438,6 +458,10 @@ was 2-point leverage, so the §4 caveat is re-based and #224 is closed without t
 detail lives in `ref/research/tolerance_benchmark_round40.md` and the memo #258.
 
 ### Standing risk, not tasks
+
+Current policy/evidence states are in the [generated inventory above](#where-the-tolerance-work-stands)
+and `ref/threshold_evidence_status.yaml`. The following round-by-round account is historical, not
+an independent-calibration certificate.
 
 - **The historical inventory reported two `⚠ partial record` rows, both RETAIN** (rounds 42/44 resolved the ΔRMSD and
   geometry rows; rounds 45–46 resolved both vs-deposited geometry-% rows, #284; rounds 47–48 resolved the

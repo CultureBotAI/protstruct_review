@@ -1,0 +1,28 @@
+{
+  "rows": [
+    {
+      "pdb_id": "1CA2",
+      "agreement": 0.707,
+      "n_concordant": 181,
+      "n_scored": 256,
+      "n_dssp": 256,
+      "n_biotite": 256,
+      "n_dropped": 0,
+      "ss_content": 0.4648,
+      "clears_provisional_content_precondition": true,
+      "meets_provisional_0_65_expectation": true
+    }
+  ],
+  "skipped": [],
+  "summary": {
+    "n_models": 1,
+    "median": 0.707,
+    "p10": 0.707,
+    "min": 0.707,
+    "max": 0.707,
+    "n_meeting_provisional_0_65_expectation": 1,
+    "below_provisional_expectation": [],
+    "n_below_provisional_content_precondition": 0,
+    "below_provisional_content_precondition": []
+  }
+}

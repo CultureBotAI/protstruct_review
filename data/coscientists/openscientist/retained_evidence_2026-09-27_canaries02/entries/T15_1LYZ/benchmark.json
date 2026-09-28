@@ -1,0 +1,28 @@
+{
+  "rows": [
+    {
+      "pdb_id": "1LYZ",
+      "agreement": 0.7209,
+      "n_concordant": 93,
+      "n_scored": 129,
+      "n_dssp": 129,
+      "n_biotite": 129,
+      "n_dropped": 0,
+      "ss_content": 0.4961,
+      "clears_provisional_content_precondition": true,
+      "meets_provisional_0_65_expectation": true
+    }
+  ],
+  "skipped": [],
+  "summary": {
+    "n_models": 1,
+    "median": 0.7209,
+    "p10": 0.7209,
+    "min": 0.7209,
+    "max": 0.7209,
+    "n_meeting_provisional_0_65_expectation": 1,
+    "below_provisional_expectation": [],
+    "n_below_provisional_content_precondition": 0,
+    "below_provisional_content_precondition": []
+  }
+}

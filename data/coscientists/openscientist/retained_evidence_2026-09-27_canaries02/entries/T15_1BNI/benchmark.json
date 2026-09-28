@@ -1,0 +1,12 @@
+{
+  "rows": [],
+  "skipped": [
+    {
+      "pdb_id": "1BNI",
+      "reason": "t15_ss_agreement failed"
+    }
+  ],
+  "summary": {
+    "n": 0
+  }
+}

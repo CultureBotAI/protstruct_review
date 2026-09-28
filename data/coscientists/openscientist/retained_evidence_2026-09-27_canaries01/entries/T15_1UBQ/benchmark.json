@@ -1,0 +1,28 @@
+{
+  "rows": [
+    {
+      "pdb_id": "1UBQ",
+      "agreement": 0.75,
+      "n_concordant": 57,
+      "n_scored": 76,
+      "n_dssp": 76,
+      "n_biotite": 76,
+      "n_dropped": 0,
+      "ss_content": 0.5789,
+      "clears_provisional_content_precondition": true,
+      "meets_provisional_0_65_expectation": true
+    }
+  ],
+  "skipped": [],
+  "summary": {
+    "n_models": 1,
+    "median": 0.75,
+    "p10": 0.75,
+    "min": 0.75,
+    "max": 0.75,
+    "n_meeting_provisional_0_65_expectation": 1,
+    "below_provisional_expectation": [],
+    "n_below_provisional_content_precondition": 0,
+    "below_provisional_content_precondition": []
+  }
+}

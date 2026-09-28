@@ -23,11 +23,6 @@ The no-overwrite JSON bundle retains the exact normalized input and raw DSSP byt
 both per-residue assignments, input hashes, and measured tool versions; both rows
 cite it through ``evidence_refs``.
 
-If both assigners complete but their residue keys differ (or have no shared key),
-the same no-overwrite destination instead retains a clearly typed failed-attempt
-JSON before the nonzero exit. It contains no scalar measurements or grading;
-earlier execution failures do not yet have this retention guarantee.
-
 Degrades loudly: if `mkdssp` cannot be resolved through `PROTSTRUCT_DSSP` or
 PATH, or biotite is not importable, exits non-zero with a clear message rather
 than fabricating a number.
@@ -45,7 +40,6 @@ import importlib.metadata
 import io
 import json
 import os
-import re
 import sys
 import tempfile
 import zipfile
@@ -61,36 +55,14 @@ from toolchain import dssp_executable, gemmi_executable, run_capture  # noqa: E4
 
 REPO = Path(__file__).resolve().parent.parent
 
-# DSSP 4.6.1 has nine raw states. Preserve the existing HEC definition,
-# including PPII -> C; unknown raw states are errors, never inferred coil.
-_DSSP_TO_HEC = {"H": "H", "G": "H", "I": "H", "E": "E", "B": "E",
-                "P": "C", "T": "C", "S": "C", " ": "C"}
+# Three-state collapse. DSSP 8-state -> HEC; biotite a/b/c -> HEC.
+_DSSP_TO_HEC = {"H": "H", "G": "H", "I": "H", "E": "E", "B": "E"}  # else -> C
 _BIOTITE_TO_HEC = {"a": "H", "b": "E", "c": "C"}
-_DSSP_HEADER = (
-    "  #  RESIDUE AA STRUCTURE BP1 BP2  ACC     N-H-->O    O-->H-N    N-H-->O    O-->H-N"
-    "    TCO  KAPPA ALPHA  PHI   PSI    X-CA   Y-CA   Z-CA"
-)
-_DSSP_TOTAL_SUFFIX = (
-    " TOTAL NUMBER OF RESIDUES, NUMBER OF CHAINS, NUMBER OF SS-BRIDGES(TOTAL,INTRACHAIN,INTERCHAIN)"
-    "                ."
-)
-_DSSP_BREAK_TAIL = (
-    "             0   0    0      0, 0.0     0, 0.0     0, 0.0     0, 0.0"
-    "   0.000 360.0 360.0 360.0 360.0    0.0    0.0    0.0"
-)
 
 
 def _fail(msg: str) -> None:
     """Exit non-zero with a clear oracle-status message (never a fabricated value)."""
     raise SystemExit(f"t15_ss_agreement: {msg}")
-
-
-class DenominatorAdmissionError(SystemExit):
-    """A completed assigner pair cannot supply the required common denominator."""
-
-    def __init__(self, reason_code: str, message: str) -> None:
-        self.reason_code = reason_code
-        super().__init__(f"t15_ss_agreement: {message}")
 
 
 # A residue is keyed on (chain, resnum, insertion-code) so that e.g. 10 and 10A
@@ -153,8 +125,7 @@ def content_bound_bundle_ref(
 
 
 def run_dssp_with_raw(
-    model: Path, *, normalized_model: Path | None = None,
-    execution_record: dict[str, Any] | None = None,
+    model: Path, *, normalized_model: Path | None = None
 ) -> tuple[dict[ResKey, str], bytes]:
     """Return collapsed assignments and the exact raw DSSP output bytes."""
     try:
@@ -165,15 +136,9 @@ def run_dssp_with_raw(
         out_path = Path(tmp.name)
     normalised = normalized_model or _normalise_for_dssp(model)
     try:
-        arguments = [exe, "--output-format", "dssp", str(normalised), str(out_path)]
-        proc = run_capture(arguments)
-        if execution_record is not None:
-            execution_record.update({
-                "argv": [str(value) for value in arguments],
-                "returncode": proc.returncode,
-                "stdout": proc.stdout,
-                "stderr": proc.stderr,
-            })
+        proc = run_capture(
+            [exe, "--output-format", "dssp", str(normalised), str(out_path)],
+        )
         # `or`, not `and`. The two conditions are independent failures and neither
         # excuses the other: mkdssp can exit non-zero *after* writing a partial
         # residue table, and an `and` here accepted that truncated table as a
@@ -248,9 +213,7 @@ def measured_biotite_version() -> str:
         _fail("biotite distribution metadata unavailable — install biotite")
 
 
-def _normalise_for_dssp(
-    model: Path, *, execution_record: dict[str, Any] | None = None
-) -> Path:
+def _normalise_for_dssp(model: Path) -> Path:
     """Rewrite the model through `gemmi convert` so mkdssp will read it.
 
     mkdssp 4.x sniffs the input format and gets it wrong on PDB files downloaded
@@ -272,15 +235,7 @@ def _normalise_for_dssp(
     assert gemmi is not None
     with tempfile.NamedTemporaryFile(suffix=".pdb", delete=False) as tmp:
         converted = Path(tmp.name)
-    arguments = [gemmi, "convert", model, converted]
-    proc = run_capture(arguments)
-    if execution_record is not None:
-        execution_record.update({
-            "argv": [str(value) for value in arguments],
-            "returncode": proc.returncode,
-            "stdout": proc.stdout,
-            "stderr": proc.stderr,
-        })
+    proc = run_capture([gemmi, "convert", model, converted])
     if proc.returncode != 0 or not converted.stat().st_size:
         converted.unlink(missing_ok=True)
         _fail(
@@ -291,81 +246,25 @@ def _normalise_for_dssp(
 
 
 def _parse_dssp(text: str) -> dict[ResKey, str]:
-    """Admit complete DSSP 4.6.1 legacy records before collapsing their states.
-
-    Grammar: PDB-REDO/dssp tag v4.6.1, libdssp/src/dssp-io.cpp:
-    ResidueToDSSPLine and writeDSSP; nine-state enum in libdssp/include/dssp.hpp.
-    Numeric overflow beyond the fixed fields and blank chains are explicitly
-    unsupported, not omitted from the scientific denominator. This is syntax
-    and declared-coverage admission, not authentication of tool execution.
-    """
+    """Parse the legacy DSSP residue table (fixed-width columns)."""
     lines = text.splitlines()
-    headers = [i for i, line in enumerate(lines) if line == _DSSP_HEADER]
-    if len(headers) != 1:
-        _fail("require exactly one complete DSSP residue table header.")
-    start = headers[0] + 1
-    totals = [line for line in lines[:start - 1] if "TOTAL NUMBER OF RESIDUES" in line]
-    if len(totals) != 1 or totals[0][17:] != _DSSP_TOTAL_SUFFIX:
-        _fail("require exactly one valid DSSP declared residue total before the table.")
-
-    def integer(field: str, line_number: int, *, signed: bool = False) -> int:
-        if not re.fullmatch(r" *-?[0-9]+" if signed else r" *[0-9]+", field):
-            _fail(f"DSSP line {line_number}: malformed decimal integer {field!r}.")
-        value = int(field)
-        if f"{value:{len(field)}d}" != field:
-            _fail(f"DSSP line {line_number}: noncanonical/overflowed integer {field!r}.")
-        return value
-
-    total_line_number = lines.index(totals[0]) + 1
-    declared = integer(totals[0][:5], total_line_number)
-    for a, b in ((5, 8), (8, 11), (11, 14), (14, 17)):
-        integer(totals[0][a:b], total_line_number)
+    start = next(
+        (i + 1 for i, ln in enumerate(lines) if ln.lstrip().startswith("#  RESIDUE")),
+        None,
+    )
+    if start is None:
+        _fail("could not locate the DSSP residue table header.")
     out: dict[ResKey, str] = {}
-    serials: set[int] = set()
-    for line_number, ln in enumerate(lines[start:], start + 1):
-        if len(ln) != 136 or any(not 32 <= ord(char) <= 126 for char in ln):
-            _fail(f"DSSP line {line_number}: incomplete, non-ASCII or unsupported-width record.")
-        serial = integer(ln[:5], line_number)
-        if serial < 1 or serial in serials:
-            _fail(f"DSSP line {line_number}: invalid or duplicate record serial {serial}.")
-        serials.add(serial)
-        if ln[13] == "!":
-            if ln[5:13] != " " * 8 or ln[14] not in " *" or ln[15:] != _DSSP_BREAK_TAIL:
-                _fail(f"DSSP line {line_number}: malformed chain-break record.")
+    for ln in lines[start:]:
+        if len(ln) < 17 or ln[13] == "!":  # chain-break marker
             continue
-        resnum = str(integer(ln[5:10], line_number, signed=True))
+        resnum = ln[5:10].strip()
         icode = ln[10].strip()  # insertion code column
         chain = ln[11].strip()
-        if not chain:
-            _fail(f"DSSP line {line_number}: blank-chain identity is unsupported; refusing to drop it.")
+        if not resnum or not chain:
+            continue
         ss = ln[16]
-        if ss not in _DSSP_TO_HEC:
-            _fail(f"DSSP line {line_number}: unknown secondary-structure state {ss!r}.")
-        if (ln[12] != " " or ln[14:16] != "  " or not re.fullmatch(r"[A-Za-z]", ln[13])
-                or ln[38] != " " or ln[83:85] != "  "
-                or any(ln[index] != " " for index in (115, 122, 129))):
-            _fail(f"DSSP line {line_number}: malformed residue fields or separators.")
-        for index, allowed in ((17, " <>XP"), (18, " <>X3"), (19, " <>X4"),
-                               (20, " <>X5"), (21, " S"), (22, " +-")):
-            if ln[index] not in allowed:
-                _fail(f"DSSP line {line_number}: malformed structure annotation at column {index + 1}.")
-        if not re.fullmatch(r"[ A-Za-z]{2}", ln[23:25]) or not re.fullmatch(r"[ A-Z]", ln[33]):
-            _fail(f"DSSP line {line_number}: malformed bridge/sheet label.")
-        for a, b in ((25, 29), (29, 33), (34, 38)):
-            integer(ln[a:b], line_number)
-        for a in (39, 50, 61, 72):
-            if not re.fullmatch(r" *-?[0-9]+, *-?[0-9]+\.[0-9]", ln[a:a + 11]):
-                _fail(f"DSSP line {line_number}: malformed hydrogen-bond field.")
-        for a, decimals in ((85, 3), (91, 1), (97, 1), (103, 1), (109, 1),
-                            (116, 1), (123, 1), (130, 1)):
-            if not re.fullmatch(rf" *-?[0-9]+\.[0-9]{{{decimals}}}", ln[a:a + 6]):
-                _fail(f"DSSP line {line_number}: malformed angle/coordinate field.")
-        key = (chain, resnum, icode)
-        if key in out:
-            _fail(f"DSSP line {line_number}: duplicate residue identity {key!r}.")
-        out[key] = _DSSP_TO_HEC[ss]
-    if len(out) != declared:
-        _fail(f"DSSP declared {declared} residues but parsed {len(out)}; incomplete residue coverage.")
+        out[(chain, resnum, icode)] = _DSSP_TO_HEC.get(ss, "C")
     return out
 
 
@@ -408,15 +307,11 @@ def agreement(a: dict[ResKey, str], b: dict[ResKey, str]) -> dict[str, Any]:
     """
     shared = sorted(set(a) & set(b))
     if not shared:
-        raise DenominatorAdmissionError(
-            "no_shared_residue_keys",
-            "no residues in common between the two assigners — cannot compute agreement.",
-        )
+        _fail("no residues in common between the two assigners — cannot compute agreement.")
     dssp_only = sorted(set(a) - set(b))
     biotite_only = sorted(set(b) - set(a))
     if dssp_only or biotite_only:
-        raise DenominatorAdmissionError(
-            "unequal_residue_keys",
+        _fail(
             "assigners scored different residue sets: "
             f"DSSP-only={len(dssp_only)}, biotite-only={len(biotite_only)}; "
             "T15 agreement and its DSSP H+E interpretability diagnostic require "
@@ -446,9 +341,6 @@ def agreement(a: dict[ResKey, str], b: dict[ResKey, str]) -> dict[str, Any]:
 
 def evidence_ref_for_path(destination: Path) -> tuple[Path, str]:
     """Resolve a new repository-local evidence path and its portable reference."""
-    # Resolve would erase an existing dangling destination alias (#839).
-    if destination.is_symlink():
-        _fail(f"evidence already exists; refusing to overwrite: {destination}")
     resolved = destination.resolve()
     try:
         relative = resolved.relative_to(REPO.resolve())
@@ -630,78 +522,6 @@ def build_evidence_bundle(
         evidence["source_archive"] = source_archive
         evidence["source_member"] = source_member
         evidence["source_archive_sha256"] = source_archive_sha256
-    return evidence
-
-
-def build_failed_attempt_evidence(
-    *,
-    error: DenominatorAdmissionError,
-    eval_id: str,
-    subject_ref: str | None,
-    source_bytes: bytes,
-    normalized_bytes: bytes,
-    raw_dssp_bytes: bytes,
-    dssp_assignments: dict[ResKey, str],
-    biotite_assignments: dict[ResKey, str],
-    gemmi_version: str,
-    dssp_version: str,
-    biotite_version: str,
-    normalization_execution: dict[str, Any],
-    dssp_execution: dict[str, Any],
-    source_archive: str | None,
-    source_member: str | None,
-    source_archive_sha256: str | None,
-) -> dict[str, Any]:
-    """Retain a rejected completed pair, never a shortened successful measurement."""
-    def keys(values: set[ResKey]) -> list[dict[str, str]]:
-        return [{"chain": c, "resnum": r, "icode": i} for c, r, i in sorted(values)]
-
-    def stream(assignments: dict[ResKey, str]) -> list[dict[str, str]]:
-        return [{"chain": c, "resnum": r, "icode": i, "state": assignments[c, r, i]}
-                for c, r, i in sorted(assignments)]
-
-    def retained(raw: bytes) -> dict[str, Any]:
-        return {"sha256": hashlib.sha256(raw).hexdigest(), "size_bytes": len(raw),
-                "encoding": "base64", "bytes_base64": base64.b64encode(raw).decode("ascii")}
-
-    a, b = set(dssp_assignments), set(biotite_assignments)
-    evidence = {
-        "evidence_format": "protstruct-review-t15-failed-attempt-v1",
-        "attempt_status": "failed_denominator_admission",
-        "catalog_task_ref": "T15",
-        "eval_id": eval_id,
-        "subject_ref": subject_ref,
-        "measurements_emitted": False,
-        "failure": {
-            "stage": "residue_key_admission",
-            "reason_code": error.reason_code,
-            "message": str(error),
-            "counts": {"n_dssp": len(a), "n_biotite": len(b), "n_shared": len(a & b),
-                       "n_dssp_only": len(a - b), "n_biotite_only": len(b - a)},
-            "shared_keys": keys(a & b),
-            "dssp_only_keys": keys(a - b),
-            "biotite_only_keys": keys(b - a),
-        },
-        "source": retained(source_bytes),
-        "normalization": {"tool": "gemmi convert", "tool_version": gemmi_version,
-                          **retained(normalized_bytes), "execution": normalization_execution},
-        "dssp": {"tool": "DSSP", "tool_version": dssp_version,
-                 "raw_output": retained(raw_dssp_bytes), "execution": dssp_execution,
-                 "assignments": stream(dssp_assignments)},
-        "biotite_psea": {"tool": "biotite P-SEA", "tool_version": biotite_version,
-                         "execution": {"mode": "in_process", "status": "returned_assignments"},
-                         "assignments": stream(biotite_assignments)},
-        "provenance_limits": (
-            "Normalization/DSSP argv, returncode and captured text are recorded at execution. "
-            "No subprocess PID, timing or complete environment was recorded by these helpers. "
-            "Biotite read the retained original source; DSSP read the retained normalized bytes. "
-            "This failed attempt emits no agreement/content scalar or quality verdict. "
-            "Earlier-phase failures are outside this completed-pair retention guarantee."
-        ),
-    }
-    if source_archive is not None:
-        evidence.update(source_archive=source_archive, source_member=source_member,
-                        source_archive_sha256=source_archive_sha256)
     return evidence
 
 
@@ -887,42 +707,20 @@ def main(argv: list[str] | None = None) -> int:
     dssp_version = measured_dssp_version()
     gemmi_version = measured_gemmi_version()
     biotite_version = measured_biotite_version()
-    normalization_execution: dict[str, Any] = {}
-    dssp_execution: dict[str, Any] = {}
-    normalized_model = _normalise_for_dssp(args.model, execution_record=normalization_execution)
+    normalized_model = _normalise_for_dssp(args.model)
     try:
         normalized_bytes = normalized_model.read_bytes()
         normalized_sha256 = hashlib.sha256(normalized_bytes).hexdigest()
         dssp, raw_dssp_bytes = run_dssp_with_raw(
-            args.model, normalized_model=normalized_model, execution_record=dssp_execution
+            args.model, normalized_model=normalized_model
         )
-        try:
-            normalized_after = normalized_model.read_bytes()
-        except OSError as error:
-            _fail(f"normalized model unavailable after DSSP; refusing to emit: {error}")
-        if normalized_after != normalized_bytes:
-            _fail("normalized model changed while DSSP was running; refusing to emit")
     finally:
         if normalized_model != args.model:
             normalized_model.unlink(missing_ok=True)
     bio = run_biotite(args.model)
     if args.model.read_bytes() != source_bytes_before:
         _fail(f"model changed while T15 was running; refusing to emit: {args.model}")
-    try:
-        result = agreement(dssp, bio)
-    except DenominatorAdmissionError as error:
-        failed_evidence = build_failed_attempt_evidence(
-            error=error, eval_id=args.eval_id, subject_ref=subject_ref,
-            source_bytes=source_bytes_before, normalized_bytes=normalized_bytes,
-            raw_dssp_bytes=raw_dssp_bytes, dssp_assignments=dssp, biotite_assignments=bio,
-            gemmi_version=gemmi_version, dssp_version=dssp_version, biotite_version=biotite_version,
-            normalization_execution=normalization_execution, dssp_execution=dssp_execution,
-            source_archive=source_archive, source_member=source_member,
-            source_archive_sha256=source_archive_sha256,
-        )
-        write_evidence_bundle_no_overwrite(evidence_path, failed_evidence)
-        print(f"t15_ss_agreement: failed-attempt evidence retained: {evidence_ref}", file=sys.stderr)
-        raise
+    result = agreement(dssp, bio)
 
     bundle_ref = content_bound_bundle_ref(
         result,

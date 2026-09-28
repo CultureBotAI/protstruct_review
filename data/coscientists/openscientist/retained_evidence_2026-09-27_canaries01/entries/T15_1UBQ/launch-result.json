@@ -1,0 +1,94 @@
+{
+  "acceptance": "pending manual/read-only evidence inspection; exit status is not acceptance",
+  "completed_at": "2026-09-28T05:01:53.543832+00:00",
+  "failure_evidence_limit": "T15 may delete normalized/raw DSSP files before publishing a bundle (#829)",
+  "files_before_result_manifest": {
+    "entries/T13_1SAR/launch-request.json": {
+      "sha256": "af709905f9ca115f57c111b4d5bf42b2fc93305c5d34a062f4249e48361abed8",
+      "size": 2899
+    },
+    "entries/T13_1SAR/launch-result.json": {
+      "sha256": "683daa6d5eaf7b65960008bebcae8195c456143bbc6c52bd4d0365862f1c53dc",
+      "size": 3529
+    },
+    "entries/T13_1SAR/launcher.log": {
+      "sha256": "b773bdf34c4afe1779056de942c1fdbb2ca7bbbb35d76aa3720bfe3ed212b1a2",
+      "size": 6074
+    },
+    "entries/T13_1SAR/tool_logs/aimless.log": {
+      "sha256": "2dabf53bbc3f765afac08936871c91b47cd70dcee7fd1b3b55dc596e2e1a73b9",
+      "size": 2862
+    },
+    "entries/T13_1SAR/tool_logs/ctruncate.log": {
+      "sha256": "1d5a0cb7df7bc7b33df5093fce1f4c32fdfa43cf4ae25476353229e5b880db01",
+      "size": 29876
+    },
+    "entries/T13_1SAR/tool_logs/ctruncate_out.mtz": {
+      "sha256": "a0bc6078b7d007bfb5002d546956c154dc67f01ab8bf8a0d1419ae3fe7201dd1",
+      "size": 147760
+    },
+    "entries/T15_1UBQ/benchmark.json": {
+      "sha256": "bf120f5f04cabe972a90821cf9db7736863667df838d75132fd3429c669799e0",
+      "size": 643
+    },
+    "entries/T15_1UBQ/launch-request.json": {
+      "sha256": "d77294e74643aae2094e2e6aef7f5e92789e28dadf21b0ba7d05019c467608fe",
+      "size": 3129
+    },
+    "entries/T15_1UBQ/launcher.log": {
+      "sha256": "ee00b3e6301fb56db2f7da09f881bcaef5e5d25819f8d30be7079c0c681611e5",
+      "size": 3804
+    },
+    "launch-root.json": {
+      "sha256": "05c989cfcd24b40294969fd769e2e7677b50da437464bf48ea51d70e85897fa7",
+      "size": 990
+    },
+    "t15_cache/1ubq.pdb": {
+      "sha256": "d4a6812d8951cf6594e6a0763f089e35f5a80b62acb3c117b2c5565228a7b161",
+      "size": 78570
+    },
+    "t15_cache/t15_1ubq.log": {
+      "sha256": "6ae3a9e779128df3df8d3681ed4612a05047f0d9596a6d2efe53aea43184da0e",
+      "size": 2388
+    },
+    "t15_evidence/1ubq.t15-evidence.json": {
+      "sha256": "5607f1f1e33d72dfdd8a522e0d3d19700b2535e25c04e9c4b725e070cc34a63a",
+      "size": 104113
+    }
+  },
+  "interrupted_pgids": [],
+  "launcher_error": null,
+  "process": {
+    "arguments": [
+      "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/refinement-cache-integration/.venv/bin/python",
+      "-B",
+      "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/refinement-cache-integration/scripts/bench_t15_ss_agreement.py",
+      "1UBQ",
+      "--cache",
+      "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/refinement-cache-integration/data/coscientists/openscientist/retained_evidence_2026-09-27_canaries01/t15_cache",
+      "--evidence-dir",
+      "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/refinement-cache-integration/data/coscientists/openscientist/retained_evidence_2026-09-27_canaries01/t15_evidence",
+      "--json",
+      "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/refinement-cache-integration/data/coscientists/openscientist/retained_evidence_2026-09-27_canaries01/entries/T15_1UBQ/benchmark.json"
+    ],
+    "pgid": 91600,
+    "pid": 91600,
+    "returncode": 0,
+    "start_new_session": true,
+    "termination_signal": null,
+    "timed_out": false
+  },
+  "source_hashes_after": {
+    "ref/research/t13_t15_canaries_preregistration_2026-09-27.md": "97d46d0fcfe9f17527dc3a60b4667929cec3c2646c27427824f16a5c44c38714",
+    "scripts/bench_t15_ss_agreement.py": "cb0ad3aac45f0dbc7498f603e014a57eb303bd4b79ad0b274eb953b32784637a",
+    "scripts/benchmark_environment.py": "3b8e2ed8808139f3e6b3e07f1ec194eea87984564e4401b598f26ae7a92d1377",
+    "scripts/entry_sandbox.py": "d90356b60b62c4ebb1dcfc1aae904f42e5af09ad947e5eefdf5dac8f150771f8",
+    "scripts/t13_data_quality.py": "9cf55c75fe51a9711f7df97138ba2404e2144dcc7c7b1c4c6c9419b78191355a",
+    "scripts/t15_ss_agreement.py": "42a84d759284752bcc2c8340148a1306c39cb5ca3a1da6eb85180496124a9f4f",
+    "scripts/toolchain.py": "e32dd23ba61d684edea4cf86208c6d7fec62af060898c63cba96f40bd0bc338f",
+    "uv.lock": "c80b8cd4c874a7cf46cd6d5712df4d0a5fd2e1ac755d5ab1efb07d94448fa8b9"
+  },
+  "sources_unchanged": true,
+  "t13_input_sha256_after": "f36d5fe685a3e524e8809d17d19ce12073acdf339eba2cfd3b0347a818850ab2",
+  "t13_input_unchanged": true
+}

@@ -42,7 +42,8 @@ from typing import Any
 
 if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-from toolchain import REDUCE, phenix as phenix_executable, run_logged, run_to_file
+from toolchain import phenix as phenix_executable, run_logged, run_to_file
+from standalone_reduce import build_hydrogens
 
 RCSB_PDB = "https://files.rcsb.org/download/{pdb_id}.pdb"
 # reduce2 reports each flippable group's final pose in its .txt report, e.g.
@@ -91,9 +92,10 @@ def fetch(pdb_id: str, cache: Path) -> Path | None:
 
 def build(model: Path, cache: Path, phenix: bool) -> Path | None:
     """Add hydrogens with one of the two builders; returns the output PDB."""
-    tag = "phx" if phenix else "std"
-    out = cache / f"{model.stem}_h_{tag}.pdb"
-    executable = phenix_executable("phenix.reduce") if phenix else REDUCE
+    if not phenix:
+        return build_hydrogens(model, cache)
+    out = cache / f"{model.stem}_h_phx.pdb"
+    executable = phenix_executable("phenix.reduce")
     if not out.exists() or not out.stat().st_size:
         run_to_file([executable, "-quiet", "-build", model], out, timeout=3600)
         if not out.exists() or not out.stat().st_size:
@@ -192,6 +194,7 @@ def collect(pdb_ids: list[str], cache: Path) -> tuple[list[dict], list[dict]]:
         r2_confident_diffs = confident_conflicts(a, r2) if r2 else []
         rows.append({
             "pdb_id": pdb_id,
+            "standalone_reduce_evidence": str(std.parent / "manifest.json"),
             "n_flippable_phenix": len(a),
             "n_flippable_standalone": len(b),
             "n_shared": len(shared),

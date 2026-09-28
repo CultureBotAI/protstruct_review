@@ -60,11 +60,12 @@ Each bullet is pass/fail; all must pass for green. Log the numeric delta that tr
    `[registry §1]` `[schema ResidueOutlierKind]` `[MolProbity]`
 2. **Clashscore agreement.** PHENIX clashscore and MolProbity-standalone clashscore agree within the
    registry §3 envelope — |Δ| ≤ 1.0, or 20 % of the mean, whichever is larger — with a matched H-build
-   convention and hydrogens from the same `reduce` binary and version; a mismatch (e.g. nuclear vs
+   convention and hydrogens from the same `reduce` binary and version; an H-convention mismatch (e.g. nuclear vs
    electron-cloud H) makes the comparison **void, not failed**. Both tools start from the same input
    model, so a disagreement is a pipeline difference, not a change to the model; the clashscore
    difference alone does not say whether H placement, Asn/Gln/His flips, het dictionaries or clash
-   counting caused it. `[registry §3 — clashscore]`
+   counting caused it. Clashscore version pin: PHENIX 2.0-5936, Richardson reduce 4.16.250520 (both builds), and standalone probe 2.26.021123. Other or unverified versions are informational pending a matched benchmark, not a threshold pass or fail.
+   Matching versions alone does not validate changed H-build settings (#799/#790). `[registry §3 — clashscore]`
 3. **Ramachandran / rotamer agreement.** The load-bearing check is **per-shared-residue
    classification agreement**: for the residues both tools evaluate, they assign the same Ramachandran
    verdict and the same rotamer OUTLIER verdict; name every residue whose verdict differs. **Rotamer

@@ -159,7 +159,7 @@ resolution range and breached by null re-refinement once low-resolution entries 
 **Where the registry stands.** Round 17 audited every `[benchmark]` row and found **7 quote a figure
 from a set that can no longer be reconstructed**; they are marked `⚠ partial record`. Round 18 fixed
 the cause — **every `bench_*.py` now commits the set it ran on**, and `scripts/validate.sh` fails if
-one does not. **18 rows are fully backed** (rounds 42 and 44 re-based every §4 `d_min ≥ 2.5 Å` X-ray figure — both band widths and the geometry row's clashscore null ratio / starting ceiling — off their lost sets onto the 44 named entries, fully backing the ΔRMSD and geometry rows; rounds 45–46 backed both vs-deposited geometry-% rows on the 42 named entries — **favored %** on named data, and **outlier %** by making the check per-shared-residue classification agreement rather than the denominator-sensitive raw % (#284); rounds 47–48 backed the **H-placement flip-set** row on the named set with the check made the confident-conflict rate rather than the raw disagreement rate inflated by one builder's uncertainty (#287) — the two remaining marks are both RETAIN, so every *resolvable* partial record is resolved). **That was true through round 48 and is no longer quite true:** #613 (2026-09-22) requalified one of the 18, the §3 secondary-structure agreement row, as `[benchmark — historical denominator unproven]` — its 0.65 expectation is non-gradeable until the benchmark is rerun with exact per-assigner denominators ([#765](https://github.com/CultureBotAI/protstruct_review/issues/765)). The registry header still says 18/2 ([#766](https://github.com/CultureBotAI/protstruct_review/issues/766)).
+one does not. **The historical inventory reported 18 fully backed rows** (rounds 42 and 44 re-based every §4 `d_min ≥ 2.5 Å` X-ray figure — both band widths and the geometry row's clashscore null ratio / starting ceiling — off their lost sets onto the 44 named entries, fully backing the ΔRMSD and geometry rows; rounds 45–46 backed both vs-deposited geometry-% rows on the 42 named entries — **favored %** on named data, and **outlier %** by making the check per-shared-residue classification agreement rather than the denominator-sensitive raw % (#284); rounds 47–48 backed the **H-placement flip-set** row on the named set with the check made the confident-conflict rate rather than the raw disagreement rate inflated by one builder's uncertainty (#287) — the two remaining marks are both RETAIN, so every *resolvable* partial record is resolved). **That reported inventory is not current independent calibration:** #809 suspends T14 flip grading because the retained benchmark used PHENIX-distributed Reduce, not the claimed standalone producer; #613 (2026-09-22) requalified one of the 18, the §3 secondary-structure agreement row, as `[benchmark — historical denominator unproven]` — its 0.65 expectation is non-gradeable until the benchmark is rerun with exact per-assigner denominators ([#765](https://github.com/CultureBotAI/protstruct_review/issues/765)). The registry header qualifies the historical 18/2 tally; its full ledger/count reconciliation remains ([#766](https://github.com/CultureBotAI/protstruct_review/issues/766)).
 
 **The counts, reconciled (round 18) — there are two different 21s and both are right.** §3 and §4
 hold **21 rows**, of which **20 carry `[benchmark]`**; the exception is §4's *absolute geometry
@@ -439,11 +439,12 @@ detail lives in `ref/research/tolerance_benchmark_round40.md` and the memo #258.
 
 ### Standing risk, not tasks
 
-- **Two rows carry `⚠ partial record`, both RETAIN by nature** (rounds 42/44 resolved the ΔRMSD and
+- **The historical inventory reported two `⚠ partial record` rows, both RETAIN** (rounds 42/44 resolved the ΔRMSD and
   geometry rows; rounds 45–46 resolved both vs-deposited geometry-% rows, #284; rounds 47–48 resolved the
   H-placement flip-set row, #287). The two that remain — #2 L-test and #6 EM map-model — are RETAIN
-  (honest disclosed limits, not resolvable by re-measurement), so **through round 48 every *resolvable*
-  partial record was resolved** — #613's T15 requalification has since reopened one (#765/#766). Round 21
+  (honest disclosed limits, not resolvable by re-measurement). That inventory is not current grading
+  authority: #613 requalified T15 (#765/#766), and #809 suspends flip grading because the retained
+  producer pair does not establish the claimed independent benchmark. Round 21
   showed one route
   out (re-measure on a committed subset) and round 22 showed its limit: **it works only when the lost
   members were unremarkable.** For the flip-set row it is established *not* to work — the five missing
@@ -458,8 +459,8 @@ detail lives in `ref/research/tolerance_benchmark_round40.md` and the memo #258.
   flip-set re-measure committed the record but the **raw** ≤ 10 % band breached at 10.95 % — 82 % of it
   one builder's own uncertain (X) calls, genuine confident-conflict only 1.80 % — so round 48 switched
   the check to the confident-conflict rate (#287), resolving #5. The two remaining marks, #2 L-test and
-  #6 EM map-model, are RETAIN. **Through round 48 every *resolvable* partial record was resolved;** #613's
-  requalification of the T15 secondary-structure row (#765/#766) is the first new resolvable gap since.
+  #6 EM map-model, are RETAIN. The former resolved-all claim is superseded by T15's denominator gap
+  (#765/#766) and the T14 producer-attribution/grading correction (#809).
   Ask what the lost members contributed before trying to re-measure.
 - **The §4 X-ray band widths no longer rest on lost entries** (was a standing risk through round 41).
   Round 42 re-based both `d_min ≥ 2.5 Å` widths onto coverage bounds over the 44 fresh named entries

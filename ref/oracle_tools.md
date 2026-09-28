@@ -146,7 +146,7 @@ conda activate cryst-oracles && servalcat --version  # 0.4.131
 | T06 | `phenix.model_vs_data` | `gemmi sfcalc`, `servalcat fsc`/`fofc`/`sigmaa`, CCP4 REFMAC5 | CCP4 sfcheck |
 | T12 | `phenix.mtriage` | `servalcat fsc`, `servalcat localcc` | RELION postprocess, ResMap |
 | T13 | `phenix.model_vs_data` (completeness, resolution range) | CCP4 ctruncate (Wilson B, L-test twinning, ΔB aniso, tNCS, ice rings); CCP4 aimless when unmerged intensities exist; wrapper `scripts/t13_data_quality.py` | (CC½ / ⟨I/σ⟩ / Rmerge require unmerged intensities — gap when artefact ships merged-only) |
-| T14 | `phenix.reduce`; `mmtbx.reduce2` | standalone Richardson `reduce`: same-binary dispatcher/distribution check against `phenix.reduce`, but a distinct-builder flip-conflict comparison against `mmtbx.reduce2` | propka3, OpenBabel; neutron evidence |
+| T14 | `phenix.reduce`; `mmtbx.reduce2` | standalone Richardson `reduce`: same-binary dispatcher/distribution check against `phenix.reduce`; independent flip grading suspended pending a matched benchmark (#809) | propka3, OpenBabel; neutron evidence |
 | T15 | *(none — PHENIX has no fold/domain classifier)* | DSSP + biotite (`scripts/t15_ss_agreement.py`) | STRIDE (optional); CATH, SCOPe, ECOD (domain/fold) |
 | T16 | *(none — no PHENIX interface scorer)* | DockQ (interface score + CAPRI class), biotite SASA (buried surface area) | PISA/PDBePISA (deposition-grade BSA reference) |
 | T17 | *(none — no PHENIX NMR restraint validator)* | biotite ensemble precision (`scripts/t17_nmr_ensemble.py`); wwPDB report parser (`scripts/t17_restraint_summary.py`) | PROCHECK-NMR, RPF |
@@ -157,12 +157,12 @@ substitute.
 
 **T14 independence is metric-specific.** In the measured installation, `phenix.reduce` and
 standalone `reduce` both dispatch Richardson `reduce.4.16.250520`; comparing them checks packaging,
-defaults, and distribution dictionaries, not independent H-placement reasoning. The registered
-confident flip-conflict comparison instead pairs standalone `reduce 4.16.250520` with the distinct
-`mmtbx.reduce2` builder from PHENIX 2.0-5936, using
-`approach=add add_flip_movers=True`. Its ≤ 10 % band governs only a preregistered cohort aggregate
-from that exact pipeline. A single structure or a different executable, version, or mover setting is
-informational pending a matched benchmark. Protonation-state corroboration still needs an
+defaults, and distribution dictionaries, not independent H-placement reasoning. Flip-conflict grading
+is suspended: all scopes are informational and criterion-free pending a matched independent benchmark
+(#809). The retained round47/48 producer was PHENIX-distributed `reduce`, compared with the distinct
+`mmtbx.reduce2` builder from PHENIX 2.0-5936 using `approach=add add_flip_movers=True`.
+Both are catalogued cctbx-family; that historical comparison cannot validate the claimed independent
+standalone pair. Protonation-state corroboration still needs an
 algorithmically distinct source such as propka3 or, where available, neutron evidence.
 
 **T15 is now runnable** for its paired oracle-side check

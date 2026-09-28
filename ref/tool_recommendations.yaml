@@ -1855,6 +1855,25 @@ tool_recommendations:
     as_of_date: '2026-09-22'
     effective_at: '2026-09-22T09:00:00+00:00'
 
+  - id: REC_T14_asn_gln_his_flip_set_conflicts_top_considered_2026_09_27_suspended
+    metric_definition_ref: T14_asn_gln_his_flip_set_conflicts
+    tool_ref: mmtbx.reduce2
+    role: top_considered
+    rank: 1
+    justification: >-
+      Flip-conflict grading is suspended: all scopes are informational and criterion-free
+      pending a matched independent benchmark (#809). Retain paired source rows,
+      conflict counts, eligible shared-residue denominators and residue-level evidence.
+      The retained round47/48 numbers compare PHENIX-distributed reduce with mmtbx.reduce2,
+      both catalogued cctbx-family, not the claimed standalone reduce pair. Do not relabel
+      those producers or use the historical cohort band as independent corroboration.
+    evidence_refs:
+      - ref/thresholds_and_standards.md
+      - ref/research/t14_flip_grading_suspension_2026-09-27.md
+    as_of_date: '2026-09-27'
+    effective_at: '2026-09-27T21:10:00-07:00'
+    supersedes_recommendation_ref: REC_T14_asn_gln_his_flip_set_conflicts_top_considered_2026_09_22
+
   # #804: USER MOD records carry H tallies and flip decisions, not dictionary
   # provenance; the loaded het dictionary must be recorded separately (#799).
   - id: REC_T14_h_added_top_considered_2026_09_27
@@ -1904,6 +1923,30 @@ tool_recommendations:
     as_of_date: '2026-09-27'
     effective_at: '2026-09-27T00:00:00+00:00'
     supersedes_recommendation_ref: REC_T14_clashscore_delta_pre_vs_post_top_considered_2026_09_22
+
+  # #798: version identity is necessary, not sufficient for the historical envelope.
+  - id: REC_T14_clashscore_delta_pre_vs_post_top_considered_2026_09_27_version_pin
+    metric_definition_ref: T14_clashscore_delta_pre_vs_post
+    tool_ref: MolProbity (gold)
+    role: top_considered
+    rank: 1
+    justification: >-
+      Use one counter consistently for each builder's pre/post diagnostic. The
+      registered cctbx-versus-probe envelope requires the same Richardson reduce
+      release and a matched H convention; each path may build its own hydrogens,
+      and identical coordinates were never established.
+      Clashscore version pin: PHENIX 2.0-5936, Richardson reduce 4.16.250520 (both builds), and standalone probe 2.26.021123. Other or unverified versions are informational pending a matched benchmark, not a threshold pass or fail.
+      Matching versions alone does not validate changed H-build settings (#799/#790).
+      The historical standalone path most likely loaded no het dictionary (#799);
+      the residual's causal decomposition is unresolved (#790). This version pin
+      neither certifies a new dictionary-loaded pipeline nor grades differences
+      between pre/post changes from distinct builders.
+    evidence_refs:
+      - ref/thresholds_and_standards.md
+      - ref/research/tolerance_benchmark_clashscore_h.md
+    as_of_date: '2026-09-27'
+    effective_at: '2026-09-27T20:27:31-07:00'
+    supersedes_recommendation_ref: REC_T14_clashscore_delta_pre_vs_post_top_considered_2026_09_27
 
   - id: REC_T14_hbond_network_consistency_top_considered_2026_09_22
     metric_definition_ref: T14_hbond-network_consistency_vs_standalone_reduce

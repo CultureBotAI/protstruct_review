@@ -61,7 +61,7 @@ criteria:
     cross_tool_agreement:
       tolerance: "|Δ| ≤ 1.0, or 20 % of the mean, whichever is larger"
       tools: "PHENIX/cctbx vs MolProbity standalone (reduce + probe)"
-      precondition: "matched hydrogen-build convention (electron-cloud vs nuclear) and hydrogens from the same Richardson reduce release (each path may build its own; identical coordinates are not required); a mismatched convention gives 6-23 units of disagreement and VOIDS the comparison rather than failing it"
+      precondition: "matched hydrogen-build convention (electron-cloud vs nuclear) and hydrogens from the same Richardson reduce release (each path may build its own; identical coordinates are not required); a mismatched convention gives 6-23 units of disagreement and VOIDS the comparison rather than failing it. Clashscore version pin: PHENIX 2.0-5936, Richardson reduce 4.16.250520 (both builds), and standalone probe 2.26.021123. Other or unverified versions are informational pending a matched benchmark, not a threshold pass or fail. Matching versions alone does not validate changed H-build settings (#799/#790)."
       provenance:
         - benchmark
       citation: "ref/research/tolerance_benchmark_clashscore_h.md — 10 models, matched median |Δ| 0.115, max 2.27; mismatched median 9.95, max 22.97 (scripts/bench_t05_clashscore_h.py)"

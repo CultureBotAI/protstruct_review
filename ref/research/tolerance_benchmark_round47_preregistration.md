@@ -1,5 +1,9 @@
 # Round 47 — pre-registration
 
+> **Current status (2026-09-27, #809): historical record, not current grading authority.**
+> The executed producer pair was PHENIX-distributed Reduce versus mmtbx.reduce2, not the
+> claimed standalone pair. Flip grading is suspended; see the dated correction below.
+
 Registered **before the flip-set comparison is run on named data**, in a commit containing no results.
 This executes **P3b triage item #5** — the last resolvable `⚠ partial record`: the H-placement row's
 Asn/Gln/His flip-set figure, **7.5 % (48 of 639 residues, 17 models, worst model 16.4 %)** for standalone
@@ -73,3 +77,20 @@ category, so the *kind* of disagreement is nameable, not just the rate.
 - **H-position vs H-count** — the count is nearly insensitive to the electron-cloud/nuclear convention;
   the row already states the count must not be read as evidence that two H builds match on position.
 - **The other rows** — #2 L-test and #6 EM map-model are untouched (both RETAIN).
+
+
+## Producer attribution and grading correction (2026-09-27, #809)
+
+The original text above is retained as the historical report/registration, not rewritten evidence.
+`bench_t14_flip_sets.py::collect` assigns `a = flip_calls(phx)` and compares `a` with reduce2;
+`b = flip_calls(std)` does not produce `n_reduce2_shared` or the reduce2 disagreement fields.
+Consequently the retained counts are PHENIX-distributed Reduce versus mmtbx.reduce2. Both producer
+Tool identities are catalogued cctbx-family. Distinct builders do not establish the independently
+benchmarked standalone pair that the later grading rule claimed.
+
+The retained round48 row counts still recount to 56/3105 confident conflicts and 340/3105 raw
+disagreements across 41 protein entries (12CI is the named exclusion from the 42-entry set).
+These are historical informational numbers, not an independent calibration. The historical cohort
+band is suspended at every scope pending a matched independent benchmark. No raw JSON, original
+execution date, issued Eval/QDS, or frozen emitter implementation is changed by this correction.
+See `t14_flip_grading_suspension_2026-09-27.md` for the rerunnable recount and current policy.

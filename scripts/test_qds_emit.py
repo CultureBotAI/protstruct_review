@@ -754,8 +754,25 @@ def test_derived_coverage_uses_only_validated_source_families() -> None:
             composite["pass_criterion"] = criterion
         return cohort
 
+    # The current policy suspends grades; retained contracts still reproduce
+    # their historical policy without retroactive mutation.
+    for numerator, denominator, status in (
+        (0, 10, "pass_with_caveat"), (1, 10, "pass"), (2, 10, "fail_criterion"),
+    ):
+        assert_raises_completeness(
+            lambda numerator=numerator, denominator=denominator, status=status:
+                qds_emit.build_cross_tool_coverage(
+                    "QDS_suspended",
+                    cohort_rows(numerator, denominator, status, "conflict rate <= 10%"),
+                ),
+            ["derived-coverage integrity", "informational"],
+            "the live emitter accepted a suspended T14 cohort grade",
+        )
+    qds_emit.build_cross_tool_coverage(
+        "QDS_cohort_info", cohort_rows(2, 10, "informational", None),
+    )
+
     for label, builder in (
-        ("live", qds_emit.build_cross_tool_coverage),
         ("frozen v2", qds_emit_contract_v2.build_cross_tool_coverage),
     ):
         for numerator, denominator, status in (

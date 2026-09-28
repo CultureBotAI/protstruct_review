@@ -134,3 +134,15 @@ being held to an unreasonably tight absolute band.
   `clashscore` wrapper (not installed); it was validated against `phenix.clashscore` on 1SAR to
   within 0.34 units.
 - One version pair: PHENIX 2.0-5936, reduce 4.16.250520, probe 2.26.021123.
+
+## Version applicability clarification (2026-09-27, #798)
+
+Both registry clashscore rows now restrict the existing envelope to the versions
+declared above. Clashscore version pin: PHENIX 2.0-5936, Richardson reduce 4.16.250520 (both builds), and standalone probe 2.26.021123. Other or unverified versions are informational pending a matched benchmark, not a threshold pass or fail.
+This is a policy restriction, not a new scientific run. The original complete
+execution/version logs have not been located; the declared trio has not been
+independently authenticated from historical raw execution evidence.
+Matching versions alone does not validate changed H-build settings (#799/#790).
+In particular, this does not certify the dictionary-loaded rerun proposed in #799,
+require identical H coordinates, or resolve the separate causal-decomposition
+experiment in #790. The earlier results and their numerical envelope are unchanged.

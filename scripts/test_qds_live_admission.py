@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import copy
+from datetime import date
 from pathlib import Path
 import unittest
 from unittest import mock
 
 import yaml
 
+import check_pass_status
+import check_referential_integrity
 import qds_emit
 import qds_emit_contract_v4 as v4
 from qds_correction_projection import canonical_sha256
@@ -364,6 +367,156 @@ class LiveAdmissionTests(unittest.TestCase):
         context["snapshot_owner_evaluation_run_ref"] = context["owner_evaluation_run_ref"]
         p = v4.prepare_projection([doc], context["qds_ref"], "synth1")
         v4._validate_live_registry_snapshots(p, v4.REPO)
+
+
+    def flip_document(self, scope: str = "cohort") -> tuple[dict, dict]:
+        """Add synthetic, source-linked T14 evidence to a valid public fixture."""
+        from test_qds_emit import _t14_derived_coverage_rows
+
+        live = registries()
+        doc = document(live)
+        rows = _t14_derived_coverage_rows()
+        for row in rows:
+            row.update({
+                "subject_ref": SUBJECT, "scope": scope,
+                "scope_selector": "synthetic T14 selected scope",
+            })
+        doc["evaluation_runs"][0]["measurements"].extend(rows)
+        doc["evaluation_runs"][0]["catalog_tasks_applied"].append("T14")
+        doc["tools"].extend([
+            {"id": "reduce (standalone, Richardson)", "family": "non_cctbx",
+             "catalog_tasks_served": ["T14"]},
+            {"id": "mmtbx.reduce2", "family": "cctbx", "catalog_tasks_served": ["T14"]},
+        ])
+        return doc, live
+
+    def test_public_v4_rejects_suspended_flip_grades_even_with_pinned_snapshots(self) -> None:
+        for scope in ("complex", "cohort"):
+            for pinned in (False, True):
+                for status, numerator in (("pass", 1), ("pass_with_caveat", 0),
+                                          ("fail_criterion", 2)):
+                    with self.subTest(scope=scope, pinned=pinned, status=status):
+                        doc, live = self.flip_document(scope)
+                        conflict = doc["evaluation_runs"][0]["measurements"][-1]
+                        conflict.update({
+                            "pass_status": status, "pass_criterion": "conflict rate <= 10%",
+                            "pass_criterion_ref": "PC_synthetic_suspended_flip",
+                        })
+                        conflict["oracle_measure"].update({"value_numeric": numerator, "count": 10})
+                        with self.assertRaisesRegex(qds_emit.QdsCompletenessError, "informational"):
+                            self.emit(doc, live, require_pinned_tool_snapshot=pinned)
+
+    def test_public_v4_rejects_top_and_nested_flip_criterion_metadata(self) -> None:
+        for scope in ("complex", "cohort"):
+            for metric_index in (1, 2, 3):
+                for carrier_name in ("measurement", "oracle_measure"):
+                    for field, value in (
+                        ("pass_criterion", "conflict rate <= 10%"),
+                        ("pass_criterion_ref", "PC_synthetic_suspended_flip"),
+                        ("criterion_preconditions", [{"id": "synthetic", "status": "satisfied"}]),
+                    ):
+                        with self.subTest(scope=scope, index=metric_index,
+                                          carrier=carrier_name, field=field):
+                            doc, live = self.flip_document(scope)
+                            row = doc["evaluation_runs"][0]["measurements"][metric_index]
+                            carrier = row if carrier_name == "measurement" else row["oracle_measure"]
+                            carrier[field] = value
+                            with self.assertRaisesRegex(qds_emit.QdsCompletenessError, "criterion|verdict"):
+                                self.emit(doc, live)
+
+    def test_public_v4_allows_informational_flip_evidence_at_structure_and_cohort_scope(self) -> None:
+        for scope in ("complex", "cohort"):
+            for pinned in (False, True):
+                with self.subTest(scope=scope, pinned=pinned):
+                    doc, live = self.flip_document(scope)
+                    before = copy.deepcopy(doc)
+                    qds = self.emit(doc, live, require_pinned_tool_snapshot=pinned)
+                    self.assertEqual(doc, before)
+                    coverage = qds["cross_tool_coverage"]["task_coverage"]
+                    conflict = next(row for row in coverage if row.get("metric_definition_ref")
+                                    == "T14_asn_gln_his_flip_set_conflicts")
+                    self.assertEqual(conflict["gap_status"],
+                                     "dual-family coverage — agreement not evaluated")
+
+    def flip_retirement_document(self, *, graded: bool) -> tuple[dict, dict, dict]:
+        """Invent a typed withdrawal; this is not historical source authorization."""
+        doc, live = self.flip_document()
+        conflict = doc["evaluation_runs"][0]["measurements"][-1]
+        if graded:
+            conflict.update({
+                "pass_status": "pass", "pass_criterion": "conflict rate <= 10%",
+                "pass_criterion_ref": "PC_synthetic_suspended_flip",
+            })
+        correction_run = RUN + "_correction"
+        correction = {
+            "id": "C_withdraw_flip", "action": "withdraw",
+            "target_collection": "measurements", "target_evaluation_run_ref": RUN,
+            "target_ref": conflict["id"], "target_sha256": canonical_sha256(conflict),
+            "reason": "Synthetic withdrawal exercising the active projection boundary.",
+            "evidence_refs": ["ref/research/synthetic_active_site_review_2026-09-23.md"],
+        }
+        doc["evaluation_runs"].append({
+            "id": correction_run, "run_date": "2026-09-24",
+            "structure_ref": "synth_live", "corrections": [correction],
+        })
+        context = doc["qds_emission_contexts"][0]
+        context.update({
+            "owner_evaluation_run_ref": correction_run,
+            "snapshot_owner_evaluation_run_ref": correction_run,
+            "source_evaluation_run_refs": [RUN, correction_run],
+            "issued_at": "2026-09-24T08:00:00+00:00",
+        })
+        return doc, live, correction
+
+    def test_public_projection_ignores_withdrawn_synthetic_grade_not_raw_admission(self) -> None:
+        """Projection-only: the synthetic raw grade remains corpus-invalid below."""
+        doc, live, correction = self.flip_retirement_document(graded=True)
+        before = copy.deepcopy(doc)
+        qds = self.emit(doc, live)
+        self.assertEqual(doc, before)
+        self.assertIn(correction, qds["applied_corrections"])
+        self.assertFalse(any(row.get("metric_definition_ref")
+                             == "T14_asn_gln_his_flip_set_conflicts"
+                             for row in qds["cross_tool_coverage"]["task_coverage"]))
+
+
+    def raw_flip_guard_results(self, doc: dict, qds: dict) -> tuple[list[str], list[str]]:
+        """Exercise the unchanged corpus-relation and raw verdict guards."""
+        carrier = {**doc, "quality_data_sheets": [qds]}
+        path = Path("data/examples/eval/EVAL_synthetic_retirement_2026-09-23.yaml")
+        indices = check_referential_integrity.build_corpus_indices([(path, carrier)])
+        relations = check_referential_integrity.check_measurement_relations(indices)
+        raw = []
+        for run in doc["evaluation_runs"]:
+            rows = run.get("measurements", [])
+            for row in rows:
+                check_pass_status.check_measurement(
+                    path, path.as_posix(), run["id"], date.fromisoformat(run["run_date"]),
+                    row, {}, False, raw, [], set(), set(),
+                )
+            check_pass_status.check_run_cross_family_trust(
+                path, run["id"], rows, False, raw,
+            )
+        return relations, raw
+
+    def test_corpus_guards_reject_new_invalid_raw_grade_despite_valid_withdrawal(self) -> None:
+        """A valid correction does not grant a legacy/content-pin exemption."""
+        doc, live, correction = self.flip_retirement_document(graded=True)
+        qds = self.emit(doc, live)
+        self.assertIn(correction, qds["applied_corrections"])
+        relations, raw = self.raw_flip_guard_results(doc, qds)
+        self.assertTrue(any("requires pass_status 'informational'" in item for item in relations))
+        self.assertTrue(any("must not carry pass_criterion" in item for item in relations))
+        self.assertTrue(any("criterion metadata pass_criterion_ref" in item for item in relations))
+        self.assertTrue(any("PC_synthetic_suspended_flip" in item and "does not resolve" in item
+                            for item in raw))
+        self.assertTrue(any("hard verdict 'pass' on a cctbx row" in item for item in raw))
+
+    def test_corpus_guards_allow_retirement_of_valid_informational_flip_evidence(self) -> None:
+        doc, live, correction = self.flip_retirement_document(graded=False)
+        qds = self.emit(doc, live)
+        self.assertIn(correction, qds["applied_corrections"])
+        self.assertEqual(self.raw_flip_guard_results(doc, qds), ([], []))
 
 
 if __name__ == "__main__":

@@ -48,8 +48,9 @@ Each bullet is pass/fail; all must pass for green.
 4. **Geometry did not degrade.** clashscore and Ramachandran favored stay within the refinement
    Δ-tolerances (registry §4); MolProbity vs PHENIX clashscore agree within the registry §3 envelope — |Δ| ≤ 1.0, or 20 % of
    the mean, whichever is larger, with a matched H-build convention and hydrogens from the same
-   `reduce` binary and version (a mismatch is void, not failed; record each tool's H convention and
-   `reduce` version). `[registry §3 — clashscore]`
+   `reduce` binary and version (an H-convention mismatch is void, not failed; record each tool's H convention and
+   `reduce` version). Clashscore version pin: PHENIX 2.0-5936, Richardson reduce 4.16.250520 (both builds), and standalone probe 2.26.021123. Other or unverified versions are informational pending a matched benchmark, not a threshold pass or fail.
+   Matching versions alone does not validate changed H-build settings (#799/#790). `[registry §3 — clashscore]`
 
 ## Notes
 

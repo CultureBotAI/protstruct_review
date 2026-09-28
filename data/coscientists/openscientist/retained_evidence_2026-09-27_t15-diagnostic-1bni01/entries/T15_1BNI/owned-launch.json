@@ -1,0 +1,12 @@
+{
+  "argv": [
+    "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/gemmi-capability-integration/.venv/bin/python",
+    "-B",
+    "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/gemmi-capability-integration/scripts/run_t15_failed_attempt_diagnostic.py",
+    "--worker",
+    "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/gemmi-capability-integration/data/coscientists/openscientist/retained_evidence_2026-09-27_t15-diagnostic-1bni01/entries/T15_1BNI/launch-request.json",
+    "--request-sha256",
+    "49606cfdced8040bb6a470e0bb5653972d5ad74cfc357a2691842d25d194a523"
+  ],
+  "timeout_seconds": 900
+}

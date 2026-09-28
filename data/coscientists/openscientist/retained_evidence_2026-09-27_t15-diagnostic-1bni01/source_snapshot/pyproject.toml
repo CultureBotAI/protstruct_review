@@ -1,0 +1,47 @@
+[project]
+name = "protstruct-review"
+version = "0.1.0"
+description = "Cross-tool quality-assessment harness for protein structures"
+license = "BSD-3-Clause"
+authors = [{ name = "Marcin P. Joachimiak" }]
+requires-python = ">=3.11,<3.13"
+dependencies = [
+  "pydantic>=2.10,<3",
+  "PyYAML>=6.0,<7",
+]
+
+[project.optional-dependencies]
+benchmark = [
+  "biotite>=1.5,<2",
+  "DockQ>=2.1,<3",
+  "gemmi>=0.7.5,<0.8",
+  "numpy>=1.26.4,<2",
+  "scipy>=1.14,<2",
+]
+
+[dependency-groups]
+dev = [
+  "gemmi>=0.7.5,<0.8",
+  "linkml>=1.9.6,<1.10",
+  "linkml-runtime>=1.9.5,<1.10",
+  "numpy>=1.26.4,<2",
+  "ruff>=0.12,<1",
+  "scipy>=1.14,<2",
+]
+
+[tool.uv]
+default-groups = ["dev"]
+package = false
+
+[tool.ruff]
+target-version = "py311"
+extend-exclude = [
+  "data",
+  "protstruct_review/models.py",
+  "ref/phenix_docs",
+]
+
+[tool.ruff.lint]
+# Start with correctness-oriented checks. Formatting and modernization rules
+# remain opt-in until the historical scripts are brought under the gate.
+select = ["E9", "F"]

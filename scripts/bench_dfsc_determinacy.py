@@ -36,6 +36,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import json
 import random
@@ -44,6 +45,11 @@ from pathlib import Path
 from typing import Any
 
 import gemmi
+
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+from deterministic_cache import deterministic_product, generator_identity
+from refinement_cache import CacheEvidenceError
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -72,16 +78,18 @@ SET_RECORD = "ref/research/data/round40_dfsc_determinacy.json"
 
 
 def perturb_cif(model: Path, sigma: float, seed: int, out: Path) -> Path:
-    """Copy `model` (mmCIF) with Gaussian noise added to every atom coordinate.
+    """Generate source/parameter-bound mmCIF perturbation evidence (#822).
 
-    gemmi rather than the PDB-column perturber in bench_refinement_deltas: EM models are
-    mmCIF and routinely exceed the PDB atom-serial limit, so a fixed-column edit is unsafe.
-    Deterministic in (sigma, seed): a later run reproduces the same perturbed model.
+    Preserve the original model-stem/sigma/seed RNG string and Gemmi coordinate
+    algorithm. The requested out basename is only a legacy label: return the
+    authenticated product in its parent's cache without overwriting that path.
     """
-    if out.exists() and out.stat().st_size:
-        return out
+    source = model.read_bytes()
     st = gemmi.read_structure(str(model))
-    rng = random.Random(f"{model.stem}:{sigma}:{seed}")
+    if model.read_bytes() != source:
+        raise CacheEvidenceError(f"Source changed while reading perturbation: {model}")
+    random_seed = f"{model.stem}:{sigma}:{seed}"
+    rng = random.Random(random_seed)
     for m in st:
         for chain in m:
             for res in chain:
@@ -91,8 +99,23 @@ def perturb_cif(model: Path, sigma: float, seed: int, out: Path) -> Path:
                                               p.y + rng.gauss(0, sigma),
                                               p.z + rng.gauss(0, sigma))
     st.setup_entities()
-    st.make_mmcif_document().write_file(str(out))
-    return out
+    expected = st.make_mmcif_document().as_string().encode()
+    provenance = {
+        "source": {"path": str(model.resolve()),
+                   "sha256": hashlib.sha256(source).hexdigest()},
+        "sigma_hex": float(sigma).hex(),
+        "sigma_seed_spelling": str(sigma),
+        "seed": seed,
+        "random_seed": random_seed,
+        "generator": generator_identity(
+            __file__, "random.Random(string-seed).gauss/mmCIF-coordinate-jitter-v1",
+            gemmi_version=gemmi.__version__,
+            gemmi_module=str(Path(gemmi.__file__).resolve()),
+        ),
+    }
+    return deterministic_product(
+        out.parent, "cif-perturb", filename="model.cif", provenance=provenance, expected=expected,
+    )
 
 
 def d_width(curve: list[tuple[float, float]], crossing: float | None,

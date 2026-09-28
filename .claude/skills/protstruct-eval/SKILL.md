@@ -53,7 +53,7 @@ Every oracle in this harness rests on assumptions that determine what it sees an
 
 ### `phenix.refine` (in-run R-factors)
 - **Bulk-solvent and anisotropic scaling.** In-run R-work / R-free use the refinement's bulk-solvent and scaling state; a fresh `phenix.model_vs_data` derivation can differ. Measure that effect only on the exact same model and MTZ. For packaged 1SAR round 4, the PDB header and fresh result differ by just 0.0001 / 0.0002; the old 0.01–0.015 claim compared the round-7 log with the round-4 package and is withdrawn.
-- **R-free flag set.** Assumes the test set is fixed and untouched. If the agent regenerated R-free flags between rounds, cross-validation is broken silently. Compare reflection counts and column labels at every round when in doubt.
+- **R-free flag set.** Assumes the test set is fixed and untouched. If the agent regenerated R-free flags between rounds, cross-validation is broken silently. Use registry §3's input-defined T03 retention domain: preserve finite F (including zero/negative values) with finite positive SIGF and explicitly encoded flags over the full input HKL set. Missing/malformed input flags or ambiguous indexing make the audit unevaluable. Report dropped/invalidated and newly usable observations separately from excluded/padding rows; counts or surviving-intersection agreement alone cannot establish retention.
 
 ### `phenix.model_vs_data`
 - **Same bulk-solvent / scaling code path as `phenix.refine`** in principle, but a separate full re-derivation. Catalog T06 oracle of record. Treats the model as fixed; not a refinement.

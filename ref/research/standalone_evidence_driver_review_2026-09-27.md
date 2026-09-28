@@ -42,6 +42,13 @@ flip decisions and a PHENIX comparator are explicitly unavailable here.
   accepts explicit captured tool metadata without probing unrelated tools;
   existing callers retain their default behavior. Plan mode does not announce
   or execute probes. No gate exception or filename-based workaround was added.
+- **#850:** macOS CI reached an EPERM error while escalating the ordinary-Python
+  timeout test to SIGKILL. The log did not establish the underlying kernel state.
+  Cleanup now reaps the owned leader again before escalation; if SIGKILL returns
+  EPERM, it recovers only when a further reap and group check establish that the
+  group has disappeared. A still-existing group remains a hard cleanup error.
+  Deterministic disappearing/still-existing controls supplement the unchanged
+  real timeout and descendant-isolation tests; no timeout test is skipped.
 
 The 26 focused tests use mocked scientific/network boundaries, including
 mutation controls and both canonical and alias paths. The process timeout test

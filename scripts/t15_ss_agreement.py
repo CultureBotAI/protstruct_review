@@ -383,7 +383,7 @@ def run_biotite(model: Path) -> dict[ResKey, str]:
     out: dict[ResKey, str] = {}
     for chain_id in sorted(set(prot.chain_id)):
         chain = prot[prot.chain_id == chain_id]
-        sse = struc.annotate_sse(chain)  # one 'a'/'b'/'c' per residue, in order
+        sse = struc.annotate_sse(chain)  # one native state per residue; '' is unassigned
         starts = struc.get_residue_starts(chain)  # first-atom index per residue, in order
         if len(sse) != len(starts):
             _fail(
@@ -394,7 +394,14 @@ def run_biotite(model: Path) -> dict[ResKey, str]:
         for idx, code in zip(starts, sse):
             resnum = str(chain.res_id[idx])
             icode = str(chain.ins_code[idx]).strip() if has_icode else ""
-            out[(chain_id, resnum, icode)] = _BIOTITE_TO_HEC.get(code, "C")
+            if not isinstance(code, str) or code not in _BIOTITE_TO_HEC:
+                reason = ("unavailable/no assignment (empty native code)"
+                          if isinstance(code, str) and code == ""
+                          else f"unsupported native secondary-structure code {code!r}")
+                _fail(f"biotite {reason} in {str(model)!r} at chain {chain_id!r}, "
+                      f"residue {resnum!r}, insertion code {icode!r}; "
+                      "refusing to coerce to coil, drop the key, or pad the denominator.")
+            out[(chain_id, resnum, icode)] = _BIOTITE_TO_HEC[code]
     return out
 
 

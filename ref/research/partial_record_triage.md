@@ -1,5 +1,14 @@
 # Partial-record triage (P3b, Codex review action plan)
 
+> **Historical triage, retained 2026-09-27; not a current completeness claim.** This document
+> records the through-round48 disposition of six then-marked rows. Later scope and evidence
+> qualifications, including T15's unproven historical denominator (#765/#766) and suspension of
+> T14's confident-flip grading for producer mismatch (#809), are not resolved by those dispositions.
+> For the current descriptive inventory, see [the threshold registry](../thresholds_and_standards.md)
+> and [`threshold_evidence_status.yaml`](../threshold_evidence_status.yaml). Its two axes distinguish
+> existing policy from retained evidence; neither a historical “resolved” label nor a retained record
+> establishes independent calibration. The historical narrative below remains unchanged.
+
 Round 42 established a *third* route out of a `⚠ partial record` — beyond round 21's "re-measure on a
 committed subset" (works only when the lost members were unremarkable) and round 22's "closed as
 unfixable" — namely **retire the lost estimator and re-base the figure on a coverage/distribution bound

@@ -1,0 +1,759 @@
+format_version: 1
+status: descriptive_inventory
+as_of_date: '2026-09-27'
+scope: Rendered table rows in registry sections 3 and 4 only; not all sections or
+  every numerical statement.
+source: ref/thresholds_and_standards.md
+review_depth: Document and retained-record inspection; not full scientific revalidation
+  or installed-tool reruns.
+policy_state_definition: Describes current prose policy or an explicitly unresolved
+  interpretation. Does not authorize QDS grading or substitute for pass-criterion
+  bindings.
+evidence_state_definition: retained_record means identifiable retained evidence for
+  the scoped claim, not complete execution provenance, independent calibration, or
+  correctness of every number in the row.
+historical_inventory_definition: Recounts the through-round48 authors' reported 18/2
+  classification. It is not today's certification.
+rows:
+- id: ca_rmsd
+  section: 3
+  row_label: CA RMSD
+  observed_line: 104
+  row_sha256: 390221c5757d08a917f59fbf4df28b5b611e62df1d79a002e8d958ef8bd10f08
+  provenance_tags:
+  - '[benchmark]'
+  historical_inventory_class: reported_backed
+  evidence_refs:
+  - path: ref/research/tolerance_benchmark_superposition.md
+    anchor: '## Applied tolerances'
+    sha256: 9020bc47ec935ae30f1f1a23213b70e2295e2f04f81264dff64336e21ca3da3c
+    hash_scope: full_file
+  components:
+  - id: agreement
+    scope: Matched-count rigid-body CA RMSD comparison
+    policy_state: active_conditional
+    evidence_state: retained_record
+    limitations: Same aligned-residue count, rigid-body PHENIX flags and declared
+      chain handling; record presence is not exact atom-set equality.
+    issue_refs: []
+- id: aligned_count
+  section: 3
+  row_label: Aligned-residue count
+  observed_line: 105
+  row_sha256: c6f7478d80a5c717a31effac23fa47359e0ca73fcd24c963dfe4452c75dd51b6
+  provenance_tags:
+  - '[benchmark]'
+  historical_inventory_class: reported_backed
+  evidence_refs:
+  - path: ref/research/tolerance_benchmark_superposition.md
+    anchor: '## Applied tolerances'
+    sha256: 9020bc47ec935ae30f1f1a23213b70e2295e2f04f81264dff64336e21ca3da3c
+    hash_scope: full_file
+  components:
+  - id: agreement
+    scope: Aligned-residue count within a matched aligner class
+    policy_state: active_conditional
+    evidence_state: retained_record
+    limitations: Same aligner class and chain handling; larger differences call for
+      inspection.
+    issue_refs: []
+- id: clashscore
+  section: 3
+  row_label: Clashscore
+  observed_line: 106
+  row_sha256: ab3e716538c82f0c960887951b207d88a75a58c651dd9ae852480cefcfa60887
+  provenance_tags:
+  - '[benchmark]'
+  historical_inventory_class: reported_backed
+  evidence_refs:
+  - path: ref/research/tolerance_benchmark_clashscore_h.md
+    anchor: '## Configuration'
+    sha256: a6884853f10bec1be57d706f08c1442a9677692b8bd7b513a6e22c96e9d64f2b
+    hash_scope: full_file
+  - path: ref/research/tolerance_benchmark_clashscore_h.md
+    anchor: '## Version applicability clarification (2026-09-27, #798)'
+    sha256: a6884853f10bec1be57d706f08c1442a9677692b8bd7b513a6e22c96e9d64f2b
+    hash_scope: full_file
+  components:
+  - id: historical_pipeline
+    scope: Registered historical version/convention pipeline only
+    policy_state: active_conditional
+    evidence_state: retained_record
+    limitations: Historical separately built hydrogens; declared versions are not
+      complete execution authentication. Matching versions is necessary, not sufficient
+      for changed dictionary/flip settings.
+    issue_refs:
+    - 798
+    - 799
+    - 790
+  - id: changed_pipeline
+    scope: New dictionary-loaded or otherwise changed H-build pipeline
+    policy_state: not_evaluable
+    evidence_state: unmeasured
+    limitations: The retained historical envelope does not establish this pipeline's
+      calibration.
+    issue_refs:
+    - 799
+    - 790
+- id: favored_percent
+  section: 3
+  row_label: Ramachandran / rotamer favored %
+  observed_line: 107
+  row_sha256: 7fd45bdb82583bc4f0e22fe94045b0f1e75565e808029dc93430e64b560b84e3
+  provenance_tags:
+  - '[benchmark]'
+  historical_inventory_class: reported_backed
+  evidence_refs:
+  - path: ref/research/tolerance_benchmark_round46.md
+    anchor: '## What the check now is'
+    sha256: 27400c231eb47867226ba5e193dc8a9dc915c045fa566d21606f2d83b8ba0841
+    hash_scope: full_file
+  - path: ref/research/tolerance_benchmark_vs_deposited.md
+    anchor: '## Results'
+    sha256: 4b50d1fc90ac950889e99935e1a982538c1b4c54364c836ba832d304f566787e
+    hash_scope: full_file
+  - path: ref/research/data/round46_vs_deposited.json
+    anchor: '"rows"'
+    sha256: 53df0c9a43883969e5583edc44414483ac49429a22ae336714ccef4ce362a829
+    hash_scope: full_file
+  - path: ref/research/t05_classification_floor_adoption_2026-09-27.md
+    anchor: '## Decision and scope'
+    sha256: 27f42ce4f4238782559c5c260abaeba6aaadc4d656033a88e44509cb2a984b94
+    hash_scope: full_file
+  components:
+  - id: shared_classification
+    scope: Shared-residue Ramachandran classification rule
+    policy_state: active_conditional
+    evidence_state: retained_record
+    limitations: Adopted documentary floor only for PHENIX 2.0-5936 versus the wwPDB
+      report on the same coordinate subject and insertion-code-keyed shared residues,
+      with counts and disagreements retained. No new QDS agreement metric or criterion
+      binding; neither standalone MolProbity nor another version is covered. Deposited-reference
+      reproduction is not method-independent confirmation.
+    issue_refs:
+    - 786
+  - id: raw_rama_percent
+    scope: Raw Ramachandran favored-percent delta
+    policy_state: informational
+    evidence_state: retained_record
+    limitations: The row explicitly retains this as a diagnostic, not the load-bearing
+      grade.
+    issue_refs: []
+  - id: rotamer_favored
+    scope: Rotamer favored-percent expectation
+    policy_state: policy_unresolved
+    evidence_state: unmeasured
+    limitations: The separately labeled exception retains a raw-percent expectation
+      while the measurement is explicitly unavailable; the classification-floor adoption
+      does not independently calibrate or resolve it.
+    issue_refs:
+    - 766
+- id: outlier_percent
+  section: 3
+  row_label: Ramachandran / rotamer outlier %
+  observed_line: 108
+  row_sha256: cb371f778d5860130a476aaed11bc636db712769f7fd046a9e09e5cad1de12ff
+  provenance_tags:
+  - '[benchmark]'
+  historical_inventory_class: reported_backed
+  evidence_refs:
+  - path: ref/research/tolerance_benchmark_round46.md
+    anchor: '## What the check now is'
+    sha256: 27400c231eb47867226ba5e193dc8a9dc915c045fa566d21606f2d83b8ba0841
+    hash_scope: full_file
+  - path: ref/research/tolerance_benchmark_round46.md
+    anchor: '## Scope limits'
+    sha256: 27400c231eb47867226ba5e193dc8a9dc915c045fa566d21606f2d83b8ba0841
+    hash_scope: full_file
+  - path: ref/research/data/round46_vs_deposited.json
+    anchor: '"rows"'
+    sha256: 53df0c9a43883969e5583edc44414483ac49429a22ae336714ccef4ce362a829
+    hash_scope: full_file
+  - path: ref/research/t05_classification_floor_adoption_2026-09-27.md
+    anchor: '## Decision and scope'
+    sha256: 27f42ce4f4238782559c5c260abaeba6aaadc4d656033a88e44509cb2a984b94
+    hash_scope: full_file
+  components:
+  - id: shared_classification
+    scope: Shared-residue Ramachandran and rotamer OUTLIER verdict agreement
+    policy_state: active_conditional
+    evidence_state: retained_record
+    limitations: Adopted documentary floor applies separately to three-state Ramachandran
+      and binary OUTLIER/non-OUTLIER agreement, not exact rotamer names. PHENIX 2.0-5936
+      versus the same-subject wwPDB report only; insertion-code-keyed nonempty shared
+      counts and every disagreement retained. No QDS agreement metric or criterion
+      binding is supplied; no standalone or cross-version coverage.
+    issue_refs:
+    - 786
+  - id: raw_percent
+    scope: Raw Ramachandran and rotamer outlier-percent deltas
+    policy_state: informational
+    evidence_state: retained_record
+    limitations: Altloc/denominator-sensitive percentages are diagnostics, not the
+      current load-bearing verdict.
+    issue_refs: []
+- id: bond_length
+  section: 3
+  row_label: Bond-length RMSD
+  observed_line: 109
+  row_sha256: 3a1b51839b857bc1d76252b65522f634b07c0cb2efb5d20559bb79456d18ab95
+  provenance_tags:
+  - '[benchmark]'
+  historical_inventory_class: reported_backed
+  evidence_refs:
+  - path: ref/research/tolerance_benchmark_bond_rmsd.md
+    anchor: '## Results'
+    sha256: d08bf39912cdd382f0e3eafad1d15154c05b36824b8b9661c6e5793d2e90ba3d
+    hash_scope: full_file
+  - path: ref/research/tolerance_benchmark_restraint_library.md
+    anchor: '## Results'
+    sha256: d4309bfb3a2b891cf6cd8ad2948348392982defbb3afbeb111119dbf19c768b2
+    hash_scope: full_file
+  components:
+  - id: agreement
+    scope: Matched-count bond-length RMSD comparison
+    policy_state: active_conditional
+    evidence_state: retained_record
+    limitations: Keep matched and differing restraint-library branches distinct; mismatched
+      counts void a graded delta. Historical Gemmi version disclosure remains applicable.
+    issue_refs: []
+- id: bond_angle
+  section: 3
+  row_label: Bond-angle RMSD
+  observed_line: 110
+  row_sha256: a111883f900843a7fdaa30688bfbdddf6db7edf4275e6904595996224c018ccf
+  provenance_tags:
+  - '[template]'
+  - '[literature]'
+  - '[benchmark]'
+  historical_inventory_class: reported_backed
+  evidence_refs:
+  - path: ref/research/tolerance_benchmark_round18.md
+    anchor: '### Bond-angle RMSD: recovered, and three of its four figures reproduce'
+    sha256: b70df9db2862b438792d893b9750d19097687d42c39d814200ad0699e199f274
+    hash_scope: full_file
+  - path: ref/research/tolerance_benchmark_restraint_library.md
+    anchor: '## Applied'
+    sha256: d4309bfb3a2b891cf6cd8ad2948348392982defbb3afbeb111119dbf19c768b2
+    hash_scope: full_file
+  components:
+  - id: agreement
+    scope: Registry library-qualified angle RMSD comparison
+    policy_state: active_conditional
+    evidence_state: retained_record
+    limitations: Retained angle table and library experiment support context; the
+      registry's matched-library-required wording versus differing-library branch
+      needs explicit interpretation, not a ledger override.
+    issue_refs: []
+  - id: matched_count_share
+    scope: Ancillary library-share figure on matched-count subset
+    policy_state: informational
+    evidence_state: unverified_ancillary
+    limitations: Round18 could not reconstruct the subset because its JSON lacks the
+      bond-count-match flag.
+    issue_refs: []
+- id: wilson_b
+  section: 3
+  row_label: Wilson B
+  observed_line: 111
+  row_sha256: 6d4d24e4a958760ab02418c9bee2c75fc5a435b30bed33532450af1af7818016
+  provenance_tags:
+  - '[benchmark]'
+  historical_inventory_class: reported_backed
+  evidence_refs:
+  - path: ref/research/tolerance_benchmark_wilson_b.md
+    anchor: '## Results'
+    sha256: c038791131407ebb8701985feddf3efe300bebcafb0009f77e874203e9bf113f
+    hash_scope: full_file
+  - path: ref/research/tolerance_benchmark_wilson_b.md
+    anchor: '## Applied tolerance'
+    sha256: c038791131407ebb8701985feddf3efe300bebcafb0009f77e874203e9bf113f
+    hash_scope: full_file
+  components:
+  - id: agreement
+    scope: Same-dataset Wilson-B estimator comparison
+    policy_state: active_conditional
+    evidence_state: retained_record
+    limitations: Void under the registered strong-anisotropy condition; weak corroboration
+      between different estimators, not precise parameter equivalence.
+    issue_refs: []
+- id: l_test
+  section: 3
+  row_label: L-test ⟨|L|⟩
+  observed_line: 112
+  row_sha256: bc3158dca065561641b58256d9600cecd5e6ab3e4899b321cb60faceac61985b
+  provenance_tags:
+  - '[benchmark]'
+  historical_inventory_class: reported_partial
+  evidence_refs:
+  - path: ref/research/tolerance_benchmark_l_test.md
+    anchor: '## Results'
+    sha256: f28a869c2d013d64fbc23ccceef37a80275712b4006ff61cb4e458d15dde6730
+    hash_scope: full_file
+  - path: ref/research/tolerance_benchmark_round21.md
+    anchor: '### What changes'
+    sha256: b835e3e4403bef8946d75fb29fb4ccbd09e90530dd5a77b1951bdd3b4bd73f90
+    hash_scope: full_file
+  components:
+  - id: twin_call
+    scope: Same twin/no-twin call on named subset
+    policy_state: active_conditional
+    evidence_state: partial_record
+    limitations: The named subset makes the comparison reproducible, not a recovery
+      of the original denominator or method-independent corroboration. Historical
+      lost-set limitation is retained.
+    issue_refs: []
+  - id: numeric_delta
+    scope: L-statistic numeric difference with agreeing twin call
+    policy_state: informational
+    evidence_state: partial_record
+    limitations: An agreeing twin call with a numeric mismatch is not a finding; matched
+      default resolution ranges are unavailable.
+    issue_refs: []
+- id: completeness
+  section: 3
+  row_label: Completeness (overall)
+  observed_line: 113
+  row_sha256: 73d911ca0ab97e390f548e7dba070453ed94df7120ae3d1952ad6b9c6f618724
+  provenance_tags:
+  - '[benchmark]'
+  historical_inventory_class: reported_backed
+  evidence_refs:
+  - path: ref/research/tolerance_benchmark_vs_deposited.md
+    anchor: 'Per-entry R-free and completeness:'
+    sha256: 4b50d1fc90ac950889e99935e1a982538c1b4c54364c836ba832d304f566787e
+    hash_scope: full_file
+  components:
+  - id: agreement
+    scope: Overall completeness versus validation-report DataCompleteness
+    policy_state: active_conditional
+    evidence_state: retained_record
+    limitations: Nine-entry retained table; reference-comparison evidence, not proof
+      of usable-reflection definitions in every T03 input.
+    issue_refs:
+    - 764
+- id: secondary_structure
+  section: 3
+  row_label: Secondary-structure agreement
+  observed_line: 114
+  row_sha256: 8f65b9ace9ad757e56646fe744cb5a43d342d1facd897af2ae047d4aae7b3f22
+  provenance_tags:
+  - '[benchmark — historical denominator unproven]'
+  historical_inventory_class: reported_backed
+  evidence_refs:
+  - path: ref/research/tolerance_benchmark_ss_agreement.md
+    anchor: '> **Evidence status (2026-09-22): historical / denominator not proven.'
+    sha256: 898a5b1e750eb8dd6bfa403c1cd23f815eacda5824268d5d011d16a48561c532
+    hash_scope: full_file
+  - path: ref/research/tolerance_benchmark_ss_agreement.md
+    anchor: '## Provisional interpretation (not a gradeable calibration)'
+    sha256: 898a5b1e750eb8dd6bfa403c1cd23f815eacda5824268d5d011d16a48561c532
+    hash_scope: full_file
+  components:
+  - id: agent_vs_dssp
+    scope: Agent-versus-DSSP agreement clause
+    policy_state: active_conditional
+    evidence_state: unmeasured
+    limitations: Different comparison from the two-assigner benchmark; requires an
+      agent assignment and is expressly unmeasured by this record.
+    issue_refs: []
+  - id: two_assigner_expectation
+    scope: DSSP-versus-biotite reporting expectation
+    policy_state: provisional_informational
+    evidence_state: denominator_unproven
+    limitations: No grade until an exact per-assigner denominator rerun; old intersection
+      counts cannot authenticate the current residue-key contract. One-entry canaries
+      do not establish cohort-wide exact-denominator calibration.
+    issue_refs:
+    - 613
+    - 765
+  - id: content_precondition
+    scope: DSSP H+E interpretability precondition
+    policy_state: provisional_informational
+    evidence_state: limited_controls
+    limitations: Informational interpretability only; sparse bad-end controls, not
+      a model-quality classifier.
+    issue_refs:
+    - 765
+- id: dockq
+  section: 3
+  row_label: DockQ score
+  observed_line: 115
+  row_sha256: cf2cacc8879047164c085a1e7d3014e64b678d605cdf173d59f4bd90bcd5ae16
+  provenance_tags:
+  - '[template]'
+  - '[benchmark]'
+  historical_inventory_class: reported_backed
+  evidence_refs:
+  - path: ref/research/tolerance_benchmark_selection_sensitivity.md
+    anchor: '## DockQ — chain-mapping ambiguity'
+    sha256: 1808f07bc30c23644efb0ce5182f7aa2e0d795cf145770d91c429b22311d4924
+    hash_scope: full_file
+  - path: ref/research/tolerance_benchmark_selection_sensitivity.md
+    anchor: '## Scope limits'
+    sha256: 1808f07bc30c23644efb0ce5182f7aa2e0d795cf145770d91c429b22311d4924
+    hash_scope: full_file
+  components:
+  - id: numeric_tolerance
+    scope: DockQ cross-tool agreement tolerance
+    policy_state: active_conditional
+    evidence_state: unmeasured
+    limitations: The cited benchmark measures mapping sensitivity within one implementation,
+      not an independent tool-versus-tool noise floor.
+    issue_refs: []
+  - id: mapping_precondition
+    scope: Declared chain-mapping hard gate
+    policy_state: active_conditional
+    evidence_state: retained_record
+    limitations: Controlled mapping table is retained; later 1SAR crystallographic
+      contact is a separate observation, not an enlarged original cohort.
+    issue_refs: []
+  - id: class_waiver
+    scope: CAPRI-class boundary waiver
+    policy_state: active_conditional
+    evidence_state: unmeasured
+    limitations: Registry asserts the waiver; the cited selection experiment does
+      not independently calibrate this waiver width.
+    issue_refs: []
+- id: interface_bsa
+  section: 3
+  row_label: Interface buried surface area
+  observed_line: 116
+  row_sha256: b4ea595f283d727ed62a6470d5ed3a2efb2c14483e69c3c9e5c841cec5ce2dd2
+  provenance_tags:
+  - '[benchmark]'
+  historical_inventory_class: reported_backed
+  evidence_refs:
+  - path: ref/research/tolerance_benchmark_interface_bsa.md
+    anchor: '## Test set and results'
+    sha256: 03599a8b05dc35bfcc789979a39983a2ed1fa0c1838fdd260c7794472c54c842
+    hash_scope: full_file
+  - path: ref/research/tolerance_benchmark_interface_bsa.md
+    anchor: '## Applied tolerance'
+    sha256: 03599a8b05dc35bfcc789979a39983a2ed1fa0c1838fdd260c7794472c54c842
+    hash_scope: full_file
+  components:
+  - id: agreement
+    scope: Same-model BSA comparison with benchmarked asymmetric selections
+    policy_state: active_conditional
+    evidence_state: retained_record
+    limitations: Protein-only biotite versus PISA assembly molecules; matched probe,
+      doubled PISA area and exclusion of same-molecule fragments. Not model-change
+      or nucleic-acid calibration.
+    issue_refs: []
+- id: nmr_precision
+  section: 3
+  row_label: NMR ensemble precision (mean Cα RMSF)
+  observed_line: 117
+  row_sha256: cf094b27bb34101737e7b32b5fdf91a7259065dc1c5e9a150e5d5517abbffda1
+  provenance_tags:
+  - '[template]'
+  - '[benchmark]'
+  historical_inventory_class: reported_backed
+  evidence_refs:
+  - path: ref/research/tolerance_benchmark_selection_sensitivity.md
+    anchor: '## NMR ensemble precision — ordered-core selection'
+    sha256: 1808f07bc30c23644efb0ce5182f7aa2e0d795cf145770d91c429b22311d4924
+    hash_scope: full_file
+  - path: ref/research/tolerance_benchmark_selection_sensitivity.md
+    anchor: '## Scope limits'
+    sha256: 1808f07bc30c23644efb0ce5182f7aa2e0d795cf145770d91c429b22311d4924
+    hash_scope: full_file
+  components:
+  - id: numeric_tolerance
+    scope: Mean C-alpha RMSF cross-tool tolerance
+    policy_state: active_conditional
+    evidence_state: unmeasured
+    limitations: The cited experiment is a selection self-comparison; independent
+      implementation noise remains unmeasured.
+    issue_refs: []
+  - id: selection_precondition
+    scope: Matched ordered-core cutoff and whole-chain disclosure
+    policy_state: active_conditional
+    evidence_state: retained_record
+    limitations: Five-ensemble selection-sensitivity record supports this precondition,
+      not a new calibrated cross-tool floor.
+    issue_refs: []
+- id: r_free
+  section: 3
+  row_label: R-free vs deposited
+  observed_line: 118
+  row_sha256: f97d39e51e4854fea74179d1518897367cd0383094abf4c47d764980b47508ad
+  provenance_tags:
+  - '[catalog]'
+  - '[benchmark]'
+  historical_inventory_class: reported_backed
+  evidence_refs:
+  - path: ref/research/tolerance_benchmark_vs_deposited.md
+    anchor: 'Per-entry R-free and completeness:'
+    sha256: 4b50d1fc90ac950889e99935e1a982538c1b4c54364c836ba832d304f566787e
+    hash_scope: full_file
+  - path: ref/research/t03_reflection_policy_2026-09-27.md
+    anchor: '## Policy and scope'
+    sha256: 2c646196c97fa3979fc1396f85106416114b3e6e13f3f10bd79843557e4388d6
+    hash_scope: full_file
+  components:
+  - id: deposited_reference
+    scope: R-free compared with depositor-reported value
+    policy_state: active_conditional
+    evidence_state: retained_record
+    limitations: Nine-entry table; subject, refinement/test-set and availability limitations
+      remain. Missing, NULL or nonfinite deposited free-R makes the T03 clause unevaluable;
+      REFMAC5 or DCC recomputation cannot replace that absent deposited reference
+      or make the conjunctive rubric complete. The separate input-integrity policy
+      is prose, outside this table-row inventory.
+    issue_refs:
+    - 764
+  - id: recomputed_reference
+    scope: R-free compared with wwPDB recomputation
+    policy_state: active_conditional
+    evidence_state: retained_record
+    limitations: Distinct reference and tolerance; same derivation is not independent-family
+      confirmation.
+    issue_refs: []
+- id: r_work_offset
+  section: 3
+  row_label: Independent-code-path R-work offset
+  observed_line: 119
+  row_sha256: d3faaf185f952a61cdfc0d1506ae6ba694f4fae357bfa3aa7e49b3a4f241722a
+  provenance_tags:
+  - '[benchmark]'
+  historical_inventory_class: reported_backed
+  evidence_refs:
+  - path: ref/research/tolerance_benchmark_r_offset.md
+    anchor: '## Results'
+    sha256: 2fab71ad520f7b2bf74a265f7fa6df71c9ecc9a6655ea833419b928a752f76dd
+    hash_scope: full_file
+  - path: ref/research/tolerance_benchmark_r_offset.md
+    anchor: '## Applied tolerance'
+    sha256: 2fab71ad520f7b2bf74a265f7fa6df71c9ecc9a6655ea833419b928a752f76dd
+    hash_scope: full_file
+  components:
+  - id: direct_work_estimator
+    scope: Directly summed globally scaled Gemmi R-work estimator
+    policy_state: active_conditional
+    evidence_state: retained_record
+    limitations: Same model, MTZ, work set and matched mask radii; offset sign is
+      diagnostic only.
+    issue_refs: []
+  - id: other_estimators
+    scope: R-free and additional bin-wise-rescaled Gemmi estimator
+    policy_state: informational
+    evidence_state: unmeasured
+    limitations: Different estimators remain informational pending matched benchmarks.
+    issue_refs: []
+- id: h_placement
+  section: 3
+  row_label: H-placement agreement
+  observed_line: 120
+  row_sha256: 9c365f66ca6df22e8b1d94265c1fd1e35b1b335210c2b29613ddec6a61036ca6
+  provenance_tags:
+  - '[benchmark]'
+  historical_inventory_class: reported_backed
+  evidence_refs:
+  - path: ref/research/tolerance_benchmark_round48.md
+    anchor: '## Producer attribution and grading correction (2026-09-27, #809)'
+    sha256: 401cf5944d0d1d1a0d1c0aa074920901217d9687530c25607998fec28146dde3
+    hash_scope: full_file
+  - path: ref/research/tolerance_benchmark_clashscore_h.md
+    anchor: '## Version applicability clarification (2026-09-27, #798)'
+    sha256: a6884853f10bec1be57d706f08c1442a9677692b8bd7b513a6e22c96e9d64f2b
+    hash_scope: full_file
+  - path: ref/research/data/round48_flip_sets.json
+    anchor: '"n_h_phenix"'
+    sha256: 862eb423eb5b01389d92f76fdfd3cf8e46a6f8f6b80f862e777fbf8a0b6a8344
+    hash_scope: full_file
+  components:
+  - id: flip_conflict
+    scope: Standalone confident-flip conflict rule at every scope
+    policy_state: suspended
+    evidence_state: producer_mismatch
+    limitations: Retained PHENIX-distributed reduce versus reduce2 comparison is not
+      the claimed independent standalone pair; raw aggregates survive without grading
+      authority.
+    issue_refs:
+    - 809
+  - id: h_count
+    scope: Protein-only H-count dispatcher/distribution check
+    policy_state: active_conditional
+    evidence_state: retained_record
+    limitations: Same-binary measured version pair, not independent H-placement corroboration;
+      non-water hetero comparisons are void.
+    issue_refs:
+    - 799
+  - id: historical_clashscore
+    scope: Clashscore clause for the registered historical pipeline
+    policy_state: active_conditional
+    evidence_state: retained_record
+    limitations: Same version/convention restrictions as the separate Clashscore row;
+      two row occurrences do not create two independent benchmarks.
+    issue_refs:
+    - 798
+    - 799
+    - 790
+  - id: changed_h_build
+    scope: Changed dictionary-loaded or distinct-builder clashscore context
+    policy_state: informational
+    evidence_state: unmeasured
+    limitations: Version pins alone do not calibrate changed H-build settings; distinct-builder
+      pre/post changes remain informational.
+    issue_refs:
+    - 799
+    - 790
+- id: delta_rmsd
+  section: 4
+  row_label: ΔRMSD sanity
+  observed_line: 226
+  row_sha256: f20cada42f9af6828fc27ebfaeeb73d6a89d83394fd4b8040c9fbd59222b2030
+  provenance_tags:
+  - '[benchmark]'
+  historical_inventory_class: reported_backed
+  evidence_refs:
+  - path: ref/research/tolerance_benchmark_refinement_deltas.md
+    anchor: '## X-ray results'
+    sha256: b17ed05b04fb100d1a5457451654f1997f8f816886e4b8ef03555671abc8218f
+    hash_scope: full_file
+  - path: ref/research/tolerance_benchmark_round42.md
+    anchor: '## What was computed'
+    sha256: 9f4cf7fe9a7966d7d1212e7caa6dd60a733ab32730c15322b38d0546fbeafce5
+    hash_scope: full_file
+  - path: ref/research/data/round37_xray_deltas.json
+    anchor: '"ca_shift_rmsd"'
+    sha256: 7e4c41c68a68d85efb295147877b1f4cbc26ad8cd6fb2f121f148f6dd54da110
+    hash_scope: full_file
+  - path: ref/research/data/round38_xray_deltas.json
+    anchor: '"ca_shift_rmsd"'
+    sha256: cfb55551d2dc345c1ad74d0ab922d6096ea7f4bd57385c4b531330bd6d93ef33
+    hash_scope: full_file
+  - path: ref/research/data/round41_xray_deltas.json
+    anchor: '"ca_shift_rmsd"'
+    sha256: 9d4fcc3fe1967e0438b887b1f13b7ae53103926bc59e6f4951a4efe21ec266d0
+    hash_scope: full_file
+  components:
+  - id: high_resolution
+    scope: High-resolution refinement-shift branch
+    policy_state: active_conditional
+    evidence_state: retained_record
+    limitations: Historical scope and same-binary limitations remain; this inventory
+      does not independently certify every old cohort member.
+    issue_refs: []
+  - id: low_resolution
+    scope: Low-resolution named-cohort coverage-bound branch
+    policy_state: active_conditional
+    evidence_state: retained_record
+    limitations: Named 44-entry record and guarded distributional assumption; not
+      a cross-version demonstration.
+    issue_refs:
+    - 760
+- id: geometry_delta
+  section: 4
+  row_label: Geometry did not degrade (**Δ clause**)
+  observed_line: 227
+  row_sha256: 4fd02f47c5cb00d041bc932613621493d7f7f0004e3ce4965f174f0d74da0254
+  provenance_tags:
+  - '[benchmark]'
+  historical_inventory_class: reported_backed
+  evidence_refs:
+  - path: ref/research/tolerance_benchmark_refinement_deltas.md
+    anchor: '## X-ray results'
+    sha256: b17ed05b04fb100d1a5457451654f1997f8f816886e4b8ef03555671abc8218f
+    hash_scope: full_file
+  - path: ref/research/tolerance_benchmark_round44.md
+    anchor: '## What was re-based'
+    sha256: 60762dd7c7a560c3fdb1a8a70ed147fe989ea88ff2b68a5d2c28c12a084c2e10
+    hash_scope: full_file
+  - path: ref/research/data/round37_xray_deltas.json
+    anchor: '"ca_shift_rmsd"'
+    sha256: 7e4c41c68a68d85efb295147877b1f4cbc26ad8cd6fb2f121f148f6dd54da110
+    hash_scope: full_file
+  - path: ref/research/data/round38_xray_deltas.json
+    anchor: '"ca_shift_rmsd"'
+    sha256: cfb55551d2dc345c1ad74d0ab922d6096ea7f4bd57385c4b531330bd6d93ef33
+    hash_scope: full_file
+  - path: ref/research/data/round41_xray_deltas.json
+    anchor: '"ca_shift_rmsd"'
+    sha256: 9d4fcc3fe1967e0438b887b1f13b7ae53103926bc59e6f4951a4efe21ec266d0
+    hash_scope: full_file
+  components:
+  - id: favored_rotamer
+    scope: Favored/rotamer change clauses within declared refinement protocol
+    policy_state: active_conditional
+    evidence_state: retained_record
+    limitations: Resolution/restraint context and same-binary reproducibility limit
+      remain; old lost-cohort narrative is not a current independent observation.
+    issue_refs:
+    - 760
+  - id: bounded_clash_ratio
+    scope: Bounded clashscore-ratio clause
+    policy_state: active_conditional
+    evidence_state: retained_record
+    limitations: Named gate-valid subset supports the historical ratio; same PHENIX
+      build, not independent-family grading authority.
+    issue_refs: []
+  - id: exact_lower_bound
+    scope: Approximate lower applicability boundary for clashscore ratio
+    policy_state: provisional_conditional
+    evidence_state: unmeasured
+    limitations: Registry explicitly says the exact floor is not measured; evidence
+      establishes the need for a bound, not its exact position.
+    issue_refs: []
+- id: absolute_floors
+  section: 4
+  row_label: Absolute geometry floors (**split out of the above**)
+  observed_line: 228
+  row_sha256: e6a5e8c2caec57e2a16a4a83b79298a2c05cfef7ee97761cd72189d25ad92da2
+  provenance_tags:
+  - '[literature]'
+  historical_inventory_class: excluded_literature
+  evidence_refs:
+  - path: ref/thresholds_and_standards.md
+    anchor: '| Absolute geometry floors (**split out of the above**) |'
+    sha256: e6a5e8c2caec57e2a16a4a83b79298a2c05cfef7ee97761cd72189d25ad92da2
+    hash_scope: registry_row
+  components:
+  - id: quality_bars
+    scope: Absolute geometry quality bars, separately reported
+    policy_state: active_conditional
+    evidence_state: external_standard_cited
+    limitations: Literature-tagged, not one of the historical benchmark rows. Citation
+      presence is not a new source verification or a delta-calibration result.
+    issue_refs: []
+- id: map_model_delta
+  section: 4
+  row_label: Map-model fit did not degrade
+  observed_line: 229
+  row_sha256: e2402e54450df5bca477af4cf52eb97c9a063cbf5984a6e8c21f0e86c2c37c4e
+  provenance_tags:
+  - '[benchmark]'
+  historical_inventory_class: reported_partial
+  evidence_refs:
+  - path: ref/research/partial_record_triage.md
+    anchor: '| 6 | Map-model fit'
+    sha256: d8ad799d6fb6ef284da28de9609b96a47742d59bc0aaa22cdb87cf2581e8e42d
+    hash_scope: full_file
+  - path: ref/research/tolerance_benchmark_refinement_deltas.md
+    anchor: '## Cryo-EM results'
+    sha256: b17ed05b04fb100d1a5457451654f1997f8f816886e4b8ef03555671abc8218f
+    hash_scope: full_file
+  - path: ref/research/data/em_refinement_deltas.tsv
+    anchor: pdb_id
+    sha256: 35522ff82bf63e544007bf5e2f376b494ac930a9e89876ed973d72a1e42894aa
+    hash_scope: full_file
+  components:
+  - id: cc_mask
+    scope: Resolution-qualified CC_mask degradation clause
+    policy_state: active_conditional
+    evidence_state: partial_record
+    limitations: Retained data coexist with missing historical members/magnitudes;
+      RETAIN describes the lost history, not complete benchmark support.
+    issue_refs: []
+  - id: dfsc_model
+    scope: One-sided d_FSC_model degradation clause
+    policy_state: active_conditional
+    evidence_state: partial_record
+    limitations: Verified extreme and retained later curves do not reconstruct all
+      historical outcomes; separate from CC_mask, not a second row.
+    issue_refs: []
+inventory_sections:
+- 3
+- 4

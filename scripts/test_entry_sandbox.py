@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+import signal
 import sys
 import tempfile
 import threading
 import time
 from pathlib import Path
+from unittest import mock
 
 from entry_sandbox import EntrySandbox
 
@@ -21,6 +23,38 @@ def check(label, got, want):
         sys.exit(1)
     PASSED += 1
     print(f"PASS  {label}")
+
+
+# Deterministic boundary controls for #850; no real signal or process is used.
+for disappears, leader_exited in ((True, True), (False, True), (False, False), (True, False)):
+    state = {"exists": True, "raced": False}
+    process = mock.Mock()
+
+    def poll():
+        if state["raced"] and disappears:
+            state["exists"] = False
+        return -signal.SIGTERM if state["raced"] and leader_exited else None
+
+    def signal_group(pgid, sig):
+        check("cleanup signals only its supplied owned PGID", pgid, 424242)
+        if sig == signal.SIGKILL:
+            state["raced"] = True
+            raise PermissionError("synthetic escalation race")
+
+    process.poll.side_effect = poll
+    with mock.patch.object(EntrySandbox, "_group_exists", side_effect=lambda pgid: state["exists"]), \
+            mock.patch("entry_sandbox.os.killpg", side_effect=signal_group):
+        try:
+            EntrySandbox._terminate_group(process, 424242, 0)
+        except PermissionError:
+            refused = True
+        else:
+            refused = False
+    recoverable = disappears and leader_exited
+    check("EPERM recovers only with an exited leader and absent group", refused, not recoverable)
+    check("unresolved EPERM is not followed by potentially blocking communicate",
+          process.communicate.call_count, int(recoverable))
+    check("leader is reaped before escalation and after EPERM", process.poll.call_count, 2)
 
 
 with tempfile.TemporaryDirectory() as temporary:

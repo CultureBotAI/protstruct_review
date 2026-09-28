@@ -148,11 +148,19 @@ class EntrySandbox:
         while EntrySandbox._group_exists(pgid) and time.monotonic() < deadline:
             process.poll()  # Reap the leader promptly; descendants may remain.
             time.sleep(0.02)
+        process.poll()  # Reap again before deciding whether escalation is needed.
         if EntrySandbox._group_exists(pgid):
             try:
                 os.killpg(pgid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
+            except PermissionError:
+                # An exiting leader can change group state between the check
+                # and signal. Recover only if reaping now proves the group is
+                # absent; EPERM for any remaining group is a cleanup failure.
+                returncode = process.poll()
+                if returncode is None or EntrySandbox._group_exists(pgid):
+                    raise
         process.communicate()
 
     @staticmethod

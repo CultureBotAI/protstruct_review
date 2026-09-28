@@ -16,11 +16,13 @@ The repository lives at `CultureBotAI/protstruct_review` since 2026-08-29 (trans
 The GitHub Actions workflow runs the hermetic gate on Linux and macOS on every PR and `main` push
 (first green on `main`: run 33283623725, after [#492](https://github.com/CultureBotAI/protstruct_review/issues/492)/PR #494
 removed the gate's dependency on a Homebrew `gemmi` CLI; `main` green on `121d088` in run 35915199044).
-Licensing and citation landed in #479 (2026-08-26). The local gate is
-`uv run --locked -- bash scripts/validate.sh`; it must exit 0 before a merge, and CI must be green on
-the PR. CI runs it with `--extra benchmark`, which the no-extra local command does not install — see
-[#762](https://github.com/CultureBotAI/protstruct_review/issues/762) for what that difference skips.
-External-tool and online benchmarks remain manual.
+Licensing and citation landed in #479 (2026-08-26). The required local gate is
+`uv run --locked --extra benchmark -- bash scripts/validate.sh` using the repository-selected
+Python 3.12; bootstrap with `uv sync --locked --extra benchmark`. It must exit 0 before a merge,
+and Linux/macOS CI must be green on the reviewed PR head. Python 3.11 remains supported, but its
+locked Biotite version skips the exact retained T15/T16 numerical replays; a clean no-extra
+environment also skips them. Neither substitutes for the CI-equivalent gate. External-tool and
+online benchmarks remain manual.
 
 **Date conventions differ by section, so two dates for one PR can differ by a day.** The negative-control
 table and its close-out notes use GitHub (UTC) merge dates — only the table **rows** are checked, against
@@ -312,10 +314,12 @@ here, and say so.
 - **Round 46's preregistered ≥ 0.99 classification-agreement floor is missing from registry rows 89/90**
   ([#786](https://github.com/CultureBotAI/protstruct_review/issues/786), P2): the rows state the check as a question with no bar, so T05
   rule 3 reads stricter than the registered floor.
-- **Workflow documentation misdescribes the gate**
-  ([#762](https://github.com/CultureBotAI/protstruct_review/issues/762), P1): `prompts/backlog-loop-goal.md`
-  says "there is no CI" and runs unlocked invocations; the documented local gate differs from CI's
-  `--extra benchmark` run.
+- **Workflow gate and merge safeguards**
+  ([#762](https://github.com/CultureBotAI/protstruct_review/issues/762), P1): active instructions use
+  the locked Python 3.12 benchmark-extra gate and require green CI on the reviewed PR head. The
+  workflow also requires complete queue counts, a read-only review, and verification of intended
+  issue closures and outstanding issues after merge. Verify delivery on `main` and the issue tracker
+  before treating the workflow correction as closed; historical records are unchanged.
 - **Registry header vs the requalified T15 row**
   ([#766](https://github.com/CultureBotAI/protstruct_review/issues/766), P2), and the **T15
   secondary-structure benchmark rerun** that would settle it

@@ -25,6 +25,16 @@ The enforceable form of these conventions — the rules a code review can cite a
 lives in `CODING_STANDARDS.md` at the repo root. This handbook is the *why and how*; that file is
 the *must*. Keep them in agreement.
 
+## Validation environment
+
+Use the repository-selected Python 3.12 (`.python-version`) and
+`uv sync --locked --extra benchmark` for the CI-equivalent environment. The required gate is
+`uv run --locked --extra benchmark -- bash scripts/validate.sh`; focused checks use
+`uv run --locked --extra benchmark -- python scripts/test_<area>.py`.
+Python 3.11 remains supported, but its locked Biotite 1.6.0 cannot replay the retained T15/T16
+evidence from 1.7.1; a clean no-extra environment also skips those exact replays. Neither is a
+substitute for the required gate. External-tool and online benchmarks remain opt-in.
+
 ## Trust model (load-bearing — do not violate)
 
 Every task in the catalog is graded by **cross-tool agreement**, not by PHENIX alone. The harness re-runs critical metrics with at least one independent oracle (MolProbity, ChimeraX, REFMAC/Servalcat, TM-align, RELION, gemmi, …) and compares. The deposited PDB/EMDB entry or publication Table 1 is the tiebreaker.
@@ -301,7 +311,7 @@ When the user asks for a metric measurement (e.g. "what's the clashscore?"):
 2. **Run the recommended tool** (verify it's installed via `ref/oracle_tools.md`). If it's missing, run the next-ranked alternative and flag the gap.
 3. **Record in the eval** which tool was used (`MeasurementValue.oracle_tool_ref`). It should match the recommendation, or the discrepancy should be noted.
 4. **Cross-check against a tool from a different family.** Never let the only oracle for a measurement be a cctbx tool. The trust model in `ref/quality_reporting.md` §3 is the principle, not a courtesy.
-5. If a recommendation is wrong (a tool consistently disagrees with consensus, or a new tool outperforms the recommended one), **update `ref/tool_recommendations.yaml`** — add a new id with a later `as_of_date`, an exact timezone-qualified `effective_at`, and `supersedes_recommendation_ref` pointing to the prior row; never mutate or delete the snapshotted predecessor. Give new or revised rows in `ref/tool_assumptions.yaml` the analogous dated/timestamped `supersedes_assumption_ref` lineage. Re-run `bash scripts/validate.sh` after edits.
+5. If a recommendation is wrong (a tool consistently disagrees with consensus, or a new tool outperforms the recommended one), **update `ref/tool_recommendations.yaml`** — add a new id with a later `as_of_date`, an exact timezone-qualified `effective_at`, and `supersedes_recommendation_ref` pointing to the prior row; never mutate or delete the snapshotted predecessor. Give new or revised rows in `ref/tool_assumptions.yaml` the analogous dated/timestamped `supersedes_assumption_ref` lineage. Re-run `uv run --locked --extra benchmark -- bash scripts/validate.sh` after edits.
 
 ## Quality Data Sheet — when to emit and what goes in it
 
@@ -569,7 +579,7 @@ all of these suites.
 - Quality reporting consensus: `ref/quality_reporting.md` — what to report and why, with citations
 - Tool recommendations: `ref/tool_recommendations.yaml` — `top_considered` vs `top_performing` per metric
 - Oracle install status: `ref/oracle_tools.md`
-- Schema: `schemas/protstruct_review.yaml`; validate with `bash scripts/validate.sh`
+- Schema: `schemas/protstruct_review.yaml`; validate with `uv run --locked --extra benchmark -- bash scripts/validate.sh`
 - Eval filename convention: `ref/eval_naming.md`
 - Driving example: `ref/driving_example.md`
 - Project overview: `ref/README.md`

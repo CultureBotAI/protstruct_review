@@ -14,17 +14,22 @@ When the first two disagree, treat the drift as a defect and reconcile it in the
 
 ## Environment
 
-Python 3.11–3.12 is supported; `.python-version` selects 3.12. Bootstrap the locked development
+Python 3.11–3.12 is supported; `.python-version` selects 3.12. Use that repository-selected
+Python 3.12 for CI-equivalent validation. Bootstrap the locked development and benchmark
 environment from a clean checkout with:
 
 ```bash
-uv sync --locked
+uv sync --locked --extra benchmark
 ```
 
-Use `uv sync --locked --extra benchmark` for the open-source Python benchmark tools. PHENIX 2.0-5936
-and CCP4 9.0.015 are separate licensed installations; their configuration and oracle-specific tools
-are documented in `ref/oracle_tools.md`. Configure them through the `PROTSTRUCT_*` variables routed
-by `scripts/toolchain.py`; do not add per-runner path constants.
+The benchmark extra supplies the exact Biotite version used by retained T15/T16 numerical replays
+on Python 3.12. Python 3.11 remains supported, but its lock selects Biotite 1.6.0 rather than the
+evidence-producing 1.7.1; those exact replays skip. A clean no-extra environment also skips them.
+Neither configuration substitutes for the required CI-equivalent gate.
+
+PHENIX 2.0-5936 and CCP4 9.0.015 are separate licensed installations; their configuration and
+oracle-specific tools are documented in `ref/oracle_tools.md`. Configure them through the
+`PROTSTRUCT_*` variables routed by `scripts/toolchain.py`; do not add per-runner path constants.
 
 ## Sources of truth
 
@@ -34,10 +39,11 @@ by `scripts/toolchain.py`; do not add per-runner path constants.
 
 ## Validation
 
-- Focused/fast: run the relevant `uv run --locked -- python scripts/test_<area>.py` scripts while
-  iterating.
-- Required hermetic gate: `uv run --locked -- bash scripts/validate.sh`
-- The core gate uses no network and invokes no PHENIX/CCP4 tools.
+- Focused/fast: while iterating, run the relevant
+  `uv run --locked --extra benchmark -- python scripts/test_<area>.py` scripts.
+- Required hermetic gate: `uv run --locked --extra benchmark -- bash scripts/validate.sh`
+- After dependency installation, the gate itself uses no network and invokes no PHENIX/CCP4 tools.
+  A missing environment can make `uv` download dependencies before the gate starts.
 - External PHENIX/CCP4 benchmarks and online data fetches are opt-in; read each benchmark module's
   requirements before running it.
 
@@ -58,5 +64,5 @@ oracle; use deposition or publication evidence as the tiebreaker when available.
 ## Workflow
 
 Use `prompts/backlog-loop-goal.md` for the full survey→branch→PR→review cycle. Branch before editing,
-run the hermetic gate before proposing a merge, and never merge without explicit user approval in
-the current conversation.
+run the hermetic gate before proposing a merge, and require green Linux/macOS CI on the reviewed
+PR head. Never merge without explicit user approval in the current conversation.

@@ -2207,74 +2207,49 @@ _cohort_conflict["oracle_measure"].update({
     "pass_status": "pass",
     "pass_criterion": "conflict rate <= 10%",
 })
-check("a cohort-scoped T14 conflict aggregate may apply the registered criterion",
-      _measurement_relation_violations(_graded_cohort_t14), [])
-
-
 def _cohort_verdict_doc(numerator, denominator, status, criterion):
     doc = _copy.deepcopy(_graded_cohort_t14)
     conflict = doc["evaluation_runs"][0]["measurements"][2]
     conflict["oracle_measure"].update({
-        "value_numeric": numerator,
-        "count": denominator,
-        "pass_status": status,
-        "pass_criterion": criterion,
+        "value_numeric": numerator, "count": denominator,
+        "pass_status": status, "pass_criterion": criterion,
     })
-    conflict.update({
-        "pass_status": status,
-        "pass_criterion": criterion,
-    })
+    conflict.update({"pass_status": status, "pass_criterion": criterion})
     return doc
 
 
-check("a T14 cohort rate exactly at 10% passes inclusively",
-      _measurement_relation_violations(
-          _cohort_verdict_doc(1, 10, "pass", "conflict rate <= 10%")), [])
-check("a T14 cohort rate below 10% may pass with a caveat",
-      _measurement_relation_violations(
-          _cohort_verdict_doc(
-              0, 10, "pass_with_caveat", "conflict rate ≤ 10 %")), [])
-check("a T14 cohort rate above 10% fails the criterion",
-      _measurement_relation_violations(
-          _cohort_verdict_doc(
-              2, 10, "fail_criterion", "conflict rate <= 10%")), [])
-
-for _numerator, _spoofed_status in ((1, "fail_criterion"), (2, "pass")):
-    _spoofed_cohort_verdict = _cohort_verdict_doc(
-        _numerator, 10, _spoofed_status, "conflict rate <= 10%"
+for _numerator, _status in (
+    (0, "pass_with_caveat"), (1, "pass"), (2, "fail_criterion"),
+):
+    _suspended_cohort = _cohort_verdict_doc(
+        _numerator, 10, _status, "conflict rate <= 10%"
     )
-    check(f"a {_numerator}/10 T14 cohort cannot claim {_spoofed_status}",
-          any("inclusive 10% boundary" in violation
-              and "pass_status" in violation
-              for violation in _measurement_relation_violations(
-                  _spoofed_cohort_verdict)), True)
+    _suspended_violations = _measurement_relation_violations(_suspended_cohort)
+    check(f"a {_numerator}/10 T14 cohort cannot assert suspended grade {_status}",
+          any("requires pass_status 'informational'" in violation
+              for violation in _suspended_violations), True)
+    check("a T14 cohort cannot retain top-level or nested suspended criteria",
+          sum("must not carry pass_criterion" in violation
+              for violation in _suspended_violations), 2)
 
-_ambiguous_cohort_criterion = _cohort_verdict_doc(
-    1, 10, "pass", "conflict rate <= 10% or <= 20%"
-)
-check("a T14 cohort grade must name only the registered <=10% criterion",
-      any("unambiguous pass_criterion" in violation
-          for violation in _measurement_relation_violations(
-              _ambiguous_cohort_criterion)), True)
-
-_negated_cohort_criterion = _cohort_verdict_doc(
-    1, 10, "pass", "not conflict rate <= 10%"
-)
-check("a negated T14 cohort threshold is not the registered criterion",
-      any("unambiguous pass_criterion" in violation
-          for violation in _measurement_relation_violations(
-              _negated_cohort_criterion)), True)
-
-_nested_spoofed_cohort = _cohort_verdict_doc(
-    1, 10, "pass", "conflict rate <= 10%"
-)
-_nested_spoofed_cohort["evaluation_runs"][0]["measurements"][2][
-    "oracle_measure"
-]["pass_status"] = "fail_criterion"
-check("a nested T14 cohort verdict cannot invert the registered arithmetic",
-      any("oracle_measure" in violation and "inclusive 10% boundary" in violation
-          for violation in _measurement_relation_violations(
-              _nested_spoofed_cohort)), True)
+for _scope in ("complex", "cohort", "chain", "residue", "site", "dataset"):
+    for _carrier_name in ("measurement", "oracle_measure"):
+        for _field, _value in (
+            ("pass_criterion_ref", "PC_synthetic_suspended_flip"),
+            ("criterion_preconditions", [{"id": "synthetic", "status": "satisfied"}]),
+        ):
+            _metadata_doc = _copy.deepcopy(_t14_doc)
+            for _row in _metadata_doc["evaluation_runs"][0]["measurements"]:
+                _row["scope"] = _scope
+                _row["scope_selector"] = "synthetic selected scope"
+            _conflict = _metadata_doc["evaluation_runs"][0]["measurements"][2]
+            _carrier = (_conflict if _carrier_name == "measurement"
+                        else _conflict["oracle_measure"])
+            _carrier[_field] = _value
+            check(f"T14 {_scope} {_carrier_name} cannot retain {_field}",
+                  any(f"criterion metadata {_field}" in violation
+                      for violation in _measurement_relation_violations(_metadata_doc)),
+                  True)
 
 _informational_cohort = _cohort_verdict_doc(
     2, 10, "informational", ""

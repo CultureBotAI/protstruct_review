@@ -1712,7 +1712,7 @@ _NON_CRITERION_TEXT = {
 def _require_informational_coverage_source(
     measurement: dict[str, Any], *, location: str
 ) -> None:
-    """Keep T14 opportunity counts and structure results non-gradeable."""
+    """Keep T14 opportunity counts and conflict results non-gradeable at all scopes."""
     if measurement.get("pass_status") != "informational":
         raise QdsCompletenessError(
             "QDS derived-coverage integrity failed: "
@@ -1740,61 +1740,12 @@ def _require_informational_coverage_source(
                 "QDS derived-coverage integrity failed: "
                 f"{location} {carrier_name} carries criterion {criterion!r}"
             )
-
-
-def _is_t14_conflict_rate_criterion(value: Any) -> bool:
-    text = str(value or "").strip().casefold().replace("≤", "<=")
-    text = re.sub(r"\s+", " ", text)
-    text = re.sub(r"\s*<=\s*", " <= ", text)
-    text = re.sub(r"\s*%\s*", "%", text).strip()
-    return text == "conflict rate <= 10%"
-
-
-def _validate_t14_cohort_verdict(
-    measurement: dict[str, Any],
-    *,
-    numerator: int,
-    denominator: int,
-    location: str,
-) -> None:
-    status = measurement.get("pass_status")
-    if status == "informational":
-        _require_informational_coverage_source(measurement, location=location)
-        return
-    passes = numerator * 10 <= denominator
-    expected = {"pass", "pass_with_caveat"} if passes else {"fail_criterion"}
-    if status not in expected:
-        raise QdsCompletenessError(
-            "QDS derived-coverage integrity failed: "
-            f"{location} conflict rate {numerator}/{denominator} requires "
-            f"pass_status in {sorted(expected)!r}, not {status!r}"
-        )
-    if not _is_t14_conflict_rate_criterion(measurement.get("pass_criterion")):
-        raise QdsCompletenessError(
-            "QDS derived-coverage integrity failed: "
-            f"{location} requires an unambiguous pass_criterion naming "
-            "conflict rate <= 10%"
-        )
-    nested = measurement.get("oracle_measure")
-    if not isinstance(nested, dict):
-        return
-    nested_status = nested.get("pass_status")
-    nested_criterion = str(nested.get("pass_criterion") or "").strip()
-    if nested_status in (None, "") and not nested_criterion:
-        return
-    if nested_status not in expected:
-        raise QdsCompletenessError(
-            "QDS derived-coverage integrity failed: "
-            f"{location} oracle_measure verdict does not match conflict rate "
-            f"{numerator}/{denominator}; expected {sorted(expected)!r}, not "
-            f"{nested_status!r}"
-        )
-    if not _is_t14_conflict_rate_criterion(nested.get("pass_criterion")):
-        raise QdsCompletenessError(
-            "QDS derived-coverage integrity failed: "
-            f"{location} oracle_measure requires an unambiguous pass_criterion "
-            "naming conflict rate <= 10%"
-        )
+        for field in ("pass_criterion_ref", "criterion_preconditions"):
+            if carrier.get(field) not in (None, "", []):
+                raise QdsCompletenessError(
+                    "QDS derived-coverage integrity failed: "
+                    f"{location} {carrier_name} carries criterion metadata {field}"
+                )
 
 
 def _integral_coverage_count(
@@ -1923,10 +1874,7 @@ def _derived_coverage_participants(
                     f"{location} with scope 'cohort' requires a non-empty "
                     "scope_selector naming the preregistered cohort"
                 )
-        else:
-            _require_informational_coverage_source(
-                measurement, location=location
-            )
+        _require_informational_coverage_source(measurement, location=location)
         numerator = _integral_coverage_count(
             measurement,
             "value_numeric",
@@ -1945,14 +1893,6 @@ def _derived_coverage_participants(
                 f"{location} conflict count {numerator} exceeds denominator "
                 f"{denominator}"
             )
-        if measurement.get("scope") == "cohort":
-            _validate_t14_cohort_verdict(
-                measurement,
-                numerator=numerator,
-                denominator=denominator,
-                location=location,
-            )
-
         sources: list[dict[str, Any]] = []
         source_candidate_counts: list[int] = []
         for ref in refs:
@@ -3608,6 +3548,25 @@ def emit_qds(
             raise QdsCompletenessError(str(exc)) from None
     if emitter_contract_version == "4":
         try:
+            # Current authoring policy applies to the corrected active view, not
+            # immutable withdrawn evidence. Pinned snapshots do not exempt new
+            # public emissions; retained-module replay remains unchanged.
+            projection = qds_emit_contract_v4.prepare_projection(
+                qds_emit_contract_v4._read_documents(eval_paths), qds_id, structure_id
+            )
+            for run in projection["runs"]:
+                for measurement in run.get("measurements", []):
+                    if measurement.get("metric_definition_ref") in {
+                        "T14_asn_gln_his_flip_candidates_scored",
+                        "T14_asn_gln_his_flip_set_conflicts",
+                    }:
+                        _require_informational_coverage_source(
+                            measurement,
+                            location=(
+                                f"EvaluationRun {run['id']!r} measurement "
+                                f"{measurement.get('id')!r}"
+                            ),
+                        )
             return qds_emit_contract_v4.emit_qds(
                 eval_paths, qds_id, structure_id, structure_method, subject_ref,
                 coverage_scope, scope_notes, resolution_a, space_group, issued_at,

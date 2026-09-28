@@ -46,7 +46,8 @@ The harness independently re-runs MolProbity on the same model and checks the tw
   `ref/oracle_tools.md`), or `molprobity.molprobity`. Re-derives clashscore, Ramachandran, rotamer,
   and Cβ independently of cctbx's own reduce build.
 - **`gemmi rmsz`** — independent bond/angle restraint deviations against the CCP4 monomer library
-  (its `rmsD` line, in Å). `gemmi validate` does not report geometry RMSDs (`ref/oracle_tools.md`).
+  (its `rmsD` fields: bond lengths in Å, bond angles in degrees; `rmsZ` is dimensionless).
+  `gemmi validate` does not report geometry RMSDs (`ref/oracle_tools.md`).
 
 ## Scoring rubric
 
@@ -59,15 +60,23 @@ Each bullet is pass/fail; all must pass for green. Log the numeric delta that tr
    `[registry §1]` `[schema ResidueOutlierKind]` `[MolProbity]`
 2. **Clashscore agreement.** PHENIX clashscore and MolProbity-standalone clashscore agree within the
    registry §3 envelope — |Δ| ≤ 1.0, or 20 % of the mean, whichever is larger — with a matched H-build
-   convention and hydrogens from the same `reduce` binary and version; a mismatch (e.g. nuclear vs
+   convention and hydrogens from the same `reduce` binary and version; an H-convention mismatch (e.g. nuclear vs
    electron-cloud H) makes the comparison **void, not failed**. Both tools start from the same input
    model, so a disagreement is a pipeline difference, not a change to the model; the clashscore
    difference alone does not say whether H placement, Asn/Gln/His flips, het dictionaries or clash
-   counting caused it. `[registry §3 — clashscore]`
-3. **Ramachandran / rotamer agreement.** The load-bearing check is **per-shared-residue
-   classification agreement**: for the residues both tools evaluate, they assign the same Ramachandran
-   verdict and the same rotamer OUTLIER verdict; name every residue whose verdict differs. **Rotamer
-   favored %** stays a pass/fail band, |Δ| ≤ **1.0 pp**, because registry row 89 retains it: round 46
+   counting caused it. Clashscore version pin: PHENIX 2.0-5936, Richardson reduce 4.16.250520 (both builds), and standalone probe 2.26.021123. Other or unverified versions are informational pending a matched benchmark, not a threshold pass or fail.
+   Matching versions alone does not validate changed H-build settings (#799/#790). `[registry §3 — clashscore]`
+3. **Ramachandran / rotamer agreement.** Apply the classification floor in the registry §3
+   favored/outlier rows only to PHENIX 2.0-5936 versus the wwPDB validation report on the same coordinate
+   subject. Match `(chain, resnum, icode, resname)`; retain altloc/key-handling disclosure. Compute
+   three-state Ramachandran agreement and binary rotamer OUTLIER/non-OUTLIER agreement separately,
+   each with its own nonzero shared-key denominator, and name every disagreeing residue. Exact rotamer
+   names are a separate diagnostic: a name difference need not change the OUTLIER verdict. Missing
+   applicability evidence or a zero denominator is unevaluable, not a pass. Other versions and
+   standalone MolProbity comparisons remain informational under this floor; deposited-reference
+   reproduction does not establish method-independent confirmation. This documentation adoption adds
+   no QDS agreement metric or PassCriterionBinding: retain QDS classification-agreement rows as informational without
+   criterion metadata. **Rotamer favored %** stays a pass/fail band, |Δ| ≤ **1.0 pp**, because registry row 89 retains it: round 46
    re-scoped only the three rows it could measure against deposited reports, and this one is not
    directly measurable. The registry notes the band assumes both tools use the same rotamer library,
    and it is exposed to the same residue-count difference as the other percentages — altloc or

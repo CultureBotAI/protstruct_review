@@ -1,0 +1,66 @@
+ 
+ ###############################################################
+ ###############################################################
+ ###############################################################
+ ### CCP4 9.0.015: AIMLESS            version 0.8.3 : 21/03/26##
+ ###############################################################
+ User: marcin  Run date: 27/ 9/2026 Run time: 22:00:29 
+
+
+ Please reference: Collaborative Computational Project, Number 4. 2011.
+ "Overview of the CCP4 suite and current developments". Acta Cryst. D67, 235-242.
+ as well as any specific reference in the program write-up.
+
+==== Command line arguments ====
+HKLIN /private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/refinement-cache-integration/data/coscientists/openscientist/retained_evidence_2026-09-23/data/1sar.mtz
+HKLOUT /private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/refinement-cache-integration/data/coscientists/openscientist/retained_evidence_2026-09-27_canaries01/entries/T13_1SAR/tool_logs/aimless_scaled.mtz
+
+==== Input command lines ====
+
+END
+====     End of input    ====
+
+Release Date: 21st March 2026
+
+
+        ******************************************************
+        *                                                    *
+        *                      AIMLESS                       *
+        *                       0.8.3                        *
+        *                                                    *
+        *     Scaling & analysis of unmerged intensities     *
+        *     Phil Evans MRC LMB, Cambridge                  *
+        *                                                    *
+        ******************************************************
+
+
+---------------------------------------------------------------
+
+Reading data from HKLIN filename: /private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/refinement-cache-integration/data/coscientists/openscientist/retained_evidence_2026-09-23/data/1sar.mtz
+
+Time for reading HKLIN: cpu time: 0.00 secs, elapsed time: 0.0 secs
+
+**** ERROR ****
+
+<!--SUMMARY_BEGIN-->
+<B><FONT COLOR="#FF8800">
+<!--SUMMARY_END-->
+----------------------------------
+
+FATAL ERROR message: 
+hkl_unmerge_list::prepare - EMPTY
+----------------------------------
+<!--SUMMARY_BEGIN-->
+</FONT></B>
+<!--SUMMARY_END-->
+
+
+$TEXT:Reference: $$ Please cite $$
+P.R.Evans and G.N.Murshudov, 'How good are my data and what is the resolution?' Acta Cryst. D69, 1204-1214  (2013).
+<a href="http://journals.iucr.org/d/issues/2013/07/00/ba5190/index.html">
+<b>PDF</b></a>
+$$
+
+End of aimless job, total time: cpu time: 0.00 secs, elapsed time: 0.0 secs
+
+hkl_unmerge_list::prepare - EMPTY

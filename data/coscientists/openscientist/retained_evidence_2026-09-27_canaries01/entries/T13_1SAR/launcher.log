@@ -1,0 +1,110 @@
+# aimless: failed (MTZ has merged amplitudes only; aimless requires unmerged intensities)
+# aimless log: /private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/refinement-cache-integration/data/coscientists/openscientist/retained_evidence_2026-09-27_canaries01/entries/T13_1SAR/tool_logs/aimless.log
+# ctruncate log: /private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/refinement-cache-integration/data/coscientists/openscientist/retained_evidence_2026-09-27_canaries01/entries/T13_1SAR/tool_logs/ctruncate.log
+# parsed: {'log': '/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/refinement-cache-integration/data/coscientists/openscientist/retained_evidence_2026-09-27_canaries01/entries/T13_1SAR/tool_logs/ctruncate.log', 'resolution_low_a': 49.972, 'resolution_high_a': 2.5, 'wilson_b': 14.542, 'wilson_b_sigma': 21.119, 'aniso_eigenvalues': [10.5625, 17.8813, 14.6262], 'delta_b_aniso': 7.3187999999999995, 'aniso_flag': 'some', 'aniso_diagnostic': 'explicit report', 'twin_fraction_l': 0.03, 'twin_fraction_moments': 0.02, 'l_statistic': 0.505, 'twin_operators_found': 0, 'twin_operators_diagnostic': 'explicit no-operator report', 'moment_2_acentric': 1.968, 'tncs_flag': False, 'tncs_diagnostic': 'explicit report', 'ice_ring_diagnostic': 'recognized complete ice-ring table', 'ice_ring_resolutions_flagged': [3.44], 'ice_ring_count_total': 4}
+  - id: EVAL_T13_OPERATIONAL_CANARY_M_t13_wilson_b
+    catalog_task_ref: T13
+    stage: all
+    scope: dataset
+    scope_selector: /*/*/[F-obs,SIGF-obs]
+    subject_ref: mtz:sha256:f36d5fe685a3e524e8809d17d19ce12073acdf339eba2cfd3b0347a818850ab2
+    metric_definition_ref: T13_wilson_b
+    oracle_tool_ref: ctruncate
+    oracle_family: non_cctbx
+    agent_claim:
+      is_not_applicable: true
+    oracle_measure:
+      value_numeric: 14.542
+      unit: Å²
+    pass_status: informational
+    evidence_refs:
+    - data/coscientists/openscientist/retained_evidence_2026-09-27_canaries01/entries/T13_1SAR/tool_logs/ctruncate.log
+    notes: ctruncate Wilson scaling; sigma 21.119.
+  - id: EVAL_T13_OPERATIONAL_CANARY_M_t13_twin_fraction_l
+    catalog_task_ref: T13
+    stage: all
+    scope: dataset
+    scope_selector: /*/*/[F-obs,SIGF-obs]
+    subject_ref: mtz:sha256:f36d5fe685a3e524e8809d17d19ce12073acdf339eba2cfd3b0347a818850ab2
+    metric_definition_ref: T13_l-test_twinning
+    oracle_tool_ref: ctruncate
+    oracle_family: non_cctbx
+    agent_claim:
+      is_not_applicable: true
+    oracle_measure:
+      value_numeric: 0.03
+      unit: fraction
+    pass_status: informational
+    evidence_refs:
+    - data/coscientists/openscientist/retained_evidence_2026-09-27_canaries01/entries/T13_1SAR/tool_logs/ctruncate.log
+    notes: 'L-test-derived twin fraction, not the mean absolute L statistic. L statistic 0.505; moments-based twin fraction 0.02; twinning-operator presence: absent (explicit no-operator report).'
+  - id: EVAL_T13_OPERATIONAL_CANARY_M_t13_delta_b_aniso
+    catalog_task_ref: T13
+    stage: all
+    scope: dataset
+    scope_selector: /*/*/[F-obs,SIGF-obs]
+    subject_ref: mtz:sha256:f36d5fe685a3e524e8809d17d19ce12073acdf339eba2cfd3b0347a818850ab2
+    metric_definition_ref: T13_anisotropy_δb_aniso
+    oracle_tool_ref: ctruncate
+    oracle_family: non_cctbx
+    agent_claim:
+      is_not_applicable: true
+    oracle_measure:
+      value_numeric: 7.3187999999999995
+      unit: Å²
+    pass_status: informational
+    evidence_refs:
+    - data/coscientists/openscientist/retained_evidence_2026-09-27_canaries01/entries/T13_1SAR/tool_logs/ctruncate.log
+    notes: ctruncate anisotropy eigenvalues [10.5625, 17.8813, 14.6262]; flag = some (explicit report).
+  - id: EVAL_T13_OPERATIONAL_CANARY_M_t13_tncs_flag
+    catalog_task_ref: T13
+    stage: all
+    scope: dataset
+    scope_selector: /*/*/[F-obs,SIGF-obs]
+    subject_ref: mtz:sha256:f36d5fe685a3e524e8809d17d19ce12073acdf339eba2cfd3b0347a818850ab2
+    metric_definition_ref: T13_tncs_flag
+    oracle_tool_ref: ctruncate
+    oracle_family: non_cctbx
+    agent_claim:
+      is_not_applicable: true
+    oracle_measure:
+      value_text: 'false'
+    pass_status: informational
+    evidence_refs:
+    - data/coscientists/openscientist/retained_evidence_2026-09-27_canaries01/entries/T13_1SAR/tool_logs/ctruncate.log
+    notes: ctruncate Patterson-search flag; consult retained log for search settings. explicit report.
+  - id: EVAL_T13_OPERATIONAL_CANARY_M_t13_ice_ring_flags
+    catalog_task_ref: T13
+    stage: all
+    scope: dataset
+    scope_selector: /*/*/[F-obs,SIGF-obs]
+    subject_ref: mtz:sha256:f36d5fe685a3e524e8809d17d19ce12073acdf339eba2cfd3b0347a818850ab2
+    metric_definition_ref: T13_ice-ring_flags
+    oracle_tool_ref: ctruncate
+    oracle_family: non_cctbx
+    agent_claim:
+      is_not_applicable: true
+    oracle_measure:
+      value_text: 3.44Å
+    pass_status: informational
+    evidence_refs:
+    - data/coscientists/openscientist/retained_evidence_2026-09-27_canaries01/entries/T13_1SAR/tool_logs/ctruncate.log
+    notes: 'ctruncate ice-ring summary: 4 sensitive bins scanned; 1 labelled yes by ctruncate. Flags are retained diagnostics, not a calibrated quality verdict.'
+  - id: EVAL_T13_OPERATIONAL_CANARY_M_t13_aimless_attempt
+    catalog_task_ref: T13
+    stage: all
+    scope: dataset
+    scope_selector: all input reflections
+    subject_ref: mtz:sha256:f36d5fe685a3e524e8809d17d19ce12073acdf339eba2cfd3b0347a818850ab2
+    metric_definition_ref: T13_aimless_status
+    oracle_tool_ref: CCP4 aimless
+    oracle_family: non_cctbx
+    agent_claim:
+      is_not_applicable: true
+    oracle_measure:
+      value_text: failed
+    pass_status: informational
+    evidence_refs:
+    - data/coscientists/openscientist/retained_evidence_2026-09-27_canaries01/entries/T13_1SAR/tool_logs/aimless.log
+    notes: MTZ has merged amplitudes only; aimless requires unmerged intensities
+

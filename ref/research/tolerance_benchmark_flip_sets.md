@@ -1,5 +1,12 @@
 # Tolerance benchmark — Asn/Gln/His flip sets (phenix.reduce vs standalone reduce)
 
+> **Current status (2026-09-27, #809/#824): historical record, not current grading authority.**
+> Flip-conflict grading is suspended at every scope. The historical Applied block below is not a
+> current independent calibration or permission to use its cohort band. The later round47/48
+> comparison used PHENIX-distributed Reduce versus mmtbx.reduce2, both catalogued cctbx-family,
+> not the claimed standalone pair. Original numbers remain historical; see
+> `t14_flip_grading_suspension_2026-09-27.md` and registry §3 for current policy.
+
 Closes the other gap PR #28 opened. The H-placement tolerance in
 `ref/thresholds_and_standards.md` requires the two H builders to produce the "same Asn/Gln/His flip
 set", but PR #28 measured only H count and clashscore, because `phenix.clashscore` does not emit flip

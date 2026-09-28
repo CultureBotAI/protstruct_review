@@ -695,71 +695,6 @@ def _meaningful_pass_criterion(row: dict[str, Any]) -> str:
     return "" if criterion.casefold() in NON_CRITERION_TEXT else criterion
 
 
-def _is_t14_conflict_rate_criterion(value: Any) -> bool:
-    """Recognize only the canonical registered inclusive 10% criterion."""
-    text = str(value or "").strip().casefold().replace("≤", "<=")
-    text = re.sub(r"\s+", " ", text)
-    text = re.sub(r"\s*<=\s*", " <= ", text)
-    text = re.sub(r"\s*%\s*", "%", text).strip()
-    return text == "conflict rate <= 10%"
-
-
-def _check_t14_cohort_verdict(
-    row: dict[str, Any],
-    *,
-    numerator: int,
-    denominator: int,
-    location: str,
-    violations: list[str],
-) -> None:
-    """Bind cohort grades to the preregistered inclusive 10% boundary."""
-    status = row.get("pass_status")
-    if status == "informational":
-        _check_t14_informational_only(
-            row,
-            location=location,
-            label="cohort conflict result declared informational",
-            violations=violations,
-        )
-        return
-
-    passes = numerator * 10 <= denominator
-    expected_statuses = {"pass", "pass_with_caveat"} if passes else {
-        "fail_criterion"
-    }
-    if status not in expected_statuses:
-        relation = "at or below" if passes else "above"
-        violations.append(
-            f"{location}: cohort conflict rate {numerator}/{denominator} is "
-            f"{relation} the inclusive 10% boundary and requires pass_status in "
-            f"{sorted(expected_statuses)!r}, not {status!r}"
-        )
-    if not _is_t14_conflict_rate_criterion(row.get("pass_criterion")):
-        violations.append(
-            f"{location}: gradeable cohort conflict result requires an unambiguous "
-            "pass_criterion naming conflict rate <= 10%"
-        )
-
-    nested = row.get("oracle_measure")
-    if not isinstance(nested, dict):
-        return
-    nested_status = nested.get("pass_status")
-    nested_criterion = _meaningful_pass_criterion(nested)
-    if nested_status in (None, "") and not nested_criterion:
-        return
-    if nested_status not in expected_statuses:
-        violations.append(
-            f"{location}.oracle_measure: cohort conflict verdict must match "
-            f"{numerator}/{denominator} at the inclusive 10% boundary; expected "
-            f"{sorted(expected_statuses)!r}, not {nested_status!r}"
-        )
-    if not _is_t14_conflict_rate_criterion(nested.get("pass_criterion")):
-        violations.append(
-            f"{location}.oracle_measure: gradeable cohort conflict result requires "
-            "an unambiguous pass_criterion naming conflict rate <= 10%"
-        )
-
-
 def _check_t14_informational_only(
     row: dict[str, Any],
     *,
@@ -778,6 +713,18 @@ def _check_t14_informational_only(
             f"{location}: {label} must not carry pass_criterion "
             f"{pass_criterion!r}"
         )
+
+    for carrier_name, carrier in (
+        ("measurement", row), ("oracle_measure", row.get("oracle_measure")),
+    ):
+        if not isinstance(carrier, dict):
+            continue
+        for field in ("pass_criterion_ref", "criterion_preconditions"):
+            if carrier.get(field) not in (None, "", []):
+                violations.append(
+                    f"{location}.{carrier_name}: {label} must not carry "
+                    f"criterion metadata {field}"
+                )
 
     oracle_measure = row.get("oracle_measure")
     if not isinstance(oracle_measure, dict):
@@ -1051,16 +998,12 @@ def _check_t14_flip_conflict_derivation(
                 f"{source_location}: cohort-scoped {T14_FLIP_CONFLICT_METRIC} "
                 "requires scope_selector naming the preregistered cohort"
             )
-    else:
-        _check_t14_informational_only(
-            row,
-            location=source_location,
-            label=(
-                f"structure-level {T14_FLIP_CONFLICT_METRIC}; the <= 10% "
-                "criterion applies only to scope 'cohort'"
-            ),
-            violations=violations,
-        )
+    _check_t14_informational_only(
+        row,
+        location=source_location,
+        label=f"{T14_FLIP_CONFLICT_METRIC}; flip-conflict grading is suspended",
+        violations=violations,
+    )
     oracle_measure = row.get("oracle_measure") or {}
     denominator = oracle_measure.get("count") if isinstance(oracle_measure, dict) else None
     numerator = (
@@ -1101,19 +1044,6 @@ def _check_t14_flip_conflict_derivation(
             f"{source_location}: conflict count {numerator_count} exceeds eligible "
             f"denominator {denominator_count}"
         )
-    if (
-        row.get("scope") == T14_COHORT_SCOPE
-        and numerator_count is not None
-        and denominator_count is not None
-    ):
-        _check_t14_cohort_verdict(
-            row,
-            numerator=numerator_count,
-            denominator=denominator_count,
-            location=source_location,
-            violations=violations,
-        )
-
     refs = row.get("derived_from_measurement_refs")
     distinct_refs = set(refs) if isinstance(refs, list) and all(
         isinstance(ref, str) for ref in refs

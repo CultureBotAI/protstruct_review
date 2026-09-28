@@ -1,0 +1,70 @@
+{
+  "acceptance": "pending manual/read-only evidence inspection; exit status is not acceptance",
+  "completed_at": "2026-09-28T05:09:27.065153+00:00",
+  "failure_evidence_limit": "T15 may delete normalized/raw DSSP files before publishing a bundle (#829)",
+  "files_before_result_manifest": {
+    "entries/T15_1UBQ/benchmark.json": {
+      "sha256": "bf120f5f04cabe972a90821cf9db7736863667df838d75132fd3429c669799e0",
+      "size": 643
+    },
+    "entries/T15_1UBQ/launch-request.json": {
+      "sha256": "34970001e03d48cbe7ece4837a36f095549f755ead644d8d3305dd3ead011d47",
+      "size": 3129
+    },
+    "entries/T15_1UBQ/launcher.log": {
+      "sha256": "63efde4dc52eca3f577e0f6a4c9108403021c42bf9eab8f28e163fef791f29aa",
+      "size": 3804
+    },
+    "launch-root.json": {
+      "sha256": "05c989cfcd24b40294969fd769e2e7677b50da437464bf48ea51d70e85897fa7",
+      "size": 990
+    },
+    "t15_cache/1ubq.pdb": {
+      "sha256": "d4a6812d8951cf6594e6a0763f089e35f5a80b62acb3c117b2c5565228a7b161",
+      "size": 78570
+    },
+    "t15_cache/t15_1ubq.log": {
+      "sha256": "09cd6b3ecaa653f58a4dd0000fc72b09fd0c8a174976ab2d5977ffa44f92ba4c",
+      "size": 2388
+    },
+    "t15_evidence/1ubq.t15-evidence.json": {
+      "sha256": "5607f1f1e33d72dfdd8a522e0d3d19700b2535e25c04e9c4b725e070cc34a63a",
+      "size": 104113
+    }
+  },
+  "interrupted_pgids": [],
+  "launcher_error": null,
+  "process": {
+    "arguments": [
+      "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/refinement-cache-integration/.venv/bin/python",
+      "-B",
+      "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/refinement-cache-integration/scripts/bench_t15_ss_agreement.py",
+      "1UBQ",
+      "--cache",
+      "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/refinement-cache-integration/data/coscientists/openscientist/retained_evidence_2026-09-27_canaries02/t15_cache",
+      "--evidence-dir",
+      "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/refinement-cache-integration/data/coscientists/openscientist/retained_evidence_2026-09-27_canaries02/t15_evidence",
+      "--json",
+      "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/refinement-cache-integration/data/coscientists/openscientist/retained_evidence_2026-09-27_canaries02/entries/T15_1UBQ/benchmark.json"
+    ],
+    "pgid": 42933,
+    "pid": 42933,
+    "returncode": 0,
+    "start_new_session": true,
+    "termination_signal": null,
+    "timed_out": false
+  },
+  "source_hashes_after": {
+    "ref/research/t13_t15_canaries_preregistration_2026-09-27.md": "97d46d0fcfe9f17527dc3a60b4667929cec3c2646c27427824f16a5c44c38714",
+    "scripts/bench_t15_ss_agreement.py": "cb0ad3aac45f0dbc7498f603e014a57eb303bd4b79ad0b274eb953b32784637a",
+    "scripts/benchmark_environment.py": "3b8e2ed8808139f3e6b3e07f1ec194eea87984564e4401b598f26ae7a92d1377",
+    "scripts/entry_sandbox.py": "d90356b60b62c4ebb1dcfc1aae904f42e5af09ad947e5eefdf5dac8f150771f8",
+    "scripts/t13_data_quality.py": "9cf55c75fe51a9711f7df97138ba2404e2144dcc7c7b1c4c6c9419b78191355a",
+    "scripts/t15_ss_agreement.py": "42a84d759284752bcc2c8340148a1306c39cb5ca3a1da6eb85180496124a9f4f",
+    "scripts/toolchain.py": "e32dd23ba61d684edea4cf86208c6d7fec62af060898c63cba96f40bd0bc338f",
+    "uv.lock": "c80b8cd4c874a7cf46cd6d5712df4d0a5fd2e1ac755d5ab1efb07d94448fa8b9"
+  },
+  "sources_unchanged": true,
+  "t13_input_sha256_after": "f36d5fe685a3e524e8809d17d19ce12073acdf339eba2cfd3b0347a818850ab2",
+  "t13_input_unchanged": true
+}

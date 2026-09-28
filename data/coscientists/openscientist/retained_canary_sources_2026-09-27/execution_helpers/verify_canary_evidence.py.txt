@@ -1,0 +1,222 @@
+#!/usr/bin/env python3
+"""Read-only canary evidence checks; not a scientific rerun or acceptance certificate."""
+from __future__ import annotations
+
+import argparse
+import base64
+from collections import Counter
+import hashlib
+import json
+from pathlib import Path
+import sys
+from unittest import mock
+
+import yaml
+
+INPUT = "data/coscientists/openscientist/retained_evidence_2026-09-23/data/1sar.mtz"
+INPUT_SHA = "f36d5fe685a3e524e8809d17d19ce12073acdf339eba2cfd3b0347a818850ab2"
+
+
+def sha(raw: bytes) -> str:
+    return hashlib.sha256(raw).hexdigest()
+
+
+def require(condition, message):
+    if not condition:
+        raise ValueError(message)
+
+
+def load(path: Path):
+    return json.loads(path.read_text())
+
+
+def resolve(repo: Path, reference: str) -> Path:
+    path = repo / reference
+    require(not Path(reference).is_absolute() and ".." not in Path(reference).parts,
+            f"non-portable evidence reference: {reference}")
+    resolved = path.resolve(strict=True)
+    resolved.relative_to(repo)
+    return resolved
+
+
+def informational(row):
+    require(row.get("pass_status") == "informational", "non-informational row")
+    require(not any(row.get(k) for k in ("pass_criterion", "pass_criterion_ref",
+                                        "criterion_preconditions")), "grading metadata present")
+
+
+def t13(repo: Path, entry: Path, repeat: bool):
+    require(sha((repo / INPUT).read_bytes()) == INPUT_SHA, "input MTZ changed")
+    logs = entry / "tool_logs"
+    for name in ("aimless.log", "ctruncate.log", "ctruncate_out.mtz"):
+        require((logs / name).is_file() and (logs / name).stat().st_size > 0, f"missing/empty {name}")
+    # Gemmi library read only; no Gemmi CLI or scientific tool invocation.
+    import gemmi
+    mtz = gemmi.read_mtz_file(str(logs / "ctruncate_out.mtz"))
+    require(mtz.nreflections > 0, "empty output MTZ")
+    rows = yaml.safe_load((entry / "launcher.log").read_text())
+    require(isinstance(rows, list) and rows, "launcher output is not a YAML measurement list")
+    for row in rows:
+        informational(row)
+        require(row["scope"] == "dataset", "wrong T13 scope")
+        require(row["subject_ref"] == "mtz:sha256:" + INPUT_SHA, "wrong dataset subject")
+        expected_selector = ("all input reflections" if row["metric_definition_ref"] == "T13_aimless_status"
+                             else "/*/*/[F-obs,SIGF-obs]")
+        require(row["scope_selector"] == expected_selector, "wrong amplitude/provenance selection")
+        require(row.get("evidence_refs"), "missing log evidence reference")
+        for ref in row["evidence_refs"]:
+            target = resolve(repo, ref)
+            require(target.parent == logs and target.stat().st_size > 0, "wrong/empty evidence log")
+    attempt = [r for r in rows if r["metric_definition_ref"] == "T13_aimless_status"]
+    require(len(attempt) == 1, "missing/duplicate aimless attempt row")
+    require(attempt[0]["oracle_measure"]["value_text"] == "failed", "aimless did not fail as expected")
+    require("hkl_unmerge_list::prepare - EMPTY" in (logs / "aimless.log").read_text(),
+            "aimless failure is not the expected merged-only limitation")
+    if repeat:
+        # Exercise the unchanged public main against its existing --logdir.
+        # Deny every tool path: accidental execution becomes an assertion failure.
+        sys.path.insert(0, str(repo / "scripts"))
+        import t13_data_quality as wrapper
+        before = {p.name: sha(p.read_bytes()) for p in logs.iterdir() if p.is_file()}
+        argv = ["t13_data_quality.py", str(repo / INPUT), "--eval-id", "EVAL_T13_OPERATIONAL_CANARY",
+                "--columns", "F-obs,SIGF-obs", "--logdir", str(logs)]
+        with mock.patch.object(sys, "argv", argv), \
+                mock.patch.object(wrapper, "try_aimless", side_effect=AssertionError("tool execution")), \
+                mock.patch.object(wrapper, "run_ctruncate", side_effect=AssertionError("tool execution")):
+            try:
+                wrapper.main()
+            except SystemExit as error:
+                require("refusing to overwrite" in str(error), "unexpected repeat failure")
+            else:
+                raise ValueError("repeat did not refuse")
+        require(before == {p.name: sha(p.read_bytes()) for p in logs.iterdir() if p.is_file()},
+                "repeat changed retained tool evidence")
+    return {"measurement_rows": len(rows), "output_reflections": mtz.nreflections,
+            "overwrite_refusal_checked_with_tools_denied": repeat,
+            "manual_remaining": "inspect actual tool versions and every available/unavailable flag against fresh full logs"}
+
+
+def t15(repo: Path, root: Path, entry: Path, pdb: str):
+    evidence_path = root / "t15_evidence" / f"{pdb.lower()}.t15-evidence.json"
+    require(evidence_path.is_file(),
+            "missing evidence bundle: preserve available logs; raw failure evidence may be unavailable (#829)")
+    evidence = load(evidence_path)
+    source = root / "t15_cache" / f"{pdb.lower()}.pdb"
+    require(sha(source.read_bytes()) == evidence["source_sha256"], "source hash mismatch")
+    require(evidence["evidence_format"] == "protstruct-review-t15-v1", "wrong evidence format")
+    for section, data, hash_key, size in (
+        ("normalization", "bytes_base64", "sha256", "size_bytes"),
+        ("dssp", "raw_output_base64", "raw_output_sha256", "raw_output_size_bytes"),
+    ):
+        part = evidence[section]
+        raw = base64.b64decode(part[data], validate=True)
+        require(raw and len(raw) == part[size] and sha(raw) == part[hash_key],
+                f"invalid retained {section} bytes")
+    for name in ("normalization", "dssp", "biotite_psea"):
+        version = evidence[name].get("tool_version")
+        require(isinstance(version, str) and version.strip() and "unknown" not in version.lower(),
+                f"missing measured {name} version")
+    assignments = evidence["per_residue_assignments"]
+    require(isinstance(assignments, list) and assignments, "missing assignments")
+    keys = [(r["chain"], r["resnum"], r["icode"]) for r in assignments]
+    require(len(set(keys)) == len(keys), "duplicate residue key")
+    require(all(r["dssp"] in "HEC" and r["biotite_psea"] in "HEC"
+                and len(r["dssp"]) == len(r["biotite_psea"]) == 1 for r in assignments),
+            "missing/invalid assignment or unequal assigner key sets")
+    # Independently reparse the retained classic DSSP table, without importing
+    # the wrapper's parser or reexecuting either assigner.
+    raw_lines = base64.b64decode(evidence["dssp"]["raw_output_base64"], validate=True).decode().splitlines()
+    headers = [i for i, line in enumerate(raw_lines) if line.startswith("  #  RESIDUE")]
+    require(len(headers) == 1, "missing/ambiguous raw DSSP table header")
+    raw_assignments = {}
+    for line in raw_lines[headers[0] + 1:]:
+        if not line.strip():
+            continue
+        require(len(line) >= 17, "truncated raw DSSP residue line")
+        if line[13] == "!":
+            continue  # Explicit chain-break pseudo-residue, not a scored key.
+        key = (line[11].strip(), str(int(line[5:10])), line[10].strip())
+        require(key not in raw_assignments, "duplicate raw DSSP key")
+        state = line[16]
+        raw_assignments[key] = "H" if state in "HGI" else "E" if state in "EB" else "C"
+    require(raw_assignments == {key: row["dssp"] for key, row in zip(keys, assignments)},
+            "retained raw DSSP disagrees with full assignment stream")
+    n = len(keys)
+    same = sum(r["dssp"] == r["biotite_psea"] for r in assignments)
+    counts = Counter(r["dssp"] for r in assignments)
+    calculated = {
+        "n_dssp": n, "n_biotite": n, "n_scored": n, "n_dropped": 0, "n_agree": same,
+        "fraction": round(same / n, 4), "dssp_h": counts["H"], "dssp_e": counts["E"],
+        "dssp_c": counts["C"], "dssp_ss_content": round((counts["H"] + counts["E"]) / n, 4),
+    }
+    for key, value in calculated.items():
+        require(evidence["aggregate"][key] == value, f"aggregate mismatch: {key}")
+    bundle_payload = {
+        "subject_ref": evidence.get("subject_ref"), "input_sha256": evidence["source_sha256"],
+        "normalization_mode": "gemmi convert",
+        "normalized_sha256": evidence["normalization"]["sha256"],
+        "gemmi_version": evidence["normalization"]["tool_version"],
+        "dssp_version": evidence["dssp"]["tool_version"],
+        "biotite_version": evidence["biotite_psea"]["tool_version"], **calculated,
+    }
+    bound_digest = sha(yaml.safe_dump(bundle_payload, sort_keys=True, allow_unicode=True).encode())[:16]
+    require(evidence["bundle_ref"] == "EVAL_BENCH_T15_SS_" + bound_digest,
+            "content-bound result identity mismatch")
+    benchmark = load(entry / "benchmark.json")
+    require(benchmark["skipped"] == [], "collector skipped the canary")
+    require(len(benchmark["rows"]) == 1 and benchmark["rows"][0]["pdb_id"] == pdb,
+            "collector did not return exactly the requested entry")
+    observed = benchmark["rows"][0]
+    mapping = {"n_dssp": "n_dssp", "n_biotite": "n_biotite", "n_scored": "n_scored",
+               "n_dropped": "n_dropped", "n_concordant": "n_agree",
+               "agreement": "fraction", "ss_content": "dssp_ss_content"}
+    for output_key, evidence_key in mapping.items():
+        require(observed[output_key] == calculated[evidence_key], f"runner mismatch: {output_key}")
+    rows = yaml.safe_load((root / "t15_cache" / f"t15_{pdb.lower()}.log").read_text())
+    require(isinstance(rows, list) and len(rows) == 2, "missing/extra T15 wrapper rows")
+    expected = {"T15_secondary_structure_agreement": calculated["fraction"],
+                "T15_secondary_structure_content": calculated["dssp_ss_content"]}
+    require({r["metric_definition_ref"] for r in rows} == set(expected), "wrong wrapper metrics")
+    for row in rows:
+        informational(row)
+        require(row["bundle_ref"] == evidence["bundle_ref"], "wrong result-bundle reference")
+        require(row["scope"] == "complex" and row["stage"] == "final", "wrong T15 measurement context")
+        require(row["oracle_measure"]["value_numeric"] == expected[row["metric_definition_ref"]],
+                "wrapper scalar mismatch")
+        require(row["evidence_refs"] == [evidence_path.relative_to(repo).as_posix()],
+                "wrapper does not cite the exact retained bundle")
+    return {"pdb_id": pdb, **calculated,
+            "raw_dssp_keys_and_classes_reparsed": len(raw_assignments),
+            "raw_integer_content_prediction": 100 * (counts["H"] + counts["E"]) >= 20 * n,
+            "raw_integer_agreement_prediction": 100 * same >= 65 * n,
+            "manual_remaining": "inspect raw DSSP/normalization and version provenance; one canary does not establish the cohort"}
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--repo", required=True, type=Path)
+    ap.add_argument("--root", required=True, help="repository-relative retained evidence root")
+    ap.add_argument("--kind", required=True, choices=("t13", "t15"))
+    ap.add_argument("--pdb", default="1UBQ")
+    ap.add_argument("--check-repeat", action="store_true")
+    args = ap.parse_args()
+    repo = args.repo.resolve(strict=True)
+    root = resolve(repo, args.root)
+    entry = root / "entries" / ("T13_1SAR" if args.kind == "t13" else f"T15_{args.pdb}")
+    result = load(entry / "launch-result.json")
+    require(result["launcher_error"] is None, "launcher error; stop protocol")
+    require(result["process"]["returncode"] == 0 and not result["process"]["timed_out"],
+            "failed/timed-out process; stop protocol")
+    require(result["sources_unchanged"] and result["t13_input_unchanged"], "input/source changed")
+    for reference, observed in result["files_before_result_manifest"].items():
+        retained = resolve(repo, root.relative_to(repo).as_posix() + "/" + reference)
+        require(retained.stat().st_size == observed["size"] and sha(retained.read_bytes()) == observed["sha256"],
+                f"retained file changed: {reference}")
+    report = t13(repo, entry, args.check_repeat) if args.kind == "t13" else t15(repo, root, entry, args.pdb)
+    print(json.dumps({"read_only_checks": report, "scientific_acceptance": "requires manual review"},
+                     indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,12 +1,13 @@
 # Driving example — T14 Hydrogen placement / protonation
 
 Standalone per-task driver for **T14 (hydrogen placement / protonation)**. Follows the structure of
-`ref/driving_example.md`. The load-bearing cross-tool comparison uses genuinely distinct builders:
-standalone Richardson-lab `reduce` and `mmtbx.reduce2`. `phenix.reduce` and standalone `reduce`
-dispatch the same Richardson binary in the measured installation, so agreement between those two is
-a packaging/defaults check, not independent scientific corroboration. The registered bands are tied
-to the exact measured implementations and settings named below; merely disclosing a different
-version does not make the old band transferable.
+`ref/driving_example.md`. Flip-conflict grading is suspended: all scopes are informational and
+criterion-free pending a matched independent benchmark (#809). The retained round47/48 comparison
+used PHENIX-distributed `reduce` and `mmtbx.reduce2`, not the claimed standalone pair; both producers
+are catalogued cctbx-family. `phenix.reduce` and standalone `reduce` dispatch the same Richardson
+implementation in the measured installation, so their agreement is a packaging/defaults check,
+not independent scientific corroboration. The other registered checks retain their own exact
+implementation and applicability conditions.
 
 > **Thresholds are defined once** in `ref/thresholds_and_standards.md`; the `[provenance]` tags below
 > point into it.
@@ -39,16 +40,17 @@ Asn/Gln/His flips, and report the clashscore change and H-bond-network consisten
 - **Standalone `reduce 4.16.250520`** (Richardson lab) — compare with the PHENIX redistribution
   only when `phenix.reduce` also reports `reduce.4.16.250520`, and only as a
   dispatcher/distribution check; it is not an independent H-placement oracle.
-- **`mmtbx.reduce2` from PHENIX 2.0-5936** — the distinct H-builder used in the registered
-  flip-conflict benchmark. Run with `approach=add add_flip_movers=True`; flip movers are off by
-  default. Another version or mover configuration is a new, currently unbenchmarked pipeline.
+- **`mmtbx.reduce2` from PHENIX 2.0-5936** — a distinct H-builder, but still cctbx-family.
+  The historical benchmark compared it with PHENIX-distributed `reduce`, using
+  `approach=add add_flip_movers=True`; it is not independent corroboration under the trust model.
 - **`propka3`** — independent pKa / protonation-state prediction for His/Asp/Glu.
 - Neutron structure — direct experimental H positions, the tiebreaker when available.
 
 ## Scoring rubric
 
-Every applicable check must pass for green. A void comparison must be reported as void, not converted
-to either a pass or a fail.
+Every applicable gradeable check must pass for green. A void comparison must be reported as void,
+not converted to either a pass or a fail. The suspended flip check cannot supply a pass or establish
+independent H-placement validation.
 
 1. **Conditional H-count agreement.** For a protein-only model, `phenix.reduce` and standalone
    `reduce` must add the identical number of H atoms (**Δ = 0**) only for the measured tool/version
@@ -59,18 +61,15 @@ to either a pass or a fail.
    invoked (#799). Even an exact count is only a same-binary
    packaging/defaults check and says nothing about H-position agreement.
    `[benchmark — H-placement agreement]`
-2. **Confident flip-set conflicts.** Compare standalone `reduce` with `mmtbx.reduce2`, not with the
-   same-binary `phenix.reduce` dispatcher. Count a conflict only where `reduce` made a confident F/K
-   call and `reduce2` made the opposite flip decision; `reduce` X/C calls mean that builder declined
-   to commit and belong in the raw-disagreement diagnostic, not the conflict numerator. Report both
-   the conflict count and eligible shared-residue denominator. The governed **≤ 10 %** band applies
-   only to a preregistered cohort aggregate produced by the measured pair — standalone
-   `reduce 4.16.250520` and `mmtbx.reduce2` from PHENIX 2.0-5936 with
-   `approach=add add_flip_movers=True`. Encode such an aggregate as `scope: cohort` with a
-   `scope_selector` naming the exact preregistered set. An individual structure uses its structural
-   scope and is informational and criterion-free; a version/configuration mismatch is likewise
-   informational rather than a threshold pass or fail.
-   `[benchmark — H-placement agreement, round 48]`
+2. **Confident flip-set conflicts — informational only.** Count a conflict where the identified
+   `reduce` producer made a confident F/K call and `reduce2` made the opposite flip decision.
+   X/C calls remain in the eligible shared-residue denominator but not the conflict numerator.
+   Retain both the numerator and denominator, the source rows and residue-level evidence.
+   A cohort still uses `scope: cohort` with its exact preregistered set in `scope_selector`.
+   No scope may use the historical cohort band: parent and nested interpretation metadata must
+   remain informational and criterion-free. The retained PHENIX-distributed Reduce versus
+   reduce2 numbers do not calibrate the proposed independent standalone comparison.
+   `[benchmark — historical informational evidence; registry §3, #809]`
 3. **Clashscore agreement.** Report each builder's pre→post clashscore change informationally. Apply
    the registered Clashscore envelope — **|Δ| ≤ 1.0, or 20 % of the mean, whichever is larger** —
    only when both counters score hydrogens built by the **same `reduce` binary and version** under the
@@ -79,9 +78,9 @@ to either a pass or a fail.
    Asn/Gln/His flips by default; the standalone build, as invoked, most likely loaded no het
    dictionary, #799); it did not establish identical H
    coordinates, did not separate H construction from clash counting, and did not benchmark changes
-   between `reduce` and `mmtbx.reduce2` models. It measured PHENIX 2.0-5936, `reduce 4.16.250520`, and
-   `probe 2.26.021123`; a builder, version, or convention mismatch makes the governed comparison
-   **void**, not failed.
+   between `reduce` and `mmtbx.reduce2` models. A builder or H-convention mismatch makes the
+   governed comparison **void**, not failed. Clashscore version pin: PHENIX 2.0-5936, Richardson reduce 4.16.250520 (both builds), and standalone probe 2.26.021123. Other or unverified versions are informational pending a matched benchmark, not a threshold pass or fail.
+   Matching versions alone does not validate changed H-build settings (#799/#790).
    `[benchmark — Clashscore]`
 4. **Build configuration disclosed.** State the add-H/flip-mover settings, H convention, executable
    version, and hetero dictionary provenance. `reduce -build`, plain add-H, and

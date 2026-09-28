@@ -1855,6 +1855,25 @@ tool_recommendations:
     as_of_date: '2026-09-22'
     effective_at: '2026-09-22T09:00:00+00:00'
 
+  - id: REC_T14_asn_gln_his_flip_set_conflicts_top_considered_2026_09_27_suspended
+    metric_definition_ref: T14_asn_gln_his_flip_set_conflicts
+    tool_ref: mmtbx.reduce2
+    role: top_considered
+    rank: 1
+    justification: >-
+      Flip-conflict grading is suspended: all scopes are informational and criterion-free
+      pending a matched independent benchmark (#809). Retain paired source rows,
+      conflict counts, eligible shared-residue denominators and residue-level evidence.
+      The retained round47/48 numbers compare PHENIX-distributed reduce with mmtbx.reduce2,
+      both catalogued cctbx-family, not the claimed standalone reduce pair. Do not relabel
+      those producers or use the historical cohort band as independent corroboration.
+    evidence_refs:
+      - ref/thresholds_and_standards.md
+      - ref/research/t14_flip_grading_suspension_2026-09-27.md
+    as_of_date: '2026-09-27'
+    effective_at: '2026-09-27T21:10:00-07:00'
+    supersedes_recommendation_ref: REC_T14_asn_gln_his_flip_set_conflicts_top_considered_2026_09_22
+
   # #804: USER MOD records carry H tallies and flip decisions, not dictionary
   # provenance; the loaded het dictionary must be recorded separately (#799).
   - id: REC_T14_h_added_top_considered_2026_09_27
@@ -1905,6 +1924,30 @@ tool_recommendations:
     effective_at: '2026-09-27T00:00:00+00:00'
     supersedes_recommendation_ref: REC_T14_clashscore_delta_pre_vs_post_top_considered_2026_09_22
 
+  # #798: version identity is necessary, not sufficient for the historical envelope.
+  - id: REC_T14_clashscore_delta_pre_vs_post_top_considered_2026_09_27_version_pin
+    metric_definition_ref: T14_clashscore_delta_pre_vs_post
+    tool_ref: MolProbity (gold)
+    role: top_considered
+    rank: 1
+    justification: >-
+      Use one counter consistently for each builder's pre/post diagnostic. The
+      registered cctbx-versus-probe envelope requires the same Richardson reduce
+      release and a matched H convention; each path may build its own hydrogens,
+      and identical coordinates were never established.
+      Clashscore version pin: PHENIX 2.0-5936, Richardson reduce 4.16.250520 (both builds), and standalone probe 2.26.021123. Other or unverified versions are informational pending a matched benchmark, not a threshold pass or fail.
+      Matching versions alone does not validate changed H-build settings (#799/#790).
+      The historical standalone path most likely loaded no het dictionary (#799);
+      the residual's causal decomposition is unresolved (#790). This version pin
+      neither certifies a new dictionary-loaded pipeline nor grades differences
+      between pre/post changes from distinct builders.
+    evidence_refs:
+      - ref/thresholds_and_standards.md
+      - ref/research/tolerance_benchmark_clashscore_h.md
+    as_of_date: '2026-09-27'
+    effective_at: '2026-09-27T20:27:31-07:00'
+    supersedes_recommendation_ref: REC_T14_clashscore_delta_pre_vs_post_top_considered_2026_09_27
+
   - id: REC_T14_hbond_network_consistency_top_considered_2026_09_22
     metric_definition_ref: T14_hbond-network_consistency_vs_standalone_reduce
     tool_ref: reduce (standalone, Richardson)
@@ -1917,3 +1960,106 @@ tool_recommendations:
     as_of_date: '2026-09-22'
     effective_at: '2026-09-22T09:00:00+00:00'
     supersedes_recommendation_ref: REC_T14_hbond-network_consistency_vs_standalone_reduce_top_considered
+
+  # 2026-09-27 / #785: capability-specific replacements; historical rows stay unchanged.
+  - id: REC_T02_omega_cis_trans_flips_top_considered_2026_09_27_capability_correction
+    metric_definition_ref: T02_omega_cis_trans_flips
+    tool_ref: gemmi validate
+    role: deprecated
+    justification: 'Deprecated unsupported producer: gemmi validate is not a geometry command. Gemmi rmsz
+      reports single-model torsion-restraint deviations, not matched-residue cis/trans changes between two
+      models. No paired omega-flip wrapper is established by this recommendation; retain the old tool identity
+      only for history.'
+    evidence_refs:
+    - https://raw.githubusercontent.com/project-gemmi/gemmi/v0.7.5/prog/rmsz.cpp
+    as_of_date: '2026-09-27'
+    effective_at: '2026-09-27T21:11:57-07:00'
+    supersedes_recommendation_ref: REC_T02_omega_cis_trans_flips_top_considered
+  - id: REC_T03_bond_angle_rmsd_top_considered_2026_09_27_capability_correction
+    metric_definition_ref: T03_bond_angle_rmsd
+    tool_ref: gemmi rmsz
+    role: top_considered
+    rank: 1
+    justification: Gemmi rmsz reports separate bond-length rmsD in Å and bond-angle rmsD in degrees, not
+      dimensionless rmsZ or one combined scalar. Apply the Bond-length RMSD and Bond-angle RMSD rows in
+      registry §3 only with their matched bond-count and restraint-library preconditions; record both populations
+      and monomer-library provenance. This corrects a command attribution, not a new benchmark or a new
+      wrapper.
+    evidence_refs:
+    - https://raw.githubusercontent.com/project-gemmi/gemmi/v0.7.5/prog/rmsz.cpp
+    - ref/thresholds_and_standards.md#3-cross-tool-agreement-tolerances
+    as_of_date: '2026-09-27'
+    effective_at: '2026-09-27T21:11:57-07:00'
+    supersedes_recommendation_ref: REC_T03_bond_angle_rmsd_top_considered
+  - id: REC_T05_bond-length_rmsd_top_considered_2026_09_27_capability_correction
+    metric_definition_ref: T05_bond-length_rmsd
+    tool_ref: gemmi rmsz
+    role: top_considered
+    rank: 1
+    justification: Use the bond rmsD output of gemmi rmsz in Å, not dimensionless rmsZ. Apply registry §3
+      Bond-length RMSD only when restrained bond counts match; distinguish matched and differing restraint
+      libraries using their applicable registry clauses. Retain the compared counts and monomer-library
+      provenance; otherwise report both values informationally, not a graded delta.
+    evidence_refs:
+    - https://raw.githubusercontent.com/project-gemmi/gemmi/v0.7.5/prog/rmsz.cpp
+    - ref/thresholds_and_standards.md#3-cross-tool-agreement-tolerances
+    as_of_date: '2026-09-27'
+    effective_at: '2026-09-27T21:11:57-07:00'
+    supersedes_recommendation_ref: REC_T05_bond-length_rmsd_top_considered
+  - id: REC_T05_bond-angle_rmsd_top_considered_2026_09_27_capability_correction
+    metric_definition_ref: T05_bond-angle_rmsd
+    tool_ref: gemmi rmsz
+    role: top_considered
+    rank: 1
+    justification: Use the angle rmsD output of gemmi rmsz in degrees, not dimensionless rmsZ. Apply registry
+      §3 Bond-angle RMSD with its restraint-library preconditions, distinguishing matched and differing
+      libraries. Retain restraint counts, the compared atom/restraint populations and monomer-library provenance;
+      do not infer matched populations from a tool name.
+    evidence_refs:
+    - https://raw.githubusercontent.com/project-gemmi/gemmi/v0.7.5/prog/rmsz.cpp
+    - ref/thresholds_and_standards.md#3-cross-tool-agreement-tolerances
+    as_of_date: '2026-09-27'
+    effective_at: '2026-09-27T21:11:57-07:00'
+    supersedes_recommendation_ref: REC_T05_bond-angle_rmsd_top_considered
+  - id: REC_T05_planarity_rmsd_top_considered_2026_09_27_capability_correction
+    metric_definition_ref: T05_planarity_rmsd
+    tool_ref: gemmi validate
+    role: deprecated
+    justification: 'Deprecated unsupported metric equivalence: gemmi validate is not a geometry command.
+      Gemmi rmsz aggregates the maximum atom-to-plane deviation for each plane restraint; its planarity
+      rmsD is not established as the catalog''s planarity RMSD definition or PHENIX-equivalent population.
+      No validated producer for this metric is supplied by this recommendation.'
+    evidence_refs:
+    - https://raw.githubusercontent.com/project-gemmi/gemmi/v0.7.5/prog/rmsz.cpp
+    as_of_date: '2026-09-27'
+    effective_at: '2026-09-27T21:11:57-07:00'
+    supersedes_recommendation_ref: REC_T05_planarity_rmsd_top_considered
+  - id: REC_T05_chirality_outliers_top_considered_2026_09_27_capability_correction
+    metric_definition_ref: T05_chirality_outliers
+    tool_ref: gemmi rmsz
+    role: alternative
+    rank: 2
+    justification: 'Qualified alternative only: gemmi rmsz reports wrong-handed chirality counts and the
+      number of checked centres, not general chiral-volume outliers. Retain the checked-centre denominator,
+      centre selection and monomer-library provenance; do not relabel the result as generic chirality-outlier
+      agreement or a percentage with an unmatched denominator. No implemented wrapper or cross-tool benchmark
+      is claimed.'
+    evidence_refs:
+    - https://raw.githubusercontent.com/project-gemmi/gemmi/v0.7.5/prog/rmsz.cpp
+    - https://raw.githubusercontent.com/project-gemmi/gemmi/v0.7.5/include/gemmi/topo.hpp
+    as_of_date: '2026-09-27'
+    effective_at: '2026-09-27T21:11:57-07:00'
+    supersedes_recommendation_ref: REC_T05_chirality_outliers_top_considered
+  - id: REC_T06_overall_b_top_considered_2026_09_27_capability_correction
+    metric_definition_ref: T06_overall_b
+    tool_ref: gemmi validate
+    role: deprecated
+    justification: 'Deprecated unsupported producer and definition: gemmi validate does not produce the
+      catalog''s undefined overall B statistic, and gemmi rmsz is not a B-factor producer. Do not substitute
+      mean atomic B or Wilson B. Specify the intended parameter, population and a validated producer before
+      recommending an oracle; retain the old tool identity only for history.'
+    evidence_refs:
+    - https://raw.githubusercontent.com/project-gemmi/gemmi/v0.7.5/prog/rmsz.cpp
+    as_of_date: '2026-09-27'
+    effective_at: '2026-09-27T21:11:57-07:00'
+    supersedes_recommendation_ref: REC_T06_overall_b_top_considered

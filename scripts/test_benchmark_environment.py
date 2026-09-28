@@ -7,6 +7,7 @@ import io
 import json
 import ast
 from pathlib import Path
+from unittest import mock
 
 import benchmark_environment as env
 
@@ -36,6 +37,17 @@ output = io.StringIO()
 returned = env.announce_benchmark_environment(output)
 record = json.loads(output.getvalue())
 check("announcement is one parseable JSON record", record["benchmark_environment"] == returned)
+
+with mock.patch.object(env, "external_tool_report", side_effect=AssertionError("unrelated probe")):
+    for scoped in ({}, {"reduce": {"reported_version": "synthetic captured evidence"}}):
+        scoped_output = io.StringIO()
+        scoped_result = env.announce_benchmark_environment(scoped_output, external_tools=scoped)
+        check("explicit scoped evidence avoids all external probes",
+              scoped_result["external_tools"] == scoped)
+        check("scoped environment still records Python/packages and one announcement",
+              bool(scoped_result["python"]["version"])
+              and bool(scoped_result["python_packages"]["PyYAML"])
+              and json.loads(scoped_output.getvalue())["benchmark_environment"] == scoped_result)
 
 scripts_dir = Path(__file__).resolve().parent
 missing_announcements = []

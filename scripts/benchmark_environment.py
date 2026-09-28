@@ -37,8 +37,13 @@ def _distribution_versions() -> dict[str, str | None]:
     return versions
 
 
-def benchmark_environment() -> dict[str, object]:
-    """Return actual Python versions and pinned/discovered external tool state."""
+def benchmark_environment(*, external_tools: dict | None = None) -> dict[str, object]:
+    """Return runtime metadata, optionally using already captured tool evidence.
+
+    An explicit mapping (including an empty one) avoids any new external probe.
+    Its caller owns measurement/admission of that scoped command evidence.
+    Omitting it preserves the historical all-tools discovery behavior.
+    """
     return {
         "recorded_at": datetime.now(timezone.utc).isoformat(),
         "python": {
@@ -47,13 +52,15 @@ def benchmark_environment() -> dict[str, object]:
             "executable": sys.executable,
         },
         "python_packages": _distribution_versions(),
-        "external_tools": external_tool_report(),
+        "external_tools": external_tool_report() if external_tools is None else external_tools,
     }
 
 
-def announce_benchmark_environment(stream: TextIO = sys.stderr) -> dict[str, object]:
+def announce_benchmark_environment(
+    stream: TextIO = sys.stderr, *, external_tools: dict | None = None,
+) -> dict[str, object]:
     """Write one JSON metadata record before measurements and return it."""
-    metadata = benchmark_environment()
+    metadata = benchmark_environment(external_tools=external_tools)
     print(json.dumps({"benchmark_environment": metadata}, sort_keys=True), file=stream)
     return metadata
 

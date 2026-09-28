@@ -280,8 +280,10 @@ mamba create -n cryst-oracles -c conda-forge python=3.11 servalcat
 > - The Homebrew build links against `libz-ng`, which is **not** pulled in as a dependency. Without
 >   `brew install zlib-ng` every `gemmi` invocation dies in dyld — the binary is on PATH and still
 >   unusable, so "installed" is not the same as "runnable" here.
-> - `gemmi rmsz` prints **rmsZ** (unitless) and **rmsD** (Å) on separate lines. Only rmsD compares
->   to a PHENIX RMSD; reading the rmsZ line instead is a units error, not a disagreement.
+> - `gemmi rmsz` prints **rmsZ** (unitless) and **rmsD** on separate lines. Its rmsD fields have
+>   different units: bond lengths and plane deviations in Å, bond angles and torsions in degrees.
+>   Compare the corresponding rmsD field and restraint population to a PHENIX RMSD;
+>   reading the rmsZ line instead is a units error, not a disagreement.
 > - The Python module is separate from the CLI (`pip install gemmi`); the CLI recipes above do not
 >   need it, but `scripts/bench_t06_r_offset.py` does.
 

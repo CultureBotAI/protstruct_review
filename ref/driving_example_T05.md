@@ -46,7 +46,8 @@ The harness independently re-runs MolProbity on the same model and checks the tw
   `ref/oracle_tools.md`), or `molprobity.molprobity`. Re-derives clashscore, Ramachandran, rotamer,
   and Cβ independently of cctbx's own reduce build.
 - **`gemmi rmsz`** — independent bond/angle restraint deviations against the CCP4 monomer library
-  (its `rmsD` line, in Å). `gemmi validate` does not report geometry RMSDs (`ref/oracle_tools.md`).
+  (its `rmsD` fields: bond lengths in Å, bond angles in degrees; `rmsZ` is dimensionless).
+  `gemmi validate` does not report geometry RMSDs (`ref/oracle_tools.md`).
 
 ## Scoring rubric
 

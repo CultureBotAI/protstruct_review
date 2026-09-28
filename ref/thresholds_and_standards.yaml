@@ -265,3 +265,31 @@ governed:
       - ref/driving_example_T14.md
     retired:
       - "requires two counters to score the same H-built coordinates"
+
+  # #798: each clashscore cell declares its own version pin and non-gradeable fallback.
+  - metric: "Clashscore benchmarked versions (§3)"
+    section: 3
+    current: "Clashscore version pin: PHENIX 2.0-5936, Richardson reduce 4.16.250520 (both builds), and standalone probe 2.26.021123. Other or unverified versions are informational pending a matched benchmark, not a threshold pass or fail."
+    registry_pattern: '\| Clashscore \|[^\n]*?(Clashscore version pin: PHENIX 2\.0-5936, Richardson reduce 4\.16\.250520 \(both builds\), and standalone probe 2\.26\.021123\. Other or unverified versions are informational pending a matched benchmark, not a threshold pass or fail\.)'
+    consumers:
+      - ref/driving_example.md
+      - ref/driving_example_T03.md
+      - ref/driving_example_T04.md
+      - ref/driving_example_T05.md
+      - ref/driving_example_T11.md
+      - ref/structural_criteria.yaml
+    retired:
+      - "version (a mismatch is void, not failed; record each tool's H convention and"
+
+  - metric: "Clashscore benchmarked versions, H-placement row (§3)"
+    section: 3
+    current: "Clashscore version pin: PHENIX 2.0-5936, Richardson reduce 4.16.250520 (both builds), and standalone probe 2.26.021123. Other or unverified versions are informational pending a matched benchmark, not a threshold pass or fail."
+    registry_pattern: '\| H-placement agreement \|[^\n]*?\*\*Clashscore check:\*\*[^\n]*?(Clashscore version pin: PHENIX 2\.0-5936, Richardson reduce 4\.16\.250520 \(both builds\), and standalone probe 2\.26\.021123\. Other or unverified versions are informational pending a matched benchmark, not a threshold pass or fail\.)'
+    consumers:
+      - ref/driving_example_T14.md
+      - ref/catalog.yaml
+      - ref/tasks_and_evaluations.md
+      - ref/tasks_and_evaluations.tsv
+      - ref/structural_criteria.yaml
+    retired:
+      - "`probe 2.26.021123`; a builder, version, or convention mismatch"

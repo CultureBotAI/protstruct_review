@@ -104,11 +104,13 @@ def build(model: Path, cache: Path, phenix: bool) -> Path | None:
 
 
 def reduce2_flip_calls(model: Path, cache: Path) -> dict[tuple[str, int, str], tuple[bool, str]] | None:
-    """Flip decisions from `mmtbx.reduce2` — the genuinely independent H builder.
+    """Flip decisions from the distinct, cctbx-family `mmtbx.reduce2` builder.
 
     `phenix.reduce` and standalone `reduce` are the same binary, so comparing them
-    measures redistribution, not method. reduce2 is the cctbx reimplementation and is
-    a real second opinion — but only with `add_flip_movers=True`; the default is
+    measures redistribution, not method. This benchmark compares PHENIX-distributed
+    Reduce with reduce2: both are catalogued cctbx-family, so it does not establish
+    independent corroboration (#809/#824). Flip records require
+    `add_flip_movers=True`; the default is
     False, in which case it builds no flip movers and reports nothing at all.
     """
     report = cache / f"{model.stem}FH.txt"
@@ -134,7 +136,7 @@ def reduce2_flip_calls(model: Path, cache: Path) -> dict[tuple[str, int, str], t
 def confident_conflicts(reduce_calls: dict, reduce2_calls: dict) -> list:
     """Residues where `reduce` is confident (category F/K) and `reduce2` disagrees (#287).
 
-    The load-bearing flip-set measure. A raw disagreement where `reduce` wrote category
+    An informational flip-set measure; grading is suspended (#809). A disagreement where `reduce` wrote category
     `X` (uncertain) or `C` (clashes either way) is one builder declining to commit, not a
     genuine conflict about the model, so it is excluded here and kept only as a diagnostic.
     Keyed like the callers: `(chain, resnum, resname)`, value `(flipped_bool, category)`.
@@ -188,7 +190,8 @@ def collect(pdb_ids: list[str], cache: Path) -> tuple[list[dict], list[dict]]:
         shared = sorted(set(a) & set(b))
         decision_diffs = [k for k in shared if a[k][0] != b[k][0]]
         category_diffs = [k for k in shared if a[k][1] != b[k][1] and a[k][0] == b[k][0]]
-        # The cross-implementation comparison: reduce (either build) vs reduce2.
+        # Historical producer: PHENIX-distributed reduce (a), not standalone (b).
+        # Both are cctbx-family here; this is informational, not an independent gate (#809).
         r2_shared = sorted(set(a) & set(r2)) if r2 else []
         r2_diffs = [k for k in r2_shared if a[k][0] != r2[k][0]]
         r2_confident_diffs = confident_conflicts(a, r2) if r2 else []
@@ -255,7 +258,7 @@ def summarize(rows: list[dict]) -> dict[str, Any]:
         "total_decision_disagreements": sum(r["n_decision_disagreements"] for r in rows),
         "reduce_vs_reduce2": {
             "n_residues_compared": sum(r["n_reduce2_shared"] for r in rows),
-            # Raw disagreements (diagnostic) vs the load-bearing confident-conflict count (#287).
+            # Raw disagreements and confident-conflict counts are informational (#809).
             "n_decision_disagreements": sum(r["n_reduce2_decision_disagreements"] for r in rows),
             "n_confident_conflicts": sum(r["n_reduce2_confident_conflicts"] for r in rows),
             "n_models": sum(1 for r in rows if r["n_reduce2_shared"]),

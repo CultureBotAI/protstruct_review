@@ -65,7 +65,7 @@ class CanaryReplayTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="test-canary-replay-")
         self.addCleanup(self.temp.cleanup)
-        self.repo = Path(self.temp.name)
+        self.repo = Path(self.temp.name).resolve()
         self.sources = {name: ("historical " + name).encode() for name in replay.SOURCE_PINS}
         self.sources["scripts/t13_data_quality.py"] = HISTORICAL_MAIN
         self.pins = {name: replay.sha(raw) for name, raw in self.sources.items()}
@@ -284,6 +284,17 @@ class CanaryReplayTests(unittest.TestCase):
         self.assertTrue(all(not root["complete_cohort"] for root in result["roots"]))
 
     def test_missing_snapshot_falls_back_only_to_historical_git_objects(self):
+        self.assert_historical_fallback(self.repo)
+
+    def test_repository_alias_preserves_exact_historical_git_fallback(self):
+        with tempfile.TemporaryDirectory(prefix="test-canary-alias-") as temporary:
+            alias = Path(temporary) / "repository-alias"
+            alias.symlink_to(self.repo, target_is_directory=True)
+            self.assertNotEqual(alias, self.repo)
+            self.assertEqual(alias.resolve(), self.repo)
+            self.assert_historical_fallback(alias)
+
+    def assert_historical_fallback(self, repository):
         exists = Path.exists
         snapshot = self.repo / replay.SNAPSHOT
         def historical(command, **kwargs):
@@ -293,8 +304,10 @@ class CanaryReplayTests(unittest.TestCase):
             return subprocess.CompletedProcess(command, 0, self.sources[name])
         with mock.patch.object(Path, "exists", lambda p: False if p == snapshot else exists(p)), \
                 mock.patch.object(subprocess, "run", side_effect=historical) as calls:
-            result = replay.recount(self.repo)
+            result = replay.recount(repository)
         self.assertEqual(calls.call_count, 8)
+        self.assertEqual({call.args[0][4] for call in calls.call_args_list},
+                         {f"{replay.COMMIT}:{name}" for name in self.sources})
         self.assertEqual(result["source_pin_verification"], "preregistered_git_commit")
 
     def test_changed_snapshot_does_not_fall_back_to_live_source(self):

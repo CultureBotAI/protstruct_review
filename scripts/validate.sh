@@ -462,6 +462,16 @@ if [[ "${QUIET}" == "0" ]]; then
   echo "driver/docstring thresholds match the registry"
 fi
 
+# The descriptive §3/§4 inventory must cover every live row, retain its evidence
+# fingerprints, and regenerate both current summaries exactly. This is not a grading gate.
+if ! "${PYTHON}" "${REPO_ROOT}/scripts/check_threshold_evidence_status.py" > /dev/null 2>&1; then
+  "${PYTHON}" "${REPO_ROOT}/scripts/check_threshold_evidence_status.py" >&2 || true
+  fail "threshold evidence inventory: row/evidence drift or stale generated summary"
+fi
+if [[ "${QUIET}" == "0" ]]; then
+  echo "threshold evidence inventory and current summaries are consistent"
+fi
+
 # Keep the initial lint boundary intentionally narrow: syntax/runtime-name
 # failures and Pyflakes correctness checks. Generated models and committed
 # research artifacts are excluded in pyproject.toml (#397).

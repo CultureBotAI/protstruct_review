@@ -22,11 +22,23 @@ external standards — change them only when the standard does, and update the c
 `[benchmark]` is the strongest tag available for a cross-tool tolerance: unlike `[template]`, the
 magnitude was observed rather than inferred.
 
-> **Current qualification (2026-09-27).** The following 18/2 inventory records the historical
-> through-round48 assessment, not a current certification of every row. T15's historical
-> denominator is unproven (#613/#765), and T14 flip grading is suspended because the retained
-> benchmark used the wrong producer pair for the claimed independent rule (#809). Its numbers
-> remain informational. Full inventory/count reconciliation remains #766.
+<!-- threshold-status-summary:start -->
+**Current descriptive inventory (§3/§4; not grading authorization).**
+
+21 rows; 20 benchmark-family rows (including qualified tags); 41 scoped components.
+Historical through-round48 labels: 18 reported-backed / 2 reported-partial / 1 excluded-literature rows. These are historical claims, not current scientific certification.
+
+Component policy counts: active_conditional=29; informational=6; not_evaluable=1; policy_unresolved=1; provisional_conditional=1; provisional_informational=2; suspended=1.
+
+Component evidence counts: denominator_unproven=1; external_standard_cited=1; limited_controls=1; partial_record=4; producer_mismatch=1; retained_record=23; unmeasured=9; unverified_ancillary=1.
+
+Scoped row flags (overlapping, not additive): suspended: h_placement; not_evaluable: clashscore; policy_unresolved: favored_percent; provisional_informational: secondary_structure; provisional_conditional: geometry_delta.
+
+The ledger separates active rules from retained evidence, provisional interpretation, suspension and unavailable calibration. Retained records do not by themselves establish independent calibration or complete execution provenance. Counts of components are not counts of rows or distinct benchmarks. See `ref/threshold_evidence_status.yaml`; scientific grading still requires the applicable registry criterion and evidence.
+<!-- threshold-status-summary:end -->
+
+> **Historical through-round48 inventory (not current authority).** The following narrative is
+> retained as history. Current scoped states and limits are recorded by the ledger above (#766).
 >
 > **⚠ partial record — historical inventory.** Round 17 audited all `[benchmark]` rows for one defect: an extreme quoted
 > from a set whose *other* values were never written down. §3 and §4 hold **21 tolerance rows, 20 of

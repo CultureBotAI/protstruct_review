@@ -87,6 +87,15 @@ library byte; unversioned in-place library changes require a fresh cache directo
 These cache safeguards do not remeasure or retroactively authenticate historical
 benchmark records, nor establish independent-oracle scientific agreement.
 
+Standalone Reduce additionally requires `PROTSTRUCT_REDUCE_HET_DICT` (default:
+`~/tools/reduce-src/reduce_wwPDB_het_dict.txt`). The T05 clashscore and T14 flip-set
+benchmarks pass this file explicitly with `-DB`, retain stderr separately, and
+reject dictionary-open errors even if Reduce emits coordinates and exits zero.
+Their new `reduce_dictionary_v1/` cache binds model, binary, dictionary, options
+and output/log hashes. Legacy bare hydrogenated PDBs are not reused; damaged new
+cache evidence requires a fresh work directory. This execution fix does not
+retroactively repair historical benchmark results (#799).
+
 **Crystallography oracle env (Servalcat):**
 ```bash
 source /opt/homebrew/Caskroom/miniforge/base/etc/profile.d/conda.sh

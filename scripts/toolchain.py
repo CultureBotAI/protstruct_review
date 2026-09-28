@@ -49,6 +49,10 @@ REDUCE = _configured_path(
     "PROTSTRUCT_REDUCE",
     Path.home() / "tools" / "reduce-src" / "build" / "reduce_src" / "reduce",
 )
+REDUCE_HET_DICT = _configured_path(
+    "PROTSTRUCT_REDUCE_HET_DICT",
+    Path.home() / "tools" / "reduce-src" / "reduce_wwPDB_het_dict.txt",
+)
 PROBE = _configured_path(
     "PROTSTRUCT_PROBE", Path.home() / "tools" / "probe-src" / "probe"
 )

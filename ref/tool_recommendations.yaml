@@ -1960,3 +1960,106 @@ tool_recommendations:
     as_of_date: '2026-09-22'
     effective_at: '2026-09-22T09:00:00+00:00'
     supersedes_recommendation_ref: REC_T14_hbond-network_consistency_vs_standalone_reduce_top_considered
+
+  # 2026-09-27 / #785: capability-specific replacements; historical rows stay unchanged.
+  - id: REC_T02_omega_cis_trans_flips_top_considered_2026_09_27_capability_correction
+    metric_definition_ref: T02_omega_cis_trans_flips
+    tool_ref: gemmi validate
+    role: deprecated
+    justification: 'Deprecated unsupported producer: gemmi validate is not a geometry command. Gemmi rmsz
+      reports single-model torsion-restraint deviations, not matched-residue cis/trans changes between two
+      models. No paired omega-flip wrapper is established by this recommendation; retain the old tool identity
+      only for history.'
+    evidence_refs:
+    - https://raw.githubusercontent.com/project-gemmi/gemmi/v0.7.5/prog/rmsz.cpp
+    as_of_date: '2026-09-27'
+    effective_at: '2026-09-27T21:11:57-07:00'
+    supersedes_recommendation_ref: REC_T02_omega_cis_trans_flips_top_considered
+  - id: REC_T03_bond_angle_rmsd_top_considered_2026_09_27_capability_correction
+    metric_definition_ref: T03_bond_angle_rmsd
+    tool_ref: gemmi rmsz
+    role: top_considered
+    rank: 1
+    justification: Gemmi rmsz reports separate bond-length rmsD in Å and bond-angle rmsD in degrees, not
+      dimensionless rmsZ or one combined scalar. Apply the Bond-length RMSD and Bond-angle RMSD rows in
+      registry §3 only with their matched bond-count and restraint-library preconditions; record both populations
+      and monomer-library provenance. This corrects a command attribution, not a new benchmark or a new
+      wrapper.
+    evidence_refs:
+    - https://raw.githubusercontent.com/project-gemmi/gemmi/v0.7.5/prog/rmsz.cpp
+    - ref/thresholds_and_standards.md#3-cross-tool-agreement-tolerances
+    as_of_date: '2026-09-27'
+    effective_at: '2026-09-27T21:11:57-07:00'
+    supersedes_recommendation_ref: REC_T03_bond_angle_rmsd_top_considered
+  - id: REC_T05_bond-length_rmsd_top_considered_2026_09_27_capability_correction
+    metric_definition_ref: T05_bond-length_rmsd
+    tool_ref: gemmi rmsz
+    role: top_considered
+    rank: 1
+    justification: Use the bond rmsD output of gemmi rmsz in Å, not dimensionless rmsZ. Apply registry §3
+      Bond-length RMSD only when restrained bond counts match; distinguish matched and differing restraint
+      libraries using their applicable registry clauses. Retain the compared counts and monomer-library
+      provenance; otherwise report both values informationally, not a graded delta.
+    evidence_refs:
+    - https://raw.githubusercontent.com/project-gemmi/gemmi/v0.7.5/prog/rmsz.cpp
+    - ref/thresholds_and_standards.md#3-cross-tool-agreement-tolerances
+    as_of_date: '2026-09-27'
+    effective_at: '2026-09-27T21:11:57-07:00'
+    supersedes_recommendation_ref: REC_T05_bond-length_rmsd_top_considered
+  - id: REC_T05_bond-angle_rmsd_top_considered_2026_09_27_capability_correction
+    metric_definition_ref: T05_bond-angle_rmsd
+    tool_ref: gemmi rmsz
+    role: top_considered
+    rank: 1
+    justification: Use the angle rmsD output of gemmi rmsz in degrees, not dimensionless rmsZ. Apply registry
+      §3 Bond-angle RMSD with its restraint-library preconditions, distinguishing matched and differing
+      libraries. Retain restraint counts, the compared atom/restraint populations and monomer-library provenance;
+      do not infer matched populations from a tool name.
+    evidence_refs:
+    - https://raw.githubusercontent.com/project-gemmi/gemmi/v0.7.5/prog/rmsz.cpp
+    - ref/thresholds_and_standards.md#3-cross-tool-agreement-tolerances
+    as_of_date: '2026-09-27'
+    effective_at: '2026-09-27T21:11:57-07:00'
+    supersedes_recommendation_ref: REC_T05_bond-angle_rmsd_top_considered
+  - id: REC_T05_planarity_rmsd_top_considered_2026_09_27_capability_correction
+    metric_definition_ref: T05_planarity_rmsd
+    tool_ref: gemmi validate
+    role: deprecated
+    justification: 'Deprecated unsupported metric equivalence: gemmi validate is not a geometry command.
+      Gemmi rmsz aggregates the maximum atom-to-plane deviation for each plane restraint; its planarity
+      rmsD is not established as the catalog''s planarity RMSD definition or PHENIX-equivalent population.
+      No validated producer for this metric is supplied by this recommendation.'
+    evidence_refs:
+    - https://raw.githubusercontent.com/project-gemmi/gemmi/v0.7.5/prog/rmsz.cpp
+    as_of_date: '2026-09-27'
+    effective_at: '2026-09-27T21:11:57-07:00'
+    supersedes_recommendation_ref: REC_T05_planarity_rmsd_top_considered
+  - id: REC_T05_chirality_outliers_top_considered_2026_09_27_capability_correction
+    metric_definition_ref: T05_chirality_outliers
+    tool_ref: gemmi rmsz
+    role: alternative
+    rank: 2
+    justification: 'Qualified alternative only: gemmi rmsz reports wrong-handed chirality counts and the
+      number of checked centres, not general chiral-volume outliers. Retain the checked-centre denominator,
+      centre selection and monomer-library provenance; do not relabel the result as generic chirality-outlier
+      agreement or a percentage with an unmatched denominator. No implemented wrapper or cross-tool benchmark
+      is claimed.'
+    evidence_refs:
+    - https://raw.githubusercontent.com/project-gemmi/gemmi/v0.7.5/prog/rmsz.cpp
+    - https://raw.githubusercontent.com/project-gemmi/gemmi/v0.7.5/include/gemmi/topo.hpp
+    as_of_date: '2026-09-27'
+    effective_at: '2026-09-27T21:11:57-07:00'
+    supersedes_recommendation_ref: REC_T05_chirality_outliers_top_considered
+  - id: REC_T06_overall_b_top_considered_2026_09_27_capability_correction
+    metric_definition_ref: T06_overall_b
+    tool_ref: gemmi validate
+    role: deprecated
+    justification: 'Deprecated unsupported producer and definition: gemmi validate does not produce the
+      catalog''s undefined overall B statistic, and gemmi rmsz is not a B-factor producer. Do not substitute
+      mean atomic B or Wilson B. Specify the intended parameter, population and a validated producer before
+      recommending an oracle; retain the old tool identity only for history.'
+    evidence_refs:
+    - https://raw.githubusercontent.com/project-gemmi/gemmi/v0.7.5/prog/rmsz.cpp
+    as_of_date: '2026-09-27'
+    effective_at: '2026-09-27T21:11:57-07:00'
+    supersedes_recommendation_ref: REC_T06_overall_b_top_considered

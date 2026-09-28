@@ -10,6 +10,8 @@ never interpolated shell syntax.
 from __future__ import annotations
 
 import os
+import hashlib
+import re
 import shlex
 import shutil
 import subprocess
@@ -113,6 +115,86 @@ def phenix(executable: str) -> Path:
     return PHENIX_BIN / executable
 
 
+def parse_phenix_build(output: str) -> str | None:
+    """Parse PHENIX's own version fields, never a warning/cctbx version token.
+
+    The vendor banner prints Version and Release tag separately when its supplied
+    environment is sourced; without that split, Version may contain the full tag.
+    Unknown, duplicate, contradictory and development-tagged fields are not pins.
+    """
+    lines = [line.strip() for line in output.splitlines()]
+    compact = [match.group(1) for line in lines if (match := re.fullmatch(
+        r"PHENIX(?: version:)? (.+)", line, re.IGNORECASE))]
+    versions = [line.partition(":")[2].strip() for line in lines
+                if line.lower().startswith("version:")]
+    releases = [line.partition(":")[2].strip() for line in lines
+                if line.lower().startswith("release tag:")]
+    if compact:
+        if len(compact) != 1 or versions or releases:
+            return None
+        return compact[0] if re.fullmatch(r"\d+\.\d+(?:\.\d+)?-\d+", compact[0]) else None
+    if not any(line.lower().startswith("phenix:") for line in lines):
+        return None
+    if len(versions) != 1 or len(releases) > 1:
+        return None
+    match = re.fullmatch(r"(\d+\.\d+(?:\.\d+)?)(?:-(\d+))?", versions[0])
+    if not match:
+        return None
+    version, embedded_release = match.groups()
+    release = releases[0] if releases else embedded_release
+    if not release or not re.fullmatch(r"\d+", release):
+        return None
+    if embedded_release and embedded_release != release:
+        return None
+    return f"{version}-{release}"
+
+
+def phenix_version_environment() -> dict[str, str]:
+    """Ignore inherited banner overrides; let the configured install report its TAG.
+
+    Preserve the rest of the launch environment and never mutate the caller's.
+    """
+    environment = dict(os.environ)
+    for name in ("PHENIX_VERSION", "PHENIX_RELEASE_TAG"):
+        environment.pop(name, None)
+    return environment
+
+
+def phenix_build_evidence() -> dict:
+    """Measure only this configured installation's version, without PATH fallback.
+
+    Retain the complete command evidence. A path hint or configured expected version
+    cannot authorize refinement-cache reuse. Hashes identify the version dispatcher,
+    not every imported PHENIX library or the complete installed software tree.
+    """
+    configured = phenix("phenix.version")
+    probe: dict = {"configured_path": str(configured), "returncode": None,
+                   "stdout": "", "stderr": "",
+                   "ignored_inherited_version_variables": sorted(
+                       name for name in ("PHENIX_VERSION", "PHENIX_RELEASE_TAG")
+                       if name in os.environ)}
+    result = {"reported_version_source": None, "reported_version": None,
+              "version_probe": probe}
+    try:
+        resolved = configured.resolve(strict=True)
+        probe["resolved_path"] = str(resolved)
+        with resolved.open("rb") as source:
+            probe["sha256"] = hashlib.file_digest(source, "sha256").hexdigest()
+        probe["argv"] = [str(resolved)]
+        process = run_capture([resolved], timeout=10, env=phenix_version_environment())
+        probe.update(returncode=process.returncode, stdout=process.stdout, stderr=process.stderr)
+        with resolved.open("rb") as source:
+            unchanged = probe["sha256"] == hashlib.file_digest(source, "sha256").hexdigest()
+        if not unchanged:
+            probe["error"] = "version executable changed during measurement"
+        elif type(process.returncode) is int and process.returncode == 0:
+            result.update(reported_version_source="command_output",
+                          reported_version=process.stdout.strip())
+    except (OSError, subprocess.TimeoutExpired) as error:
+        probe["error"] = f"{type(error).__name__}: {error}"
+    return result
+
+
 def _discover_executable(
     configured_path: Path, executable_names: tuple[str, ...]
 ) -> Path | None:
@@ -165,13 +247,16 @@ def dssp_executable(required: bool = True) -> Path | None:
     return executable.resolve()
 
 
-def _version_output(executable: Path, arguments: tuple[str, ...]) -> str | None:
+def _version_output(
+    executable: Path, arguments: tuple[str, ...], *, env: Mapping[str, str] | None = None,
+) -> str | None:
     try:
         process = subprocess.run(
             [str(executable), *arguments],
             capture_output=True,
             text=True,
             timeout=10,
+            env=env,
             check=False,
         )
     except (OSError, subprocess.TimeoutExpired):
@@ -195,7 +280,10 @@ def external_tool_report() -> dict[str, dict[str, str | bool | None]]:
         executable = _discover_executable(configured, specification["executables"])
         version_args = specification["version_args"]
         reported_version = (
-            _version_output(executable, version_args)
+            _version_output(
+                executable, version_args,
+                env=phenix_version_environment() if name == "PHENIX" else None,
+            )
             if executable is not None and version_args is not None
             else None
         )
@@ -290,7 +378,7 @@ def run_logged(
     input_text: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run an argument vector with combined stdout/stderr written to a log."""
-    environment = ccp4_environment() if ccp4 else (dict(env) if env else None)
+    environment = ccp4_environment() if ccp4 else (dict(env) if env is not None else None)
     with Path(log_path).open("w") as log_handle:
         return subprocess.run(
             _argv(arguments),
@@ -316,7 +404,7 @@ def run_to_file(
     stderr: int | IO[str] = subprocess.DEVNULL,
 ) -> subprocess.CompletedProcess[str]:
     """Run an argument vector with stdout written to a data/output file."""
-    environment = ccp4_environment() if ccp4 else (dict(env) if env else None)
+    environment = ccp4_environment() if ccp4 else (dict(env) if env is not None else None)
     with Path(output_path).open("w") as output_handle:
         return subprocess.run(
             _argv(arguments),
@@ -340,7 +428,7 @@ def run_capture(
     input_text: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run an argument vector and capture stdout/stderr as text."""
-    environment = ccp4_environment() if ccp4 else (dict(env) if env else None)
+    environment = ccp4_environment() if ccp4 else (dict(env) if env is not None else None)
     return subprocess.run(
         _argv(arguments),
         cwd=cwd,

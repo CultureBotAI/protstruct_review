@@ -29,32 +29,52 @@ Before triage, read the repository routing and authority files:
 Refresh and inspect the default branch, local tree, and open PR dependencies:
 
 ```bash
+review_dir=$(mktemp -d "${TMPDIR:-/tmp}/protstruct-review-triage.XXXXXX")
 git fetch origin
 git branch --show-current
 git status --short
 git log origin/main..HEAD --oneline
 gh pr list --repo CultureBotAI/protstruct_review --state open --limit 5000 \
-  --json number,title,baseRefName,headRefName,mergeable,mergeStateStatus,url
+  --json number,title,baseRefName,headRefName,mergeable,mergeStateStatus,url \
+  > "$review_dir/open-prs.json"
+jq . "$review_dir/open-prs.json"
+gh api graphql -f query='query {
+  repository(owner:"CultureBotAI", name:"protstruct_review") {
+    issues(states:OPEN) { totalCount }
+    pullRequests(states:OPEN) { totalCount }
+    defaultBranchRef { name target { oid } }
+  }
+}' > "$review_dir/queue-totals.json"
+jq -e --slurpfile totals "$review_dir/queue-totals.json" \
+  'length == $totals[0].data.repository.pullRequests.totalCount' "$review_dir/open-prs.json"
 ```
 
 State whether `main` has moved, whether the tree is clean, and whether any open
 PR is based on a non-main branch. An issue implemented only on an unmerged branch
-is still open work.
+is still open work. If the user's read-only boundary prohibits fetching, compare
+against the API's default-branch SHA without changing local refs; disclose stale
+or unavailable local state. Use the user-approved scratch location when one is
+specified, rather than the generic temporary directory above.
 
 ## 2. Fetch the complete issue queue
 
 ```bash
-queue_file="${TMPDIR:-/tmp}/protstruct-review-open-issues.json"
 gh issue list --repo CultureBotAI/protstruct_review --state open --limit 5000 \
-  --json number,title,body,labels,comments,createdAt,updatedAt > "$queue_file"
-jq -r '.[] | [.number, .createdAt[:10], .title] | @tsv' "$queue_file"
-jq length "$queue_file"
+  --json number,title,body,labels,comments,createdAt,updatedAt,url \
+  > "$review_dir/open-issues.json"
+jq -r '.[] | [.number, .createdAt[:10], .title] | @tsv' "$review_dir/open-issues.json"
+jq length "$review_dir/open-issues.json"
+jq -e --slurpfile totals "$review_dir/queue-totals.json" \
+  'length == $totals[0].data.repository.issues.totalCount' "$review_dir/open-issues.json"
 ```
 
 Read and assess the saved bodies, labels, and comments, not only the title list.
-Omitting `--limit` silently samples the first 30. If exactly 5000 rows are
-returned, treat coverage as possibly truncated and fetch a higher limit before
-claiming a full review.
+Omitting `--limit` silently samples the first 30. Require successful commands and
+compare both saved list counts with the API totals before claiming complete
+coverage. If either count differs, increase the limit or paginate and re-fetch
+the totals; if the queue changed during collection, refresh both lists and totals.
+If a complete consistent collection cannot be obtained, report coverage as
+incomplete rather than treating a partial list or failed query as an empty queue.
 
 ## 3. Group without hiding issues
 
@@ -107,11 +127,17 @@ superseded, blocked, or an umbrella.
 - For schema/catalog issues, inspect canonical sources and generated views:
   `ref/catalog.yaml` owns the TSV; `schemas/protstruct_review.yaml` owns
   `protstruct_review/models.py`. Never diagnose drift from a generated file alone.
-- Use focused hermetic tests and `uv run --locked -- bash scripts/validate.sh`
-  when they materially verify a claim. Do not launch licensed PHENIX/CCP4 runs,
-  online fetches, or costly benchmark batches merely to triage. Mark evidence
-  that requires an optional external rerun as unverified and explain what is
-  missing.
+- When authorized and useful for a claim, use focused hermetic tests with
+  `uv run --locked --extra benchmark -- python scripts/test_<area>.py`, or the
+  required gate `uv run --locked --extra benchmark -- bash scripts/validate.sh`.
+  Use repository-selected Python 3.12 (`.python-version`), bootstrapped with
+  `uv sync --locked --extra benchmark`. Python 3.11 remains supported, but its
+  locked Biotite 1.6.0 skips exact retained T15/T16 replays from 1.7.1; a clean
+  no-extra environment also skips them. Neither is equivalent to the required
+  gate. Dependency installation may need network access; after installation the
+  gate itself is offline. Do not launch licensed PHENIX/CCP4 runs, online data
+  fetches, or costly benchmark batches merely to triage. Mark evidence requiring
+  an optional external rerun as unverified and explain what is missing.
 
 ### Guard evidence
 

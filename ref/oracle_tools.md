@@ -71,6 +71,33 @@ resolved paths, measured version output, separately labeled configured-path hint
 `version_divergence` flag before measurements begin. An override that does not match the registered
 version is therefore explicit in the benchmark record.
 
+**Refinement benchmark caches (#777):** the X-ray and cryo-EM refinement runners
+use `refinement_cache_v1/` evidence bundles, keyed by model/data bytes, exact
+arguments, configured/resolved dispatcher identity and the measured build from
+that configured installation's `phenix.version`. A path-derived version hint
+does not authorize reuse: an unknown or failed version probe permits only a fresh,
+explicitly non-reusable run. Successful bundles retain invocation metadata,
+return status, combined stdout/stderr and hashes of the products actually used
+(including mtriage's FSC curve). A changed build or input creates a separate
+bundle; legacy filename-only caches are neither adopted nor overwritten. Missing
+or corrupted evidence fails closed. Failed attempts retain their diagnostic logs.
+Consumers must use returned artifact paths, not reconstruct old cache filenames.
+This identifies a reported release/build and its dispatchers, not every installed
+library byte; unversioned in-place library changes require a fresh cache directory.
+These cache safeguards do not remeasure or retroactively authenticate historical
+benchmark records, nor establish independent-oracle scientific agreement.
+
+PHENIX version probes discard inherited `PHENIX_VERSION` and `PHENIX_RELEASE_TAG`
+so an older sourced environment cannot supply the new installation's banner (#816).
+Other launch variables are retained; the parent environment is unchanged. The
+shared runners honor an explicitly empty environment rather than inheriting it (#821).
+
+PDB/mmCIF perturbations use `deterministic_cache_v1/` bundles (#812/#822): regenerate
+the inexpensive expected coordinates, then verify source/parameter/generator evidence
+and exact output bytes before reuse. Use the returned path. Old requested filenames
+are preserved, not adopted; missing or changed evidence is a hard error. This does not
+claim that historical perturbations were wrong or authenticate missing old inputs.
+
 Standalone Reduce additionally requires `PROTSTRUCT_REDUCE_HET_DICT` (default:
 `~/tools/reduce-src/reduce_wwPDB_het_dict.txt`). The T05 clashscore and T14 flip-set
 benchmarks pass this file explicitly with `-DB`, retain stderr separately, and
@@ -253,8 +280,10 @@ mamba create -n cryst-oracles -c conda-forge python=3.11 servalcat
 > - The Homebrew build links against `libz-ng`, which is **not** pulled in as a dependency. Without
 >   `brew install zlib-ng` every `gemmi` invocation dies in dyld — the binary is on PATH and still
 >   unusable, so "installed" is not the same as "runnable" here.
-> - `gemmi rmsz` prints **rmsZ** (unitless) and **rmsD** (Å) on separate lines. Only rmsD compares
->   to a PHENIX RMSD; reading the rmsZ line instead is a units error, not a disagreement.
+> - `gemmi rmsz` prints **rmsZ** (unitless) and **rmsD** on separate lines. Its rmsD fields have
+>   different units: bond lengths and plane deviations in Å, bond angles and torsions in degrees.
+>   Compare the corresponding rmsD field and restraint population to a PHENIX RMSD;
+>   reading the rmsZ line instead is a units error, not a disagreement.
 > - The Python module is separate from the CLI (`pip install gemmi`); the CLI recipes above do not
 >   need it, but `scripts/bench_t06_r_offset.py` does.
 

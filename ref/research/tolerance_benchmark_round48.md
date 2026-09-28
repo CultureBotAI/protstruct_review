@@ -3,6 +3,13 @@
 > **Current status (2026-09-27, #809): historical record, not current grading authority.**
 > The executed producer pair was PHENIX-distributed Reduce versus mmtbx.reduce2, not the
 > claimed standalone pair. Flip grading is suspended; see the dated correction below.
+>
+> **Parser scope correction (2026-09-28, #846):** the legacy Reduce parser omits
+> source-defined HIS and small-Set records, incompletely represents signed,
+> insertion-code and alternate identities, and overwrites duplicate short keys.
+> The retained totals below are historical parser outputs, not a proven complete
+> residue population. No historical numerator or denominator is corrected here.
+> See [the new recount's limits](standalone_reduce_flip_recount_review_2026-09-28.md).
 
 Settles **#287**. Round 47 re-measured the Asn/Gln/His flip-set agreement (`reduce` vs `mmtbx.reduce2`)
 on the named 42-set and found the **raw** disagreement rate 10.95 %, over the ≤ 10 % band — but 82 % of it

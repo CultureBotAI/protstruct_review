@@ -553,7 +553,7 @@ rows:
   evidence_refs:
   - path: ref/research/tolerance_benchmark_round48.md
     anchor: '## Producer attribution and grading correction (2026-09-27, #809)'
-    sha256: 401cf5944d0d1d1a0d1c0aa074920901217d9687530c25607998fec28146dde3
+    sha256: 1e654e6f37064d603519ba8cf0363e86b44178b9b0a781829229ea4dfdb647ff
     hash_scope: full_file
   - path: ref/research/tolerance_benchmark_clashscore_h.md
     anchor: '## Version applicability clarification (2026-09-27, #798)'

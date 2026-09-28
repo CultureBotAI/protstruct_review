@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Benchmark the Asn/Gln/His flip-set half of the H-placement tolerance.
+"""Historical Asn/Gln/His flip-set benchmark implementation.
+
+Legacy parser warning (#846): HIS and small-Set records are omitted; signed,
+insertion-code and alternate identities are incomplete, and short-key duplicates
+overwrite. Its totals are legacy-parser summaries, not complete inventories.
+For new standalone evidence use recount_standalone_reduce_flips.py. A paired
+reduce2 comparison still needs a separately reviewed identity/coverage contract.
+The historical method below is not current grading authority (#809).
 
 `ref/thresholds_and_standards.md` requires the two H builders to agree on the
 "same Asn/Gln/His flip set". PR #28 measured H count and clashscore but not flips,
@@ -148,7 +155,12 @@ def confident_conflicts(reduce_calls: dict, reduce2_calls: dict) -> list:
 
 
 def flip_calls(model_h: Path) -> dict[tuple[str, int, str], tuple[bool, str]]:
-    """Map each flippable residue to (was_flipped, category) from its USER MOD line."""
+    """Reproduce legacy parsed short keys, not the complete mover population.
+
+    Known omissions/collisions are documented in #846 and the module warning.
+    Preserve this historical algorithm; do not join a new one-sided parser to
+    the old reduce2 domain or describe these keys as a complete residue inventory.
+    """
     calls = {}
     for line in model_h.read_text(errors="ignore").splitlines():
         if not line.startswith("USER  MOD"):

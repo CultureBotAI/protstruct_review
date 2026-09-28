@@ -4,12 +4,13 @@
 The negative-control agent leg once used name-based ``pkill`` patterns that
 crossed entry boundaries.  This module makes the safe unit explicit: one entry
 owns one directory and every launched process owns one POSIX session/process
-group.  Timeout and interrupt cleanup can therefore target the recorded PGID,
-never a process name.
+group.  Cleanup after every leader outcome targets that recorded PGID, never a
+process name. A reaped leader alone does not prove its descendants have stopped.
 """
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import signal
@@ -24,6 +25,11 @@ from typing import Mapping, Sequence
 _ENTRY_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*\Z")
 _ACTIVE_LOCK = threading.Lock()
 _ACTIVE_PROCESSES: dict[int, subprocess.Popen[str]] = {}
+_CLEANUP_REAP_TIMEOUT = 1.0
+
+
+class ProcessGroupCleanupError(RuntimeError):
+    """An owned group could not be proven absent within bounded cleanup."""
 
 
 @dataclass(frozen=True)
@@ -37,6 +43,7 @@ class ProcessGroupResult:
     timed_out: bool
     termination_signal: int | None
     start_new_session: bool = True
+    cleanup: dict | None = None
 
     def to_record(self) -> dict:
         return asdict(self)
@@ -83,16 +90,22 @@ class EntrySandbox:
         input_text: str | None = None,
         terminate_grace: float = 5.0,
     ) -> ProcessGroupResult:
-        """Run in a fresh session and terminate only that PGID on timeout.
+        """Run in a fresh session, checking/cleaning its PGID on every outcome.
 
         ``start_new_session=True`` makes the child's PID its PGID before exec.
         Recording that value avoids the race in querying a very short-lived
         child with ``os.getpgid()`` after it has already exited.
         """
+        if not math.isfinite(terminate_grace) or terminate_grace < 0:
+            raise ValueError("terminate_grace must be finite and nonnegative")
         log_path = self.child(log_name)
         log_path.parent.mkdir(parents=True, exist_ok=True)
         argv = [os.fspath(argument) for argument in arguments]
-        with log_path.open("w") as log_handle:
+        log_handle = log_path.open("w")
+        primary_error = None
+        propagating_error = None
+        cleanup = None
+        try:
             process = subprocess.Popen(
                 argv,
                 cwd=self.path,
@@ -105,19 +118,71 @@ class EntrySandbox:
             )
             pgid = process.pid
             timed_out = False
+            cleanup_failure = None
+            diagnostic_failure = False
             with _ACTIVE_LOCK:
                 _ACTIVE_PROCESSES[pgid] = process
             try:
-                process.communicate(input=input_text, timeout=timeout)
-            except subprocess.TimeoutExpired:
-                timed_out = True
-                self._terminate_group(process, pgid, terminate_grace)
-            except BaseException:
-                self._terminate_group(process, pgid, terminate_grace)
-                raise
+                try:
+                    process.communicate(input=input_text, timeout=timeout)
+                except subprocess.TimeoutExpired as error:
+                    timed_out = True
+                    primary_error = error
+                except BaseException as error:
+                    primary_error = error
+                try:
+                    cleanup = self._terminate_group(process, pgid, terminate_grace)
+                except BaseException as error:
+                    cleanup_failure = error
+                    cleanup = getattr(error, "cleanup_record", {
+                        "status": "unresolved", "pgid": pgid,
+                        "group_absent_verified": False,
+                        "error": f"{type(error).__name__}: {error}",
+                    })
+                    if primary_error is not None:
+                        primary_error.add_note(f"Owned PGID cleanup unresolved: {cleanup}")
+                        primary_error.cleanup_record = cleanup
+                        raise primary_error from error
+                    raise
+                finally:
+                    record = {"cleanup": cleanup, "leader_returncode": process.returncode,
+                              "timed_out": timed_out}
+                    if primary_error is not None:
+                        record["primary_exception"] = f"{type(primary_error).__name__}: {primary_error}"
+                    try:
+                        log_handle.write("\n[entry_sandbox cleanup] " + json.dumps(record, sort_keys=True) + "\n")
+                        log_handle.flush()
+                    except BaseException as log_error:
+                        diagnostic_failure = True
+                        original_error = primary_error if primary_error is not None else cleanup_failure
+                        if original_error is None:
+                            raise
+                        original_error.add_note(f"Cleanup diagnostic write failed: {type(log_error).__name__}: {log_error}")
+                if primary_error is not None and (not timed_out or diagnostic_failure):
+                    primary_error.cleanup_record = cleanup
+                    raise primary_error
             finally:
                 with _ACTIVE_LOCK:
                     _ACTIVE_PROCESSES.pop(pgid, None)
+        except BaseException as error:
+            propagating_error = error
+            raise
+        finally:
+            # A context manager's implicit close could replace the exception
+            # above. Preserve that exact object and its cleanup cause instead.
+            try:
+                log_handle.close()
+            except BaseException as log_error:
+                original_error = propagating_error if propagating_error is not None else primary_error
+                if original_error is None:
+                    raise
+                original_error.add_note(f"Cleanup diagnostic close failed: {type(log_error).__name__}: {log_error}")
+                if cleanup is not None:
+                    original_error.cleanup_record = cleanup
+                if propagating_error is None:
+                    # An otherwise handled timeout must expose lost diagnostics,
+                    # not discard the only exception carrying their failure.
+                    raise original_error
         return ProcessGroupResult(
             arguments=argv,
             returncode=process.returncode,
@@ -125,35 +190,65 @@ class EntrySandbox:
             pgid=pgid,
             timed_out=timed_out,
             termination_signal=(-process.returncode if process.returncode < 0 else None),
+            cleanup=cleanup,
         )
 
     @staticmethod
     def _terminate_group(
         process: subprocess.Popen[str], pgid: int, terminate_grace: float
-    ) -> None:
+    ) -> dict:
         """Terminate one known process group, escalating TERM to KILL.
 
         The group leader may obey TERM while one of its descendants ignores
         it.  Waiting only for the leader therefore is not proof that the
         owned process group is gone (#416).
         """
-        if not EntrySandbox._group_exists(pgid):
-            process.communicate()
-            return
+        if not math.isfinite(terminate_grace) or terminate_grace < 0:
+            raise ValueError("terminate_grace must be finite and nonnegative")
+        record = {"status": "unresolved", "pgid": pgid, "signal_attempts": [],
+                  "group_absent_verified": False}
         try:
-            os.killpg(pgid, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
-        deadline = time.monotonic() + terminate_grace
-        while EntrySandbox._group_exists(pgid) and time.monotonic() < deadline:
-            process.poll()  # Reap the leader promptly; descendants may remain.
-            time.sleep(0.02)
-        if EntrySandbox._group_exists(pgid):
+            if EntrySandbox._group_exists(pgid):
+                record["signal_attempts"].append("SIGTERM")
+                try:
+                    os.killpg(pgid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+                deadline = time.monotonic() + terminate_grace
+                while EntrySandbox._group_exists(pgid) and time.monotonic() < deadline:
+                    process.poll()  # Reap the leader promptly; descendants may remain.
+                    time.sleep(min(0.02, max(0.0, deadline - time.monotonic())))
+                process.poll()  # Reap again before deciding whether escalation is needed.
+                if EntrySandbox._group_exists(pgid):
+                    record["signal_attempts"].append("SIGKILL")
+                    try:
+                        os.killpg(pgid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    except PermissionError:
+                        # Preserve #850: suppress EPERM only when both the
+                        # leader has exited and a fresh group check is absent.
+                        returncode = process.poll()
+                        if returncode is None or EntrySandbox._group_exists(pgid):
+                            raise
+            deadline = time.monotonic() + _CLEANUP_REAP_TIMEOUT
             try:
-                os.killpg(pgid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-        process.communicate()
+                process.communicate(timeout=_CLEANUP_REAP_TIMEOUT)
+            except subprocess.TimeoutExpired as error:
+                raise ProcessGroupCleanupError("Leader not reaped within cleanup bound") from error
+            while EntrySandbox._group_exists(pgid):
+                if time.monotonic() >= deadline:
+                    raise ProcessGroupCleanupError(
+                        "Owned group remains present or unqueryable after cleanup; "
+                        "running descendants and unreaped zombies are not distinguished"
+                    )
+                time.sleep(min(0.02, max(0.0, deadline - time.monotonic())))
+            record.update(status="group_absent", group_absent_verified=True)
+            return record
+        except BaseException as error:
+            record["error"] = f"{type(error).__name__}: {error}"
+            error.cleanup_record = record
+            raise
 
     @staticmethod
     def _group_exists(pgid: int) -> bool:

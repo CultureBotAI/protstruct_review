@@ -133,8 +133,8 @@ def measure_entry(pdb_id: str, resolution: float, cache: Path,
         return {"pdb_id": pdb_id, "error": "model or map not in cache"}
     dep = EM.measure(model, map_file, resolution, work, f"det_dep_{pdb_id}")
     d0 = dep["d_fsc_model_masked"]
-    curve_path = work / f"mt_{EM.cache_key(f'det_dep_{pdb_id}', resolution)}" / EM.FSC_CURVE
-    curve = EM.read_fsc_curve(curve_path) if curve_path.exists() else []
+    curve_path = dep["curve_path"]
+    curve = EM.read_fsc_curve(curve_path) if curve_path else []
     row: dict[str, Any] = {
         "pdb_id": pdb_id, "resolution": resolution,
         "d_fsc_model_dep": d0, "d_fsc_dep_plausible": dep["d_fsc_model_plausible"],

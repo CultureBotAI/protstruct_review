@@ -10,6 +10,8 @@ never interpolated shell syntax.
 from __future__ import annotations
 
 import os
+import hashlib
+import re
 import shlex
 import shutil
 import subprocess
@@ -111,6 +113,72 @@ EXTERNAL_TOOL_SPECS = {
 def phenix(executable: str) -> Path:
     """Return one executable from the configured, version-pinned PHENIX tree."""
     return PHENIX_BIN / executable
+
+
+def parse_phenix_build(output: str) -> str | None:
+    """Parse PHENIX's own version fields, never a warning/cctbx version token.
+
+    The vendor banner prints Version and Release tag separately when its supplied
+    environment is sourced; without that split, Version may contain the full tag.
+    Unknown, duplicate, contradictory and development-tagged fields are not pins.
+    """
+    lines = [line.strip() for line in output.splitlines()]
+    compact = [match.group(1) for line in lines if (match := re.fullmatch(
+        r"PHENIX(?: version:)? (.+)", line, re.IGNORECASE))]
+    versions = [line.partition(":")[2].strip() for line in lines
+                if line.lower().startswith("version:")]
+    releases = [line.partition(":")[2].strip() for line in lines
+                if line.lower().startswith("release tag:")]
+    if compact:
+        if len(compact) != 1 or versions or releases:
+            return None
+        return compact[0] if re.fullmatch(r"\d+\.\d+(?:\.\d+)?-\d+", compact[0]) else None
+    if not any(line.lower().startswith("phenix:") for line in lines):
+        return None
+    if len(versions) != 1 or len(releases) > 1:
+        return None
+    match = re.fullmatch(r"(\d+\.\d+(?:\.\d+)?)(?:-(\d+))?", versions[0])
+    if not match:
+        return None
+    version, embedded_release = match.groups()
+    release = releases[0] if releases else embedded_release
+    if not release or not re.fullmatch(r"\d+", release):
+        return None
+    if embedded_release and embedded_release != release:
+        return None
+    return f"{version}-{release}"
+
+
+def phenix_build_evidence() -> dict:
+    """Measure only this configured installation's version, without PATH fallback.
+
+    Retain the complete command evidence. A path hint or configured expected version
+    cannot authorize refinement-cache reuse. Hashes identify the version dispatcher,
+    not every imported PHENIX library or the complete installed software tree.
+    """
+    configured = phenix("phenix.version")
+    probe: dict = {"configured_path": str(configured), "returncode": None,
+                   "stdout": "", "stderr": ""}
+    result = {"reported_version_source": None, "reported_version": None,
+              "version_probe": probe}
+    try:
+        resolved = configured.resolve(strict=True)
+        probe["resolved_path"] = str(resolved)
+        with resolved.open("rb") as source:
+            probe["sha256"] = hashlib.file_digest(source, "sha256").hexdigest()
+        probe["argv"] = [str(resolved)]
+        process = run_capture([resolved], timeout=10)
+        probe.update(returncode=process.returncode, stdout=process.stdout, stderr=process.stderr)
+        with resolved.open("rb") as source:
+            unchanged = probe["sha256"] == hashlib.file_digest(source, "sha256").hexdigest()
+        if not unchanged:
+            probe["error"] = "version executable changed during measurement"
+        elif type(process.returncode) is int and process.returncode == 0:
+            result.update(reported_version_source="command_output",
+                          reported_version=process.stdout.strip())
+    except (OSError, subprocess.TimeoutExpired) as error:
+        probe["error"] = f"{type(error).__name__}: {error}"
+    return result
 
 
 def _discover_executable(

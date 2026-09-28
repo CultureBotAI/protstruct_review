@@ -71,6 +71,22 @@ resolved paths, measured version output, separately labeled configured-path hint
 `version_divergence` flag before measurements begin. An override that does not match the registered
 version is therefore explicit in the benchmark record.
 
+**Refinement benchmark caches (#777):** the X-ray and cryo-EM refinement runners
+use `refinement_cache_v1/` evidence bundles, keyed by model/data bytes, exact
+arguments, configured/resolved dispatcher identity and the measured build from
+that configured installation's `phenix.version`. A path-derived version hint
+does not authorize reuse: an unknown or failed version probe permits only a fresh,
+explicitly non-reusable run. Successful bundles retain invocation metadata,
+return status, combined stdout/stderr and hashes of the products actually used
+(including mtriage's FSC curve). A changed build or input creates a separate
+bundle; legacy filename-only caches are neither adopted nor overwritten. Missing
+or corrupted evidence fails closed. Failed attempts retain their diagnostic logs.
+Consumers must use returned artifact paths, not reconstruct old cache filenames.
+This identifies a reported release/build and its dispatchers, not every installed
+library byte; unversioned in-place library changes require a fresh cache directory.
+These cache safeguards do not remeasure or retroactively authenticate historical
+benchmark records, nor establish independent-oracle scientific agreement.
+
 Standalone Reduce additionally requires `PROTSTRUCT_REDUCE_HET_DICT` (default:
 `~/tools/reduce-src/reduce_wwPDB_het_dict.txt`). The T05 clashscore and T14 flip-set
 benchmarks pass this file explicitly with `-DB`, retain stderr separately, and

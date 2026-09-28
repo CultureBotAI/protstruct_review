@@ -303,9 +303,11 @@ here, and say so.
   licensed and installed; only `phenix-2.0-5936` exists. Then point `PROTSTRUCT_PHENIX_BIN` at it (the
   benchmark environment report flags the version divergence) and run the round-38 panel (14 of its 17
   pairs have committed baselines; the input cache is not committed) under the registered decision rule,
-  canarying one entry first. **Fix [#777](https://github.com/CultureBotAI/protstruct_review/issues/777) first:** the benchmark's output caches
-  are not keyed by PHENIX build, so a run that reuses the round-38 work directory silently adopts the
-  pinned outputs and reports no version shift. **Not
+  canarying one entry first. **Cache prerequisite [#777](https://github.com/CultureBotAI/protstruct_review/issues/777):**
+  use the content/build-bound refinement runners described in `ref/oracle_tools.md`; legacy bare
+  output caches are not accepted. Check the canary's retained invocation, measured build, input hashes,
+  successful status and output hashes before fanning out. A path-version hint alone is not measured
+  build evidence, and a fresh cache is still required for unversioned in-place library changes. **Not
   retired:** [`stopping_criteria.md`](ref/research/stopping_criteria.md) closes a question for lack of
   power, not lack of access, and the registration has no stop clause.
 - **Active tool recommendations still name `gemmi validate`** for T05 bond/angle/planarity/chirality and
@@ -344,8 +346,9 @@ here, and say so.
   ([#767](https://github.com/CultureBotAI/protstruct_review/issues/767), P2 — manual, licensed; its tests
   mock execution).
 - **Found by the reviews of this reconciliation (PR #768)**, each filed before its fix:
-  - **Cross-version cache collision** ([#777](https://github.com/CultureBotAI/protstruct_review/issues/777), P1): `bench_refinement_deltas.py`
-    caches outputs by file name without the PHENIX build — a prerequisite for #760.
+  - **Cross-version cache collision** ([#777](https://github.com/CultureBotAI/protstruct_review/issues/777), P1):
+    content/build-bound X-ray and EM caches now have hermetic regression coverage; the scientific
+    cross-version execution remains #760. See `ref/research/refinement_cache_integrity_2026-09-27.md`.
   - #769–#773 (first review) and #778–#780 (reviews of the fix commits) were wording defects in this
     file, fixed in the same PR.
 

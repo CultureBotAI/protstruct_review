@@ -87,6 +87,17 @@ library byte; unversioned in-place library changes require a fresh cache directo
 These cache safeguards do not remeasure or retroactively authenticate historical
 benchmark records, nor establish independent-oracle scientific agreement.
 
+PHENIX version probes discard inherited `PHENIX_VERSION` and `PHENIX_RELEASE_TAG`
+so an older sourced environment cannot supply the new installation's banner (#816).
+Other launch variables are retained; the parent environment is unchanged. The
+shared runners honor an explicitly empty environment rather than inheriting it (#821).
+
+PDB/mmCIF perturbations use `deterministic_cache_v1/` bundles (#812/#822): regenerate
+the inexpensive expected coordinates, then verify source/parameter/generator evidence
+and exact output bytes before reuse. Use the returned path. Old requested filenames
+are preserved, not adopted; missing or changed evidence is a hard error. This does not
+claim that historical perturbations were wrong or authenticate missing old inputs.
+
 Standalone Reduce additionally requires `PROTSTRUCT_REDUCE_HET_DICT` (default:
 `~/tools/reduce-src/reduce_wwPDB_het_dict.txt`). The T05 clashscore and T14 flip-set
 benchmarks pass this file explicitly with `-DB`, retain stderr separately, and

@@ -134,6 +134,7 @@ governed:
       - "**±1.0** on the same model"
       - "`[template check 7]`"
       - "(Non-agreement indicates a reporting / parameterisation bug on the agent side.)"
+      - "≈ 0.5 on 1SAR here"
 
   - metric: "Rotamer outlier definition (§1)"
     section: 1
@@ -204,3 +205,63 @@ governed:
       - ref/driving_example_T05.md
     retired:
       - "bond-length RMSD within **±0.003 Å**"
+
+  # #763/#774/#776: the clashscore precondition is settled once. The benchmark
+  # built hydrogens separately on each path with the same reduce binary, so the
+  # registry requires the same binary/version and a matched convention, and no
+  # longer claims identical H coordinates.
+  - metric: "Clashscore builder precondition (§3)"
+    section: 3
+    current: "hydrogens from the same `reduce` binary and version"
+    registry_pattern: '\| Clashscore \|.*\*\*with a matched H-build convention\*\* and \*\*(hydrogens from the same `reduce` binary and version)\*\*'
+    consumers:
+      - ref/driving_example.md
+      - ref/driving_example_T03.md
+      - ref/driving_example_T04.md
+      - ref/driving_example_T05.md
+      - ref/driving_example_T11.md
+      - ref/driving_example_T14.md
+      - ref/structural_criteria.yaml
+    retired:
+      - "with a matched H-build convention (a mismatched convention is"
+      - "convention; a mismatched convention (nuclear vs electron-cloud H) makes the comparison"
+      - "makes the comparison **void, not failed** (record each tool's H convention)."
+      # #802: the pre-#795 structural_criteria.yaml T05_clashscore text.
+      - "matched hydrogen-build convention (electron-cloud vs nuclear); a mismatched convention gives"
+      - "so this Δ is larger than implementation noise alone"
+      - "because it compared two electron-cloud builds"
+
+  - metric: "Clashscore check precondition, H-placement row (§3)"
+    section: 3
+    current: "built by the same Richardson `reduce` binary and version"
+    registry_pattern: '\*\*Clashscore check:\*\* apply .*? only when both counters score hydrogens \*\*(built by the same Richardson `reduce` binary and version)\*\*'
+    consumers:
+      - ref/driving_example_T14.md
+      - ref/catalog.yaml
+      - ref/tasks_and_evaluations.md
+      - ref/tasks_and_evaluations.tsv
+      - ref/structural_criteria.yaml
+    retired:
+      - "only when two counters score the **same H-built coordinates**"
+      - "same Richardson H build;"
+      - "identical H-built coordinates"
+
+  # #797: the exact registry text #763 flagged (row 102's oracle column) and the
+  # section 3 method-dependence note are read too, so reverting either fails.
+  - metric: "Clashscore basis, H-placement oracle column (§3)"
+    section: 3
+    current: "each on hydrogens built separately by the same `reduce` binary and convention"
+    registry_pattern: 'clashscore: PHENIX/cctbx counter vs standalone `probe`, (each on hydrogens built separately by the same `reduce` binary and convention)'
+    consumers:
+      - ref/driving_example_T14.md
+    retired:
+      - "counter vs standalone `probe` on identical H coordinates"
+
+  - metric: "Clashscore method-dependence note (§3)"
+    section: 3
+    current: "requires both counters to score hydrogens built by the same `reduce` binary and"
+    registry_pattern: '> - \*\*Clashscore\*\* (requires both counters to score hydrogens built by the same `reduce` binary and)'
+    consumers:
+      - ref/driving_example_T14.md
+    retired:
+      - "requires two counters to score the same H-built coordinates"

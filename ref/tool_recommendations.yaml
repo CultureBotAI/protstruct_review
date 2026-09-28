@@ -1799,7 +1799,8 @@ tool_recommendations:
     supersedes_recommendation_ref: REC_T03_r_free_top_performing
 
   # Corrective dated T14 revisions: same-binary dispatch is not independence,
-  # and the clashscore envelope is defined on identical H-built coordinates.
+  # and the clashscore envelope is defined on identical H-built coordinates
+  # (that clause is superseded by the 2026-09-27 entry below, #792/#801).
   - id: REC_T14_h_added_top_considered_2026_09_22
     metric_definition_ref: T14_h_added
     tool_ref: reduce (standalone, Richardson)
@@ -1854,6 +1855,25 @@ tool_recommendations:
     as_of_date: '2026-09-22'
     effective_at: '2026-09-22T09:00:00+00:00'
 
+  # #804: USER MOD records carry H tallies and flip decisions, not dictionary
+  # provenance; the loaded het dictionary must be recorded separately (#799).
+  - id: REC_T14_h_added_top_considered_2026_09_27
+    metric_definition_ref: T14_h_added
+    tool_ref: reduce (standalone, Richardson)
+    role: top_considered
+    rank: 1
+    justification: >-
+      Canonical Richardson H-build record: keep the USER MOD H tallies and flip
+      decisions and record the het dictionary path actually loaded (-DB or the
+      default), which USER MOD does not show; a standalone build that cannot open
+      its dictionary adds no hetero hydrogens. When compared with phenix.reduce in
+      the measured installation this is a same-binary dispatcher/defaults check, not
+      an independent H-placement oracle. Use a distinct builder or experimental
+      neutron evidence for corroboration.
+    as_of_date: '2026-09-27'
+    effective_at: '2026-09-27T00:00:00+00:00'
+    supersedes_recommendation_ref: REC_T14_h_added_top_considered_2026_09_22
+
   - id: REC_T14_clashscore_delta_pre_vs_post_top_considered_2026_09_22
     metric_definition_ref: T14_clashscore_delta_pre_vs_post
     tool_ref: MolProbity (gold)
@@ -1867,6 +1887,23 @@ tool_recommendations:
     as_of_date: '2026-09-22'
     effective_at: '2026-09-22T09:00:00+00:00'
     supersedes_recommendation_ref: REC_T14_clashscore_delta_pre_vs_post_top_considered
+
+  # #763/#776/#792: the envelope is not defined on identical H-built coordinates;
+  # the benchmark built hydrogens separately with one reduce release.
+  - id: REC_T14_clashscore_delta_pre_vs_post_top_considered_2026_09_27
+    metric_definition_ref: T14_clashscore_delta_pre_vs_post
+    tool_ref: MolProbity (gold)
+    role: top_considered
+    rank: 1
+    justification: >-
+      Use one counter consistently for each builder's pre/post diagnostic. The
+      registered cctbx-versus-probe envelope applies only when both counters score
+      hydrogens from the same Richardson reduce release under a matched H convention;
+      each path may build its own, and identical coordinates were never established.
+      It does not grade the difference between changes produced by distinct H builders.
+    as_of_date: '2026-09-27'
+    effective_at: '2026-09-27T00:00:00+00:00'
+    supersedes_recommendation_ref: REC_T14_clashscore_delta_pre_vs_post_top_considered_2026_09_22
 
   - id: REC_T14_hbond_network_consistency_top_considered_2026_09_22
     metric_definition_ref: T14_hbond-network_consistency_vs_standalone_reduce

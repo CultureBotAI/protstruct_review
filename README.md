@@ -6,19 +6,19 @@ and Quality Data Sheet records.
 
 ## Setup
 
-Install [uv](https://docs.astral.sh/uv/), then bootstrap a clean checkout with one command:
-
-```bash
-uv sync --locked
-```
-
-The checked-in `.python-version` selects Python 3.12 (the supported range is Python 3.11–3.12), and
-`uv.lock` fixes the complete development environment used for validation, tests, linting, and
-LinkML model generation. To add the open-source Python benchmark tools:
+Install [uv](https://docs.astral.sh/uv/), then bootstrap a clean checkout with the same locked
+development and benchmark dependencies as CI:
 
 ```bash
 uv sync --locked --extra benchmark
 ```
+
+The checked-in `.python-version` selects Python 3.12 (the supported range is Python 3.11–3.12).
+Use this repository-selected version for CI-equivalent validation. `uv.lock` fixes the environment
+used for validation, tests, linting, LinkML model generation, and retained numerical replays.
+Python 3.11 remains supported, but its lock selects Biotite 1.6.0 rather than the retained T15/T16
+evidence's 1.7.1, so those exact replays skip. A clean no-extra environment also skips them; neither
+is a substitute for the required Python 3.12 benchmark-extra gate.
 
 PHENIX and CCP4 are separate licensed installations and are not installed by `uv`; see
 [`ref/oracle_tools.md`](ref/oracle_tools.md) for pinned versions and activation rules.
@@ -44,11 +44,15 @@ arguments are passed directly as subprocess argument vectors.
 
 ## Validation
 
-The hermetic gate needs no network, PHENIX, or CCP4:
+After the locked dependencies are installed, the hermetic gate itself needs no network, PHENIX,
+or CCP4. The `uv` wrapper may download missing dependencies before starting it:
 
 ```bash
-uv run --locked -- bash scripts/validate.sh
+uv run --locked --extra benchmark -- bash scripts/validate.sh
 ```
+
+For focused checks while iterating, use
+`uv run --locked --extra benchmark -- python scripts/test_<area>.py`.
 
 External-tool and online benchmarks are opt-in. Each benchmark's module documentation identifies
 its required binaries, data downloads, and command line.
@@ -87,7 +91,8 @@ checksum-pinned in `data/pdb_mtz/fixture_provenance.yaml`, and the hermetic gate
 or checksum drift. Citation metadata lives in [`CITATION.cff`](CITATION.cff) (#402, closed).
 
 The hermetic gate runs in GitHub Actions on Linux and macOS (`.github/workflows/validate.yml`) on every
-pull request and push to `main`. CI uses the locked `benchmark` extra so retained Biotite evidence is
-numerically replayed, then runs `scripts/validate.sh`; it does not invoke DockQ, PHENIX, CCP4, or an
-online benchmark. Both the green check and a local exit 0 are required before a merge. PHENIX/CCP4
-and online benchmarks remain deliberate, manual workflows.
+pull request and push to `main`. CI uses the repository-selected Python 3.12 and locked `benchmark`
+extra so retained Biotite evidence is numerically replayed, then runs `scripts/validate.sh`; it does
+not invoke DockQ, PHENIX, CCP4, or an online benchmark. Both green Linux/macOS checks on the reviewed
+PR head and a CI-equivalent local exit 0 are required before a merge. PHENIX/CCP4 and online
+benchmarks remain deliberate, manual workflows.

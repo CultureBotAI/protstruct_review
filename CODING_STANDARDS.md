@@ -253,6 +253,12 @@ Where this file and the handbook overlap, they must agree; if they drift, that i
 
 ## The gate
 
-20. **`bash scripts/validate.sh` must be green before commit.** It runs LinkML validation of every
-    record, referential integrity, the emitter regression tests, and the published-view drift
-    check. A change that needs the gate relaxed needs the gate *fixed*, not bypassed.
+20. **The locked, CI-equivalent gate must be green before commit.** Use the repository-selected
+    Python 3.12 (`.python-version`), bootstrap with `uv sync --locked --extra benchmark`, and run
+    `uv run --locked --extra benchmark -- bash scripts/validate.sh`. It runs LinkML validation of
+    every record, referential integrity, the emitter regression tests, retained numerical replays,
+    and the published-view drift check. Python 3.11 remains supported, but its locked Biotite
+    version cannot replay the retained 1.7.1 evidence; a clean no-extra environment also skips
+    those exact T15/T16 replays. Neither substitutes for the required gate. Before merging, also
+    require green Linux/macOS CI on the reviewed PR head. A change that needs the gate relaxed
+    needs the gate *fixed*, not bypassed. External-tool and online benchmarks remain opt-in.

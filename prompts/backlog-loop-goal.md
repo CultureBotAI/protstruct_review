@@ -1,6 +1,6 @@
 <task>
-Take a goal through the full change cycle in the structural-biology evaluation harness at
-/Users/marcin/Documents/VIMSS/ontology/protstruct_review (GitHub repo CultureBotAI/protstruct_review):
+From the repository root, take a goal through the full change cycle in the
+structural-biology evaluation harness (GitHub repo CultureBotAI/protstruct_review):
 
   survey → triage and prioritize → branch → work → push → PR → adversarial review
          → file issues → address → pause for approval → merge → clean up
@@ -14,21 +14,37 @@ Two rules override everything else in this prompt:
      Approval of a previous PR is not approval of this one.
   2. BRANCH BEFORE THE FIRST EDIT, not after the work is done.
 
-The gate is `bash scripts/validate.sh` — there is no CI. It must exit 0 before any merge, and the
-unit suite (`python3 scripts/test_bench_tolerances.py`) must pass.
+Use the repository-selected Python 3.12 and `uv sync --locked --extra benchmark`.
+The required local gate is `uv run --locked --extra benchmark -- bash scripts/validate.sh`;
+it includes the tolerance unit suite and must exit 0 before commit. CI runs the same command
+on Ubuntu and macOS for PRs and main pushes. Python 3.11 remains supported, but its locked Biotite
+version differs; a Python 3.11 or no-extra run can skip exact evidence replays and is not CI-equivalent.
+Before merging, both `validate (ubuntu-latest)` and `validate (macos-latest)` must report SUCCESS
+for the reviewed head. External-tool runs remain opt-in, not part of this hermetic gate.
 </task>
 
 <survey>
 Before proposing anything, establish state and report it in one short paragraph:
 
-  gh issue list --state open --json number,title
-  gh pr list  --state open --json number,title,baseRefName,mergeable,mergeStateStatus
+  set -euo pipefail
+  issue_queue="$(mktemp "${TMPDIR:-/tmp}/protstruct-issues.XXXXXX")"
+  pr_queue="$(mktemp "${TMPDIR:-/tmp}/protstruct-prs.XXXXXX")"
+  gh issue list --repo CultureBotAI/protstruct_review --state open --limit 5000 \
+    --json number,title,body,comments,labels,url > "$issue_queue"
+  gh pr list --repo CultureBotAI/protstruct_review --state open --limit 5000 \
+    --json number,title,baseRefName,headRefName,mergeable,mergeStateStatus,url > "$pr_queue"
+  totals="$(gh api graphql -f query='query { repository(owner:"CultureBotAI", name:"protstruct_review") { issues(states:OPEN) { totalCount } pullRequests(states:OPEN) { totalCount } } }')"
+  test "$(jq length "$issue_queue")" -eq "$(jq -r '.data.repository.issues.totalCount' <<< "$totals")" || { echo "Incomplete issue queue" >&2; exit 1; }
+  test "$(jq length "$pr_queue")" -eq "$(jq -r '.data.repository.pullRequests.totalCount' <<< "$totals")" || { echo "Incomplete PR queue" >&2; exit 1; }
   git branch --show-current && git status --short
   git fetch origin && git log origin/main..HEAD --oneline
-  bash scripts/validate.sh
+  uv run --locked --extra benchmark -- bash scripts/validate.sh
 
 Note specifically: whether main has moved, whether any open PR is based on another branch rather
-than main (see <pr_dependencies>), and whether the working tree is clean.
+than main (see <pr_dependencies>), and whether the working tree is clean. Read every saved issue
+body and comment. If a count differs, paginate/increase the limit or re-fetch a changed queue;
+do not claim a complete survey until both list counts equal the API totals. Stop on any command
+failure and disclose unavailable remote state rather than treating it as an empty queue.
 </survey>
 
 <triage>
@@ -80,6 +96,11 @@ it had not been pushed yet.
 
 Commit messages state what changed, WHY, and what failure it prevents. Push, then open a PR whose
 body a reviewer could act on without reading the diff first.
+
+List the exact intended issue closures and the separate outstanding issues. Automatic closing
+directives belong only on fully completed issues. Never negate a closing directive: GitHub can
+still interpret it as a closure (#815). Use neutral “Related” or “Remaining work” references for
+unfinished scope, and check both the PR body and planned squash message for unintended directives.
 </work>
 
 <review_contract>
@@ -95,8 +116,10 @@ Check specifically:
     Watch for a stronger version of a true result: "validated" for "measured on a subset",
     "independent" for a re-run of the same inputs, "across versions" for one pinned binary.
   - DENOMINATORS. Did a count silently change meaning? Is n stated anywhere?
-  - GUARDS. Would the new test fail if the fix were reverted? PROVE IT — revert, watch it fail,
-    restore.
+  - GUARDS. Would the new test fail against the old behavior? Prove the expected failure using
+    an in-memory historical implementation or an isolated scratch copy/fixture. Never revert or
+    restore the reviewed worktree; it remains read-only (#817). Record exactly which assertion
+    failed, not merely an import/setup error.
   - SIBLINGS. If this fixes one instance of a defect class, grep for the others. A defect fixed in
     one script is usually still present in its neighbour.
   - LEAD SENTENCES. In the long §3/§4 rows of ref/thresholds_and_standards.md the bolded opener is
@@ -154,14 +177,27 @@ PAUSE. Summarize what merging would land, then wait for explicit go-ahead.
 On approval, match the repo's existing merge style (squash; main's history is one commit per round,
 titled "... (#NN)"):
 
-  bash scripts/validate.sh                       # must exit 0
-  gh pr merge <N> --squash --delete-branch       # merges, and deletes the REMOTE branch
+  uv run --locked --extra benchmark -- bash scripts/validate.sh  # must exit 0
+  gh pr view <N> --repo CultureBotAI/protstruct_review --json headRefOid,baseRefName,statusCheckRollup,closingIssuesReferences
+  gh pr merge <N> --repo CultureBotAI/protstruct_review --squash --match-head-commit <reviewed-sha>
   git checkout main && git pull
-  git branch -D <branch>                         # LOCAL only; may already be gone, harmless if so
   gh issue close <fixed> --comment "Fixed in #<N>, merged to main as <sha>."
 
+Before the merge command, verify the exact headRefOid equals the reviewed SHA, the base is correct,
+and both named CI jobs above succeeded for that head. If the head changes, repeat review and
+validation. Compare closingIssuesReferences with the exact intended closure list, including an
+empty list when nothing is fully resolved. Inspect the planned squash message as well; GitHub's
+closing references are not a substitute for checking its commit-message directives.
+
+Do not delete a base branch while dependent PRs still target it. After the merge is confirmed,
+resolve the exact local/remote branch tips, verify the merged content, and delete only the authorized
+completed branch. Prefer ordinary local `git branch -d`; a squash merge can require explicit `-D`,
+but only after content verification, not as an unconditional cleanup step. Preserve unrelated
+changes and worktrees; do not switch or pull across a dirty worktree just to follow this example.
+
 Then confirm each separately — PR merged, REMOTE branch gone (`git ls-remote --heads origin
-<branch>`), local branch gone, issues closed, gate green on main. Do not infer the remote from the
+<branch>`), local branch gone, intended issues closed, outstanding issues still open, gate green on
+main. Verify both closure and non-closure against the pre-merge lists (#815). Do not infer the remote from the
 local deletion; they are done by different commands. Note that squash
 merging collapses the pre-registration commit, so a write-up citing a bare hash will not resolve
 from main — cite the PR instead.

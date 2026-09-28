@@ -38,6 +38,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import statistics
@@ -49,6 +50,7 @@ if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 from toolchain import run_logged, split_args
 from refinement_cache import OperationFailed, cached_phenix_operation
+from deterministic_cache import deterministic_product, generator_identity
 
 _CLASHSCORE = re.compile(r"clashscore\s*=\s*([\d.]+)")
 _RAMA_FAV = re.compile(r"SUMMARY:\s*([\d.]+)%\s*favored")
@@ -328,23 +330,44 @@ def summarize(rows: list[dict]) -> dict[str, Any]:
 PERTURB_SIGMAS = [0.05, 0.1, 0.2, 0.3, 0.5, 1.0]
 
 
-def perturb(model: Path, sigma: float, work: Path, seed: int = 7) -> Path:
-    """Copy `model` with Gaussian noise added to every atom coordinate."""
+def _perturb_coordinates(source: bytes, sigma: float, seed: int) -> bytes:
+    """Keep the original seeded per-coordinate Gaussian/PDB rounding algorithm."""
     import random
 
-    out = work / f"{model.stem}_perturb{sigma}.pdb"
-    if out.exists() and out.stat().st_size:
-        return out
     rng = random.Random(seed)
     lines = []
-    for line in model.read_text(errors="ignore").splitlines():
+    for line in source.decode(errors="ignore").splitlines():
         if line.startswith(("ATOM", "HETATM")) and len(line) >= 54:
             x, y, z = float(line[30:38]), float(line[38:46]), float(line[46:54])
             x, y, z = (v + rng.gauss(0, sigma) for v in (x, y, z))
             line = f"{line[:30]}{x:8.3f}{y:8.3f}{z:8.3f}{line[54:]}"
         lines.append(line)
-    out.write_text("\n".join(lines) + "\n")
-    return out
+    return ("\n".join(lines) + "\n").encode()
+
+
+def perturb(model: Path, sigma: float, work: Path, seed: int = 7) -> Path:
+    """Generate or verify deterministic coordinates with source/seed provenance.
+
+    Coordinate generation is cheap, so compute the expected bytes even on reuse.
+    The producing script digest/runtime conservatively separate generator
+    revisions; even unrelated edits to this script make a new bundle.
+    Old filename-only products are neither adopted nor overwritten (#812).
+    """
+    source = model.read_bytes()
+    sigma = float(sigma)
+    expected = _perturb_coordinates(source, sigma, seed)
+    provenance = {
+        "source": {"path": str(model.resolve()),
+                   "sha256": hashlib.sha256(source).hexdigest()},
+        "sigma_hex": sigma.hex(),
+        "seed": seed,
+        "generator": generator_identity(
+            __file__, "random.Random.gauss/PDB-coordinate-jitter-v1",
+        ),
+    }
+    return deterministic_product(
+        work, "pdb-perturb", filename="model.pdb", provenance=provenance, expected=expected,
+    )
 
 
 def detection_test(model: Path, work: Path) -> list[dict]:

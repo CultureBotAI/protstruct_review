@@ -1,0 +1,18 @@
+{
+  "pgid": 20899,
+  "pid": 20899,
+  "recorded_at": "2026-09-28T08:09:32.784130+00:00",
+  "request_sha256": "49606cfdced8040bb6a470e0bb5653972d5ad74cfc357a2691842d25d194a523",
+  "wrapper_argv": [
+    "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/gemmi-capability-integration/.venv/bin/python",
+    "-B",
+    "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/gemmi-capability-integration/scripts/t15_ss_agreement.py",
+    "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/gemmi-capability-integration/data/coscientists/openscientist/retained_evidence_2026-09-27_canaries02/t15_cache/1bni.pdb",
+    "--eval-id",
+    "EVAL_T15_1BNI_DENOMINATOR_DIAGNOSTIC",
+    "--subject-ref",
+    "retained:1BNI:sha256:e7a0612d97d3b9f52f2ab6efcaa94b8baa410c37e30107992e4e2564b5385796",
+    "--evidence-out",
+    "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/gemmi-capability-integration/data/coscientists/openscientist/retained_evidence_2026-09-27_t15-diagnostic-1bni01/entries/T15_1BNI/failed-attempt.json"
+  ]
+}

@@ -1,0 +1,2 @@
+t15_ss_agreement: failed-attempt evidence retained: data/coscientists/openscientist/retained_evidence_2026-09-27_t15-diagnostic-1bni01/entries/T15_1BNI/failed-attempt.json
+t15_ss_agreement: assigners scored different residue sets: DSSP-only=0, biotite-only=1; T15 agreement and its DSSP H+E interpretability diagnostic require the same denominator.

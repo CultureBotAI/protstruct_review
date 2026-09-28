@@ -1,0 +1,128 @@
+{
+  "entry_absolute": "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/gemmi-capability-integration/data/coscientists/openscientist/retained_evidence_2026-09-27_t15-diagnostic-1bni01/entries/T15_1BNI",
+  "executables": {
+    "dssp": {
+      "path": "/opt/homebrew/Cellar/dssp/4.6.1/bin/mkdssp",
+      "sha256": "36e6cb32dbcd6fe457611d8491fc14ea58cbb0787947350fe74df9cd36411ee5",
+      "size_bytes": 2541984
+    },
+    "gemmi": {
+      "path": "/opt/homebrew/Cellar/gemmi/0.7.5/bin/gemmi",
+      "sha256": "992dae028b5a18e41b026947f4f6279fe088426d0a1a9821b1f842c501e22121",
+      "size_bytes": 1939016
+    }
+  },
+  "format": "t15-1bni-diagnostic-launch-v1",
+  "input_identity": {
+    "sha256": "e7a0612d97d3b9f52f2ab6efcaa94b8baa410c37e30107992e4e2564b5385796",
+    "size_bytes": 263574
+  },
+  "input_ref": "data/coscientists/openscientist/retained_evidence_2026-09-27_canaries02/t15_cache/1bni.pdb",
+  "policy": "one entry only; no fetch, retry, cohort continuation or quality grading",
+  "python": {
+    "executable": "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/gemmi-capability-integration/.venv/bin/python",
+    "executable_identity": {
+      "sha256": "de22baf27e7120d1c605812f9acdf55b344d8aeef16e9d0fd543f5157e79792e",
+      "size_bytes": 33815
+    },
+    "package_metadata": {
+      "DockQ": {
+        "path": "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/gemmi-capability-integration/.venv/lib/python3.12/site-packages/dockq-2.1.3.dist-info/METADATA",
+        "sha256": "f8241586d348b2740360f4e2a186925883f02578b5a82a241780313017f3117e",
+        "size_bytes": 11413
+      },
+      "PyYAML": {
+        "path": "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/gemmi-capability-integration/.venv/lib/python3.12/site-packages/pyyaml-6.0.3.dist-info/METADATA",
+        "sha256": "03c3b415ed38d09faedc49360e930769b40c58f68585e6de00e2e4916a858d34",
+        "size_bytes": 2351
+      },
+      "biotite": {
+        "path": "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/gemmi-capability-integration/.venv/lib/python3.12/site-packages/biotite-1.7.1.dist-info/METADATA",
+        "sha256": "2ba081c54130f787e8b7e090a9c4cb861ccf384cff7e2861e8b3d9b7f54f50c7",
+        "size_bytes": 5670
+      },
+      "gemmi": {
+        "path": "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/gemmi-capability-integration/.venv/lib/python3.12/site-packages/gemmi-0.7.5.dist-info/METADATA",
+        "sha256": "b82dba712f27ff666e9b49a6a5b37d5ce7b52a2886de8e3f944535972bc09020",
+        "size_bytes": 2308
+      },
+      "numpy": {
+        "path": "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/gemmi-capability-integration/.venv/lib/python3.12/site-packages/numpy-1.26.4.dist-info/METADATA",
+        "sha256": "804ce5ed37916ab3a6d4a50b7e13769fe64aa9f1265cfe3aefb6f90737bacc66",
+        "size_bytes": 61064
+      },
+      "pydantic": {
+        "path": "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/gemmi-capability-integration/.venv/lib/python3.12/site-packages/pydantic-2.13.4.dist-info/METADATA",
+        "sha256": "d1e56c3412492512fb6b59a9dfc25ab7af2a8204585cd7bca000513023133394",
+        "size_bytes": 109397
+      },
+      "scipy": {
+        "path": "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/gemmi-capability-integration/.venv/lib/python3.12/site-packages/scipy-1.17.1.dist-info/METADATA",
+        "sha256": "b1cd2c784f6e003c6c71af4c5ee57f6370ee467d17b656250d9fd38cf579d7d0",
+        "size_bytes": 62145
+      }
+    },
+    "packages": {
+      "DockQ": "2.1.3",
+      "PyYAML": "6.0.3",
+      "biotite": "1.7.1",
+      "gemmi": "0.7.5",
+      "numpy": "1.26.4",
+      "pydantic": "2.13.4",
+      "scipy": "1.17.1"
+    },
+    "prefix": "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/gemmi-capability-integration/.venv",
+    "version": "3.12.11 (main, Aug 15 2025, 11:56:45) [Clang 14.0.3 (clang-1403.0.22.14.1)]"
+  },
+  "registration_commit": "f05783af4d2c0a50b9cae847fbd794cd33093ca2",
+  "repo": "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/gemmi-capability-integration",
+  "root": "data/coscientists/openscientist/retained_evidence_2026-09-27_t15-diagnostic-1bni01",
+  "source_identities": {
+    ".python-version": {
+      "sha256": "7b55f8e67b5623c4bef3fa691288da9437d79d3aba156de48d481db32ac7d16d",
+      "size_bytes": 5
+    },
+    "pyproject.toml": {
+      "sha256": "13254e777b00c58c9048a8e8dea823a7ef80da53e48b148b89cad9ed6377a49d",
+      "size_bytes": 989
+    },
+    "ref/research/t15_failed_attempt_diagnostic_preregistration_2026-09-27.md": {
+      "sha256": "2375258249c2cc13d2fec9bc808433a3cf0ec29c561ab2ff2eab2725db7dc327",
+      "size_bytes": 16045
+    },
+    "scripts/entry_sandbox.py": {
+      "sha256": "abeeb0f2307b1ea13e4aa45057137f799a80428b0b3c5036c7b8f931bb9c50cd",
+      "size_bytes": 13183
+    },
+    "scripts/run_t15_failed_attempt_diagnostic.py": {
+      "sha256": "65aa66cf76e1a2fdd268a77def74b01b3afc078d20d17715b22268f309a8a130",
+      "size_bytes": 39285
+    },
+    "scripts/t15_ss_agreement.py": {
+      "sha256": "e211bba8a8767e011cd4dbe5adf044fdd7ec6fe77e00020536da101026657dd4",
+      "size_bytes": 40833
+    },
+    "scripts/toolchain.py": {
+      "sha256": "e32dd23ba61d684edea4cf86208c6d7fec62af060898c63cba96f40bd0bc338f",
+      "size_bytes": 17165
+    },
+    "uv.lock": {
+      "sha256": "c80b8cd4c874a7cf46cd6d5712df4d0a5fd2e1ac755d5ab1efb07d94448fa8b9",
+      "size_bytes": 186642
+    }
+  },
+  "started_at": "2026-09-28T08:09:32.682140+00:00",
+  "timeout_seconds": 900,
+  "wrapper_argv": [
+    "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/gemmi-capability-integration/.venv/bin/python",
+    "-B",
+    "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/gemmi-capability-integration/scripts/t15_ss_agreement.py",
+    "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/gemmi-capability-integration/data/coscientists/openscientist/retained_evidence_2026-09-27_canaries02/t15_cache/1bni.pdb",
+    "--eval-id",
+    "EVAL_T15_1BNI_DENOMINATOR_DIAGNOSTIC",
+    "--subject-ref",
+    "retained:1BNI:sha256:e7a0612d97d3b9f52f2ab6efcaa94b8baa410c37e30107992e4e2564b5385796",
+    "--evidence-out",
+    "/private/tmp/claude-501/-Users-marcin-Documents-VIMSS-ontology-protstruct-review/27a177c7-2112-4108-8d4a-ed95cab88332/scratchpad/codex/gemmi-capability-integration/data/coscientists/openscientist/retained_evidence_2026-09-27_t15-diagnostic-1bni01/entries/T15_1BNI/failed-attempt.json"
+  ]
+}

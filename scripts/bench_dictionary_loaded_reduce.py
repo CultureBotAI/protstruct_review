@@ -60,15 +60,16 @@ def save_new(path: Path, value: dict) -> None:
     write_new(path, (json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n").encode())
 
 
-def identity(path: Path) -> dict:
+def identity(path: Path, *, read_bytes=None) -> dict:
     resolved = path.resolve(strict=True)
     if not resolved.is_file() or not resolved.stat().st_size:
         raise ValueError(f"Nonempty file required: {path}")
-    return {"path": str(resolved), "sha256": digest(resolved.read_bytes()), "bytes": resolved.stat().st_size}
+    data = resolved.read_bytes() if read_bytes is None else read_bytes(path)
+    return {"path": str(resolved), "sha256": digest(data), "bytes": resolved.stat().st_size}
 
 
-def verify_identity(record: dict) -> None:
-    if identity(Path(record["path"])) != record:
+def verify_identity(record: dict, *, read_bytes=None) -> None:
+    if identity(Path(record["path"]), read_bytes=read_bytes) != record:
         raise ValueError(f"Source/input/executable changed: {record['path']}")
 
 
@@ -77,8 +78,8 @@ def require(condition: bool, message: str) -> None:
         raise ValueError(f"Inconsistent retained evidence: {message}")
 
 
-def checked_bytes(path: Path, sha256: str) -> bytes:
-    data = path.read_bytes()
+def checked_bytes(path: Path, sha256: str, *, read_bytes=None) -> bytes:
+    data = path.read_bytes() if read_bytes is None else read_bytes(path)
     require(digest(data) == sha256, f"bytes changed: {path}")
     return data
 
@@ -309,28 +310,34 @@ def scoped_version_record(name: str, item: dict, version: dict, expected: str) -
             "version_command": version}
 
 
-def admit_evidence(request: dict, directory: Path, result: dict) -> None:
-    """Require one coherent input/helper/raw/result chain at both boundaries."""
+def admit_evidence(request: dict, directory: Path, result: dict, *, read_bytes=None) -> None:
+    """Require one coherent input/helper/raw/result chain at both boundaries.
+
+    Read-only postprocessors may inject a regular/no-follow byte reader (#870).
+    None preserves existing caller behavior; the reader reaches every file read
+    here, including identity and retained-byte helpers. Counting is unchanged.
+    """
     def read_json(path):
-        return json.loads(path.read_text())
+        text = path.read_text() if read_bytes is None else read_bytes(path).decode("utf-8")
+        return json.loads(text)
 
     require(read_json(directory / "request.json") == request, "launch request changed")
     for source in request["source_files"]:
-        verify_identity(source)
-        checked_bytes(directory / "sources" / Path(source["path"]).name, source["sha256"])
+        verify_identity(source, read_bytes=read_bytes)
+        checked_bytes(directory / "sources" / Path(source["path"]).name, source["sha256"], read_bytes=read_bytes)
     prereg = request["preregistration_identity"]
-    verify_identity(prereg)
-    checked_bytes(directory / "sources/preregistration.md", prereg["sha256"])
+    verify_identity(prereg, read_bytes=read_bytes)
+    checked_bytes(directory / "sources/preregistration.md", prereg["sha256"], read_bytes=read_bytes)
     provenance = read_json(directory / "input-provenance.json")
     model = provenance["retained_file"]
     require(Path(model["path"]) == directory / "input.pdb", "retained input location")
-    verify_identity(model)
-    model_bytes = checked_bytes(Path(model["path"]), model["sha256"])
+    verify_identity(model, read_bytes=read_bytes)
+    model_bytes = checked_bytes(Path(model["path"]), model["sha256"], read_bytes=read_bytes)
     require(read_json(directory / "input-inventory.json") == pdb_inventory(model_bytes, request["entry"]),
             "input inventory")
     require(provenance["origin"] == ("retained_local" if request["input"] else "fresh_fetch"), "input origin")
     if provenance["origin"] == "retained_local":
-        verify_identity(provenance["original_file"])
+        verify_identity(provenance["original_file"], read_bytes=read_bytes)
         require(provenance["original_file"]["path"] == request["input"]
                 and provenance["original_file"]["sha256"] == model["sha256"]
                 and provenance["original_url"] == request["source_url_asserted"]
@@ -342,7 +349,7 @@ def admit_evidence(request: dict, directory: Path, result: dict) -> None:
     tools = read_json(directory / "tool-identities.json")
     scoped = {}
     for name, item in tools.items():
-        verify_identity(item)
+        verify_identity(item, read_bytes=read_bytes)
         require(item["path"] == request["configured_tools"][name], "configured tool binding")
         if name == "dictionary":
             continue
@@ -365,16 +372,18 @@ def admit_evidence(request: dict, directory: Path, result: dict) -> None:
                 and read_json(command / "result.json") == receipt["result"]
                 and receipt["result"].get("returncode") == 0, "command receipt")
         for stream in ("stdout", "stderr"):
-            checked_bytes(command / f"{stream}.bin", receipt["result"][f"{stream}.bin_sha256"])
+            checked_bytes(command / f"{stream}.bin", receipt["result"][f"{stream}.bin_sha256"], read_bytes=read_bytes)
 
     h_model = result["h_model"]
     h_path = Path(h_model["path"])
     require(h_path.is_relative_to(directory / "work"), "H output location")
-    verify_identity(h_model)
-    h_bytes = checked_bytes(h_path, h_model["sha256"])
+    verify_identity(h_model, read_bytes=read_bytes)
+    h_bytes = checked_bytes(h_path, h_model["sha256"], read_bytes=read_bytes)
     require(result["h_inventory"] == pdb_inventory(h_bytes, request["entry"], allow_h=True), "H inventory")
     raw_user_mod = b"".join(line for line in h_bytes.splitlines(keepends=True) if line.startswith(b"USER  MOD"))
-    require((directory / "raw-user-mod.txt").read_bytes() == raw_user_mod
+    retained_mod = ((directory / "raw-user-mod.txt").read_bytes() if read_bytes is None
+                    else read_bytes(directory / "raw-user-mod.txt"))
+    require(retained_mod == raw_user_mod
             and result["raw_user_mod_record_count"] == len(raw_user_mod.splitlines()), "raw USER MOD/count binding")
     reduce = read_json(h_path.parent / "manifest.json")
     inputs = {name: {key: item[key] for key in ("path", "sha256")}
@@ -385,7 +394,7 @@ def admit_evidence(request: dict, directory: Path, result: dict) -> None:
             "Reduce invocation")
     require(reduce["output_sha256"] == h_model["sha256"] == receipts[0]["result"]["stdout.bin_sha256"]
             and reduce["stderr_sha256"] == receipts[0]["result"]["stderr.bin_sha256"], "Reduce output bindings")
-    checked_bytes(h_path.parent / "stderr.log", reduce["stderr_sha256"])
+    checked_bytes(h_path.parent / "stderr.log", reduce["stderr_sha256"], read_bytes=read_bytes)
     if request["cohort"] == "clashscore":
         manifest_path = Path(result["probe_manifest"])
         require(manifest_path.is_relative_to(directory / "work"), "Probe evidence location")
@@ -397,12 +406,12 @@ def admit_evidence(request: dict, directory: Path, result: dict) -> None:
                 and probe["executable_sha256"] == tools["probe"]["sha256"], "Probe invocation")
         for stream in ("stdout", "stderr"):
             require(probe[f"{stream}_sha256"] == receipts[1]["result"][f"{stream}.bin_sha256"], "Probe output binding")
-        contacts = checked_bytes(manifest_path.parent / "stdout.txt", probe["stdout_sha256"])
-        checked_bytes(manifest_path.parent / "stderr.log", probe["stderr_sha256"])
+        contacts = checked_bytes(manifest_path.parent / "stdout.txt", probe["stdout_sha256"], read_bytes=read_bytes)
+        checked_bytes(manifest_path.parent / "stderr.log", probe["stderr_sha256"], read_bytes=read_bytes)
         recounted = recount_legacy_ec(contacts, h_bytes)
         require(all(probe[key] == value for key, value in recounted.items())
                 and result["clashscore"] == recounted["clashscore"], "Probe counts/pairs/score")
-    verify_identity(h_model)
+    verify_identity(h_model, read_bytes=read_bytes)
 
 
 def worker(request_file: Path, *, announce=announce_benchmark_environment) -> int:

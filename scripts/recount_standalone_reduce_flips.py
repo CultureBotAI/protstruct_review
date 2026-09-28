@@ -245,14 +245,16 @@ def legacy_comparison_keys(_result: dict) -> None:
                      "identities cannot be joined to the old reduce2 domain without a paired adapter")
 
 
-def checked_inventory(directory: Path, inventory: dict) -> None:
+def checked_inventory(directory: Path, inventory: dict, *, read_bytes=None) -> None:
+    """Verify original pins, optionally using a caller's strict byte reader."""
     if not isinstance(inventory, dict) or not inventory:
         raise ValueError("Missing original retained inventory")
     for relative, sha256 in inventory.items():
         path = directory / relative
         if Path(relative).is_absolute() or ".." in Path(relative).parts or not path.resolve().is_relative_to(directory):
             raise ValueError("Evidence path escapes entry")
-        if digest(path.read_bytes()) != sha256:
+        data = path.read_bytes() if read_bytes is None else read_bytes(path)
+        if digest(data) != sha256:
             raise ValueError(f"Original retained hash mismatch: {relative}")
 
 

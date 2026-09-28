@@ -1,0 +1,58 @@
+{
+  "completed_at": "2026-09-28T08:22:31.683864+00:00",
+  "error": "Worker failed, timed out, or did not retain a complete result",
+  "limitation": "New retained-input observation, not authenticated historical reproduction; informational only. No PHENIX comparator or independent grading is supplied.",
+  "process": {
+    "arguments": [
+      "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.venv/bin/python",
+      "-B",
+      "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/scripts/bench_dictionary_loaded_reduce.py",
+      "--worker",
+      "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/data/coscientists/openscientist/retained_799_24MR_attempt01/24MR/request.json"
+    ],
+    "cleanup": {
+      "group_absent_verified": true,
+      "pgid": 28485,
+      "signal_attempts": [],
+      "status": "group_absent"
+    },
+    "pgid": 28485,
+    "pid": 28485,
+    "returncode": 1,
+    "start_new_session": true,
+    "termination_signal": null,
+    "timed_out": false
+  },
+  "retained_files": {
+    "benchmark-environment.json": "fa6fce0917657188717c6cd1b0f2b64c0ef98c203217480213949bf6beafe030",
+    "commands/01/request.json": "f5111963f15021d1e1db70569bc5259c6878738fdcc58f55a7ddb792d502e59a",
+    "commands/01/result.json": "1479186c315c680e5e4592440427bc8d7b53cfca1380e5426be26bfe702fec01",
+    "commands/01/stderr.bin": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "commands/01/stdout.bin": "1d921580797d23892ecc57184941334510f5a5151541d1d210361595119637f0",
+    "input-inventory.json": "e55cfa71e0dd129874295c3cae4ba3fa9c9b65a05b59b9be403c4613d77a0798",
+    "input-provenance.json": "7049249b6a51b6146847d787d628388cdda5ded1dfc738459b422d3ee3c1e69e",
+    "input.pdb": "07c2ccd02d074878d51eac543877e4f4ce2b4e87f88532ca4a6d811f537a0563",
+    "launch-plan.json": "20bd6ecdbbe84c4b2ddedda839b888607a471949a15195fee8a469a1d134971a",
+    "launch-request.json": "f2e6c27aba9c1399fbcd37bd8f3138c83ba294e2d899f10188485efb389ac917",
+    "probe-version-request.json": "57aeb2229500410f45514918927240768d117d38e1bf449f2c326550337bd757",
+    "probe-version.json": "01bc1b566604f79ddbb7c5b76c7e1966e3ef8b77e7866c6d27ae4936ffdc5798",
+    "reduce-version-request.json": "e47c1bbe41f0468b3ca84065f326bda2f688fc51b9f3f807307aa18ad25a8341",
+    "reduce-version.json": "62de29d1a2c803f3ac0908a1d7b120bf84bb5ec36c56a686713758d6638eb87a",
+    "request.json": "2c11ad954e022498302fe00ee0263014f7045ae8a3ba1c0994e1d19bf870b7c1",
+    "sources/bench_dictionary_loaded_reduce.py": "0fdc7f0193c0890058c005331941cadb283b4f30152503fc8567a95f85773d04",
+    "sources/bench_t05_clashscore_h.py": "310fe87b647f147a6190acfff035412002c251edc89d8955968dfe6150f42ae7",
+    "sources/benchmark_environment.py": "ad16402d61ea9722ca1a21c97a67dd490dcf6e033658e0d4f834312113c3eeda",
+    "sources/entry_sandbox.py": "abeeb0f2307b1ea13e4aa45057137f799a80428b0b3c5036c7b8f931bb9c50cd",
+    "sources/preregistration.md": "c33def07d5d355de5672a699a0614e46b21170be8d502a0925bd439b48d010ff",
+    "sources/standalone_reduce.py": "f47a37c89eb967487f196a18927a5fcbfd7c0ef03b70e1b848dd61dee3aa46dc",
+    "sources/toolchain.py": "e32dd23ba61d684edea4cf86208c6d7fec62af060898c63cba96f40bd0bc338f",
+    "tool-identities.json": "dcdee03275341b16e721d49071ae138d8b71fe2b4b7033d3b5804d041116c90d",
+    "work/reduce_dictionary_v1/.8ae0bed64a24ba58-4xkk86_e/input_h_ec_8ae0bed64a24ba58.pdb": "1d921580797d23892ecc57184941334510f5a5151541d1d210361595119637f0",
+    "work/reduce_dictionary_v1/.8ae0bed64a24ba58-4xkk86_e/stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "worker-result.json": "c3cda493acd996a691ec3e63519cb860b5e0a781b59c24a7e6eccada9580fb81",
+    "worker-start.json": "605e56d57b0f0d7bfc2e7ee4ade0c6a06c4be2a79625aefe02b60eb63075d6f8",
+    "worker.log": "bb85b45d0703dc10ebd559f9ff7e88df3ccafa3773678b20e6b3a9282a2e836a"
+  },
+  "started_at": "2026-09-28T08:22:23.945605+00:00",
+  "status": "failed"
+}

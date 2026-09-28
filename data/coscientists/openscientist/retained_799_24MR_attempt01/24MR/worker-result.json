@@ -1,0 +1,94 @@
+{
+  "benchmark_environment": {
+    "external_tools": {
+      "probe": {
+        "available": true,
+        "executable_identity": {
+          "bytes": 348002,
+          "path": "/Users/marcin/tools/probe-src/probe",
+          "sha256": "9a026a9e4031a88680e7df9af3e8f1307f51992a15cbf0eae3869053430927ea"
+        },
+        "expected_version": "2.26.021123",
+        "reported_version": "probe.2.26.021123",
+        "reported_version_source": "command_output",
+        "version_command": {
+          "argv": [
+            "/Users/marcin/tools/probe-src/probe",
+            "-version"
+          ],
+          "completed_at": "2026-09-28T08:22:24.506172+00:00",
+          "expected_version": "2.26.021123",
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "probe.2.26.021123\n"
+        }
+      },
+      "reduce": {
+        "available": true,
+        "executable_identity": {
+          "bytes": 2399683,
+          "path": "/Users/marcin/tools/reduce-src/build/reduce_src/reduce",
+          "sha256": "9d633cc9e2ae539a7f0871fe96a8e4303448a6a5aba8adee03dd0dda63049ff4"
+        },
+        "expected_version": "4.16.250520",
+        "reported_version": "reduce.4.16.250520",
+        "reported_version_source": "command_output",
+        "version_command": {
+          "argv": [
+            "/Users/marcin/tools/reduce-src/build/reduce_src/reduce",
+            "-version"
+          ],
+          "completed_at": "2026-09-28T08:22:24.500620+00:00",
+          "expected_version": "4.16.250520",
+          "returncode": 2,
+          "stderr": "reduce.4.16.250520\n",
+          "stdout": ""
+        }
+      }
+    },
+    "python": {
+      "executable": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.venv/bin/python",
+      "implementation": "CPython",
+      "version": "3.12.11"
+    },
+    "python_packages": {
+      "DockQ": "2.1.3",
+      "PyYAML": "6.0.3",
+      "biotite": "1.7.1",
+      "gemmi": "0.7.5",
+      "linkml": "1.9.6",
+      "numpy": "1.26.4",
+      "pydantic": "2.13.4",
+      "scipy": "1.17.1"
+    },
+    "recorded_at": "2026-09-28T08:22:24.506771+00:00"
+  },
+  "command_receipts": [
+    {
+      "request": {
+        "argv": [
+          "/Users/marcin/tools/reduce-src/build/reduce_src/reduce",
+          "-quiet",
+          "-build",
+          "-DB",
+          "/Users/marcin/tools/reduce-src/reduce_wwPDB_het_dict.txt",
+          "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/data/coscientists/openscientist/retained_799_24MR_attempt01/24MR/input.pdb"
+        ],
+        "cwd": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/data/coscientists/openscientist/retained_799_24MR_attempt01/24MR",
+        "started_at": "2026-09-28T08:22:24.553900+00:00",
+        "stdout_initial_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/data/coscientists/openscientist/retained_799_24MR_attempt01/24MR/work/reduce_dictionary_v1/.8ae0bed64a24ba58-4xkk86_e/input_h_ec_8ae0bed64a24ba58.pdb",
+        "timeout_seconds": 3600
+      },
+      "result": {
+        "completed_at": "2026-09-28T08:22:31.626843+00:00",
+        "returncode": 1,
+        "stderr.bin_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout.bin_sha256": "1d921580797d23892ecc57184941334510f5a5151541d1d210361595119637f0"
+      }
+    }
+  ],
+  "completed_at": "2026-09-28T08:22:31.627149+00:00",
+  "error": "RuntimeError: Reduce failed (exit 1); retained stderr: /Users/marcin/Documents/VIMSS/ontology/protstruct_review/data/coscientists/openscientist/retained_799_24MR_attempt01/24MR/work/reduce_dictionary_v1/.8ae0bed64a24ba58-4xkk86_e/stderr.log",
+  "limitation": "New retained-input observation, not authenticated historical reproduction; informational only. No PHENIX comparator or independent grading is supplied.",
+  "status": "failed"
+}

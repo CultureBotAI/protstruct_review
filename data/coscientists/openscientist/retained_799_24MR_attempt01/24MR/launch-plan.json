@@ -1,0 +1,39 @@
+{
+  "cohort": "clashscore",
+  "cohort_ids": [
+    "24MR",
+    "37AS",
+    "37AP",
+    "11AF",
+    "28SZ",
+    "37BG",
+    "12LO",
+    "30IZ",
+    "9LLR",
+    "9PN7"
+  ],
+  "configured_tools": {
+    "dictionary": "/Users/marcin/tools/reduce-src/reduce_wwPDB_het_dict.txt",
+    "probe": "/Users/marcin/tools/probe-src/probe",
+    "reduce": "/Users/marcin/tools/reduce-src/build/reduce_src/reduce"
+  },
+  "contract": 1,
+  "entry": "24MR",
+  "evidence_root": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/data/coscientists/openscientist/retained_799_24MR_attempt01",
+  "expected_versions": {
+    "probe": "2.26.021123",
+    "reduce": "4.16.250520"
+  },
+  "fetch_url": "https://files.rcsb.org/download/24MR.pdb",
+  "flip_policy": "standalone -build (flips enabled)",
+  "input": null,
+  "limitation": "New retained-input observation, not authenticated historical reproduction; informational only. No PHENIX comparator or independent grading is supplied.",
+  "mode": "execute",
+  "nuclear": false,
+  "parsed_flip_conclusions": "unavailable; raw USER MOD/counts only",
+  "preregistration": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/ref/research/standalone_dictionary_rerun_preregistration_2026-09-28.md",
+  "retrieved_at_asserted": null,
+  "source_url_asserted": null,
+  "timeout_seconds": 900,
+  "unknown_origin_reason": null
+}

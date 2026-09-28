@@ -1,0 +1,37 @@
+{
+  "record_kind": "campaign_disposition_after_first_attempt",
+  "registration": "registration.json",
+  "campaign_status": "stopped",
+  "launched": [{
+    "entry": "24MR",
+    "cohort": "clashscore",
+    "attempt": "retained_799_24MR_attempt01",
+    "status": "failed_not_admitted",
+    "started_at": "2026-09-28T08:22:23.945605+00:00",
+    "completed_at": "2026-09-28T08:22:31.683864+00:00",
+    "parent_result_sha256": "caa7b5361f1af6b488cb54746c4ffde127142ae6b1d603af1bf231e858a6b4d8",
+    "native_reduce_returncode": 1,
+    "worker_returncode": 1,
+    "parent_returncode": 1,
+    "timed_out": false,
+    "owned_group_absent_verified": true,
+    "clashscore": null,
+    "scientific_probe_invocations": 0,
+    "component_inventory": {
+      "argv": [".venv/bin/python", "-B", "scripts/inventory_standalone_components.py", "data/coscientists/openscientist/retained_799_24MR_attempt01/24MR"],
+      "returncode": 1,
+      "stdout": "",
+      "stderr": "Inventory refused: Inconsistent retained evidence: parent process did not complete successfully\n",
+      "admitted": false,
+      "recording_note": "Parent transcription of observed CLI refusal; the sidecar emitted no JSON. Not a successful component inventory."
+    }
+  }],
+  "admitted": [],
+  "not_launched": {
+    "clashscore": ["37AS", "37AP", "11AF", "28SZ", "37BG", "12LO", "30IZ", "9LLR", "9PN7"],
+    "flip": ["12OC", "14ZZ", "15C8", "1A0C", "1B9B", "1BDJ", "1OWJ", "1RH7", "1TIJ", "1VYJ", "1W1I", "1ZY2", "2I4M", "2IEF", "2IY0", "2QIZ", "2QTU", "2YOL", "3A01", "3G7M", "3MIU", "3ZM5", "4DYT", "4FN9", "4MH1", "4NJD", "4Q9R", "4W7P", "5DZK", "5MAC", "5T9A", "5URQ", "5X6C", "6ABT", "6LE5", "6QGY", "6TPW", "7D6N", "7LMC", "7P4U", "7PLN"]
+  },
+  "interpretation": "The registered return-status gate rejected this attempt. Installed source makes status 1 compatible with either incomplete optimization or a completed zero-adjustment clique; quiet output does not adjudicate that cause. Do not whitelist, grade or promote its emitted coordinates to a successful H build.",
+  "remaining_issue": 799,
+  "retry": "none; new reviewed diagnostic and fresh retained destination required before another execution"
+}

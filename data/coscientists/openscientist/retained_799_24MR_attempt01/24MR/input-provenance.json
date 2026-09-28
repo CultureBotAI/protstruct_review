@@ -1,0 +1,20 @@
+{
+  "acquisition_started_at": "2026-09-28T08:22:24.050016+00:00",
+  "http_status": 200,
+  "origin": "fresh_fetch",
+  "requested_url": "https://files.rcsb.org/download/24MR.pdb",
+  "response_headers": {
+    "Content-Type": "text/plain",
+    "Date": "Mon, 28 Sep 2026 08:22:24 GMT",
+    "ETag": null,
+    "Last-Modified": null
+  },
+  "response_url": "https://files.rcsb.org/download/24MR.pdb",
+  "retained_at": "2026-09-28T08:22:24.420059+00:00",
+  "retained_file": {
+    "bytes": 807408,
+    "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/data/coscientists/openscientist/retained_799_24MR_attempt01/24MR/input.pdb",
+    "sha256": "07c2ccd02d074878d51eac543877e4f4ce2b4e87f88532ca4a6d811f537a0563"
+  },
+  "retrieved_at": "2026-09-28T08:22:24.419304+00:00"
+}

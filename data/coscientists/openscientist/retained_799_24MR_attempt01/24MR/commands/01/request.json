@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "/Users/marcin/tools/reduce-src/build/reduce_src/reduce",
+    "-quiet",
+    "-build",
+    "-DB",
+    "/Users/marcin/tools/reduce-src/reduce_wwPDB_het_dict.txt",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/data/coscientists/openscientist/retained_799_24MR_attempt01/24MR/input.pdb"
+  ],
+  "cwd": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/data/coscientists/openscientist/retained_799_24MR_attempt01/24MR",
+  "started_at": "2026-09-28T08:22:24.553900+00:00",
+  "stdout_initial_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/data/coscientists/openscientist/retained_799_24MR_attempt01/24MR/work/reduce_dictionary_v1/.8ae0bed64a24ba58-4xkk86_e/input_h_ec_8ae0bed64a24ba58.pdb",
+  "timeout_seconds": 3600
+}

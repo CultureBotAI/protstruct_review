@@ -152,7 +152,7 @@ governed:
   - metric: "Ramachandran favored-% diagnostic (§3)"
     section: 3
     current: "0.2"
-    registry_pattern: '\| Ramachandran / rotamer favored % \| \*\*Ramachandran: ± ([\d.]+) pp\*\*'
+    registry_pattern: '\| Ramachandran / rotamer favored % \|[^\n]*\*\*Historical percentage diagnostics \(not classification gates\):\*\* \*\*Ramachandran: ± ([\d.]+) pp\*\*'
     consumers:
       - ref/driving_example_T05.md
     retired:
@@ -293,3 +293,58 @@ governed:
       - ref/structural_criteria.yaml
     retired:
       - "`probe 2.26.021123`; a builder, version, or convention mismatch"
+
+  # #786/#830: the CURRENT floor must lead each Tolerance cell; read its applicability too.
+  - metric: Ramachandran classification floor, favored row (§3)
+    section: 3
+    current: '0.99'
+    registry_pattern: '(?m)^\| Ramachandran / rotamer favored % \|(?=[^\n]*Classification scope: PHENIX 2\.0-5936 versus the
+      wwPDB validation report only\. Both must describe the same coordinate subject\. Match `\(chain, resnum, icode, resname\)`;
+      retain the altloc/key-handling disclosure\.)(?=[^\n]*nonzero shared-key denominator)(?=[^\n]*Do not pool models or Ramachandran/rotamer
+      denominators\.)(?=[^\n]*Missing applicability evidence or a zero denominator is unevaluable, not a pass\.)(?=[^\n]*Other
+      versions and standalone MolProbity comparisons are informational, not covered by this floor\.)(?=[^\n]*No QDS agreement
+      metric or PassCriterionBinding is registered by this adoption; retain QDS classification-agreement rows as informational
+      without criterion metadata\.) \*\*Classification floor: agreement ≥ ([\d.]+)\*\* for the three-state Ramachandran verdict
+      \(Favored/Allowed/OUTLIER\); this does not calibrate rotamer favored %\. Exact rotamer-name agreement remains a separate
+      diagnostic\.'
+    consumers:
+    - ref/driving_example_T05.md
+    retired:
+    - 'classification agreement**: for the residues both tools evaluate, they assign the same Ramachandran'
+  - metric: Ramachandran/rotamer classification floor, outlier row (§3)
+    section: 3
+    current: '0.99'
+    registry_pattern: '(?m)^\| Ramachandran / rotamer outlier % \|(?=[^\n]*Classification scope: PHENIX 2\.0-5936 versus the
+      wwPDB validation report only\. Both must describe the same coordinate subject\. Match `\(chain, resnum, icode, resname\)`;
+      retain the altloc/key-handling disclosure\.)(?=[^\n]*nonzero shared-key denominator)(?=[^\n]*Do not pool models or Ramachandran/rotamer
+      denominators\.)(?=[^\n]*Missing applicability evidence or a zero denominator is unevaluable, not a pass\.)(?=[^\n]*Other
+      versions and standalone MolProbity comparisons are informational, not covered by this floor\.)(?=[^\n]*No QDS agreement
+      metric or PassCriterionBinding is registered by this adoption; retain QDS classification-agreement rows as informational
+      without criterion metadata\.) \*\*Classification floor: agreement ≥ ([\d.]+)\*\* separately for the three-state Ramachandran
+      verdict \(Favored/Allowed/OUTLIER\) and the binary rotamer OUTLIER/non-OUTLIER verdict\. Exact rotamer-name agreement
+      is a separate diagnostic, not the outlier-classification fraction\.'
+    consumers:
+    - ref/driving_example_T05.md
+    retired:
+    - 'classification agreement**: for the residues both tools evaluate, they assign the same Ramachandran'
+
+  - metric: "T03 missing deposited R-free (§3)"
+    section: 3
+    current: "Missing deposited R-free makes the deposition clause unevaluable even with REFMAC5 available."
+    registry_pattern: '\*\*(Missing deposited R-free makes the deposition clause unevaluable even with REFMAC5 available\.)\*\*'
+    consumers:
+      - ref/driving_example_T03.md
+    retired:
+      - "Each bullet is pass/fail; all must pass for green."
+      - "and of a REFMAC5 re-refinement."
+
+  - metric: "T03 input-led reflection retention (§3)"
+    section: 3
+    current: "Every eligible input HKL must remain usable with its original flag."
+    registry_pattern: '\*\*(Every eligible input HKL must remain usable with its original flag\.)\*\*'
+    consumers:
+      - ref/driving_example_T03.md
+      - .claude/skills/protstruct-eval/SKILL.md
+    retired:
+      - "Reflection count and R-free flag column match the input"
+      - "Compare reflection counts and column labels at every round when in doubt."

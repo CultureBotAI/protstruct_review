@@ -62,6 +62,7 @@ catalog_tasks:
   - REFMAC5 (CCP4)
   - BUSTER
   - Servalcat
+  - gemmi rmsz
   metric_definition_refs:
   - T03_r-work
   - T03_r-free
@@ -115,6 +116,7 @@ catalog_tasks:
   - MolProbity (gold)
   - wwPDB validation pipeline
   - gemmi validators
+  - gemmi rmsz
   - RosettaHoles2
   - ProSA
   - Verify3D
@@ -157,7 +159,6 @@ catalog_tasks:
   - refmac -hklin
   - Servalcat
   - gemmi sfcalc
-  - gemmi validate
   - PDB-REDO
   - FSC-Q
   metric_definition_refs:
@@ -712,6 +713,11 @@ tools:
   family: non_cctbx
   catalog_tasks_served:
   - T06
+- id: gemmi rmsz
+  family: non_cctbx
+  catalog_tasks_served:
+  - T03
+  - T05
 - id: gemmi validate
   family: non_cctbx
   catalog_tasks_served:

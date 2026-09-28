@@ -35,6 +35,7 @@ terms. TSV form with the same rows: `ref/tasks_and_evaluations.tsv`.
 - **PHENIX tool(s):** `phenix.structure_comparison`
 - **Doc paths:** `reference/structure_comparison.html`
 - **Independent oracle(s):** ProSMART, LSQMAN, PyMOL `rms_cur` with per-residue loop, custom gemmi script
+- **Omega capability limit (#785):** the old `gemmi validate` recommendation is deprecated. `gemmi rmsz` reports single-model torsion-restraint deviations, not paired-model cis/trans changes; no matched-residue omega-flip wrapper is established by that recommendation.
 - **Typical inputs:** two or more near-identical PDBs (different crystal forms, mutants, NCS copies); optional sequence file; optional maps
 - **Metrics:** per-residue Ramachandran / rotamer outlier differences, secondary-structure agreement, B-factor deltas, ligand centre-of-mass distances, omega angle (cis/trans) flips, histidine protonation differences
 - **Gold standard:** cross-tool per-residue agreement; manual Coot inspection for hotspots
@@ -44,7 +45,8 @@ terms. TSV form with the same rows: `ref/tasks_and_evaluations.tsv`.
 
 - **PHENIX tool(s):** `phenix.refine`, `phenix.den_refine`, `phenix.rosetta_refine`, `phenix.amber`
 - **Doc paths:** `reference/refinement.html`, `reference/den_refine.html`, `reference/rosetta_refine.html`, `reference/amber.html`
-- **Independent oracle(s):** REFMAC5 (CCP4), BUSTER (Global Phasing), Servalcat
+- **Independent oracle(s):** REFMAC5 (CCP4), BUSTER (Global Phasing), Servalcat; `gemmi rmsz` for bond/angle geometry only
+- **Geometry capability (#785):** keep bond-length rmsD (Å) and bond-angle rmsD (degrees) separate; neither is dimensionless rmsZ. Apply the registry §3 Bond-length RMSD / Bond-angle RMSD rows only with their count and restraint-library preconditions, recording monomer-library provenance. Listing the command does not add a wrapper or a new benchmark.
 - **Typical inputs:** starting model (PDB), reflection data (MTZ with F/SIGF + R-free flags), optional ligand restraint CIFs
 - **Metrics:** R-work, R-free, R-free − R-work gap, ΔR-free vs input, bond/angle RMSD, MolProbity score, clashscore, Ramachandran favored %
 - **Gold standard:** deposited R-values for the target PDB; REFMAC-refined variant produces comparable R-free (within ~0.01–0.02)
@@ -64,7 +66,8 @@ terms. TSV form with the same rows: `ref/tasks_and_evaluations.tsv`.
 
 - **PHENIX tool(s):** `phenix.holton_geometry_validation`, `phenix.validation` (GUI), `phenix.cablam`, `mmtbx.validation_summary`
 - **Doc paths:** `reference/holton_geometry_validation.html`, `reference/validation.html`, `reference/cablam_validation.html`
-- **Independent oracle(s):** **MolProbity** (web/standalone — gold standard for geometry), wwPDB validation pipeline, iotbx-independent parsers via gemmi, RosettaHoles2 (packing), ProSA, Verify3D
+- **Independent oracle(s):** **MolProbity** (web/standalone — gold standard for geometry), wwPDB validation pipeline, iotbx-independent parsers via gemmi, `gemmi rmsz` (bond/angle rmsD; qualified wrong-handed chirality counts), RosettaHoles2 (packing), ProSA, Verify3D
+- **Gemmi capability limits (#785):** `gemmi rmsz` is not a blanket geometry substitute. Retain restraint counts and monomer-library provenance, and follow registry §3's bond/angle library and population conditions. Chirality is a qualified alternative for wrong-handed counts with the checked-centre denominator, not generic chiral-volume outliers or a newly implemented wrapper. Its planarity aggregate uses each plane's maximum atom deviation; equivalence to the catalog's planarity RMSD is unestablished, so that recommendation is deprecated. These are capability corrections from [Gemmi 0.7.5 source](https://raw.githubusercontent.com/project-gemmi/gemmi/v0.7.5/prog/rmsz.cpp), not new execution results.
 - **Retained-coordinate audit:** `protstruct retained-coordinate audit` identifies the stdlib fixed-column method in `scripts/audit_1sar_retained_evidence.py`. It recounts atoms/waters and B-factor distributions on the pinned packaged 1SAR model, not geometry quality or a new crystallographic validation run. Record the exact selected population and method/input/output hashes; do not attribute coordinate arithmetic to `gemmi sfcalc`.
 - **Auxiliary provenance:** standalone Richardson `reduce` also serves T05 by producing the historical hydrogen-built model/atom-count denominator used by `probe`. That does not make its atom count an independent geometry-quality verdict.
 - **Typical inputs:** model (PDB/mmCIF)
@@ -76,8 +79,9 @@ terms. TSV form with the same rows: `ref/tasks_and_evaluations.tsv`.
 
 - **PHENIX tool(s):** `phenix.model_vs_data`, `phenix.mtriage` (map side), `phenix.fmodel` (listed in the PHENIX reference index but its doc page currently 404s upstream), `phenix.map_correlations`
 - **Doc paths:** `reference/model_vs_data.html`, `reference/mtriage.html`, `reference/map_correlations.html`
-- **Independent oracle(s):** CCP4 `sfcheck` / `refmac -hklin`, Servalcat, `gemmi` (`gemmi sfcalc`, `gemmi validate`), PDB-REDO, FSC-Q
+- **Independent oracle(s):** CCP4 `sfcheck` / `refmac -hklin`, Servalcat, `gemmi sfcalc`, PDB-REDO, FSC-Q
 - **Typical inputs:** model + experimental data (MTZ for X-ray, map(s) for cryo-EM)
+- **Overall-B gap (#785):** the `gemmi validate` recommendation is deprecated; the catalog's “overall B” parameter and its validated producer remain undefined. Do not substitute mean atomic B or Wilson B. The historical tool identity is retained for replay, not listed as a current T06 oracle.
 - **Auxiliary task coverage:** `phenix.model_vs_data` can supply T03 R-factor diagnostics and T13 completeness observations in addition to T06 model/data statistics. It remains cctbx and does not implement an independent refinement or data-quality oracle; these auxiliary task links do not add it to the independent-oracle lists or authorize same-family grades.
 - **Metrics:** R-work, R-free, CC_work, CC_free, CC*, map-model FSC (global + per-resolution-shell), d_FSC_model, overall B, Wilson B, residue RSCC (per-residue), RSCC outlier fraction (complex), diffraction precision index (complex)
 - **Gold standard:** values reported in the deposition header for that PDB/EMDB pair

@@ -47,7 +47,8 @@ from typing import Any
 
 if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-from toolchain import phenix, run_logged, split_args
+from toolchain import run_logged, split_args
+from refinement_cache import OperationFailed, cached_phenix_operation
 
 _CLASHSCORE = re.compile(r"clashscore\s*=\s*([\d.]+)")
 _RAMA_FAV = re.compile(r"SUMMARY:\s*([\d.]+)%\s*favored")
@@ -88,12 +89,14 @@ def ca_shift_rmsd(before: Path, after: Path) -> tuple[float | None, int]:
 
 def run_tool(exe: str, model: Path, work: Path, tag: str, pattern: re.Pattern) -> float | None:
     """Run a PHENIX validation tool on `model` and pull one number out of its log."""
-    log = work / f"{tag}_{model.stem}.log"
-    if not log.exists() or not pattern.search(log.read_text(errors="ignore")):
-        run_logged([phenix(exe), model], log, cwd=work, timeout=3600)
-    if not log.exists():
+    try:
+        paths = cached_phenix_operation(
+            work, exe, executable=exe, inputs={"model": model}, arguments=[model],
+            required_outputs={}, timeout=3600, runner=run_logged,
+        )
+    except OperationFailed:
         return None
-    match = pattern.search(log.read_text(errors="ignore"))
+    match = pattern.search(paths["stdout"].read_text(errors="ignore"))
     return float(match.group(1)) if match else None
 
 
@@ -116,9 +119,9 @@ LOW_RES_RESTRAINTS = "ncs_search.enabled=True secondary_structure.enabled=True"
 def refine_prefix(model_stem: str, restraints: bool) -> str:
     """Output prefix for a refinement run.
 
-    Restrained and unrestrained runs must not share a prefix: the caching in
-    `refine()` keys on the output file, so a collision would make the second run
-    silently adopt the first's result and report no difference between protocols.
+    These human-readable prefixes distinguish restrained and unrestrained runs.
+    Cache identity additionally binds exact input/build/argument bytes (#777), so
+    an output filename alone can no longer authenticate a previous invocation.
 
     `MACRO_CYCLES` is in the prefix for the same reason, and was not (#124): the
     argument above applies unchanged to any parameter that moves the refinement, and
@@ -209,28 +212,28 @@ def refine(model: Path, mtz: Path, work: Path,
     used at low resolution — the round-7 null spreads came from default weights with
     neither, which likely made them pessimistic.
     """
-    prefix = refine_prefix(model.stem, restraints)
-    out = work / f"{prefix}_001.pdb"
-    log = work / f"refine_{refine_prefix(model.stem, restraints)}.log"
-    if not out.exists():
-        arguments = [
-            phenix("phenix.refine"),
-            model,
-            mtz,
-            f"main.number_of_macro_cycles={MACRO_CYCLES}",
-        ]
-        if restraints:
-            arguments.extend(split_args(LOW_RES_RESTRAINTS))
-        arguments.extend([f"output.prefix={prefix}", "--overwrite"])
-        run_logged(arguments, log, cwd=work, timeout=7200)
-    if not out.exists():
+    # The operation directory supplies input identity; this simple output basename
+    # avoids interpreting glob metacharacters from a scientific input filename.
+    prefix = refine_prefix("model", restraints)
+    arguments = [model, mtz, f"main.number_of_macro_cycles={MACRO_CYCLES}"]
+    if restraints:
+        arguments.extend(split_args(LOW_RES_RESTRAINTS))
+    arguments.extend([f"output.prefix={prefix}", "--overwrite"])
+    try:
+        paths = cached_phenix_operation(
+            work, "phenix.refine", executable="phenix.refine",
+            inputs={"model": model, "reflections": mtz}, arguments=arguments,
+            required_outputs={"model": f"{prefix}_001.pdb"}, timeout=7200, runner=run_logged,
+        )
+    except OperationFailed as error:
+        log = error.log_path
         return None, {"failure_reason": refine_failure_reason(log)}
-    r_values = _R_WORK.findall(log.read_text(errors="ignore")) if log.exists() else []
+    r_values = _R_WORK.findall(paths["stdout"].read_text(errors="ignore"))
     stats: dict[str, Any] = {}
     if r_values:
         stats["r_work_pre"], stats["r_free_pre"] = float(r_values[0][0]), float(r_values[0][1])
         stats["r_work_post"], stats["r_free_post"] = float(r_values[-1][0]), float(r_values[-1][1])
-    return out, stats
+    return paths["model"], stats
 
 
 def collect(pairs: list[tuple[Path, Path]], work: Path,

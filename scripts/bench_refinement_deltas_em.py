@@ -39,7 +39,7 @@ from typing import Any
 
 if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-from toolchain import phenix, run_logged
+from refinement_cache import OperationFailed, cached_phenix_operation
 
 _CC_MASK = re.compile(r"CC_mask\s*:\s*([\d.]+)")
 # mtriage prints masked and unmasked columns; FSC=0.143 is the conventional model-map
@@ -102,29 +102,11 @@ def d_fsc_from_curve(rows: list[tuple[float, float]], threshold: float = FSC_THR
     return None
 
 
-def run(arguments: list[str | Path], log: Path, pattern: re.Pattern, work: Path) -> str | None:
-    """Run an argument vector in `work`, caching on a parseable log."""
-    if not log.exists() or not pattern.search(log.read_text(errors="ignore")):
-        run_logged(arguments, log, cwd=work, timeout=7200)
-    return log.read_text(errors="ignore") if log.exists() else None
-
-
 def cache_key(tag: str, resolution: float) -> str:
-    """Cache key for one measurement or refinement.
+    """Legacy display label, NOT cache identity (#777).
 
-    `resolution` belongs in the key. It is passed to map_correlations, mtriage and
-    real_space_refine, and it sets the plausibility bound below -- so two runs of the
-    same entry at different resolutions are different measurements. Keying on `tag`
-    alone meant the second silently adopted the first's logs, FSC curve and refined
-    model, and the row written to the TSV then paired the NEW resolution with values
-    computed at the OLD one (#119).
-
-    The X-ray sibling already bakes `restraints` into its prefix for exactly this
-    reason, with a docstring saying so; the argument was simply never carried across.
-
-    Including the resolution preserves the deliberate sharing between this benchmark
-    and `screen_dfsc_ratio.py` -- they pass the same tag AND the same resolution for a
-    given entry, so they still reuse each other's work whenever it is valid to.
+    Content-addressed operations below use input bytes, measured build and exact
+    arguments. Consumers must use returned artifact paths, not rebuild old names.
     """
     return f"{tag}_{resolution:g}A"
 
@@ -132,27 +114,32 @@ def cache_key(tag: str, resolution: float) -> str:
 def measure(model: Path, map_file: Path, resolution: float, work: Path,
             tag: str) -> dict[str, Any]:
     """CC_mask and masked d_FSC_model(0.143) for one model against one map."""
-    tag = cache_key(tag, resolution)
-    cc_log = work / f"mc_{tag}.log"
-    cc_text = run(
-        [phenix("phenix.map_correlations"), model, map_file, f"resolution={resolution}"],
-        cc_log,
-        _CC_MASK,
-        work,
-    )
-    # mtriage writes its FSC curve into the working directory under a fixed name, so
-    # each measurement gets its own directory or they overwrite one another.
-    mt_dir = work / f"mt_{tag}"
-    mt_dir.mkdir(parents=True, exist_ok=True)
-    mt_log = mt_dir / "mtriage.log"
-    run(
-        [phenix("phenix.mtriage"), model, map_file, f"resolution={resolution}"],
-        mt_log,
-        _D_FSC_MODEL,
-        mt_dir,
-    )
-    curve_path = mt_dir / FSC_CURVE
-    d_value = (d_fsc_from_curve(read_fsc_curve(curve_path)) if curve_path.exists() else None)
+    # tag labels the caller's row, not the scientific invocation. Identical inputs
+    # intentionally share evidence across screening and benchmark consumers.
+    arguments = [model, map_file, f"resolution={resolution}"]
+    inputs = {"model": model, "map": map_file}
+    cc_manifest = mt_manifest = None
+    try:
+        result = cached_phenix_operation(
+            work, "em-map-correlations", executable="phenix.map_correlations",
+            inputs=inputs, arguments=arguments, required_outputs={}, timeout=7200,
+        )
+        cc_log, cc_manifest = result["stdout"], result["manifest"]
+        cc_text = cc_log.read_text(errors="ignore")
+    except OperationFailed as error:
+        cc_log, cc_text = error.log_path, None
+    # Fixed-name mtriage products live inside one authenticated invocation bundle.
+    try:
+        result = cached_phenix_operation(
+            work, "em-mtriage", executable="phenix.mtriage",
+            inputs=inputs, arguments=arguments,
+            required_outputs={"curve": FSC_CURVE}, timeout=7200,
+        )
+        curve_path, mt_log = result["curve"], result["stdout"]
+        mt_manifest = result["manifest"]
+    except OperationFailed as error:
+        curve_path, mt_log = None, error.log_path
+    d_value = d_fsc_from_curve(read_fsc_curve(curve_path)) if curve_path else None
     cc = _CC_MASK.search(cc_text) if cc_text else None
     # mtriage's model-map FSC crossings are degenerate without half-maps: 27WR reports
     # FSC=0.5 at 29.79 Å for a 2.7 Å map, and 9VJD reports FSC=0.143 at 29.65 Å for a
@@ -171,6 +158,10 @@ def measure(model: Path, map_file: Path, resolution: float, work: Path,
         # "map_correlations produced no log" instead of its real cause (#136).
         # Returning the path removes the duplication rather than re-syncing it.
         "cc_log": cc_log,
+        "curve_path": curve_path,
+        "fsc_log": mt_log,
+        "cc_evidence": cc_manifest,
+        "fsc_evidence": mt_manifest,
     }
 
 
@@ -231,29 +222,18 @@ def refine(model: Path, map_file: Path, resolution: float, work: Path,
 
     Returns (refined coordinates, failure reason). Exactly one is None.
     """
-    tag = cache_key(tag, resolution)   # see cache_key: resolution changes the result
-    prefix = f"rs_{tag}"
-    cached = sorted(work.glob(f"{prefix}_real_space_refined_*.cif"))
-    if cached:                       # real_space_refine takes minutes; do not repeat it
-        return cached[-1], None
-    log = work / f"rsr_{tag}.log"
-    run_logged(
-        [
-            phenix("phenix.real_space_refine"),
-            model,
-            map_file,
-            f"resolution={resolution}",
-            f"output.prefix={prefix}",
-            "--overwrite",
-        ],
-        log,
-        cwd=work,
-        timeout=14400,
-    )
-    hits = sorted(work.glob(f"{prefix}_real_space_refined_*.cif"))
-    if hits:
-        return hits[-1], None
-    return None, refine_failure_reason(log)
+    try:
+        result = cached_phenix_operation(
+            work, "em-real-space-refine", executable="phenix.real_space_refine",
+            inputs={"model": model, "map": map_file},
+            arguments=[model, map_file, f"resolution={resolution}",
+                       "output.prefix=refined", "--overwrite"],
+            required_outputs={"model": "refined_real_space_refined_*.cif"},
+            timeout=14400,
+        )
+    except OperationFailed as error:
+        return None, refine_failure_reason(error.log_path)
+    return result["model"], None
 
 
 def collect(entries: list[dict], cache: Path,

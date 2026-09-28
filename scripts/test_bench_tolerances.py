@@ -1334,28 +1334,29 @@ check("and it contributes no rows", _rows, [])
 # module's own docstring memorialises, reintroduced by a fix in the same file.
 #
 # The existing crash test monkeypatches refem.measure wholesale, so it never exercises
-# the rebind. This one drives the real function with a stub `run()` and asserts the
+# the rebind. This one drives the real function with a stub operation and asserts the
 # reason survives the round trip.
 
 _fr_dir = Path(__import__("tempfile").mkdtemp())
 _LIGAND_LOG = ("Sorry: Fatal problems interpreting model file\n"
                "  Number of atoms with unknown nonbonded energy type symbols: 38\n")
 
-_real_run = refem.run
-def _stub_run(cmd, log, pattern, work):
+_real_operation = refem.cached_phenix_operation
+def _stub_operation(work, name, **kwargs):
     """Write a PHENIX-style failure log wherever measure() asks for one."""
+    log = work / name / "stdout.log"
     log.parent.mkdir(parents=True, exist_ok=True)
     log.write_text(_LIGAND_LOG)
-    return _LIGAND_LOG
+    raise refem.OperationFailed("mock tool failure", log_path=log)
 try:
-    refem.run = _stub_run
+    refem.cached_phenix_operation = _stub_operation
     _res = refem.measure(_fr_dir / "m.cif", _fr_dir / "m.map", 2.73, _fr_dir, "1abc_pre")
 finally:
-    refem.run = _real_run
+    refem.cached_phenix_operation = _real_operation
 
 check("a failed measurement reports no CC_mask", _res["cc_mask"], None)
 check("and hands back the log it actually wrote", _res["cc_log"].name,
-      f"mc_{refem.cache_key('1abc_pre', 2.73)}.log")
+      "stdout.log")
 check("so the caller recovers the REAL reason, not 'produced no log'",
       refem.failure_reason(_res["cc_log"], "map_correlations"),
       "unparameterised ligand: 38 atoms with unknown nonbonded energy types "

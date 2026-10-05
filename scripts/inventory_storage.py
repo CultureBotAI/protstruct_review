@@ -17,8 +17,9 @@ index is read; the report says so.) A name match, duplicate, empty file, failed
 run or ignored status is not evidence that anything is disposable.
 
 Exit status: 0 when traversal and Git classification are complete, 1 when the
-report is partial (see errors/exclusions), 2 for usage errors. Tracked paths
-missing from the traversal are listed separately and do not change the status.
+report is partial (see errors, exclusions and unclassified_entries), 2 for usage
+errors. Tracked paths missing from the inventory are listed in
+tracked_paths_not_inventoried and do not change the status.
 """
 from __future__ import annotations
 
@@ -26,7 +27,6 @@ import argparse
 from collections import defaultdict
 from datetime import datetime, timezone
 import fcntl
-import glob
 import hashlib
 import json
 import os
@@ -55,7 +55,7 @@ GIT_ENV = {"GIT_OPTIONAL_LOCKS": "0", "GIT_TERMINAL_PROMPT": "0", "GIT_NO_LAZY_F
 # and ls-files --modified can hash working-tree files through configured clean
 # filters, so they are deliberately absent.
 GIT_LISTINGS = {
-    "tracked": ("ls-files", "-z", "--cached"),
+    "tracked": ("ls-files", "-z", "--stage"),  # index modes identify gitlinks and type changes
     "untracked": ("ls-files", "-z", "--others", "--exclude-standard"),
     "ignored": ("ls-files", "-z", "--others", "--ignored", "--exclude-standard"),
 }
@@ -179,7 +179,8 @@ def git_facts(root: str, errors: list) -> dict:
     """HEAD, branch, Git-class path sets, staged changes, object storage and worktrees."""
     facts = {"available": False, "branch": None, "head": None, "git_dir": None, "common_dir": None,
              "split_index": False, "staged_changes": None, "count_objects": {}, "worktrees": [],
-             "sets": {}, "storage_paths": set(), "precompose_unicode": False, "ignore_case": False}
+             "sets": {}, "modes": {}, "storage_paths": set(), "precompose_unicode": False,
+             "ignore_case": False}
     code, out, _ = run_git(root, "rev-parse", "--absolute-git-dir", "--git-common-dir")
     lines = os.fsdecode(out).splitlines()
     if code or len(lines) < 2:
@@ -187,9 +188,9 @@ def git_facts(root: str, errors: list) -> dict:
         return facts
     # Git prints real absolute paths; normalize lexically so nothing outside the root is stat'ed.
     git_dir, common_dir = (os.path.normpath(os.path.join(root, line)) for line in lines[:2])
+    code, out, _ = run_git(root, "rev-parse", "--shared-index-path")  # prints a path only while split
     facts.update(available=True, git_dir=git_dir, common_dir=common_dir,
-                 split_index=any(glob.glob(os.path.join(glob.escape(path), "sharedindex.*"))
-                                 for path in {git_dir, common_dir}),
+                 split_index=code == 0 and bool(out.strip()),
                  precompose_unicode=git_bool(root, "core.precomposeunicode"),
                  ignore_case=git_bool(root, "core.ignorecase"))
     facts["storage_paths"] = {relpath(path, root) for path in (git_dir, common_dir) if inside(path, root)}
@@ -206,7 +207,12 @@ def git_facts(root: str, errors: list) -> dict:
                       else f"failed or unterminated output (exit {code})")
             errors.append(error(".", f"git ls-files ({name})", detail))
             facts["available"] = False
-        if fields is not None:
+        if fields is not None and name == "tracked":
+            for field in filter(None, fields):  # "<mode> <object> <stage>\t<path>"
+                meta, _, path = field.partition("\t")
+                facts["modes"][path] = meta.split(" ", 1)[0]
+            facts["sets"][name] = set(facts["modes"])
+        elif fields is not None:
             facts["sets"][name] = {field for field in fields if field}
     if facts["head"]:
         code, out, _ = run_git(root, "diff-index", "--cached", "--name-status", "-z", "HEAD")
@@ -259,7 +265,11 @@ def walk(root: str, errors: list, exclusions: list, empty_dirs: list):
     Every directory is reopened through descriptors and must still be the inode
     seen in its parent's listing, so a directory swapped for a symlink during the
     walk is reported as an error instead of being followed."""
-    root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+    except OSError as exc:
+        errors.append(error(".", "scandir", exc))
+        return
     try:
         root_info = os.fstat(root_fd)
         pending = [("", (root_info.st_dev, root_info.st_ino))]
@@ -328,6 +338,11 @@ class Matcher:
         self.sets, self.precompose, self.ignore_case = sets, precompose, ignore_case
         self.keys = {name: {self.key(path): path for path in paths} for name, paths in sets.items()}
         self.mismatches = []
+        self.disk = {}  # folded key -> on-disk path, filled once the tree is walked
+
+    def on_disk(self, path: str) -> str | None:
+        """The walked spelling of a path Git or a user wrote, if it exists."""
+        return self.disk.get(self.key(path))
 
     def key(self, path: str) -> str:
         path = unicodedata.normalize("NFC", path) if self.precompose else path
@@ -360,7 +375,8 @@ def sensitive(rel: str) -> bool:
             or rel.startswith(SENSITIVE_PREFIXES))
 
 
-def symlink_fact(root: str, rel: str, target: str | None, records: dict, exclusions: list) -> dict:
+def symlink_fact(root: str, rel: str, target: str | None, records: dict, exclusions: list,
+                 matcher: Matcher) -> dict:
     """Describe a symlink from its target string alone; nothing is followed."""
     fact = {"path": rel, "class": records[rel]["class"], "target": target, "scope": "unknown",
             "resolved": None, "target_inventoried": None}
@@ -373,7 +389,8 @@ def symlink_fact(root: str, rel: str, target: str | None, records: dict, exclusi
         fact["scope"] = "outside_root"
         return fact
     target = relpath(resolved, root)
-    fact.update(scope="inside_root", resolved=target or ".", target_inventoried=not target or target in records)
+    fact.update(scope="inside_root", resolved=target or ".",
+                target_inventoried=not target or target in records or matcher.on_disk(target) is not None)
     return fact
 
 
@@ -415,7 +432,7 @@ def sha256_file(root: str, rel: str, expected: dict) -> str:
     return digest.hexdigest()
 
 
-def duplicates(root: str, records: dict, selections: list, errors: list) -> dict:
+def duplicates(root: str, records: dict, selections: list, errors: list, matcher: Matcher) -> dict:
     """SHA-256 exact-duplicate groups among regular files below explicit selections."""
     chosen, skipped, empty = {}, [], set()
     for raw in selections:
@@ -424,7 +441,8 @@ def duplicates(root: str, records: dict, selections: list, errors: list) -> dict
             errors.append(error(raw, "hash-select", "selection outside root"))
             continue
         rel = relpath(candidate, root)
-        if rel and rel not in records:
+        rel = rel if not rel or rel in records else matcher.on_disk(rel)
+        if rel is None:
             errors.append(error(raw, "hash-select", "selection not found in inventory"))
             continue
         if rel and records[rel]["kind"] == "symlink":
@@ -520,12 +538,13 @@ def build_report(root: str | os.PathLike = REPO_ROOT, *, depth: int = 2, top: in
     kinds_by_path = {rel: kind_of(info.st_mode) for rel, info, _ in entries}
     storage = git["storage_paths"]
     sets = {name: {path for path in paths if not path.endswith("/")} for name, paths in git["sets"].items()}
-    # Nested repositories as Git sees them: "dir/" entries in the untracked or ignored
-    # listings, and tracked gitlinks that are directories on disk.
-    nested = {path.rstrip("/") for name in ("untracked", "ignored")
-              for path in git["sets"].get(name, ()) if path.endswith("/")}
-    nested |= {path for path in sets.get("tracked", ()) if kinds_by_path.get(path) == "dir"}
     matcher = Matcher(sets, git["precompose_unicode"], git["ignore_case"])
+    matcher.disk = {matcher.key(rel): rel for rel in kinds_by_path}
+    # Nested repositories as Git sees them: "dir/" entries in the untracked or ignored
+    # listings, and gitlinks (index mode 160000) that are directories on disk.
+    named = [path.rstrip("/") for name in ("untracked", "ignored") for path in git["sets"].get(name, ())
+             if path.endswith("/")] + [path for path, mode in git["modes"].items() if mode == "160000"]
+    nested = {disk for disk in map(matcher.on_disk, named) if disk is not None and kinds_by_path[disk] == "dir"}
     records = {rel: {"kind": kinds_by_path[rel], "size": info.st_size,
                      "allocated": info.st_blocks * BLOCK_BYTES, "dev": info.st_dev, "ino": info.st_ino,
                      "nlink": info.st_nlink, "mtime_ns": info.st_mtime_ns,
@@ -558,7 +577,7 @@ def build_report(root: str | os.PathLike = REPO_ROOT, *, depth: int = 2, top: in
                 matches[group[0]].setdefault(rel, bucket(classes=True))
             continue
         if record["kind"] == "symlink":
-            symlinks.append(symlink_fact(root, rel, targets.get(rel), records, exclusions))
+            symlinks.append(symlink_fact(root, rel, targets.get(rel), records, exclusions, matcher))
             continue
         if record["kind"] != "file":
             special.append({"path": rel, "type": record["kind"], "class": record["class"]})
@@ -587,7 +606,14 @@ def build_report(root: str | os.PathLike = REPO_ROOT, *, depth: int = 2, top: in
     files = [rel for rel, record in records.items() if record["kind"] == "file"]
     largest = sorted(files, key=lambda rel: (-records[rel]["allocated"], -records[rel]["size"], rel))[:top]
     unclassified = sum(1 for r in records.values() if r["kind"] in ("file", "symlink") and r["class"] == "unclassified")
-    walked = {matcher.key(rel) for rel in records}
+    # A tracked path is inventoried only as an entry of the kind its index mode names,
+    # or as the Git name of an on-disk entry matched after Unicode/case folding.
+    folded = {m["git"] for m in matcher.mismatches if m["set"] == "tracked"}
+    expected = {"100644": "file", "100755": "file", "120000": "symlink", "160000": "dir"}
+
+    def inventoried(path: str) -> bool:
+        kind = expected.get(git["modes"].get(path, ""))
+        return path in folded or (path in records and kind in (None, records[path]["kind"]))
     report = {
         "contract": CONTRACT,
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -621,9 +647,8 @@ def build_report(root: str | os.PathLike = REPO_ROOT, *, depth: int = 2, top: in
         "special_files": special,
         "nested_repositories": sorted(nested),
         "name_matches": {name: rows(table) for name, table in matches.items()},
-        "tracked_paths_not_inventoried": sorted(p for p in sets.get("tracked", ())
-                                                if p not in records and matcher.key(p) not in walked),
-        "duplicates": duplicates(root, records, list(hash_paths), errors) if hash_paths else None,
+        "tracked_paths_not_inventoried": sorted(p for p in sets.get("tracked", ()) if not inventoried(p)),
+        "duplicates": duplicates(root, records, list(hash_paths), errors, matcher) if hash_paths else None,
         "entries": [{"path": rel, "kind": r["kind"], "class": r["class"], "hidden": r["hidden"],
                      "logical_bytes": r["size"], "allocated_bytes": r["allocated"], "nlink": r["nlink"],
                      "mtime_ns": r["mtime_ns"]} for rel, r in records.items()] if list_entries else None,
@@ -677,7 +702,7 @@ def render_text(report: dict, top: int = 20) -> str:
         f"Git: branch={git['branch']} head={git['head']} available={git['available']} "
         f"staged changes={'n/a' if staged is None else len(staged)} (unstaged modifications not computed)",
         "Units: logical = st_size; allocated = st_blocks x 512; KiB/MiB/GiB are 1024-based.",
-        f"Traversal within root: {'complete' if report['inventory_complete_within_root'] else 'INCOMPLETE'} "
+        f"Inventory within root: {'complete' if report['inventory_complete_within_root'] else 'INCOMPLETE'} "
         f"({len(report['errors'])} errors, {within} excluded subtrees within root); "
         f"Git classification complete: {report['git_classification_complete']} "
         f"({report['unclassified_entries']} unclassified files/symlinks)",
@@ -738,7 +763,7 @@ def render_text(report: dict, top: int = 20) -> str:
     lines += limited(report["nested_repositories"], top, lambda path: f"  {path}")
     lines += [f"Names matched to Git only after Unicode/case normalization: {len(report['name_mismatches'])}"]
     lines += limited(report["name_mismatches"], top, lambda m: f"  disk {m['disk']} = git {m['git']} [{m['set']}]")
-    lines += [f"Tracked paths not inventoried (missing, unreadable parent, or excluded): "
+    lines += [f"Tracked paths not inventoried (missing, type changed, unreadable parent, or excluded): "
               f"{len(report['tracked_paths_not_inventoried'])}"]
     lines += limited(report["tracked_paths_not_inventoried"], top, lambda path: f"  {path}")
     dup = report["duplicates"]

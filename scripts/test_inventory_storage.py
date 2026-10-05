@@ -55,11 +55,15 @@ def keys(value) -> set:
     return set()
 
 
+class Blocked(BaseException):
+    """Raised by deadline(); not an OSError, so the helper's handlers cannot absorb it."""
+
+
 @contextlib.contextmanager
 def deadline(seconds: int):
     """Fail instead of hanging if a regression makes a call block."""
     def expire(signum, frame):
-        raise TimeoutError("call blocked")
+        raise Blocked("call blocked")
     previous = signal.signal(signal.SIGALRM, expire)
     signal.alarm(seconds)
     try:
@@ -78,7 +82,7 @@ class Tree:
     def __init__(self, test: unittest.TestCase, *, repository: bool = True):
         holder = tempfile.TemporaryDirectory(prefix="inventory storage $(x) ;'")
         test.addCleanup(holder.cleanup)
-        self.base = Path(holder.name).resolve()
+        self.base = Path(inventory.canonical_root(holder.name))  # on-disk case, as Git prints it
         self.root, self.outside, home = self.base / "repo", self.base / "outside", self.base / "home"
         for path in (self.root, self.outside, home):
             path.mkdir()
@@ -177,6 +181,24 @@ class ClassificationTests(unittest.TestCase):
         self.assertFalse({"data/extract", "data/gitfile"} & set(report["nested_repositories"]))
         self.assertTrue(report["git_classification_complete"])
 
+    def test_index_modes_decide_gitlinks_and_type_changes(self):
+        tree = Tree(self)
+        os.symlink("run5", tree.root / "latest")
+        tree.write("results", b"table\n")
+        tree.write("Report.txt", b"r")
+        tree.git("add", "latest", "results", "Report.txt")
+        tree.git("commit", "-q", "-m", "fixture")
+        for name in ("latest", "results", "Report.txt"):
+            (tree.root / name).unlink()
+        tree.write("latest/unique_rerun.pdb", b"new")  # a tracked symlink became a directory
+        tree.write("results/table.tsv", b"new")  # a tracked file became a directory
+        (tree.root / "report.txt").mkdir()  # a deleted tracked file beside a differently cased directory
+        report = tree.report(list_entries=True)
+        classes = {row["path"]: row["class"] for row in report["entries"]}
+        self.assertEqual((classes["latest/unique_rerun.pdb"], classes["results/table.tsv"]), ("untracked", "untracked"))
+        self.assertEqual(report["nested_repositories"], [])
+        self.assertEqual(report["tracked_paths_not_inventoried"], ["Report.txt", "latest", "results"])
+
     def test_unreadable_ignore_rules_make_classification_partial(self):
         tree = Tree(self)
         tree.write(".gitignore", b"*.log\n")
@@ -245,6 +267,22 @@ class ClassificationTests(unittest.TestCase):
             other = inventory.build_report(variant)
             self.assertEqual(other["root"], str(tree.root))
             self.assertEqual([e for e in other["exclusions"] if not e["within_root"]], [])
+
+
+    def test_names_resolve_through_case_folding(self):
+        tree = Tree(self)
+        setting = subprocess.run(["git", "-C", str(tree.root), "config", "--get", "--type=bool", "core.ignorecase"],
+                                 capture_output=True, text=True, timeout=60)
+        if setting.stdout.strip() != "true":
+            self.skipTest("the repository does not ignore case on this platform")
+        tree.write("Run5/model.pdb", b"m" * 10)
+        tree.write("other/model.pdb", b"m" * 10)
+        os.symlink("run5", tree.root / "latest")
+        report = tree.report(hash_paths=["run5", "other"])
+        link = next(row for row in report["symlinks"] if row["path"] == "latest")
+        self.assertTrue(link["target_inventoried"])
+        self.assertEqual(report["errors"], [])
+        self.assertEqual(len(report["duplicates"]["groups"]), 1)
 
 
 class EvidenceShapeTests(unittest.TestCase):
@@ -427,7 +465,7 @@ class BoundaryTests(unittest.TestCase):
                 self.assertEqual(inventory.main(["--root", str(tree.root)]), 1)
         self.assertEqual([(e["path"], e["operation"]) for e in report["errors"]], [("injected", "scandir")])
         self.assertFalse(report["inventory_complete_within_root"])
-        self.assertIn("Traversal within root: INCOMPLETE", inventory.render_text(report))
+        self.assertIn("Inventory within root: INCOMPLETE", inventory.render_text(report))
         if os.geteuid() == 0:
             self.skipTest("root bypasses directory permissions; the injected failure above still ran")
         locked = tree.write("locked/file.txt", b"l").parent
@@ -435,6 +473,32 @@ class BoundaryTests(unittest.TestCase):
         self.addCleanup(locked.chmod, 0o755)
         self.assertIn(("locked", "scandir"), {(e["path"], e["operation"]) for e in tree.report()["errors"]})
         self.assertEqual(tree.cli().returncode, 1)  # a partial report exits nonzero
+
+    def test_unlistable_root_still_reports(self):
+        if os.geteuid() == 0:
+            self.skipTest("root bypasses directory permissions")
+        tree = Tree(self)
+        tree.write("a.txt", b"a")
+        tree.root.chmod(0o311)  # searchable but not listable
+        self.addCleanup(tree.root.chmod, 0o755)
+        report = tree.report()
+        self.assertIn((".", "scandir"), {(e["path"], e["operation"]) for e in report["errors"]})
+        self.assertFalse(report["inventory_complete_within_root"])
+        result = tree.cli("--format", "json")
+        self.assertEqual(result.returncode, 1)
+        self.assertFalse(json.loads(result.stdout)["inventory_complete_within_root"])
+
+    def test_split_index_is_detected_from_git_not_leftover_files(self):
+        tree = Tree(self)
+        tree.write("a.txt", b"a")
+        tree.git("add", "a.txt")
+        tree.git("update-index", "--split-index")
+        self.assertTrue(tree.report()["git"]["split_index"])
+        tree.git("update-index", "--no-split-index")
+        self.assertTrue(list((tree.root / ".git").glob("sharedindex.*")))  # Git leaves the old file behind
+        report = tree.report()
+        self.assertFalse(report["git"]["split_index"])
+        self.assertFalse(any("Split index" in note for note in report["notes"]))
 
     def test_mount_points_are_excluded_and_partial(self):
         tree = Tree(self)
@@ -470,7 +534,7 @@ class BoundaryTests(unittest.TestCase):
         tree.git("add", "a.txt")
         tree.git("commit", "-q", "-m", "fixture")
         cases = {
-            "ls-files failure": (lambda args: (128, b"", 0) if args[:3] == ("ls-files", "-z", "--cached") else None,
+            "ls-files failure": (lambda args: (128, b"", 0) if args[:3] == ("ls-files", "-z", "--stage") else None,
                                  "git ls-files (tracked)", "git_classification_complete"),
             "unterminated listing": (lambda args: (0, b"a.txt", 0) if "--ignored" in args else None,
                                      "git ls-files (ignored)", "git_classification_complete"),
@@ -554,6 +618,8 @@ class BoundaryTests(unittest.TestCase):
             report = tree.report(hash_paths=["."])
         self.assertNotIn("a.bin", {name for name, _ in opened})  # never reached through the swapped parent
         failed = {e["path"] for e in report["errors"] if e["operation"] == "hash"}
+        fifo = next(e["error"] for e in report["errors"] if e["path"] == "e.bin")
+        self.assertIn("changed since traversal", fifo)  # rejected by fstat, not by the deadline
         self.assertTrue({"dir/a.bin", "c.bin", "e.bin", "g.bin"} <= failed, report["errors"])
         grouped = {c["path"] for g in report["duplicates"]["groups"] for c in g["copies"]}
         self.assertTrue({"d.bin", "f.bin"} <= grouped)
@@ -628,12 +694,9 @@ class ReadOnlyTests(unittest.TestCase):
 
     def test_fsmonitor_hooks_and_trace2_targets_never_fire(self):
         tree = Tree(self)
-        plain = Path(tempfile.mkdtemp()).resolve()  # Git runs hooks through sh: keep metacharacters out
-        self.addCleanup(shutil.rmtree, plain)
-        hook, ran = plain / "fsmonitor-hook", tree.base / "fsmonitor-ran"
-        hook.write_text(f"#!/bin/sh\n: > {shlex.quote(str(ran))}\n")
-        hook.chmod(0o755)
-        tree.git("config", "core.fsmonitor", str(hook))
+        hook, ran = tree.base / "fsmonitor-hook", tree.base / "fsmonitor-ran"
+        hook.write_text(f": > {shlex.quote(str(ran))}\n")
+        tree.git("config", "core.fsmonitor", f"/bin/sh {shlex.quote(str(hook))}")  # Git runs it through sh
         tree.write("a.txt", b"a")
         tree.git("add", "a.txt")
         ran.unlink(missing_ok=True)
@@ -710,11 +773,11 @@ class ReadOnlyTests(unittest.TestCase):
     def test_text_output_escapes_control_characters(self):
         tree = Tree(self)
         tree.write("x\x1b[2KErrors: 0\x07", b"")
-        tree.write("spoof\nTraversal within root: complete", b"")
+        tree.write("spoof\nInventory within root: complete", b"")
         text = inventory.render_text(tree.report())
         self.assertNotIn("\x1b", text)
         self.assertNotIn("\x07", text)
-        self.assertEqual(sum(line.startswith("Traversal within root:") for line in text.splitlines()), 1)
+        self.assertEqual(sum(line.startswith("Inventory within root:") for line in text.splitlines()), 1)
 
 
 class CliTests(unittest.TestCase):
@@ -723,7 +786,7 @@ class CliTests(unittest.TestCase):
         tree.write("a.txt", b"a")
         with contextlib.redirect_stdout(io.StringIO()) as captured:
             self.assertEqual(inventory.main(["--root", str(tree.root)]), 0)
-        for phrase in ("KiB/MiB/GiB are 1024-based", "Traversal within root: complete",
+        for phrase in ("KiB/MiB/GiB are 1024-based", "Inventory within root: complete",
                        "Git classification complete: True", "facts only", "unstaged modifications not computed",
                        "KiB allocated); packs=", "KiB logical .pack+.idx"):
             self.assertIn(phrase, captured.getvalue())

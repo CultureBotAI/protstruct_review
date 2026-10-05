@@ -40,14 +40,18 @@ with the read-only standard-library helper, using any Python 3.11+ and `-B`:
 
 ```bash
 review_dir=$(mktemp -d "${TMPDIR:-/tmp}/protstruct-retention.XXXXXX")  # or the user's location
+g() { GIT_OPTIONAL_LOCKS=0 GIT_NO_LAZY_FETCH=1 GIT_ALLOW_PROTOCOL= git --no-optional-locks -c core.fsmonitor=false "$@"; }
 python3 -B scripts/inventory_storage.py --format text
 python3 -B scripts/inventory_storage.py --format json --entries > "$review_dir/inventory.json"
 python3 -B scripts/inventory_storage.py --format json --hash data/agents/round5 > "$review_dir/duplicates.json"
 ```
 
-The helper classifies every entry as tracked, untracked, ignored, Git storage
-(including nested repositories' `.git`), nested repository or unclassified without
-following symlinks, and reports branch, HEAD, staged changes, logical bytes
+Run every Git command in this skill through `g`, which carries the helper's guards
+against index rewrites, fsmonitor hooks and daemons, lazy fetches and transports.
+The helper classifies every file and symlink as tracked, untracked, ignored, Git
+storage (including nested repositories' `.git`), nested repository or unclassified
+without following symlinks (directories and special files elsewhere have class
+`null`), and reports branch, HEAD, staged changes, logical bytes
 (`st_size`), allocated bytes (`st_blocks` x 512), unique-inode totals, hardlinks,
 symlinks, empty and special files, conventional cache-name matches, Git storage and
 worktrees. Exit status 1, `inventory_complete_within_root: false`,
@@ -56,17 +60,16 @@ makes the inventory partial, never clean. `--hash` groups exact SHA-256 duplicat
 only within the selected paths, skipping Git storage, empty files and a best-effort
 list of sensitive names; never select private configuration, and try a small
 selection first. Name matches and duplicate groups are leads for section 2, not
-conclusions. Cross-check totals that matter with `du -sk` or
-`git --no-optional-locks count-objects -v` (loose size is allocated KiB, pack size
-logical KiB), and inventory linked worktrees without treating them as cleanup targets.
+conclusions. Cross-check totals that matter with `du -sk` or `g count-objects -v`
+(loose size is allocated KiB, pack size logical KiB), and inventory linked worktrees
+without treating them as cleanup targets.
 
 The helper does not compute unstaged modifications, because Git's content comparison
-can run filters. Only where no attribute source (`.gitattributes`,
-`.git/info/attributes`, `core.attributesFile`, `$XDG_CONFIG_HOME/git/attributes`)
-assigns `filter=`, add `git --no-optional-locks -c core.fsmonitor=false status --short
---branch`; plain `git status` can also rewrite `.git/index` or start an fsmonitor
-daemon. Keep untracked or locally modified work and local configuration unless
-their owner decides otherwise.
+can run filters, which can be assigned from in-tree `.gitattributes`,
+`.git/info/attributes`, the global and system attribute files or `attr.tree`. Run
+`g status --short --branch` only after `g ls-files -z | g check-attr --stdin -z filter`
+reports nothing but `unspecified` or `unset`. Keep untracked or locally modified work
+and local configuration unless their owner decides otherwise.
 
 Separate working-tree data, research records, installed environments, software
 caches, and Git storage. Report logical bytes and allocated disk space distinctly
@@ -173,9 +176,11 @@ counts into a cleanup rule:
 - `CODING_STANDARDS.md` (13b-13i) and the retained-emitter guards make historical,
   superseded and correction-targeted EVAL/QDS carriers immutable. Do not rewrite,
   re-serialize, rename, move, compress, symlink or deduplicate them, or the
-  hash-pinned retained contract modules. A `.yaml.gz` carrier silently drops out of
-  every gate discovery route, and path-keyed allowlists stop edits but not removal.
-  A green gate does not prove equal coverage.
+  hash-pinned retained contract modules. A `.yaml.gz` carrier drops out of every gate
+  discovery route. `scripts/check_qds_trust_invariant.py`'s path-keyed QDS allowlists
+  stop edits but not removal; `scripts/check_pass_status.py`'s exceptions also fail as
+  stale when their file is removed, renamed or compressed. A green gate does not prove
+  equal coverage.
 - `ref/README.md`, `THIRD_PARTY_NOTICES.md` and `LICENSE-DOCS.md` keep the PHENIX
   documentation cache local-only and leave third-party bundles and fixtures under
   upstream terms. Never put licensed tools or documentation, credentials, local
@@ -210,26 +215,38 @@ migration, keep that evidence in place and report the constraint.
 Working-tree compression/deletion does not remove old blobs from Git history;
 committing a compressed duplicate adds new objects that stay in every clone.
 Report loose-object and pack sizes separately, and measure a packed size instead of
-assuming one (`git --no-optional-locks -c core.fsmonitor=false pack-objects --stdout
---all --reflog --indexed-objects </dev/null | wc -c` writes nothing). Inventory
-recovery state read-only: for each prunable worktree record, the commits only it
-keeps reachable
-(`git --no-optional-locks rev-list --single-worktree <its HEAD and the SHAs in
-.git/worktrees/<id>/logs/HEAD> --not --all <every other record's HEAD and reflog
-SHAs>`), since a record whose HEAD a branch contains can still hold the only
-reference in its reflog; and unreachable commits
-(`git --no-optional-locks fsck --unreachable --no-progress`), flagging dropped
-stashes (`WIP on`, `index on`, `untracked files on`) with their ages. Recording SHAs
-preserves nothing. Do not delete `.git` objects, expire reflogs, drop stashes, run
-GC/prune/repack, rewrite history, or remove branches/worktrees as part of a data
-review. A default `git gc`, including the auto-gc that ordinary commits and fetches
-can trigger, prunes unreachable loose objects older than two weeks, expires
-unreachable reflog entries after 30 days and stale worktree records after three
-months; `git worktree prune` and `--prune=now` act at once. Report how close
-auto-gc is, and while recovery state is undecided make any commit or fetch you are
-authorized to run with `-c gc.auto=0 -c maintenance.auto=false`. Any later Git
-maintenance needs distinct scope and a recovery plan. "Prunable" metadata is not
-authorization to destroy user recovery state.
+assuming one (`g pack-objects --stdout --all --reflog --indexed-objects </dev/null |
+wc -c` writes nothing; in a partial clone it fails, so report the size as not
+measured).
+
+Inventory recovery state read-only. `g rev-list --all --reflog --not --branches
+--tags --remotes` lists the commits that only HEADs, reflogs or stashes keep
+reachable, including those of every prunable worktree record; pruning removes all
+such records at once, and a record whose HEAD a branch contains can still hold the
+only reference in its reflog. Attribute each commit to the reflogs that name it
+(`.git/logs/**`, `.git/worktrees/*/logs/HEAD`) with entry dates, and say whether a
+remote branch still holds it; checking GitHub PR refs (`git ls-remote origin
+'refs/pull/*/head'`) is a network query that needs the user's consent. Also list
+unreachable commits (`g fsck --unreachable --no-progress`), flagging dropped stashes
+(`WIP on`, `index on`, `untracked files on`) with their ages, and staged-only work in
+each worktree record's index (`GIT_INDEX_FILE=.git/worktrees/<id>/index g diff-index
+--cached --name-status <its HEAD>`). Recording SHAs preserves nothing. Do not delete
+`.git` objects, expire reflogs, drop stashes, run GC/prune/repack, rewrite history,
+or remove branches/worktrees as part of a data review.
+
+A default `git gc` prunes unreachable loose objects older than two weeks, expires
+unreachable reflog entries after 30 days (and the commits they alone kept) and stale
+worktree records after three months; `git worktree prune` and `--prune=now` act at
+once. Auto-gc runs from commit, fetch, pull, merge, am and rebase, and `gh pr merge`
+can pull locally. It fires when `.git/objects/17` holds more than ceil(gc.auto/256)
+loose objects (27 by default) or there are more than gc.autoPackLimit packs (50);
+`count-objects` totals understate how close that is, so report the `objects/17`
+count. While recovery state is undecided, run any write command you are authorized
+to run under a guard every Git child inherits: `export GIT_CONFIG_COUNT=2
+GIT_CONFIG_KEY_0=gc.auto GIT_CONFIG_VALUE_0=0 GIT_CONFIG_KEY_1=maintenance.auto
+GIT_CONFIG_VALUE_1=false`. Any later Git maintenance needs distinct scope and a
+recovery plan. "Prunable" metadata is not authorization to destroy user recovery
+state.
 
 ## 5. Present the proposal
 
@@ -256,11 +273,12 @@ next action.
 
 A cleanup request is a request for a proposal. Authorization counts only when given
 after the user has seen the proposal rows it covers, and it names those rows or
-literal paths; a request that itself names literal paths authorizes only those
-paths, after the review confirms them. It never reaches required-evidence or
-uncertain rows; `.venv` teardown, migrations and Git maintenance each need their own
-approval. Before acting, recheck the tree and each target against the saved helper
-JSON, and follow repository branch/review/validation rules for tracked changes.
+literal paths. A request that itself names literal paths still needs the user's
+approval of the proposal rows for exactly those paths. Authorization never reaches
+required-evidence or uncertain rows; `.venv` teardown, migrations and Git maintenance
+each need their own approval. Before acting, recheck the tree and each target
+against the saved helper JSON, and follow repository branch/review/validation rules
+for tracked changes.
 
 Dry-run the exact list, then act on the smallest approved item alone as a canary and
 verify its side effects (target absent or archive restored byte-for-byte, helper

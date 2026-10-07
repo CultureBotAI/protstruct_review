@@ -1,0 +1,93 @@
+{
+  "record_type": "engineering_review",
+  "date": "2026-10-06",
+  "pull_request": "https://github.com/CultureBotAI/protstruct_review/pull/878",
+  "reviewed_parent": "22312f33d77392e3fadedf19eac9a5578f71d52c",
+  "scope": "Complete the inherited uncommitted inventory and Claude-skill fixes, independently reproduce regressions, and test the command recipes. No scientific evidence, cleanup targets, or recovered Git objects are changed.",
+  "new_findings": [
+    {
+      "issue": 901,
+      "severity": "P2",
+      "cause": "Shared-index discovery separately listed Git directories outside the selected root, followed a symlinked Git directory, counted non-files, and suppressed listing failures.",
+      "reproduction": "Disposable separate-git-dir and symlinked-.git fixtures instrument Python directory enumeration; a directory named sharedindex.NOT_A_REGULAR_FILE was reported as a file.",
+      "resolution": "Derive root-relative regular-file paths from the existing bounded, no-follow traversal. Limit them to direct children of this worktree's Git directories. State that uninspected storage and stale shared-index files prevent inferring active split-index state."
+    },
+    {
+      "issue": 902,
+      "severity": "P1",
+      "cause": "A casefold-prefix comparison sliced an original path using the length of a differently spelled Git top-level; Unicode casefold expansion can change that length.",
+      "reproduction": "On case-insensitive APFS, requested Repoß/sub aliases disk ReposS/sub. With sub mode 0311 and a populated sibling repository ReposSsub, the inherited draft inventories that sibling, including outside_only.txt, with both completeness flags true and no errors.",
+      "resolution": "Verify ancestor filesystem identity with samefile, then reconstruct the suffix by path components. The same fixture now retains the selected directory and reports incomplete traversal without sibling entries."
+    },
+    {
+      "issue": 903,
+      "severity": "P2",
+      "cause": "Two colliding tracked names could both claim one folded disk entry when neither name matched its spelling exactly.",
+      "reproduction": "Index Data.txt and data.txt with only DATA.TXT on disk: the draft reported neither tracked path missing. A second real-Git fixture reproduces the same error using NFC, NFD, and a mixed Unicode spelling.",
+      "resolution": "Preserve exact matches but require a unique normalized tracked name for each non-exact match; ambiguous names remain in tracked_paths_not_inventoried."
+    },
+    {
+      "issue": 904,
+      "severity": "P2",
+      "cause": "The skill assumed .git was a directory and omitted the main worktree index when reviewing from a linked worktree.",
+      "reproduction": "From a linked audit worktree, the literal .git/worktrees/stale/index query fails with Not a directory. Resolved common-directory paths expose staged-evidence.txt in the stale record and main-staged-evidence.txt in the main index.",
+      "resolution": "Resolve Git metadata paths through guarded Git queries; inspect main and linked administrative indexes against their own HEADs and report failed or unborn-HEAD comparisons as unverified."
+    }
+  ],
+  "follow_up_coverage": [
+    {
+      "issues": [879, 880, 892, 893],
+      "change": "Check the resolved tracked entry's type, retain collision protection, recognize differently spelled gitlinks, and accept Git's regular-file symlink representation only with core.symlinks=false."
+    },
+    {
+      "issues": [881, 883, 884, 900],
+      "change": "Retain partial reports for unreadable roots, use a deadline exception the helper cannot swallow, preserve special-character scratch paths, and verify root/worktree containment."
+    },
+    {
+      "issues": [882, 894],
+      "change": "Replace the configuration-dependent split_index boolean with observed shared_index_files and conditional mtime-refresh wording; do not claim stale files prove an active split index."
+    },
+    {
+      "issues": [885, 886, 887, 888, 895, 896, 897, 898],
+      "change": "Execute alias-safe local Git recipes, separate consented remote inspection, gate status on effective attributes and ignore submodules, propagate pack-producer failures, and attribute reflog reachability through both nonzero entry sides with configuration-aware retention."
+    },
+    {
+      "issues": [889, 890, 891, 899],
+      "change": "Keep proposal approval distinct from cleanup authorization; distinguish guard removal coverage and null classes; state exit status through the two completeness flags and the separate tracked-path gap list. PR prose and the eventual squash message must use the same contract."
+    }
+  ],
+  "focused_verification": {
+    "interpreter": "Python 3.12.11",
+    "platform": "macOS APFS",
+    "inventory_suite": {
+      "command": "python -B scripts/test_inventory_storage.py",
+      "tests_run": 44,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 1,
+      "skip_reason": "The filesystem rejects the non-UTF-8 filename fixture."
+    },
+    "skill_recipe_suite": {
+      "command": "python -B scripts/test_retention_skill_commands.py",
+      "tests_run": 13,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "behaviors": ["Bash and Zsh aliases/functions", "fsmonitor suppression", "local transport block and explicit remote-query exception", "submodule filter avoidance with a positive control", "pack success and failure handling", "unnamed reflog ancestors and stash parents", "default versus per-ref stash expiry", "linked-worktree administrative path resolution", "main and linked indexes compared against their own HEADs", "unborn or missing HEAD and missing or invalid index reported as unverified"]
+    },
+    "historical_regression_checks": [
+      "Seven focused tests against an isolated 22312f3 helper produced six assertion failures, with no setup errors or skips.",
+      "Three focused tests against the inherited uncommitted helper produced four assertion failures across subtests, with no setup errors or skips.",
+      "Two new third-spelling collision tests failed semantic assertions against the pre-903 helper while the exact-spelling collision control passed; there were no setup errors or skips.",
+      "Removing O_NONBLOCK in an isolated helper caused the FIFO deadline to raise an uncaught BaseException, rather than recording a normal hash error."
+    ],
+    "skill_frontmatter": "skill-creator quick_validate passed",
+    "lint": "ruff check passed on the helper and both test modules"
+  },
+  "interpretation_limits": [
+    "This is an engineering review, not a scientific experiment or a data-retention authorization.",
+    "Focused results here do not substitute for the required locked full gate or green Linux and macOS CI on the reviewed PR head; those receipts belong to the PR.",
+    "The remote-query recipe uses a disposable local origin in tests, not a live external service.",
+    "Recovered local history stays protected by recovery refs and disabled automatic maintenance; this change does not restore ledger rows, publish private history, or authorize Git housekeeping."
+  ]
+}

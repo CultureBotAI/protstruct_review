@@ -285,6 +285,122 @@ class ClassificationTests(unittest.TestCase):
         self.assertEqual(len(report["duplicates"]["groups"]), 1)
 
 
+    def test_folded_names_keep_index_kinds_and_gitlinks(self):
+        tree = Tree(self)
+        if not (tree.root.parent / tree.root.name.swapcase()).exists():
+            self.skipTest("case-sensitive filesystem")
+        tree.git("config", "core.ignorecase", "true")
+        sub = tree.write("Tool/inner.txt", b"inner").parent
+        tree.git("init", "-q", "-b", "main", cwd=sub)
+        tree.git("add", "inner.txt", cwd=sub)
+        tree.git("commit", "-q", "-m", "inner", cwd=sub)
+        sha = tree.git("rev-parse", "HEAD", cwd=sub).strip()
+        tree.git("update-index", "--add", "--cacheinfo", f"160000,{sha},tool")  # gitlink spelled differently
+        tree.write("Notes.txt", b"n")
+        os.symlink("target.txt", tree.root / "Latest")
+        tree.git("add", "Notes.txt", "Latest")
+        (tree.root / "Notes.txt").unlink()
+        os.symlink("target.txt", tree.root / "notes.txt")  # a case-differing file-to-symlink type change
+        (tree.root / "Latest").unlink()
+        tree.write("latest", b"target.txt")  # the reverse type change must also remain visible
+        changed = tree.git("diff-files", "--name-status", "-z").split("\0")
+        self.assertEqual(dict(zip(changed[1::2], changed[0::2])), {"Latest": "T", "Notes.txt": "T"})
+        report = tree.report(list_entries=True)
+        classes = {row["path"]: row["class"] for row in report["entries"]}
+        self.assertEqual(classes["Tool/inner.txt"], "nested_repository")
+        self.assertEqual(report["nested_repositories"], ["Tool"])
+        self.assertEqual(report["tracked_paths_not_inventoried"], ["Latest", "Notes.txt"])
+        self.assertEqual((classes["latest"], classes["notes.txt"]), ("tracked", "tracked"))
+        self.assertTrue(report["git_classification_complete"])
+        self.assertTrue(report["inventory_complete_within_root"])
+
+    def test_unicode_folded_names_keep_index_kinds_and_nested_directories(self):
+        tree = Tree(self)
+        setting = subprocess.run(["git", "-C", str(tree.root), "config", "--get", "--type=bool",
+                                  "core.precomposeunicode"], capture_output=True, text=True, timeout=60)
+        if setting.stdout.strip() != "true":
+            self.skipTest("Git does not precompose Unicode on this platform")
+        clone_name, sub_name, file_name, link_name = [unicodedata.normalize("NFD", name) for name in
+                                                    ("bibliothèque", "résumé", "résultats", "dernière")]
+        clone = tree.write(f"vendor/{clone_name}/lib.c", b"c").parent
+        tree.git("init", "-q", "-b", "main", cwd=clone)
+        sub = tree.write(f"{sub_name}/inner.txt", b"inner").parent
+        tree.git("init", "-q", "-b", "main", cwd=sub)
+        tree.git("add", "inner.txt", cwd=sub)
+        tree.git("commit", "-q", "-m", "inner", cwd=sub)
+        sha = tree.git("rev-parse", "HEAD", cwd=sub).strip()
+        tree.git("update-index", "--add", "--cacheinfo", f"160000,{sha},résumé")
+        tree.write(file_name, b"file")
+        os.symlink("target.txt", tree.root / link_name)
+        tree.git("add", "--", file_name, link_name)
+        self.assertEqual(set(tree.git("ls-files", "-z").split("\0")) - {""},
+                         {"résumé", "résultats", "dernière"})  # actual Git names differ from disk names
+        self.assertIn("vendor/bibliothèque/", tree.git("ls-files", "-z", "--others", "--exclude-standard").split("\0"))
+        (tree.root / file_name).unlink()
+        os.symlink("target.txt", tree.root / file_name)
+        (tree.root / link_name).unlink()
+        tree.write(link_name, b"target.txt")
+        report = tree.report(list_entries=True)
+        classes = {row["path"]: row["class"] for row in report["entries"]}
+        self.assertEqual(classes[f"vendor/{clone_name}/lib.c"], "nested_repository")
+        self.assertEqual(classes[f"{sub_name}/inner.txt"], "nested_repository")
+        self.assertEqual(report["nested_repositories"], sorted([sub_name, f"vendor/{clone_name}"]))
+        self.assertEqual(report["tracked_paths_not_inventoried"], ["dernière", "résultats"])
+        self.assertEqual((classes[file_name], classes[link_name]), ("tracked", "tracked"))
+        self.assertTrue(report["git_classification_complete"])
+        self.assertTrue(report["inventory_complete_within_root"])
+
+    def test_folded_match_cannot_reuse_another_tracked_paths_entry(self):
+        tree = Tree(self)
+        tree.git("config", "core.ignorecase", "true")
+        tree.write("data.txt", b"tracked")
+        tree.git("add", "data.txt")
+        blob = tree.git("rev-parse", ":data.txt").strip()
+        tree.git("update-index", "--add", "--cacheinfo", f"100644,{blob},Data.txt")
+        self.assertEqual(set(tree.git("ls-files", "-z").split("\0")) - {""}, {"Data.txt", "data.txt"})
+        report = tree.report()
+        self.assertEqual(report["tracked_paths_not_inventoried"], ["Data.txt"])
+        self.assertEqual(report["totals_by_class"]["tracked"]["files"], 1)
+
+    def test_folded_collision_cannot_reuse_a_third_spelling(self):
+        tree = Tree(self)
+        tree.git("config", "core.ignorecase", "true")
+        tree.write("Data.txt", b"tracked")
+        tree.git("add", "Data.txt")
+        blob = tree.git("rev-parse", ":Data.txt").strip()
+        tree.git("update-index", "--add", "--cacheinfo", f"100644,{blob},data.txt")
+        (tree.root / "Data.txt").unlink()
+        tree.write("DATA.TXT", b"tracked")  # neither index spelling has an exact disk entry
+        self.assertEqual(set(tree.git("ls-files", "-z").split("\0")) - {""}, {"Data.txt", "data.txt"})
+        report = tree.report(list_entries=True)
+        self.assertEqual([(row["path"], row["kind"]) for row in report["entries"] if row["class"] == "tracked"],
+                         [("DATA.TXT", "file")])
+        self.assertEqual(report["tracked_paths_not_inventoried"], ["Data.txt", "data.txt"])
+
+    def test_unicode_collision_cannot_reuse_a_third_normalization(self):
+        tree = Tree(self)
+        setting = subprocess.run(["git", "-C", str(tree.root), "config", "--get", "--type=bool",
+                                  "core.precomposeunicode"], capture_output=True, text=True, timeout=60)
+        if setting.stdout.strip() != "true":
+            self.skipTest("Git does not precompose Unicode on this platform")
+        nfc = "résumé.txt"
+        nfd = unicodedata.normalize("NFD", nfc)
+        mixed = "résume\u0301.txt"  # first accent composed, second decomposed: a third equivalent spelling
+        tree.git("config", "core.precomposeunicode", "false")  # preserve both distinct index spellings
+        tree.write(nfc, b"tracked")
+        tree.git("add", "--", nfc)
+        blob = tree.git("rev-parse", f":{nfc}").strip()
+        tree.git("update-index", "--add", "--cacheinfo", f"100644,{blob},{nfd}")
+        (tree.root / nfc).unlink()
+        tree.write(mixed, b"tracked")
+        tree.git("config", "core.precomposeunicode", "true")
+        self.assertEqual(set(tree.git("ls-files", "-z").split("\0")) - {""}, {nfc, nfd})
+        report = tree.report(list_entries=True)
+        self.assertEqual([(row["path"], row["kind"]) for row in report["entries"] if row["class"] == "tracked"],
+                         [(mixed, "file")])
+        self.assertEqual(report["tracked_paths_not_inventoried"], sorted([nfc, nfd]))
+
+
 class EvidenceShapeTests(unittest.TestCase):
     def test_empty_evidence_is_inventoried_and_not_grouped_as_duplicates(self):
         tree = Tree(self)
@@ -488,17 +604,177 @@ class BoundaryTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertFalse(json.loads(result.stdout)["inventory_complete_within_root"])
 
-    def test_split_index_is_detected_from_git_not_leftover_files(self):
+    def test_shared_index_files_are_reported_from_disk_not_config(self):
+        tree = Tree(self)
+        tree.write("a.txt", b"a")
+        tree.git("add", "a.txt")
+        tree.git("config", "core.splitIndex", "true")  # configured, but no shared index written yet
+        unsplit_index = (tree.root / ".git/index").read_bytes()
+        report = tree.report()
+        self.assertIn("shared_index_files", report["git"])
+        self.assertNotIn("split_index", report["git"])  # presence alone cannot identify an active split index
+        self.assertEqual(report["git"]["shared_index_files"], [])
+        self.assertFalse(any("Shared-index files are present:" in note for note in report["notes"]))
+        self.assertEqual((tree.root / ".git/index").read_bytes(), unsplit_index)
+        tree.git("update-index", "--split-index")
+        tree.git("config", "core.splitIndex", "false")  # the on-disk index stays split
+        shared = sorted(str(path.relative_to(tree.root)) for path in (tree.root / ".git").glob("sharedindex.*"))
+        self.assertTrue(shared, "fixture must have a real shared index before testing the report")
+        split_index = (tree.root / ".git/index").read_bytes()
+        report = tree.report()
+        self.assertEqual(report["git"]["shared_index_files"], shared)
+        self.assertTrue(any("Shared-index files are present:" in note for note in report["notes"]))
+        self.assertEqual((tree.root / ".git/index").read_bytes(), split_index)
+        tree.git("update-index", "--no-split-index")
+        self.assertEqual(tree.git("rev-parse", "--shared-index-path").strip(), "")
+        self.assertTrue(all((tree.root / path).is_file() for path in shared))  # stale files remain real facts
+        report = tree.report()
+        self.assertEqual(report["git"]["shared_index_files"], shared)
+        self.assertNotIn("split_index", report["git"])
+
+    def test_shared_index_metadata_requires_regular_files_in_git_directory(self):
         tree = Tree(self)
         tree.write("a.txt", b"a")
         tree.git("add", "a.txt")
         tree.git("update-index", "--split-index")
-        self.assertTrue(tree.report()["git"]["split_index"])
-        tree.git("update-index", "--no-split-index")
-        self.assertTrue(list((tree.root / ".git").glob("sharedindex.*")))  # Git leaves the old file behind
+        shared = sorted(str(path.relative_to(tree.root)) for path in (tree.root / ".git").glob("sharedindex.*"))
+        self.assertTrue(shared)
+        (tree.root / ".git/sharedindex.directory").mkdir()
+        outside = tree.write("sharedindex.external", b"private", base=tree.outside)
+        os.symlink(outside, tree.root / ".git/sharedindex.symlink")
+        tree.write(".git/unrelated/sharedindex.nested", b"not a shared index")
         report = tree.report()
-        self.assertFalse(report["git"]["split_index"])
-        self.assertFalse(any("Split index" in note for note in report["notes"]))
+        self.assertEqual(report["git"]["shared_index_files"], shared)
+
+    def test_shared_index_metadata_never_lists_external_or_symlinked_git_directories(self):
+        for layout in ("separate_git_dir", "symlink"):
+            with self.subTest(layout=layout):
+                tree = Tree(self)
+                tree.write("a.txt", b"a")
+                tree.git("add", "a.txt")
+                tree.git("update-index", "--split-index")
+                external = tree.outside / "metadata"
+                if layout == "separate_git_dir":
+                    tree.git("init", "-q", "--separate-git-dir", str(external))
+                else:
+                    (tree.root / ".git").rename(external)
+                    os.symlink(external, tree.root / ".git", target_is_directory=True)
+                self.assertTrue(list(external.glob("sharedindex.*")))
+                forbidden, external_info = [], external.stat()
+                real_listdir, real_scandir = os.listdir, os.scandir
+
+                def guard(real):
+                    def listing(path):
+                        if isinstance(path, int):
+                            info = os.fstat(path)
+                            outside = (info.st_dev, info.st_ino) == (external_info.st_dev, external_info.st_ino)
+                        else:
+                            outside = os.path.commonpath([os.path.realpath(path), str(tree.outside)]) == str(tree.outside)
+                        if outside:
+                            forbidden.append(str(path))
+                            raise AssertionError("Python attempted to list external Git metadata")
+                        return real(path)
+                    return listing
+
+                with mock.patch.object(inventory.os, "listdir", side_effect=guard(real_listdir)), \
+                        mock.patch.object(inventory.os, "scandir", side_effect=guard(real_scandir)):
+                    report = tree.report(list_entries=True)
+                self.assertEqual(forbidden, [])
+                self.assertEqual(report["git"]["shared_index_files"], [])
+                self.assertFalse(any("sharedindex." in row["path"] for row in report["entries"]))
+                self.assertTrue(any(row["path"] == str(external) and not row["within_root"]
+                                    for row in report["exclusions"]))
+
+    def test_symlinks_checked_out_as_files_count_when_core_symlinks_is_false(self):
+        tree = Tree(self)
+        tree.write("target.txt", b"target")
+        os.symlink("target.txt", tree.root / "link")
+        tree.git("add", "target.txt", "link")
+        tree.git("commit", "-q", "-m", "symlink fixture")
+        checkout = tree.outside / "checkout"
+        tree.git("clone", "-q", "--no-hardlinks", "-c", "core.symlinks=false", str(tree.root), str(checkout))
+        self.assertFalse((checkout / "link").is_symlink())
+        self.assertEqual((checkout / "link").read_bytes(), b"target.txt")
+        self.assertEqual(tree.git("status", "--porcelain", cwd=checkout), "")  # a legitimate clean checkout
+        report = inventory.build_report(checkout, list_entries=True)
+        self.assertEqual(report["tracked_paths_not_inventoried"], [])
+        self.assertEqual(report["totals_by_class"]["tracked"]["files"], 2)
+        self.assertTrue(report["git_classification_complete"])
+        self.assertTrue(report["inventory_complete_within_root"])
+        tree.git("config", "core.symlinks", "true", cwd=checkout)
+        self.assertEqual(inventory.build_report(checkout)["tracked_paths_not_inventoried"], ["link"])
+        tree.git("config", "--unset", "core.symlinks", cwd=checkout)  # missing configuration defaults to true
+        self.assertEqual(inventory.build_report(checkout)["tracked_paths_not_inventoried"], ["link"])
+        tree.git("config", "core.symlinks", "false", cwd=checkout)
+        (checkout / "link").unlink()
+        (checkout / "link").mkdir()
+        self.assertEqual(inventory.build_report(checkout)["tracked_paths_not_inventoried"], ["link"])
+
+    def test_miscased_unlistable_root_keeps_its_own_git_inside(self):
+        if os.geteuid() == 0:
+            self.skipTest("root bypasses directory permissions")
+        tree = Tree(self)
+        variant = str(tree.root).swapcase()
+        if not os.path.exists(variant):
+            self.skipTest("case-sensitive filesystem")
+        tree.write("a.txt", b"a")
+        tree.root.chmod(0o311)
+        self.addCleanup(tree.root.chmod, 0o755)
+        report = inventory.build_report(variant)
+        self.assertEqual(report["root"], str(tree.root))
+        self.assertEqual([e for e in report["exclusions"] if not e["within_root"]], [])
+        self.assertIn((".", "scandir"), {(row["path"], row["operation"]) for row in report["errors"]})
+        self.assertFalse(report["inventory_complete_within_root"])
+        self.assertEqual(report["git"]["git_dir"], str(tree.root / ".git"))
+        current = [row for row in report["git"]["worktrees"] if row["path"] == str(tree.root)]
+        self.assertEqual(len(current), 1)
+        self.assertTrue(current[0]["inside_root"] and current[0]["contains_root"])
+        with contextlib.redirect_stdout(io.StringIO()) as captured:
+            self.assertEqual(inventory.main(["--root", variant, "--format", "json"]), 1)
+        rendered = json.loads(captured.getvalue())
+        self.assertEqual(rendered["root"], str(tree.root))
+        self.assertFalse(rendered["inventory_complete_within_root"])
+
+    def test_miscased_unlistable_subdirectory_keeps_its_git_ancestor(self):
+        if os.geteuid() == 0:
+            self.skipTest("root bypasses directory permissions")
+        tree = Tree(self)
+        subdir = tree.write("Inner/a.txt", b"a").parent
+        variant = str(tree.root).swapcase() + "/Inner"
+        if not os.path.exists(variant):
+            self.skipTest("case-sensitive filesystem")
+        subdir.chmod(0o311)
+        self.addCleanup(subdir.chmod, 0o755)
+        report = inventory.build_report(variant)
+        self.assertTrue(os.path.samefile(report["root"], subdir))
+        self.assertFalse(report["inventory_complete_within_root"])
+        self.assertIn((".", "scandir"), {(row["path"], row["operation"]) for row in report["errors"]})
+        current = [row for row in report["git"]["worktrees"] if row["path"] == str(tree.root)]
+        self.assertEqual(len(current), 1)
+        self.assertFalse(current[0]["inside_root"])
+        self.assertTrue(current[0]["contains_root"])
+        self.assertFalse(any("linked worktree" in row["reason"] for row in report["exclusions"]))
+
+    def test_length_changing_case_alias_cannot_redirect_an_unlistable_root(self):
+        if os.geteuid() == 0:
+            self.skipTest("root bypasses directory permissions")
+        tree = Tree(self)
+        renamed = tree.base / "ReposS"
+        tree.root.rename(renamed)
+        tree.root = renamed
+        subdir = tree.write("sub/inside.txt", b"inside").parent
+        variant = tree.base / "Repoß/sub"
+        if not variant.exists() or not os.path.samefile(variant, subdir):
+            self.skipTest("filesystem does not equate this length-changing case alias")
+        decoy = tree.write("outside_only.txt", b"outside", base=tree.base / "ReposSsub").parent
+        tree.git("init", "-q", "-b", "main", cwd=decoy)
+        subdir.chmod(0o311)
+        self.addCleanup(subdir.chmod, 0o755)
+        report = inventory.build_report(variant, list_entries=True)
+        self.assertTrue(os.path.samefile(report["root"], subdir), report["root"])
+        self.assertFalse(report["inventory_complete_within_root"])
+        self.assertIn((".", "scandir"), {(row["path"], row["operation"]) for row in report["errors"]})
+        self.assertFalse(any(row["path"] == "outside_only.txt" for row in report["entries"]))
 
     def test_mount_points_are_excluded_and_partial(self):
         tree = Tree(self)
@@ -838,7 +1114,10 @@ class CliTests(unittest.TestCase):
             self.assertTrue(name in text, f"the skill no longer names {name}")
             self.assertTrue(name in report_keys, f"the helper no longer reports {name}")
         self.assertIn("Exit status 1", text)
-        self.assertIn("1 when the\nreport is partial", inventory.__doc__)
+        contract = " ".join(inventory.__doc__.split())
+        for phrase in ("0 when inventory_complete_within_root", "git_classification_complete are both true",
+                       "1 otherwise", "2 for usage errors", "do not change the status"):
+            self.assertIn(phrase, contract)
 
 
 if __name__ == "__main__":

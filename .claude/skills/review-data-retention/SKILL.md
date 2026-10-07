@@ -40,14 +40,16 @@ with the read-only standard-library helper, using any Python 3.11+ and `-B`:
 
 ```bash
 review_dir=$(mktemp -d "${TMPDIR:-/tmp}/protstruct-retention.XXXXXX")  # or the user's location
-g() { GIT_OPTIONAL_LOCKS=0 GIT_NO_LAZY_FETCH=1 GIT_ALLOW_PROTOCOL= git --no-optional-locks -c core.fsmonitor=false "$@"; }
+unalias git_ro 2>/dev/null || true
+git_ro() { GIT_OPTIONAL_LOCKS=0 GIT_NO_LAZY_FETCH=1 GIT_ALLOW_PROTOCOL= command git --no-optional-locks -c core.fsmonitor=false "$@"; }
 python3 -B scripts/inventory_storage.py --format text
 python3 -B scripts/inventory_storage.py --format json --entries > "$review_dir/inventory.json"
 python3 -B scripts/inventory_storage.py --format json --hash data/agents/round5 > "$review_dir/duplicates.json"
 ```
 
-Run every Git command in this skill through `g`, which carries the helper's guards
-against index rewrites, fsmonitor hooks and daemons, lazy fetches and transports.
+Run every local Git query in this skill through `git_ro`, which carries the helper's
+guards against index rewrites, fsmonitor hooks and daemons, lazy fetches and
+transports, and bypasses any `git` alias or function.
 The helper classifies every file and symlink as tracked, untracked, ignored, Git
 storage (including nested repositories' `.git`), nested repository or unclassified
 without following symlinks (directories and special files elsewhere have class
@@ -60,15 +62,18 @@ makes the inventory partial, never clean. `--hash` groups exact SHA-256 duplicat
 only within the selected paths, skipping Git storage, empty files and a best-effort
 list of sensitive names; never select private configuration, and try a small
 selection first. Name matches and duplicate groups are leads for section 2, not
-conclusions. Cross-check totals that matter with `du -sk` or `g count-objects -v`
+conclusions. Cross-check totals that matter with `du -sk` or `git_ro count-objects -v`
 (loose size is allocated KiB, pack size logical KiB), and inventory linked worktrees
 without treating them as cleanup targets.
 
 The helper does not compute unstaged modifications, because Git's content comparison
 can run filters, which can be assigned from in-tree `.gitattributes`,
 `.git/info/attributes`, the global and system attribute files or `attr.tree`. Run
-`g status --short --branch` only after `g ls-files -z | g check-attr --stdin -z filter`
-reports nothing but `unspecified` or `unset`. Keep untracked or locally modified work
+`git_ro status --short --branch --ignore-submodules=all` only after
+`set -o pipefail; git_ro ls-files -z | git_ro check-attr --stdin -z filter`
+succeeds and every NUL-delimited attribute value is `unspecified` or `unset`.
+An error leaves unstaged status unverified; `--ignore-submodules=all` prevents
+submodules' unchecked filters from running. Keep untracked or locally modified work
 and local configuration unless their owner decides otherwise.
 
 Separate working-tree data, research records, installed environments, software
@@ -215,32 +220,100 @@ migration, keep that evidence in place and report the constraint.
 Working-tree compression/deletion does not remove old blobs from Git history;
 committing a compressed duplicate adds new objects that stay in every clone.
 Report loose-object and pack sizes separately, and measure a packed size instead of
-assuming one (`g pack-objects --stdout --all --reflog --indexed-objects </dev/null |
-wc -c` writes nothing; in a partial clone it fails, so report the size as not
-measured).
+assuming one. The following skips partial-clone configuration and never treats a
+failed producer's zero-byte output as a measurement:
 
-Inventory recovery state read-only. `g rev-list --all --reflog --not --branches
---tags --remotes` lists the commits that only HEADs, reflogs or stashes keep
-reachable, including those of every prunable worktree record; pruning removes all
-such records at once, and a record whose HEAD a branch contains can still hold the
-only reference in its reflog. Attribute each commit to the reflogs that name it
-(`.git/logs/**`, `.git/worktrees/*/logs/HEAD`) with entry dates, and say whether a
-remote branch still holds it; checking GitHub PR refs (`git ls-remote origin
-'refs/pull/*/head'`) is a network query that needs the user's consent. Also list
-unreachable commits (`g fsck --unreachable --no-progress`), flagging dropped stashes
-(`WIP on`, `index on`, `untracked files on`) with their ages, and staged-only work in
-each worktree record's index (`GIT_INDEX_FILE=.git/worktrees/<id>/index g diff-index
---cached --name-status <its HEAD>`). Recording SHAs preserves nothing. Do not delete
+```bash
+if git_ro config --get-regexp '^(remote\..*\.promisor|extensions\.partialclone)$' >/dev/null; then
+    printf '%s\n' 'Packed size: not measured (partial-clone configuration)'
+else
+    config_status=$?
+    if [ "$config_status" -ne 1 ]; then
+        printf '%s\n' 'Packed size: not measured (configuration query failed)'
+    elif packed_bytes=$(set -o pipefail; git_ro pack-objects --stdout --all --reflog --indexed-objects </dev/null | wc -c); then
+        printf 'Packed size: %s bytes\n' "$packed_bytes"
+    else
+        printf '%s\n' 'Packed size: not measured (pack command failed)'
+    fi
+fi
+```
+
+Inventory recovery state read-only. Resolve Git's administrative paths instead of
+assuming `.git` is a directory; a linked worktree has a `.git` file:
+
+```bash
+git_dir=$(git_ro rev-parse --absolute-git-dir) &&
+common_dir=$(git_ro rev-parse --path-format=absolute --git-common-dir) &&
+object_dir=$(git_ro rev-parse --path-format=absolute --git-path objects)
+```
+
+Proceed with these paths only if all three queries succeed; otherwise report the
+affected recovery checks as unverified. Recovery checks may inspect this
+repository's Git administrative metadata outside the selected root, including
+linked-worktree records. This does not include the contents of external working
+trees or add them to the helper's filesystem inventory.
+
+`git_ro rev-list --all --reflog --not --branches
+--tags --remotes` lists commits not reachable from branches, tags or remote-tracking
+refs, including those held by HEADs, reflogs, stashes or other refs and by every
+prunable worktree record; pruning removes all such records at once, and a record
+whose HEAD a branch contains can still hold the
+only reference in its reflog. Date each commit by the newest reflog entry that
+reaches it: inspect shared-ref and main-worktree logs under `"$common_dir/logs"`,
+and each linked record's `logs/HEAD` under `"$common_dir/worktrees"` (the current
+linked worktree's log is `"$git_dir/logs/HEAD"`)
+(`git_ro rev-list <entry> --not --branches --tags --remotes` for both old and new
+object IDs, skipping all-zero IDs), since stash index commits and interior commits
+are named by no entry. Use the entry timestamp, not the commit date; a failed
+reachability query leaves attribution unverified. `refs/stash` entries never expire
+by default, and commits held by other refs (`refs/notes`, `refs/prefetch`, recovery
+refs) are listed but not at risk from reflog expiry while those refs remain.
+Whether GitHub still has a commit needs a network query, the one Git command run
+outside `git_ro` and only with the
+user's consent: `GIT_TERMINAL_PROMPT=0 command git --no-optional-locks -c
+core.fsmonitor=false ls-remote origin 'refs/pull/*/head'`; if it fails, record
+"not checked", never "not held". Also list
+unreachable commits (`git_ro fsck --unreachable --no-progress`), flagging dropped stashes
+(`WIP on`, `index on`, `untracked files on`) with their ages.
+
+Check staged-only work against each record's own HEAD. Set
+`record_git_dir="$common_dir"` for the main worktree, then repeat for each literal
+administrative directory found under `"$common_dir/worktrees"`; for the current
+linked worktree use `record_git_dir="$git_dir"`. This includes the main index at
+`"$common_dir/index"`, which is absent from the linked-record directories:
+
+```bash
+if [ -f "$record_git_dir/index" ] &&
+   record_head=$(git_ro --git-dir="$record_git_dir" rev-parse --verify -q 'HEAD^{commit}') &&
+   record_staged=$(GIT_INDEX_FILE="$record_git_dir/index" git_ro --git-dir="$record_git_dir" diff-index --cached --name-status "$record_head"); then
+    printf '%s\n' "$record_staged"
+else
+    printf '%s\n' 'Staged changes: unverified (missing index, missing or unborn HEAD, or Git query failure)'
+fi
+```
+
+Only a successful comparison with empty output establishes no staged changes;
+retain an unverified record for further investigation. Recording SHAs preserves
+nothing. Do not delete
 `.git` objects, expire reflogs, drop stashes, run GC/prune/repack, rewrite history,
 or remove branches/worktrees as part of a data review.
 
 A default `git gc` prunes unreachable loose objects older than two weeks, expires
-unreachable reflog entries after 30 days (and the commits they alone kept) and stale
-worktree records after three months; `git worktree prune` and `--prune=now` act at
-once. Auto-gc runs from commit, fetch, pull, merge, am and rebase, and `gh pr merge`
-can pull locally. It fires when `.git/objects/17` holds more than ceil(gc.auto/256)
-loose objects (27 by default) or there are more than gc.autoPackLimit packs (50);
-`count-objects` totals understate how close that is, so report the `objects/17`
+unreachable reflog entries after 30 days (other entries after 90 days, except the
+stash default above) and stale worktree records after three months. Check effective
+`gc.reflogExpire`, `gc.reflogExpireUnreachable`, their `gc.<pattern>.*` overrides,
+`gc.pruneExpire` and `gc.worktreePruneExpire` with `git_ro config --show-origin
+--get-regexp '^gc\.'` before predicting loss. Matching per-ref settings or explicit
+expiry options can override stash protection; global expiry defaults alone do not.
+Entry age and the newest protecting entry alone do not prove what the next GC will
+remove: account for every protecting ref/reflog and the applicable
+expiry and object-pruning thresholds. `git worktree prune` removes eligible stale
+records when run, and explicit `--expire=now`/`--prune=now` bypass the respective age
+thresholds. Auto-gc runs from commit, fetch, pull, merge, am and rebase, and `gh pr merge`
+can pull locally. It fires when `"$object_dir/17"` holds more than ceil(gc.auto/256)
+loose objects (27 by default) or more than gc.autoPackLimit local packs without
+`.keep` protection (50 by default);
+`count-objects` totals understate how close that is, so report the resolved directory's
 count. While recovery state is undecided, run any write command you are authorized
 to run under a guard every Git child inherits: `export GIT_CONFIG_COUNT=2
 GIT_CONFIG_KEY_0=gc.auto GIT_CONFIG_VALUE_0=0 GIT_CONFIG_KEY_1=maintenance.auto
@@ -264,10 +337,14 @@ Explain why each retained failed or excluded run stays. Close with coverage and
 limits: roots scanned and excluded, traversal errors, each search and whether it
 included ignored, hidden, binary and compressed files, and evidence not checked
 (history, publications, licensed reruns). Mark claims measured, inferred or
-unverified. Confirm nothing changed by rerunning the helper with `--entries` and
+unverified. Check for changes by rerunning the helper with `--entries` and
 comparing paths, kinds, classes, sizes, link counts and `mtime_ns` with the saved
-JSON, along with count-objects and the worktree list; then give the smallest useful
-next action.
+JSON, along with count-objects and the worktree list. Git itself may refresh an
+active split index's shared-index mtime during these reads. Report any such observed
+timestamp changes explicitly; a listed `shared_index_files` path alone may be stale
+and does not prove an active split index. Do not claim an unchanged snapshot when
+metadata changed, or excuse other differences as this timestamp refresh. Then give
+the smallest useful next action.
 
 ## 6. Act only when separately authorized
 

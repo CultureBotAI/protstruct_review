@@ -4,18 +4,26 @@ A curated working view of substantive work not yet done. **GitHub Issues are the
 for what is open; this file carries execution detail and context, and names every open item that has
 **no** issue as such, so an empty queue is never mistaken for an empty backlog.
 
-**Last reconciled: 2026-09-26**, against `main` at `121d088` (PR #754) and the issue tracker. At that
-point the queue was empty; this reconciliation filed #760–#767 for the untracked items it found, and its
-reviews filed #769–#780 (#769–#773 and #778–#780 fixed in the same PR). The live ledger is [Open](#open) below. Covered since the previous reconciliation (2026-08-29): the
+**Last reconciled: 2026-10-15**, against `main` at
+[`8aef21c`](https://github.com/CultureBotAI/protstruct_review/commit/8aef21ccb528b60d811a3356af70c7346045a5e1)
+(PR #878): **7 open issues, 0 open PRs**, with both complete lists checked against API totals.
+Issue bodies and comments, exact merged PRs, current code and retained records were reviewed;
+this was a documentation reconciliation, not a scientific rerun or a new installation inventory.
+The live ledger and proposed work directions are under [Open](#open). **Check GitHub before execution;
+this file does not mirror it in real time.**
+
+**Previous reconciliation history:** the 2026-09-26 review checked `main` at `121d088` (PR #754).
+The queue was empty then; that reconciliation filed #760–#767, and its reviews filed #769–#780
+(#769–#773 and #778–#780 fixed in PR #768). Its coverage since 2026-08-29 included the
 gate-consolidation close-out (#293), the toolchain/CI hardening after the transfer, and the September
 [QDS integrity and 1SAR evidence correction](#qds-integrity-and-the-1sar-evidence-correction-2026-09-09--2026-09-23)
-track. **Check the issue tracker for open issues; this file does not mirror it in real time.**
+track.
 
 The repository lives at `CultureBotAI/protstruct_review` since 2026-08-29 (transferred from
 `realmarcin` to escape a personal-account Actions billing lock, [#410](https://github.com/CultureBotAI/protstruct_review/issues/410)).
 The GitHub Actions workflow runs the hermetic gate on Linux and macOS on every PR and `main` push
 (first green on `main`: run 33283623725, after [#492](https://github.com/CultureBotAI/protstruct_review/issues/492)/PR #494
-removed the gate's dependency on a Homebrew `gemmi` CLI; `main` green on `121d088` in run 35915199044).
+removed the gate's dependency on a Homebrew `gemmi` CLI; historical green `main` at `121d088` in run 35915199044).
 Licensing and citation landed in #479 (2026-08-26). The required local gate is
 `uv run --locked --extra benchmark -- bash scripts/validate.sh` using the repository-selected
 Python 3.12; bootstrap with `uv sync --locked --extra benchmark`. It must exit 0 before a merge,
@@ -72,7 +80,9 @@ record was rewritten. **Step (b)** (`ref/thresholds_and_standards.yaml` + valida
 did not do: the `headlines` block governs **no committed record yet** (0 of the 14 NC records carry it, so
 every NC headline check still runs through the legacy renderers until the next NC round writes one), and
 the partial-record ledger sidecar — the example that motivated #293 — was deferred by the inventory as a
-separate design question (listed under [Open](#open), no issue). The inventory's guard tables describe the
+separate design question. **2026-10-15 qualification:** PR #842 subsequently delivered the scoped
+§3/§4 descriptive evidence ledger at `ref/threshold_evidence_status.yaml`; whether broader coverage is
+useful remains optional under [Open](#open), with no issue. The inventory's guard tables describe the
 state before consolidation and predate the September guards (`check_pass_status.py`, `strict_yaml.py`).
 
 **NC-11 closeout and the registry:** the stopping/consolidation checklist promised by #292 landed as
@@ -89,8 +99,9 @@ the next screen registration; it was correctly outside NC-10's recover-leg scope
 
 A September track that re-audited the one real co-scientist record — the OpenScientist 1SAR (RNase Sa)
 refinement — and rebuilt QualityDataSheet (QDS) emission so an issued sheet can be replayed and corrected
-without rewriting history. Complete; every issue it referenced is closed. Detail lives in the records and
-review trails named below, not here. Dates are squash-commit dates.
+without rewriting history. That implementation and correction track is complete within its dated
+scope; the later scientific follow-ups in [Open](#open) remain separate. Detail lives in the records
+and review trails named below, not here. Dates are squash-commit dates.
 
 **The current 1SAR account is
 [`QDS_1sar_cdba2c07_2026-09-23.yaml`](data/coscientists/openscientist/QDS_1sar_cdba2c07_2026-09-23.yaml)
@@ -118,6 +129,8 @@ interpretations by design and are listed in that sheet's `corrected_qds_refs` (9
   now scoped to directly summed R-work: R-free offsets and the bin-rescaled estimator stay informational.
   T14 flip-set agreement was split, with the ≤ 10 % confident-conflict band applying to preregistered
   cohorts only. The 2026-09-07 1SAR record was re-scoped to informational. QDS emitter contract 2.
+  **Later policy:** #809 / PR #835 suspended the unsupported flip grading rule; the September 22
+  description here is historical, not current grading authority.
 - **Replayable partial sheets** (#613 and #719, 2026-09-22). Emitter contract 1 frozen with replay pins
   and subject isolation; contract 3 adds a typed, source-owned emission context for partial sheets.
   Partial 1SAR sheets for T16 (2026-09-21) and T15+T16 (2026-09-22) were published with retained
@@ -176,6 +189,10 @@ The ledger separates active rules from retained evidence, provisional interpreta
 from a set that can no longer be reconstructed**; they are marked `⚠ partial record`. Round 18 fixed
 the cause — **every `bench_*.py` now commits the set it ran on**, and `scripts/validate.sh` fails if
 one does not. **The historical inventory reported 18 fully backed rows** (rounds 42 and 44 re-based every §4 `d_min ≥ 2.5 Å` X-ray figure — both band widths and the geometry row's clashscore null ratio / starting ceiling — off their lost sets onto the 44 named entries, fully backing the ΔRMSD and geometry rows; rounds 45–46 backed both vs-deposited geometry-% rows on the 42 named entries — **favored %** on named data, and **outlier %** by making the check per-shared-residue classification agreement rather than the denominator-sensitive raw % (#284); rounds 47–48 backed the **H-placement flip-set** row on the named set with the check made the confident-conflict rate rather than the raw disagreement rate inflated by one builder's uncertainty (#287) — the two remaining marks are both RETAIN, so every *resolvable* partial record is resolved). **That reported inventory is not current independent calibration:** #809 suspends T14 flip grading because the retained benchmark used PHENIX-distributed Reduce, not the claimed standalone producer; #613 (2026-09-22) requalified one of the 18, the §3 secondary-structure agreement row, as `[benchmark — historical denominator unproven]` — its 0.65 expectation is non-gradeable until the benchmark is rerun with exact per-assigner denominators ([#765](https://github.com/CultureBotAI/protstruct_review/issues/765)). The descriptive ledger now recounts scoped policy and evidence states (#766); it does not retire the scientific limits behind #765 or #809.
+
+**2026-10-15 T15 status:** the original exact-domain rerun is stopped; the current next step is
+input-based comparison-population design under #765 in [Open](#open). Neither the retained diagnostic
+nor that design proposal recalibrates the historical expectation.
 
 **Historical count convention (round 18) — two different counting units.** §3 and §4
 hold **21 rows**, of which **20 carry `[benchmark]`**; the exception is §4's *absolute geometry
@@ -305,55 +322,93 @@ Record new ones there. The operative few, for anyone about to add a tolerance or
 
 ## Open
 
-The live ledger, reconciled 2026-09-27 against merged main through PR #837. GitHub is
-authoritative; items marked **no issue** exist only here, and say so. Engineering and
-policy delivery do not imply that the remaining scientific reruns are complete.
+The live ledger, reconciled **2026-10-15** against `main` at **`8aef21c`** (PR #878):
+**7 open issues, 0 open PRs**, verified against API totals. Every open issue is listed below;
+none was verified as ready for closure. GitHub is authoritative for tracker state. Items marked
+**proposed / no issue** are work recommendations, not delivered features or scheduled experiments.
+Engineering and policy delivery do not complete a scientific measurement or authorize grading.
 
 ### Tracked on GitHub
 
-- **P3a — cross-version PHENIX reproducibility (round 43), blocked on a human action**
-  ([#760](https://github.com/CultureBotAI/protstruct_review/issues/760)). The only unexecuted item of the
-  [Codex action plan](ref/research/codex_review_action_plan.md), and the pending test behind the §4
-  "same-binary, version shift untested" caveat that rounds 44–48 defer to it. Pre-registered in
-  [`tolerance_benchmark_round43_preregistration.md`](ref/research/tolerance_benchmark_round43_preregistration.md)
-  (PR #273 — a merged registration, not a tracker). **Unblock condition:** a second, newer PHENIX build
-  licensed and installed; only `phenix-2.0-5936` exists. Then point `PROTSTRUCT_PHENIX_BIN` at it (the
-  benchmark environment report flags the version divergence) and run the round-38 panel (14 of its 17
-  pairs have committed baselines; the input cache is not committed) under the registered decision rule,
-  canarying one entry first. **Delivered cache prerequisite [#777](https://github.com/CultureBotAI/protstruct_review/issues/777)**
-  (PRs #818 and #823):
-  use the content/build-bound refinement runners described in `ref/oracle_tools.md`; legacy bare
-  output caches are not accepted. Check the canary's retained invocation, measured build, input hashes,
-  successful status and output hashes before fanning out. A path-version hint alone is not measured
-  build evidence, and a fresh cache is still required for unversioned in-place library changes. **Not
-  retired:** [`stopping_criteria.md`](ref/research/stopping_criteria.md) closes a question for lack of
-  power, not lack of access, and the registration has no stop clause.
-- **T15 secondary-structure benchmark rerun** (the descriptive #766 ledger does not settle the
-  denominator or authorize grading)
-  ([#765](https://github.com/CultureBotAI/protstruct_review/issues/765), P2 — opt-in and online; mkdssp and
-  biotite, no PHENIX/CCP4). PR #831 retains a stopped rerun: the second execution root
-  admits 8 of 16 entries and rejects 1BNI because the assigner key sets differ; the
-  remaining seven were not launched. Failure-stream instrumentation remains
-  [#829](https://github.com/CultureBotAI/protstruct_review/issues/829). Neither a
-  successful prefix nor pooling the two execution roots completes the cohort.
-- **Standalone `reduce` in the benchmarks most likely ran with no het dictionary**
-  ([#799](https://github.com/CultureBotAI/protstruct_review/issues/799), P1): the dictionary files are byte-identical, the standalone default
-  path is missing and stderr was discarded, so ligand hydrogens were most likely absent on that path.
-  PR #811 delivered explicit `-DB`, retained stderr and fail-on-dictionary-error
-  handling. What remains is an opt-in re-measurement of the standalone leg for
-  the clashscore and flip-set cohorts with retained input and output provenance
-  (`reduce -DB … -build` plus `probe`; no PHENIX run needed, canary 24MR first).
+- **Standalone dictionary benchmark — incomplete and intentionally stopped**
+  ([#799](https://github.com/CultureBotAI/protstruct_review/issues/799), P1). PR #811 delivered explicit
+  dictionary loading and error retention; later evidence/admission work culminated in PR #875's
+  preserved 24MR canary. Native Reduce returned a nonzero status and the attempt was rejected before
+  Probe scoring. Its coordinate output is failed-attempt evidence, not an admitted hydrogen build.
+  The [2026-09-28 disposition](https://github.com/CultureBotAI/protstruct_review/issues/799#issuecomment-5875777839)
+  keeps #799 and #876 open and hands off the failure: **no retry, diagnostic execution, installed-tool
+  modification, or cohort expansion is queued**. What remains is admitted standalone-leg evidence
+  and scientific reconciliation, or an explicit scope disposition. A future restart first needs the
+  separately reviewed protocol below. See the
+  [execution report](ref/research/standalone_dictionary_canary_execution_2026-09-28.md) and
+  [stopped campaign record](data/coscientists/openscientist/retained_799_campaign_2026-09-28/stopped-after-canary.json).
+- **Resolve native Reduce status ambiguity before any #799 restart**
+  ([#876](https://github.com/CultureBotAI/protstruct_review/issues/876), P2; prerequisite to #799).
+  Installed-source inspection found a status path shared by successful zero-change optimization and
+  failed/abandoned optimization; the quiet canary does not establish which occurred. Do not accept
+  status 1 merely because coordinates exist, or claim that it proves abandonment. The next possible
+  step is a bounded diagnostic/adapter **design** retaining discriminating native evidence, followed
+  by separate review and prospective registration before execution into a fresh destination.
+  Keep the original failed bundle and zero-status admission rule unchanged. The
+  [latest disposition](https://github.com/CultureBotAI/protstruct_review/issues/876#issuecomment-5875778892)
+  explicitly preserves the stop; designing a restart is not permission to run it.
+- **T15 — define an input-based comparison population**
+  ([#765](https://github.com/CultureBotAI/protstruct_review/issues/765), P2; calibration remains
+  non-gradeable). PR #831 retained stopped attempts; PR #871 delivered failed-pair evidence and a
+  [bounded 1BNI diagnostic](ref/research/t15_failed_attempt_diagnostic_execution_2026-09-28.md), closing
+  #829. It did not recover discarded earlier streams, complete the cohort, or authorize resumption.
+  The [2026-09-28 design disposition](https://github.com/CultureBotAI/protstruct_review/issues/765#issuecomment-5875812783)
+  keeps the original exact-domain registration stopped. Next: freeze eligibility from input coordinates
+  before assignment, first-model extraction, whole-context alternate-conformer handling, modified
+  residues, chain/TER/gap identity, exact inputs/versions, retention, and stop rules. Preserve supported
+  structural context and require both tools to assign every eligible residue; do not score an output
+  intersection, convert missing states to coil, or pool successful prefixes. Review the design and
+  hermetic negative tests before a new result-free protocol and fresh-destination canary. The current
+  public wrapper's exact-full-domain contract stays intact. The prospective #874 / PR #877 native-state
+  admission fix and descriptive #766 ledger do not supply a calibration. No execution is queued.
 - **Decompose the matched-convention clashscore residual**
-  ([#790](https://github.com/CultureBotAI/protstruct_review/issues/790), P2 — optional, opt-in, licensed PHENIX): feed both counters
-  the same H-built file to separate flip policy, H construction, dictionaries and counting.
+  ([#790](https://github.com/CultureBotAI/protstruct_review/issues/790), P2 — optional, unperformed,
+  licensed PHENIX). Separate flip policy and dictionary loading before comparing counters on the same
+  hydrogen-built coordinates. This needs the two execution prerequisites below and valid native-status
+  admission for the selected builder path; #799's rejected output cannot substitute. Next: a bounded
+  design and reviewed adapters before registration/execution. Completion means the residual is
+  decomposed or bounded with retained evidence and dated scientific reconciliation. This optional
+  causal study need not block the general refinement-assessment workflow.
+- **Bound nested PHENIX helper processes for #790**
+  ([#872](https://github.com/CultureBotAI/protstruct_review/issues/872), P2 execution prerequisite).
+  The proposed outer process-group bound does not cover PHENIX helpers that detach into their own
+  groups. Before that study, use explicit shell-free recording at both Reduce and Probe boundaries,
+  preserving the owned group, actual arguments, statuses, and streams. Verify timeout cleanup and
+  exact payload behavior hermetically; retain scientific scoring semantics and label the transport
+  adaptation. The delivered generic EntrySandbox cleanup does not resolve detached helper groups.
+- **Retain native Reduce status through the PHENIX dispatcher for #790**
+  ([#873](https://github.com/CultureBotAI/protstruct_review/issues/873), P2 execution prerequisite).
+  Dispatcher success can mask native failure. Record the native executable's status and streams with
+  the dispatcher's exact injected flags, and add a hermetic native-nonzero regression before a builder
+  canary. Label the adaptation and preserve installed tools. This is specific to the PHENIX study;
+  the standalone-only #799 path does not use that dispatcher.
+- **P3a — cross-version PHENIX reproducibility (round 43)**
+  ([#760](https://github.com/CultureBotAI/protstruct_review/issues/760), P2, access-blocked).
+  The remaining item of the [Codex action plan](ref/research/codex_review_action_plan.md), registered in
+  [round 43](ref/research/tolerance_benchmark_round43_preregistration.md) (PR #273). The recorded unblock
+  condition is a second, newer licensed and installed PHENIX build; availability was not re-inventoried
+  in this reconciliation. **#777 and #816 are delivered**, through PRs #818/#823, per the
+  [engineering checkpoint](https://github.com/CultureBotAI/protstruct_review/issues/760#issuecomment-5863595057).
+  Once access is available, preserve the registered design and its baseline/fetch amendments; canary
+  one entry using the content/build-bound runners and isolated version probing in
+  [oracle guidance](ref/oracle_tools.md). Verify invocation, measured build, input hashes, return status,
+  and product hashes before expansion. A path-version hint alone cannot authenticate a run; unversioned
+  in-place library changes still require a fresh cache. Lack of access does not retire this registration
+  under [stopping criteria](ref/research/stopping_criteria.md), and no cross-version result is claimed.
 
 ### Delivered prerequisites (not open reruns)
 
 - **#762 workflow safeguards:** PR #820 (`849535c`) delivered the locked Python 3.12
   benchmark-extra gate, complete-queue checks, read-only review and reviewed-head
   CI/closure safeguards.
-- **#777 cache integrity:** PR #818 (`15edb68`) and runtime follow-up PR #823
-  (`fbacb66`) delivered content/build-bound caches. Cross-version science remains #760.
+- **#777 cache integrity / #816 version identity:** PR #818 (`15edb68`) and runtime follow-up
+  PR #823 (`fbacb66`) delivered content/build-bound caches and isolation from inherited PHENIX version
+  overrides. Cross-version science and the installation-access blocker remain #760.
 - **#785 Gemmi capability correction:** PR #832 (`f6e8722`) delivered the catalog
   and dated successor recommendations with scoped capability claims.
 - **#798 version policy / #809 flips:** PR #835 (`fec9334`) pins both clashscore
@@ -363,14 +418,66 @@ policy delivery do not imply that the remaining scientific reruns are complete.
   R-free unevaluable, rejects unexplained usable-input observation loss, and adopts
   ≥0.99 only for the benchmarked PHENIX 2.0-5936/wwPDB shared-residue comparison
   with insertion-code keys. It does not authorize standalone MolProbity grading.
-- **#799 engineering:** PR #811 (`df011cc`) delivered the dictionary-loading/error
-  checks, but the issue remains open for the scientific reruns above.
+- **#799 engineering and failure handoff:** PR #811 (`df011cc`) delivered dictionary-loading/error
+  checks; PRs #849 (`2626fc8`), #866 (`9f25a7b`), #867 (`c2d9e08`), and #875 (`f6f8b39`) delivered
+  the standalone evidence driver, flip recount admission, owned-process cleanup, component inventories,
+  and retained stopped canary. These are execution/provenance deliveries; #799 remains scientifically
+  incomplete and #876 blocks any restart.
 - **#767 T13 operational acceptance:** PR #831 retains the installed-CCP4
   invocation, real logs, output hashes and independent replay checks for one
   merged-input canary. This does not validate unmerged-data handling, supply a
   paired xtriage comparison, or establish a model-quality verdict. Its stopped
   T15 rerun remains separately tracked above.
+- **#829 T15 failure retention / #874 native-state admission:** PR #871 (`79858e2`) retained the
+  rejected 1BNI pair and diagnostic; PR #877 (`6dc9b94`) rejects unavailable/unknown Biotite states
+  instead of fabricating coil. Both issues are closed. Neither completes or recalibrates #765.
+- **#766 descriptive evidence ledger:** PR #842 (`246eb8c`) delivered
+  `ref/threshold_evidence_status.yaml`, its generated summaries and guard. It separates scoped policy
+  and evidence states in registry §3/§4; it does not independently validate thresholds or authorize grading.
+- **Storage inventory and retention review:** PR #878 (`8aef21c`) delivered
+  `scripts/inventory_storage.py` and `.claude/skills/review-data-retention/SKILL.md`. This is a bounded
+  inventory/review capability, not completed cleanup or permission to remove scientific evidence.
 - **Earlier reconciliation:** PR #768 fixed wording issues #769–#773 and #778–#780.
+
+### Recommended next directions
+
+Use the two [project goals](CLAUDE.md#project-goals) together: assess refinement results and explain
+the landscape of tools and measurements. The following deliverables are **proposed / no issue**;
+they extend the current backlog without claiming implementation or scheduling experiments.
+
+1. **Reconcile the scientific guide before expanding it.** Review
+   [`quality_reporting.md`](ref/quality_reporting.md) against the canonical catalog, tool
+   recommendations, threshold registry, and current retained evaluations. Concrete starting points
+   are its pLDDT-to-B-factor conversion (which disagrees with
+   [PHENIX's documented conversion](https://www.phenix-online.org/documentation/reference/process_predicted_model.html)),
+   blanket refinement-equivalence/noise statements, and the older assertion that 1SAR closed the
+   T03/T06/T05 oracle gaps despite the current sheet's explicit waivers. **Done when:** tool capabilities,
+   metric meanings, applicability, and evidence qualifications agree across the guide and canonical
+   sources; the guide points to scoped criteria rather than supplying competing thresholds.
+2. **Deliver a reusable before/after refinement assessment.** Build on the existing negative-control
+   and agent-evaluation work with one fully retained X-ray case. Preserve exact starting/final model
+   identities, observations/free flags, selections, and tool versions; report paired experimental-fit,
+   geometry, structural-change, and important-site measurements with independent checks. **Done when:**
+   a reproducible human-readable comparison and EvaluationRun/QDS records separately explain
+   measurement agreement, final-model quality, and benefit over the actual input, including missing,
+   conflicting, and inapplicable evidence. Exercise unchanged, damaged, and recovered controls under
+   an appropriate reviewed protocol. New verdicts require applicable registry bindings; unsupported
+   comparisons remain informational. Use 1SAR as a missing-artifact case, not proof of an adjudicated
+   final round whose coordinates are absent. Extend to cryo-EM after the first workflow is usable.
+3. **Make a question-based tools-and-measurements guide.** Reuse `ref/catalog.yaml`,
+   `ref/tool_recommendations.yaml`, `ref/tool_assumptions.yaml`, and the scoped evidence ledger.
+   Organize experimental fit, geometry, structural change, sites/interfaces, prediction confidence,
+   and classification by the question each answers. **Done when:** users can determine required inputs,
+   modality, scope, reference dependence, implementation dependencies, available integrations, and
+   grading eligibility for a proposed assessment. Distinguish documented capability, runnable
+   integration, retained independent evidence, and calibrated interpretation; shared code or separate
+   executable names alone do not establish independence.
+
+For the tracked benchmark work, prioritize #876's diagnostic **design** and #765's input-population
+design when their measurements are needed. Resolve #872/#873 before scheduling optional #790; retain
+#760 as access-blocked. These dependencies do not prevent the guide and general assessment work.
+Apply the existing [stopping criteria](ref/research/stopping_criteria.md) when choosing another
+benchmark or assurance pass; a further audit is a deliberate scoped investment, not the default task.
 
 ### Open questions and optional work (no issue)
 
@@ -380,9 +487,11 @@ policy delivery do not imply that the remaining scientific reruns are complete.
   has no gradeable same-model cross-tool R-free offset band. (Rule 1's ±0.02 comparison against the
   deposited value and a REFMAC5 re-refinement is a separate, graded check.) If wanted, it is a preregistered PHENIX benchmark on the
   r_offset set; if not, record it as intentional scope.
-- **Partial-record ledger sidecar** — the example that motivated #293, deferred by the gate inventory as a
-  separate design question. It has no machine-readable source today, so it would have to be created.
-  Optional.
+- **Broader partial-record ledger coverage** — #293 deferred the original design question, but PR #842
+  has since delivered the machine-readable §3/§4 descriptive ledger and generated summary above.
+  Reuse that source. Decide whether coverage outside those registry sections is needed for a concrete
+  assessment; any broader ledger remains an optional design task, not a missing implementation of the
+  existing scoped inventory.
 - **A same-subject 1SAR reassessment** — optional and partly blocked. Two different gaps: a same-model
   rerun with retained raw output would close the missing raw-output gap (M_001–M_003) but stays
   cctbx-only and informational, so it closes **no** waiver. Closing the 11 cctbx-only waivers needs
@@ -443,6 +552,10 @@ is guarded, not assumed); **P4 done** — [#292](https://github.com/CultureBotAI
 (2026-08-12) was fully remediated** in the negative-control track above (PRs #313–#332), including
 two invariants the whole repo now enforces: the trust model as a gate (validate 3c) and
 negative-control record reconciliation (3b).
+
+**2026-10-15 scope note:** the dated action-plan completion above does not settle the subsequently
+requalified T15 calibration or T14 independent flip-grading evidence. Their current limits and
+related #765/#799 work remain in [Open](#open).
 
 The one **unbounded** option that persists from the old menu: **another `scripts/` audit pass with a
 new lens** — it has found defects every time (12, then 2, then 5), the lens must differ each pass, and
@@ -555,7 +668,9 @@ an independent-calibration certificate.
 ## Other tracked work
 
 - **GitHub #2** *(closed — informational)*: driving examples complete (17/17).
-- **GitHub #3** *(closed — informational)*: T15/T16/T17 runnable; only web/report-blocked pieces remain.
+- **GitHub #3** *(closed — historical implementation milestone)*: T15/T16/T17 wrappers delivered.
+  Current T15 population/calibration limits and stopped execution are tracked under #765 in [Open](#open);
+  the historical milestone does not settle them.
 - **GitHub #18, #19** *(closed 2026-07-25, PR #24)*: the two provisional tolerances.
 - **GitHub #25, #26, #27** *(closed 2026-07-25, PR #24)*: intramolecular fragment pairs counted as
   interfaces, cache written into the working tree, multi-block sf-cifs.

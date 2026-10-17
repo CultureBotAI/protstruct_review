@@ -22,7 +22,7 @@ This directory holds offline reference material and the key **task × evaluation
 | `tool_assumptions.yaml` | Per-tool implicit/explicit assumptions (LinkML-validated). Feeds the QDS assumptions report. |
 | `structural_criteria.yaml` | **Self-describing criterion and verdict-binding registry**: criterion definitions/citations/recipes/ranges/examples plus `PassCriterionBinding` rows that select one whole threshold-registry cell, declare typed comparison/applicability/preconditions, and preserve inclusive effective intervals with append-only supersession. Schema: `schemas/structural_criteria.yaml`. |
 | `protein_structure_quality_refinement_indicators.md` | Survey of quality/refinement indicators behind the T15–T17 tasks and the newer QDS summary blocks (classification, interface, prediction-ensemble, NMR). |
-| `quality_reporting.md` | Synthesis of community consensus on the smallest defensible quality report (single-structure, X-ray / cryo-EM / predicted) and pair-of-structures (TM-score, lDDT, GDT-TS, RMSD, Δ model-vs-data). Evidence base for the QualityDataSheet schema. ~18 citations. |
+| `quality_reporting.md` | Reporting guide for structure quality and refinement comparisons: metric meaning, required context, independent evidence and modality-specific reporting. Links primary sources and scoped criteria, and distinguishes recommended evidence from schema/emitter support. |
 
 ## Creating a local PHENIX docs cache
 

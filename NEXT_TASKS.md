@@ -4,15 +4,21 @@ A curated working view of substantive work not yet done. **GitHub Issues are the
 for what is open; this file carries execution detail and context, and names every open item that has
 **no** issue as such, so an empty queue is never mistaken for an empty backlog.
 
-**Last reconciled: 2026-10-15**, against `main` at
-[`8aef21c`](https://github.com/CultureBotAI/protstruct_review/commit/8aef21ccb528b60d811a3356af70c7346045a5e1)
-(PR #878): **7 open issues, 0 open PRs**, with both complete lists checked against API totals.
+**Last reconciled: 2026-10-17**, against `main` at
+[`d06475e`](https://github.com/CultureBotAI/protstruct_review/commit/d06475eb378f32e948c2eca177a92aad3ca99121)
+(PR #905): **12 open issues, 0 open PRs**, with both complete lists checked against API totals
+before publication of the quality-guide correction branch.
 Issue bodies and comments, exact merged PRs, current code and retained records were reviewed;
 this was a documentation reconciliation, not a scientific rerun or a new installation inventory.
 The live ledger and proposed work directions are under [Open](#open). **Check GitHub before execution;
 this file does not mirror it in real time.**
 
-**Previous reconciliation history:** the 2026-09-26 review checked `main` at `121d088` (PR #754).
+**Previous reconciliation history:** the 2026-10-15 review checked `main` at `8aef21c` (PR #878),
+with seven open issues and no open PRs. PR #905 delivered that reconciliation, the project goals,
+and the backlog-update skill. Four additional issues track the quality-guide defects found while
+starting its first recommended task; a fifth tracks the related ProSMART capability audit.
+The seven preceding scientific issues retain their dispositions.
+The 2026-09-26 review checked `main` at `121d088` (PR #754).
 The queue was empty then; that reconciliation filed #760–#767, and its reviews filed #769–#780
 (#769–#773 and #778–#780 fixed in PR #768). Its coverage since 2026-08-29 included the
 gate-consolidation close-out (#293), the toolchain/CI hardening after the transfer, and the September
@@ -322,14 +328,38 @@ Record new ones there. The operative few, for anyone about to add a tolerance or
 
 ## Open
 
-The live ledger, reconciled **2026-10-15** against `main` at **`8aef21c`** (PR #878):
-**7 open issues, 0 open PRs**, verified against API totals. Every open issue is listed below;
-none was verified as ready for closure. GitHub is authoritative for tracker state. Items marked
+The live ledger, reconciled **2026-10-17** against `main` at **`d06475e`** (PR #905):
+**12 open issues, 0 open PRs**, verified against API totals before publication of the quality-guide
+correction branch. Every open issue is listed below; the guide corrections are local work pending
+review and merge, not delivered on main. GitHub is authoritative for tracker state. Items marked
 **proposed / no issue** are work recommendations, not delivered features or scheduled experiments.
 Engineering and policy delivery do not complete a scientific measurement or authorize grading.
 
 ### Tracked on GitHub
 
+- **Correct the scientific quality-reporting guide** — first recommended task, implemented on
+  `correct-quality-reporting-2026-10-17`, pending review and merge. The findings are
+  [#907](https://github.com/CultureBotAI/protstruct_review/issues/907) (P1, confidence conversion
+  and interpretation), [#908](https://github.com/CultureBotAI/protstruct_review/issues/908)
+  (P1, unsupported quality/refinement verdicts),
+  [#909](https://github.com/CultureBotAI/protstruct_review/issues/909) (P1, tool independence,
+  literature and 1SAR coverage), and
+  [#910](https://github.com/CultureBotAI/protstruct_review/issues/910) (P2, schema/emitter instructions).
+  The correction aligns [`quality_reporting.md`](ref/quality_reporting.md) and directly repeated
+  descriptions with primary sources and the executable contract. It distinguishes measurement
+  agreement, final-model quality, and benefit over the actual starting model; it retains 1SAR's
+  missing evidence and points grading decisions to applicable registry bindings. Next: complete
+  independent review and the required gates, then merge with approval. These documentation issues
+  require no scientific rerun. See the
+  [dated audit](ref/research/quality_reporting_review_2026-10-17.md).
+- **Audit the ProSMART Ramachandran-Z recommendation**
+  ([#911](https://github.com/CultureBotAI/protstruct_review/issues/911), P1; newly tracked).
+  `REC_T05_rama_z_score_top_performing` and two active assumptions describe a ProSMART Rama-Z
+  capability that the cited structural-comparison scores and retained 1SAR correction do not
+  establish. Next: verify the exact producer/output identity and supersede unsupported registry
+  descriptions through dated, append-only recommendations/assumptions. Preserve frozen snapshots.
+  The guide correction limits its claims to supported observations; this registry audit remains
+  separate work and must precede reliance on the disputed Rama-Z recommendation.
 - **Standalone dictionary benchmark — incomplete and intentionally stopped**
   ([#799](https://github.com/CultureBotAI/protstruct_review/issues/799), P1). PR #811 delivered explicit
   dictionary loading and error retention; later evidence/admission work culminated in PR #875's
@@ -403,6 +433,11 @@ Engineering and policy delivery do not complete a scientific measurement or auth
 
 ### Delivered prerequisites (not open reruns)
 
+- **Project goals and backlog updates:** PR #905 (`d06475e`) delivered the two goals in
+  `CLAUDE.md`, `.claude/skills/reconcile-next-tasks/SKILL.md`, and the preceding complete issue
+  reconciliation. Use that existing skill to update this file; no duplicate update skill is needed.
+  The same PR resolved #906 by suppressing automatic maintenance during disposable Git-fixture
+  construction and adding a Trace2 regression; this is a test-fixture fix, not scientific evidence.
 - **#762 workflow safeguards:** PR #820 (`849535c`) delivered the locked Python 3.12
   benchmark-extra gate, complete-queue checks, read-only review and reviewed-head
   CI/closure safeguards.
@@ -442,18 +477,16 @@ Engineering and policy delivery do not complete a scientific measurement or auth
 ### Recommended next directions
 
 Use the two [project goals](CLAUDE.md#project-goals) together: assess refinement results and explain
-the landscape of tools and measurements. The following deliverables are **proposed / no issue**;
-they extend the current backlog without claiming implementation or scheduling experiments.
+the landscape of tools and measurements. Direction 1 is now tracked and under correction;
+directions 2 and 3 remain **proposed / no issue** and do not schedule experiments.
 
-1. **Reconcile the scientific guide before expanding it.** Review
-   [`quality_reporting.md`](ref/quality_reporting.md) against the canonical catalog, tool
-   recommendations, threshold registry, and current retained evaluations. Concrete starting points
-   are its pLDDT-to-B-factor conversion (which disagrees with
-   [PHENIX's documented conversion](https://www.phenix-online.org/documentation/reference/process_predicted_model.html)),
-   blanket refinement-equivalence/noise statements, and the older assertion that 1SAR closed the
-   T03/T06/T05 oracle gaps despite the current sheet's explicit waivers. **Done when:** tool capabilities,
-   metric meanings, applicability, and evidence qualifications agree across the guide and canonical
-   sources; the guide points to scoped criteria rather than supplying competing thresholds.
+1. **Finish the scientific-guide correction** (#907–#910, tracked above). The local revision covers
+   confidence, contextual metric interpretation, tool capabilities and independence, retained 1SAR
+   limits, and actual reporting support. **Done when:** the reviewed correction is merged and the
+   guide and directly repeated descriptions agree with canonical sources without competing grading
+   thresholds. Keep the separately filed ProSMART recommendation audit (#911) visible and resolve it
+   before using that capability. This prepares the next deliverable; it does not itself implement a
+   reusable assessment.
 2. **Deliver a reusable before/after refinement assessment.** Build on the existing negative-control
    and agent-evaluation work with one fully retained X-ray case. Preserve exact starting/final model
    identities, observations/free flags, selections, and tool versions; report paired experimental-fit,

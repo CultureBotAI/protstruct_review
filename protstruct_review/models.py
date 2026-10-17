@@ -178,7 +178,7 @@ class CatalogTaskId(str, Enum):
 
 class ToolFamily(str, Enum):
     """
-    Source code lineage of a tool. The trust model treats `non_cctbx` as genuinely independent from PHENIX; `cctbx` includes any tool that shares the cctbx/iotbx/mmtbx libraries (PHENIX, mmtbx.* CLI tools).
+    Source code lineage used by the coverage checks. `cctbx` includes tools sharing cctbx/iotbx/mmtbx libraries (PHENIX, mmtbx.* CLI tools); `non_cctbx` identifies the other family. This label alone does not establish independent algorithms, reference data or hydrogen builders; retain those metric-specific assumptions with each measurement.
     """
     cctbx = "cctbx"
     non_cctbx = "non_cctbx"
@@ -344,23 +344,23 @@ class RecommendationRole(str, Enum):
 
 class PlddtDistributionShape(str, Enum):
     """
-    Coarse classification of the per-residue pLDDT distribution shape. Mean pLDDT alone is insufficient — distribution tells you whether a model is uniformly confident or hides disordered regions.
+    Coarse classification of the per-residue pLDDT distribution shape. Retain residue locations as well as the distribution. Confidence variation alone does not establish disorder, flexibility or their cause.
     """
     bimodal_sharp = "bimodal_sharp"
     """
-    Confident core + disordered tails.
+    Two distinct confidence modes; their structural locations and causes require separate evidence.
     """
     broad = "broad"
     """
-    Uncertain throughout (broad spread centred on mid-range).
+    Broad spread of per-residue confidence values.
     """
     narrow_high = "narrow_high"
     """
-    Uniformly confident.
+    Confidence values concentrated at the high end.
     """
     narrow_low = "narrow_low"
     """
-    Uniformly uncertain (suspicious).
+    Confidence values concentrated at the low end.
     """
 
 
@@ -536,7 +536,7 @@ class SiteKind(str, Enum):
 class MeasurementScope(str, Enum):
     """
     The granularity at which a metric is measured. Used both on MetricDefinition (the canonical scope of a metric) and on MeasurementValue (the actual scope of a specific measurement — can override the canonical scope when the same metric is reported at a different level, e.g. clashscore restricted to a site's residues is `site`-scoped).
-For `residue` and `atom` scope, store every value in the per-residue/per-atom slot and surface the summary statistics (mean, std_dev, min, max, count) on the corresponding scalar slot. The summary fields on TypedMeasurementValue exist for this purpose.
+For local measurements, retain individual values in the supported structured collections or linked raw output. Supply summary statistics (mean, std_dev, min, max, count) on an applicable scalar measurement when it summarises that same population. The emitter preserves supplied statistics rather than deriving arbitrary summaries from arrays.
     """
     complex = "complex"
     """
@@ -2476,8 +2476,8 @@ class GeometrySummary(ConfiguredBaseModel):
     molprobity_score: Optional[TypedMeasurementValue] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Refinement', 'GeometrySummary']} })
     bond_rmsd_a: Optional[TypedMeasurementValue] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['GeometrySummary']} })
     angle_rmsd_deg: Optional[TypedMeasurementValue] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['GeometrySummary']} })
-    bond_rmsz: Optional[TypedMeasurementValue] = Field(default=None, description="""Bond-length RMSZ (Z-score against restraint targets). Over- refinement diagnostic — a model with small absolute RMSD can still be a high-Z outlier relative to its restraints. See ref/quality_reporting.md §1.2.""", json_schema_extra = { "linkml_meta": {'domain_of': ['GeometrySummary']} })
-    angle_rmsz: Optional[TypedMeasurementValue] = Field(default=None, description="""Bond-angle RMSZ (Z-score against restraint targets). Same over-refinement diagnostic as bond_rmsz.""", json_schema_extra = { "linkml_meta": {'domain_of': ['GeometrySummary']} })
+    bond_rmsz: Optional[TypedMeasurementValue] = Field(default=None, description="""Bond-length RMSZ relative to restraint targets and their sigmas. Retain the restraint library and evaluated population; RMSZ differs from raw RMSD and does not alone diagnose over-refinement. See ref/quality_reporting.md §1.1.""", json_schema_extra = { "linkml_meta": {'domain_of': ['GeometrySummary']} })
+    angle_rmsz: Optional[TypedMeasurementValue] = Field(default=None, description="""Bond-angle RMSZ relative to restraint targets and their sigmas. Interpret with the restraint-library and population context described for bond_rmsz.""", json_schema_extra = { "linkml_meta": {'domain_of': ['GeometrySummary']} })
     cbeta_deviations_count: Optional[TypedMeasurementValue] = Field(default=None, description="""Number of Cβ-deviation outliers (> 0.25 Å from ideal).""", json_schema_extra = { "linkml_meta": {'domain_of': ['GeometrySummary']} })
     ramachandran_z_score: Optional[TypedMeasurementValue] = Field(default=None, description="""Ramachandran-Z distribution score against a high-resolution reference.""", json_schema_extra = { "linkml_meta": {'domain_of': ['GeometrySummary']} })
     packing_z_score: Optional[TypedMeasurementValue] = Field(default=None, description="""Packing-quality Z-score against a structural reference distribution.""", json_schema_extra = { "linkml_meta": {'domain_of': ['GeometrySummary', 'PackingSummary']} })
@@ -2549,7 +2549,7 @@ class RefinementSummary(ConfiguredBaseModel):
 
 class MapSummary(ConfiguredBaseModel):
     """
-    Headline map quality numbers as of QDS issue date (cryo-EM only). Tracks the metrics ref/quality_reporting.md §1.4 calls out as load-bearing: CC family, model-map FSC, EMRinger / Q-score, and local-resolution spread. Per the EMDataResource 2019 challenge consensus, ≥ 3 metrics from different families should be reported (e.g. CC_mask + EMRinger + d_FSC_model).
+    Headline map quality numbers as of QDS issue date (cryo-EM only). Complementary observations can include the CC family, model-map FSC, EMRinger / Q-score and local resolution. Select measures appropriate to the data and question, record masks and processing conventions, and state unavailable evidence. These fields do not impose a minimum metric count or an automatic quality verdict; see ref/quality_reporting.md.
     """
     linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'https://w3id.org/protstruct-review/schema'})
 
@@ -2604,12 +2604,12 @@ class MapSummary(ConfiguredBaseModel):
                        'Site',
                        'SiteQuality']} })
     cc_mask: Optional[TypedMeasurementValue] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['MapSummary']} })
-    cc_box: Optional[TypedMeasurementValue] = Field(default=None, description="""Map-model correlation in the full box. If much lower than cc_mask, suspect over-sharpening or artifacts outside the molecule.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MapSummary']} })
+    cc_box: Optional[TypedMeasurementValue] = Field(default=None, description="""Map-model correlation in the full box. Its spatial selection differs from cc_mask and cc_volume; differences alone do not diagnose sharpening artifacts or model errors.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MapSummary']} })
     cc_volume: Optional[TypedMeasurementValue] = Field(default=None, description="""Map-model correlation in the high-density volume envelope.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MapSummary']} })
-    emringer_score: Optional[TypedMeasurementValue] = Field(default=None, description="""Side-chain–density agreement metric (Barad et al. 2015). Resolution-sensitive; > 1.5 is good at high resolution.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MapSummary']} })
-    mean_q_score: Optional[TypedMeasurementValue] = Field(default=None, description="""Mean atom-resolvability Q-score (Pintilie 2020). Per-atom by construction; surface the mean here and the per-residue array via PerResidueQuality.q_score_per_residue when available.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MapSummary']} })
-    d_fsc_model_a: Optional[TypedMeasurementValue] = Field(default=None, description="""Resolution at which model-map FSC = 0.5.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MapSummary']} })
-    global_fsc_0143_a: Optional[TypedMeasurementValue] = Field(default=None, description="""Global FSC resolution at 0.143 (gold-standard half-map FSC). Compare to d_fsc_model_a — if d_fsc_model >> global_fsc the model is under-fitting; if << it's noise-fitting.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MapSummary']} })
+    emringer_score: Optional[TypedMeasurementValue] = Field(default=None, description="""Side-chain–density agreement metric (Barad et al. 2015). Interpret with resolution and map-processing context; this field does not establish a universal quality cutoff.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MapSummary']} })
+    mean_q_score: Optional[TypedMeasurementValue] = Field(default=None, description="""Mean atom-resolvability Q-score (Pintilie 2020). Record the evaluated atom population, resolution and map-processing context; retain local values in the linked raw output. This schema does not provide a dedicated per-residue Q-score array.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MapSummary']} })
+    d_fsc_model_a: Optional[TypedMeasurementValue] = Field(default=None, description="""Model-map FSC crossing resolution at 0.5; retain mask, map processing and crossing rule with the measurement.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MapSummary']} })
+    global_fsc_0143_a: Optional[TypedMeasurementValue] = Field(default=None, description="""Global FSC resolution at 0.143 (gold-standard half-map FSC). This compares different objects from model-map FSC. A difference between their crossing resolutions alone does not establish underfitting or fitting to noise.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MapSummary']} })
     local_resolution_mean_a: Optional[TypedMeasurementValue] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['MapSummary']} })
     local_resolution_std_a: Optional[TypedMeasurementValue] = Field(default=None, description="""Standard deviation of local-resolution distribution.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MapSummary']} })
     directional_resolution_anisotropy: Optional[TypedMeasurementValue] = Field(default=None, description="""Directional resolution anisotropy from 3DFSC-style analysis.""", json_schema_extra = { "linkml_meta": {'domain_of': ['MapSummary']} })
@@ -2969,7 +2969,7 @@ class DataQualitySummary(ConfiguredBaseModel):
 
 class PredictedConfidenceSummary(ConfiguredBaseModel):
     """
-    AlphaFold/RoseTTAFold confidence summary. Mean pLDDT alone is insufficient — distribution shape is what tells you whether a model is uniformly confident or hides disordered regions.
+    Predictor confidence summary. Report residue-level confidence and its distribution alongside available PAE or other predictor outputs. Confidence is not observed structural accuracy, and distribution shape alone does not diagnose disorder or flexibility.
     """
     linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'https://w3id.org/protstruct-review/schema'})
 
@@ -3028,7 +3028,7 @@ class PredictedConfidenceSummary(ConfiguredBaseModel):
     mean_plddt: Optional[TypedMeasurementValue] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['PredictedConfidenceSummary']} })
     plddt_distribution_shape: Optional[PlddtDistributionShape] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['PredictedConfidenceSummary']} })
     pae_max_a: Optional[TypedMeasurementValue] = Field(default=None, description="""Maximum PAE in Å across the matrix.""", json_schema_extra = { "linkml_meta": {'domain_of': ['PredictedConfidenceSummary']} })
-    pae_multimer_block_min_a: Optional[TypedMeasurementValue] = Field(default=None, description="""For multimers — the minimum PAE in the off-diagonal block between subunits. Low values indicate confident inter-subunit placement; > 15 Å typically unreliable.""", json_schema_extra = { "linkml_meta": {'domain_of': ['PredictedConfidenceSummary']} })
+    pae_multimer_block_min_a: Optional[TypedMeasurementValue] = Field(default=None, description="""For multimers, the minimum PAE in an identified off-diagonal block between subunits. This is a descriptive extreme, not a whole-interface confidence verdict. Inspect the full directional block and residue coverage; no universal cutoff is defined here.""", json_schema_extra = { "linkml_meta": {'domain_of': ['PredictedConfidenceSummary']} })
     predicted_tm_score: Optional[TypedMeasurementValue] = Field(default=None, description="""Predicted TM-score (pTM) for the model.""", json_schema_extra = { "linkml_meta": {'domain_of': ['PredictedConfidenceSummary']} })
     interface_predicted_tm_score: Optional[TypedMeasurementValue] = Field(default=None, description="""Interface predicted TM-score (ipTM) for multimers.""", json_schema_extra = { "linkml_meta": {'domain_of': ['PredictedConfidenceSummary']} })
     prediction_ensemble_convergence: Optional[TypedMeasurementValue] = Field(default=None, description="""Convergence score across prediction ensemble replicates.""", json_schema_extra = { "linkml_meta": {'domain_of': ['PredictedConfidenceSummary', 'PredictionEnsembleSummary']} })
@@ -3345,7 +3345,7 @@ class NmrValidationSummary(ConfiguredBaseModel):
 
 class PairwiseComparison(SourceRowLineage):
     """
-    Candidate vs reference structure comparison. Modern default per ref/quality_reporting.md is to report TM-score AND lDDT as a mandatory pair (CASP15+ consensus, Mariani et al. 2013); CA RMSD is reported additionally for legibility but is not the basis of the verdict on its own.
+    Candidate vs reference structure comparison. Select metrics for the question: Cα RMSD describes displacement under a stated superposition, TM-score fold-scale similarity, and lDDT local distance agreement. TM-score and lDDT are optional fields, not a mandatory pair. Similarity alone does not establish refinement improvement; see ref/quality_reporting.md for comparison context.
     """
     linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'https://w3id.org/protstruct-review/schema',
          'mixins': ['SourceRowLineage']})
@@ -3427,7 +3427,7 @@ class PairwiseComparison(SourceRowLineage):
     candidate_ref: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['PairwiseComparison']} })
     reference_ref: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['PairwiseComparison']} })
     reference_kind: ReferenceKind = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['PairwiseComparison']} })
-    alignment_method: str = Field(default=..., description="""Tool used for the alignment that backs every metric in this row (e.g. \"TMalign\", \"phenix.superpose_models\", \"gemmi align\", \"ChimeraX matchmaker\"). State exactly one — different tools give subtly different alignments.""", json_schema_extra = { "linkml_meta": {'domain_of': ['PairwiseComparison']} })
+    alignment_method: str = Field(default=..., description="""Tool used for superposition-dependent metrics in this row (e.g. \"TMalign\", \"phenix.superpose_models\", \"gemmi align\", \"ChimeraX matchmaker\"). State the tool and its selection/settings. lDDT is superposition-free; retain its implementation and residue correspondence separately in the source evidence.""", json_schema_extra = { "linkml_meta": {'domain_of': ['PairwiseComparison']} })
     atoms_aligned: Optional[str] = Field(default=None, description="""e.g. \"Cα\", \"all-atom\", \"main-chain\".""", json_schema_extra = { "linkml_meta": {'domain_of': ['PairwiseComparison']} })
     residues_aligned: Optional[int] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['PairwiseComparison']} })
     tm_score: Optional[TypedMeasurementValue] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['PairwiseComparison']} })
@@ -5213,7 +5213,7 @@ class Site(ConfiguredBaseModel):
 
 class SiteQuality(ConfiguredBaseModel):
     """
-    Site-scoped quality metrics. Lives on QualityDataSheet.site_qualities[]. The fields are deliberately overlapping with GeometrySummary so the consumer can compare the site to the global average — a structure with great global geometry but a wrecked active site is still a bad model for its intended function.
+    Site-scoped quality metrics. Lives on QualityDataSheet.site_qualities[]. Available local observations help assess a functional site even when global summaries hide its problems. Fields are optional, and their presence in the schema does not imply that the emitter computes them. Current site-scalar routing supports RMSD, clashscore and Ramachandran outliers; preserve unavailable local metrics as explicit gaps.
     """
     linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'https://w3id.org/protstruct-review/schema'})
 
@@ -5274,7 +5274,7 @@ class SiteQuality(ConfiguredBaseModel):
     site_clashscore: Optional[TypedMeasurementValue] = Field(default=None, description="""Clashscore restricted to atoms within the site's member residues.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SiteQuality']} })
     site_ramachandran_outlier_count: Optional[TypedMeasurementValue] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['SiteQuality']} })
     site_density_peaks: Optional[list[DensityPeak]] = Field(default=[], json_schema_extra = { "linkml_meta": {'domain_of': ['SiteQuality']} })
-    ligand_quality: Optional[LigandQuality] = Field(default=None, description="""Required when site.ligand_ref is set.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SiteQuality']} })
+    ligand_quality: Optional[LigandQuality] = Field(default=None, description="""Supplied ligand observations joined through site.ligand_ref; eligible ligand-scoped measurements require a corresponding block.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SiteQuality']} })
 
 
 # Model rebuild

@@ -37,7 +37,7 @@ substitute for the required gate. External-tool and online benchmarks remain opt
 
 ## Trust model (load-bearing — do not violate)
 
-Every task in the catalog is graded by **cross-tool agreement**, not by PHENIX alone. The harness re-runs critical metrics with at least one independent oracle (MolProbity, ChimeraX, REFMAC/Servalcat, TM-align, RELION, gemmi, …) and compares. The deposited PDB/EMDB entry or publication Table 1 is the tiebreaker.
+Gradeable claims require an applicable criterion and independent cross-checks of the same metric and comparison context. Cross-tool agreement checks a measurement; it does not by itself establish model quality or refinement improvement. Record each producer's implementation, shared methods and reference data; a tool-suite name alone does not establish independence. Preserve unavailable comparisons as explicit gaps, with claim-specific waivers where required by the QDS contract below. The deposited PDB/EMDB entry or publication Table 1 is the tiebreaker for the corresponding reference claim.
 
 If you are about to add a task whose only oracle is another PHENIX tool, stop — find an external oracle or call out explicitly that none exists.
 
@@ -46,7 +46,8 @@ If you are about to add a task whose only oracle is another PHENIX tool, stop �
 Every oracle in this harness rests on assumptions that determine what it sees and what it misses. Surface them in the eval `notes:` field whenever a measurement is borderline; bake them into the QDS narrative when they materially change a verdict.
 
 ### MolProbity / probe / reduce
-- **Reference distribution.** Top8000 is built from high-resolution (≤ 2.0 Å) structures. Applying its percentile thresholds to a 3.0 Å model is implicit — the percentile is still computed but the outlier definition was set against tighter geometry than the model can deliver.
+- **Metric-specific producers.** `probe` detects contacts and `reduce` prepares hydrogens for clashscore. Those binaries alone do not supply Ramachandran/rotamer classifications, the MolProbity composite, or bond/angle RMSZ. Identify the classifier, library and denominator for each geometry observation; standalone packaging does not establish an independent algorithm.
+- **Reference distribution.** Top8000 supplies residue-conformation reference distributions. Distinguish a classifier's contour percentile from a whole-structure score's archive percentile. Report the reference population and resolution context; resolution alone does not justify accepting a particular outlier rate.
 - **H-atom placement.** `reduce -build` chooses Asn/Gln/His flips and adds H atoms. Matching the reduce version and H convention does not prove identical H coordinates: hetero dictionaries can differ. The retained clashscore benchmark builds hydrogens separately on each pipeline, so its matched-convention residual does not isolate a counting-code effect. Its causal decomposition, and the cause of the old 1SAR headline gap, remain unresolved. Compare exact H-built coordinates and dictionaries before assigning a mechanism; distinct-builder comparisons such as `reduce` versus `mmtbx.reduce2` require their own matched evidence.
 - **Water and altloc handling.** `probe`'s default `ogt33` water filter and altloc selection determines which atoms can clash. Quote the flags used.
 - **Rotamer library.** MolProbity distinguishes Favored, Allowed, and OUTLIER classifications. Outside the favored region does not imply an outlier. Classification depends on the residue-specific joint torsion-library score, not one χ angle's distance from a favored boundary. Retain the reported classification and score when available; flag borderline classifications in `notes`.
@@ -68,7 +69,7 @@ Every oracle in this harness rests on assumptions that determine what it sees an
 - **Optimal Cα selection.** TM-align drops Cα pairs from the score that are too far apart, by design. The `Aligned length` field tells you how many were used.
 
 ### `gemmi align`, ChimeraX `matchmaker`, PyMOL `super` / `cealign`
-- Each picks a different objective (sequence-aware vs structure-only, iterative vs single-pass). Two tools "agreeing within 0.1 Å" is a guarantee about the score, not the alignment — they may have aligned different residues to get there.
+- Each picks a different objective (sequence-aware vs structure-only, iterative vs single-pass). Similar RMSDs do not establish the same alignment: retain matched residue identities, atom selection and aligned counts. Apply registry §3's Cα RMSD tolerance only to its benchmarked tool/settings context and matched selections.
 
 ### Servalcat (`sigmaa`, `fofc`, `refine_xtal_norefmac`)
 - **Per-shell R uses Murshudov-group sigma-A weighting** with bins set by reflection count. The "overall R" surfaced in QDS is a per-shell weighted mean, not a separately-cross-validated R-work / R-free.
@@ -89,7 +90,7 @@ Every oracle in this harness rests on assumptions that determine what it sees an
 
 ### CCP4 `aimless` and `ctruncate` (T13 data-quality oracle)
 - **`aimless` requires unmerged intensities** (M/ISYM column). On a merged-only MTZ (e.g. F-obs / SIGF-obs only — the 1SAR case) it aborts immediately with `hkl_unmerge_list::prepare - EMPTY`. CC½, ⟨I/σ⟩ outer, and Rmerge / Rmeas all flow from unmerged data and are **unobtainable** if the artefact does not ship it. Document this as a known gap rather than substituting unrelated metrics.
-- **`ctruncate` is the merged-data fallback** for the T13 metrics that *are* recoverable from amplitudes alone: Wilson B, L-test twin fraction (+ moments), ΔB anisotropy, tNCS via Patterson search, ice-ring summary. These are CCP4 / non-cctbx and close the T13 cross-tool gap when aimless can't run.
+- **`ctruncate` is the merged-data fallback** for the T13 metrics that *are* recoverable from amplitudes alone: Wilson B, L-test twin fraction (+ moments), ΔB anisotropy, tNCS via Patterson search, ice-ring summary. These supply non-cctbx observations for those metrics; they cannot close a different claim about completeness or unavailable unmerged-data statistics.
 - **`scripts/t13_data_quality.py`** wraps both using the configured CCP4 environment: it tries aimless first (captured as a provenance row), then runs ctruncate and emits informational EvaluationMeasurement rows bound to the input MTZ digest. Pass `--columns 'F-obs,SIGF-obs'` for typical phenix-refined MTZs and a fresh repository-local `--logdir` (default `<mtz_dir>/t13_oracle_logs/`); retained logs/output MTZs are never overwritten, and evidence refs are portable repository-relative paths. Missing or unrecognized flag evidence is unavailable, not false. Paired agreement grading still requires the corresponding agent measurement and registry preconditions.
 - **Twinning thresholds.** L-test fraction < 0.05 = effectively untwinned; 0.05–0.20 = mild / borderline; > 0.20 = strong. ctruncate's "first-principles operator search" is independent of the L-test and reports zero operators when the lattice/symmetry permits no twin laws.
 - **Anisotropy ΔB rule of thumb.** Eigenvalue spread (max − min) < ~20 Å² on the orthogonal-coords B-tensor is acceptable for general refinement; ctruncate's "some anisotropy detect" message fires at much lower thresholds and is informational unless ΔB is large.
@@ -310,7 +311,7 @@ When the user asks for a metric measurement (e.g. "what's the clashscore?"):
 1. **Check `ref/tool_recommendations.yaml`** for the metric's `top_considered` and `top_performing` recommendations. The schema class is `ToolRecommendation` (`schemas/protstruct_review.yaml`).
 2. **Run the recommended tool** (verify it's installed via `ref/oracle_tools.md`). If it's missing, run the next-ranked alternative and flag the gap.
 3. **Record in the eval** which tool was used (`MeasurementValue.oracle_tool_ref`). It should match the recommendation, or the discrepancy should be noted.
-4. **Cross-check against a tool from a different family.** Never let the only oracle for a measurement be a cctbx tool. The trust model in `ref/quality_reporting.md` §3 is the principle, not a courtesy.
+4. **Cross-check the same claim against an independent implementation when available.** Match the observable, subjects, selection and conventions. If independent evidence is unavailable, retain the observation with an explicit gap and the claim-specific waiver required by the QDS contract; do not substitute an unrelated metric or infer a quality pass from agreement. See `ref/quality_reporting.md` §3.
 5. If a recommendation is wrong (a tool consistently disagrees with consensus, or a new tool outperforms the recommended one), **update `ref/tool_recommendations.yaml`** — add a new id with a later `as_of_date`, an exact timezone-qualified `effective_at`, and `supersedes_recommendation_ref` pointing to the prior row; never mutate or delete the snapshotted predecessor. Give new or revised rows in `ref/tool_assumptions.yaml` the analogous dated/timestamped `supersedes_assumption_ref` lineage. Re-run `uv run --locked --extra benchmark -- bash scripts/validate.sh` after edits.
 
 ## Quality Data Sheet — when to emit and what goes in it
@@ -320,44 +321,44 @@ A `QualityDataSheet` (schema class `QualityDataSheet`, emitter `scripts/qds_emit
 - A structure has been evaluated against the catalog and you want a one-page summary downstream consumers can cite.
 - A new oracle has been added and you want to publish the now-hardened findings.
 
-The QDS holds these summary blocks (use only the ones the modality needs):
+The QDS can hold these summary blocks. Populate them from retained source observations that apply to the modality; the emitter preserves supplied evidence and enforces the implied-content rules below, not a universal minimum metric count:
 
 | Block | Class | When to populate |
 |---|---|---|
 | `identity_block` | `IdentityBlock` | always |
-| `geometry_summary` | `GeometrySummary` | always (clashscore, Ramachandran, rotamer, MolProbity score, RMSZ) |
+| `geometry_summary` | `GeometrySummary` | when eligible geometry measurements exist (clashscore, Ramachandran, rotamer, MolProbity score, RMSZ); state missing measurements |
 | `data_quality_summary` | `DataQualitySummary` | X-ray only — populated from `stage: all` measurements (completeness, ⟨I/σ⟩ outer, CC½ outer, R-merge/R-meas) |
 | `refinement_summary` | `RefinementSummary` | X-ray only (R-work, R-free, gap) |
 | `map_summary` | `MapSummary` | cryo-EM only (CC_mask, d_FSC_model) |
 | `predicted_confidence_summary` | `PredictedConfidenceSummary` | predicted models only (mean pLDDT + distribution shape, PAE max, multimer-block min) |
-| `pairwise_comparisons[]` | `PairwiseComparison` | one per relevant reference (deposited / starting / AlphaFold / truth) — TM-score AND lDDT mandatory pair, RMSD reported additionally |
+| `pairwise_comparisons[]` | `PairwiseComparison` | one per relevant reference (deposited / starting / AlphaFold / truth); choose RMSD, TM-score and/or lDDT for the question and retain their comparison context |
 | `per_residue_quality` | `PerResidueQuality` | populate when local/per-residue measurements exist (per-residue lDDT, displacement, RSRZ; outlier residue list; difference-density peaks; flagged regions) |
-| `site_qualities[]` | `SiteQuality` | one per active site / binding site / interface / metal site. Required when a functional site or bound ligand is present |
+| `site_qualities[]` | `SiteQuality` | declared sites and supported site/ligand measurements imply corresponding blocks; available fields are not all mandatory measurements |
 | `packing_summary` | `PackingSummary` | when packing / B-factor-outlier indicators were measured (packing Z-score, unsatisfied buried H-bonds, per-residue B-factor outlier Z) |
 | `classification_summary` | `ClassificationSummary` | T15 — informational DSSP H+E content diagnostic plus secondary-structure agreement (informational pending exact-denominator recalibration), with SS / domain / fold labels (informational) |
 | `interface_quality_summary` | `InterfaceQualitySummary` | T16 — total two-sided buried surface area (`ΣSASA(chains) − SASA(complex)`), DockQ, CAPRI class. Double PISA's per-side `interface_area` before comparison; BSA tolerance is `max(3% of mean, 30 Å²)`. Required when any `scope=interface` measurement exists |
 | `prediction_ensemble_summary` | `PredictionEnsembleSummary` | T07/T17 — ensemble convergence across predicted models. Required when any `scope=ensemble` measurement exists |
 | `nmr_validation_summary` | `NmrValidationSummary` | T17 — restraint violations, ensemble precision RMSD |
 | `assumptions_report` | assumption records | when a measurement's validity depends on a tool assumption that could change the verdict (schema v5) |
-| `cross_tool_coverage` | `CrossToolCoverage` | always — surfaces which tool families confirmed each task |
+| `cross_tool_coverage` | `CrossToolCoverage` | always — surfaces tool-family coverage and explicit gaps per metric and comparison context |
 | `tool_recommendations_applied[]` | `ToolRecommendation` | snapshot of recommendations active at issue time |
 | `headline_verdict` | string | always |
 
 ## Metric scope and per-residue summary discipline
 
-Every `MeasurementValue` declares a `scope` (overriding the canonical scope on its `MetricDefinition` if needed). The `MeasurementScope` enum has values: `complex`, `chain`, `site`, `residue`, `atom`, `dataset`, `ligand`, `domain`, `interface`, `ensemble`.
+A `MeasurementValue.scope` can override the canonical scope on its `MetricDefinition`. Declare it explicitly when needed to preserve comparison context or route scoped evidence. The `MeasurementScope` enum has values: `complex`, `chain`, `site`, `residue`, `atom`, `dataset`, `ligand`, `domain`, `interface`, `ensemble`, `assembly`, `cohort`.
 
 `domain`, `interface`, and `ensemble` are the T15–T17 scopes. Each has a fail-hard rule in the
 emitter: a measurement at that scope implies its structured block (`ClassificationSummary`,
 `InterfaceQualitySummary` / `PredictionEnsembleSummary`, `NmrValidationSummary`), and emitting the
 scalar without the rows raises `QdsCompletenessError`.
 
-For non-`complex` scopes, also set `scope_selector` (free text) so the reader can locate what was measured: e.g. `"chain A"`, `"chain A residues 30-45"`, `"Asn A 39"`, `"Ca²⁺ A 33"`, `"active site 1"`.
+Use `scope_selector` to identify the measured subset. For `site` and `ligand`, it must equal the exact declared Site or Ligand id; the ligand must be bound to exactly one declared Site. Put human-readable details in `notes`. Other selectors can describe a chain or residue selection; `cohort` requires the exact named preregistered cohort. Keep `subject_ref` and `reference_subject_ref` separate from selectors.
 
-For per-residue / per-atom / per-chain measurements, the discipline is **store everything, surface the summary**:
+For local measurements, retain individual observations as well as any applicable summary:
 
-- Store the full array under `PerResidueQuality.lddt_per_residue[]` (or `displacement_per_residue_a[]`, `rsrz_per_residue[]`, ...) — one `PerResidueValue` per residue.
-- Surface mean / std / min / max / count on the matching scalar MeasurementValue via `TypedMeasurementValue.mean`, `std_dev`, `min_value`, `max_value`, `count`. The `value_numeric` slot conventionally holds the mean.
+- Store supported per-residue values under `PerResidueQuality.lddt_per_residue[]` (or `displacement_per_residue_a[]`, `rsrz_per_residue[]`, ...) — one `PerResidueValue` per residue. Retain other local observations in their supported structured collections or linked raw output; do not invent an array slot.
+- When an applicable scalar metric summarises that population, supply mean / std / min / max / count on its MeasurementValue via `TypedMeasurementValue.mean`, `std_dev`, `min_value`, `max_value`, `count`. The `value_numeric` slot conventionally holds the mean. The emitter copies supplied statistics; it does not automatically derive arbitrary scalar or site summaries from arrays.
 
 This way a downstream consumer can read the QDS as a one-page summary AND drill into the per-residue details when needed.
 
@@ -415,7 +416,12 @@ Each per-ligand check populates a `MeasurementValue` at `scope: ligand`, `scope_
 - `T10_protein-ligand_hbond_count` → `LigandQuality.protein_ligand_hbond_count`
 - `T10_rmsd_to_deposited_ligand_pose` → `LigandQuality.pose_rmsd_to_deposited_a`
 
-The QDS emitter joins via `Site.ligand_ref` → `LigandQuality` so every ligand bound at a Site has its quality block in `site_qualities[].ligand_quality`. Declare the Site (kind: `binding_site`, `metal_coordination`, etc.) explicitly in the eval — without it, scope=ligand measurements will trigger `_check_implied_blocks` to fail the QDS emit.
+The QDS emitter joins supplied ligand observations through `Site.ligand_ref` and emits
+`site_qualities[].ligand_quality` when eligible supported ligand-scoped measurements supply
+values. A Site/Ligand declaration alone does not create a quality block. Declare the Site
+(kind: `binding_site`, `metal_coordination`, etc.) and Ligand explicitly; each measured ligand's
+exact `scope_selector` must identify a declared Ligand bound to exactly one Site. Missing or
+ambiguous bindings and unsupported scoped metrics fail emission.
 
 For waters specifically: do NOT declare every HOH as a Ligand. Use a single scope=complex measurement carrying the water B and RSCC distribution stats (mean/std/min/max/count). Add `density_misfit` ResidueOutlier rows only when retained significance evidence supports that classification; rank-only or RSCC-only review candidates remain informational observations. The historical 1SAR water flags are not a validated template for assigning outlier status.
 
@@ -562,21 +568,21 @@ all of these suites.
 
 ## Common pitfalls
 
-- **Inverting the trust model.** MolProbity is the geometry oracle; it is not a PHENIX tool. `phenix.holton_geometry_validation` and MolProbity are *both* run, and the harness compares them.
+- **Treating a suite name as independent confirmation.** Probe clashscore, Ramachandran/rotamer classification, the MolProbity composite and Holton geometry energy are distinct observations. Match the metric and its producer before comparing; shared implementations or libraries remain relevant even across separately installed tools.
 - **Naming drift.** It's `phenix.superpose_models`, not `phenix.superpose_pdbs`. Verify in `ref/phenix_docs/phenix-online.org/documentation/reference/` before adding a new row.
 - **Adding pass thresholds to the catalog or driver.** Don't. Define them once in
   `ref/thresholds_and_standards.md`; drivers cite that row.
 - **Skipping the baseline.** Pre-refinement metrics are required to compute Δ-anything. The driving example shows this; per-task drivers should follow.
 - **Vague example datasets.** "Any high-resolution structure" is not reproducible. Use a PDB/EMDB ID.
-- **Reporting RMSD alone for pair comparisons.** TM-score and lDDT are the mandatory pair (`ref/quality_reporting.md` §2.1); RMSD is reported additionally for legibility, never as the basis of the verdict.
-- **Quoting R-work alone.** Always with R-free and the gap. The R-free expectation rule of thumb is `≤ resolution_Å / 10` (Brünger 1992; Evans & Murshudov 2013).
-- **Mean pLDDT without distribution.** A bimodal-sharp distribution (confident core + disordered tails) is normal; a broad distribution centred on 70 is a different story. Always report distribution shape via the `PlddtDistributionShape` enum.
+- **Choosing pair metrics without a question.** RMSD measures displacement over a stated superposition and selection; TM-score adds fold-scale similarity and lDDT adds local distance agreement. Use the combination appropriate to the comparison (`ref/quality_reporting.md` §2.1), with explicit baselines and applicability. The schema does not require TM-score and lDDT together, and similarity alone does not establish refinement improvement.
+- **Quoting R-work alone.** Report R-free and the gap when a valid held-out set is available; otherwise explain the limitation. Retain the data, free-flag and estimator conventions. There is no universal `resolution_Å / 10` quality or overfitting rule; use the applicable registry criterion and comparison evidence.
+- **Mean pLDDT without distribution or residue locations.** Describe the confidence distribution and map it to residues. A low-confidence mode can reflect disorder, flexibility, missing context or prediction uncertainty; distribution shape alone does not identify disordered tails. Use `PlddtDistributionShape` descriptively.
 
 ## Reference materials
 
 - PHENIX docs: `ref/phenix_docs/`
 - Task catalog: `ref/catalog.yaml` (canonical, LinkML-validated) + `ref/tasks_and_evaluations.{md,tsv}` (denormalized export)
-- Quality reporting consensus: `ref/quality_reporting.md` — what to report and why, with citations
+- Quality reporting guide: `ref/quality_reporting.md` — what to report and why, with citations and implementation boundaries
 - Tool recommendations: `ref/tool_recommendations.yaml` — `top_considered` vs `top_performing` per metric
 - Oracle install status: `ref/oracle_tools.md`
 - Schema: `schemas/protstruct_review.yaml`; validate with `uv run --locked --extra benchmark -- bash scripts/validate.sh`

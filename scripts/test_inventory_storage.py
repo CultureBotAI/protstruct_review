@@ -102,7 +102,10 @@ class Tree:
         return path
 
     def git(self, *args: str, cwd: Path | None = None) -> str:
-        return subprocess.run(["git", "-C", str(cwd or self.root), *args], check=True, capture_output=True,
+        # Fixture writes must finish before a read-only snapshot begins (#906).
+        # Keep these defaults on setup calls, not in the recipe/CLI environment.
+        return subprocess.run(["git", "-c", "maintenance.auto=false", "-c", "gc.auto=0",
+                               "-C", str(cwd or self.root), *args], check=True, capture_output=True,
                               text=True, timeout=60).stdout
 
     def report(self, **kwargs) -> dict:
@@ -120,6 +123,42 @@ def failing_git(fail):
         result = fail(args)
         return result if result is not None else real(root, *args)
     return mock.patch.object(inventory, "run_git", side_effect=run)
+
+
+class FixtureTests(unittest.TestCase):
+    def test_setup_suppresses_automatic_maintenance_in_each_repository(self):
+        tree = Tree(self)
+        nested = tree.outside / "nested"
+        nested.mkdir()
+        tree.git("init", "-q", "-b", "main", cwd=nested)
+        for index, root in enumerate((tree.root, nested)):
+            with self.subTest(root=root.name):
+                # Explicit repository settings must not restart background setup work.
+                tree.git("config", "maintenance.auto", "true", cwd=root)
+                tree.git("config", "gc.auto", "1", cwd=root)
+                trace = tree.outside / f"setup-{index}.jsonl"
+                tree.write("fixture.txt", base=root)
+                with mock.patch.dict(os.environ, GIT_TRACE2_EVENT=str(trace)):
+                    tree.git("add", "fixture.txt", cwd=root)
+                    tree.git("commit", "-qm", "fixture", cwd=root)
+                events = [json.loads(line) for line in trace.read_text().splitlines()]
+                commands = [event.get("argv", []) for event in events if event.get("event") == "start"]
+                self.assertTrue(any("add" in argv for argv in commands), "setup add was not traced")
+                self.assertTrue(any("commit" in argv for argv in commands), "setup commit was not traced")
+                maintenance = [event for event in events if event.get("event") == "child_start"
+                               and "maintenance" in event.get("argv", [])]
+                self.assertEqual(maintenance, [], "fixture setup launched automatic maintenance")
+
+                # A synchronous positive control proves that the trace detects the child.
+                with mock.patch.dict(os.environ, GIT_TRACE2_EVENT=str(trace)):
+                    tree.git("-c", "maintenance.auto=true", "-c", "maintenance.autoDetach=false",
+                             "commit", "--allow-empty", "-qm", "trace control", cwd=root)
+                events = [json.loads(line) for line in trace.read_text().splitlines()]
+                maintenance = [event for event in events if event.get("event") == "child_start"
+                               and "maintenance" in event.get("argv", [])]
+                self.assertTrue(maintenance, "positive control did not trace maintenance")
+                self.assertTrue(all({"run", "--auto", "--no-detach"} <= set(event["argv"])
+                                    for event in maintenance))
 
 
 class ClassificationTests(unittest.TestCase):

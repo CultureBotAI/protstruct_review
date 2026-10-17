@@ -30,6 +30,8 @@ def inline_recipe(prefix: str) -> str:
 
 
 class SkillCommandTests(unittest.TestCase):
+    maxDiff = None  # Retain the exact changed path/metadata if isolation regresses (#906).
+
     def setUp(self):
         self.tree = Tree(self)
         self.tree.write("data.txt")

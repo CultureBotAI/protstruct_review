@@ -1,6 +1,6 @@
 ---
 name: review-open-issues
-description: Sweep and prioritize the complete protstruct_review GitHub issue queue against current main, scientific records, guards, and repository invariants. Use when asked to review issues, triage the backlog, identify urgent work, or reconcile NEXT_TASKS.md with GitHub. Produces a read-only ranked report by default; it does not close, relabel, comment on, or implement issues unless the user separately asks.
+description: Sweep and prioritize the complete protstruct_review GitHub issue queue against current main, scientific records, guards, and repository invariants. Use when asked to review issues, triage the backlog, identify urgent work, or check NEXT_TASKS.md for drift. Produces a read-only ranked report; use reconcile-next-tasks when asked to update the backlog document.
 ---
 
 # Review and prioritize open issues
@@ -15,6 +15,10 @@ it with GitHub but do not treat its contents as proof that an issue is live.
 This skill triages work. It is read-only by default and does not implement fixes,
 edit `NEXT_TASKS.md`, close or relabel issues, post comments, or maintain a tracker
 unless the user explicitly requests that separate mutation.
+
+For a requested update to `NEXT_TASKS.md`, use
+[reconcile-next-tasks](../reconcile-next-tasks/SKILL.md), which reuses this skill's
+collection checks and carries out the requested local document edit.
 
 Before triage, read the repository routing and authority files:
 

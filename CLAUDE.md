@@ -2,6 +2,18 @@
 
 Quality-assessment harness for agent-refined or generated protein structures.
 
+## Project goals
+
+1. **Assess protein refinement results.** Compare the actual starting and refined
+   structures using reproducible measurements, independent cross-checks, and explicit
+   evidence for improvements, regressions, and conclusions that cannot yet be assessed.
+2. **Understand the landscape of protein structure tools and measurements**, including
+   their use in assessing refinement. Explain what each tool and measurement evaluates,
+   its required inputs, applicability, assumptions, limitations, and relationship to
+   other tools and measurements.
+
+Use these two goals together when reviewing issues and choosing the next directions of work.
+
 ## Read first
 
 These sources have decreasing precedence:
@@ -62,6 +74,10 @@ oracle; use deposition or publication evidence as the tiebreaker when available.
 - `prompts/` — repository workflows
 
 ## Workflow
+
+Use `.claude/skills/reconcile-next-tasks/SKILL.md` when asked to refresh or reconcile
+`NEXT_TASKS.md`. It updates the local backlog from GitHub and retained evidence;
+ordinary issue reviews remain read-only through `.claude/skills/review-open-issues/SKILL.md`.
 
 Use `prompts/backlog-loop-goal.md` for the full survey→branch→PR→review cycle. Branch before editing,
 run the hermetic gate before proposing a merge, and require green Linux/macOS CI on the reviewed

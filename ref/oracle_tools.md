@@ -38,13 +38,13 @@ for r in d['tool_recommendations']:
 | **probe** (Richardson lab) | 2.26.021123 | `$HOME/tools/probe-src/probe` | T05 (clash detection — feeds clashscore) |
 | **reduce** (Richardson lab) | 4.16.250520 | `$HOME/tools/reduce-src/build/reduce_src/reduce` | T14 (H-atom placement); T05 (input prep for clashscore) |
 | **Servalcat** | 0.4.131 | conda env `cryst-oracles` (`mamba activate cryst-oracles`) | T03 (`servalcat refine_xtal_norefmac`), T06 (`servalcat fsc`, `fofc`, `sigmaa`), T12 |
-| **OpenStructure (OST)** | 2.11.1 | conda env `cryst-oracles` (CLI `lddt`, Python `import ost`) | T01 (`lddt` — CASP15+ reference implementation, global + per-residue), T02 (per-residue Cα distance + structural comparison), T05 (Ramachandran φ/ψ extraction; outlier classification needs external Top8000 contour data), T07 (per-residue lDDT for predicted-vs-experimental) |
-| **CCP4 suite** (REFMAC5, ProSMART, aimless, ctruncate, pointless) | 9.0.015 | `/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/` (source `bin/ccp4.setup-sh` first) | T02/T05 (ProSMART — Procrustes per-residue geometry; non-cctbx Ramachandran-Z for T05), T03 (REFMAC5 — independent refiner / R-factors), T13 (ctruncate — Wilson B / twinning / anisotropy / tNCS / ice rings on merged data; aimless — canonical when unmerged intensities are available; pointless — space-group sanity) |
+| **OpenStructure (OST)** | 2.11.1 | conda env `cryst-oracles` (CLI `lddt`, Python `import ost`) | T01 (`lddt` — global + per-residue local distance comparison), T02 (per-residue Cα distance + structural comparison), T05 (Ramachandran φ/ψ extraction; outlier classification needs external Top8000 contour data), T07 (per-residue lDDT for predicted-vs-experimental) |
+| **CCP4 suite** (REFMAC5, ProSMART, aimless, ctruncate, pointless) | 9.0.015 | `/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/` (source `bin/ccp4.setup-sh` first) | T02/T05 (ProSMART — Procrustes per-residue comparison; not a Ramachandran outlier classifier), T03 (REFMAC5 — independent refiner / R-factors), T13 (ctruncate — Wilson B / twinning / anisotropy / tNCS / ice rings on merged data; aimless — canonical when unmerged intensities are available; pointless — space-group sanity) |
 | **DSSP** (`mkdssp`) | 4.6.1 | `/opt/homebrew/bin/mkdssp` (`brew install brewsci/bio/dssp`) | T15 (secondary-structure assignment; H-bond energetics half of the agreement metric) |
 | **biotite** | 1.7.1 | locked `benchmark` extra (`uv sync --locked --extra benchmark`) | T15 (P-SEA Cα-geometry secondary structure, `scripts/t15_ss_agreement.py`); T16 (Shrake-Rupley SASA buried surface area, `scripts/t16_interface_quality.py`); T17 (ensemble Cα-RMSF precision, `scripts/t17_nmr_ensemble.py`) |
 | **DockQ** | 2.1.3 | locked `benchmark` extra (`uv sync --locked --extra benchmark`; pins numpy < 2) | T16 (interface DockQ score + CAPRI class via `scripts/t16_interface_quality.py`) |
 
-Together, `probe` + `reduce` constitute the standalone Richardson-lab MolProbity pipeline that the catalog calls "MolProbity standalone" — these are the same binaries the MolProbity web service runs.
+Here, the catalog's "MolProbity standalone" label identifies the retained `reduce` + `probe` clashscore path: hydrogen preparation followed by contact detection. It does not mean those binaries supply Ramachandran/rotamer classifications, the MolProbity composite, or bond/angle RMSZ. Identify each metric's actual producer and reference library. Separate installations can share algorithms or binaries, so the label alone does not establish independence.
 
 Servalcat ships a no-REFMAC refinement mode (`refine_xtal_norefmac`, `refine_spa_norefmac`) so it can serve as a T03 second-opinion oracle even without CCP4.
 
@@ -142,7 +142,7 @@ conda activate cryst-oracles && servalcat --version  # 0.4.131
 | T01 | `phenix.superpose_models` | TM-align, `gemmi align`, OpenStructure (`lddt`), CCP4 ProSMART | ChimeraX matchmaker, US-align |
 | T02 | `phenix.structure_comparison` (PHENIX 2.0-5936 launcher is GUI/project-bound; a headless two-file invocation exits without a report) | OpenStructure, CCP4 ProSMART, gemmi coordinate analysis, DSSP | — |
 | T03 | `phenix.refine` | `servalcat refine_xtal_norefmac`, CCP4 REFMAC5 (`NCYC=0` for in-place R-factors) | BUSTER |
-| T05 | `phenix.holton_geometry_validation` | `probe` + `reduce` (std MolProbity), `gemmi rmsz`, CCP4 ProSMART | wwPDB validation pipeline |
+| T05 | `phenix.holton_geometry_validation` | `probe` + `reduce` (clashscore path), `gemmi rmsz` (documented geometry fields), CCP4 ProSMART (local deformation; not a Rama classifier) | Independent classification/composite coverage remains metric- and subject-specific; wwPDB reports can reproduce deposition classifications but may share methods |
 | T06 | `phenix.model_vs_data` | `gemmi sfcalc`, `servalcat fsc`/`fofc`/`sigmaa`, CCP4 REFMAC5 | CCP4 sfcheck |
 | T12 | `phenix.mtriage` | `servalcat fsc`, `servalcat localcc` | RELION postprocess, ResMap |
 | T13 | `phenix.model_vs_data` (completeness, resolution range) | CCP4 ctruncate (Wilson B, L-test twinning, ΔB aniso, tNCS, ice rings); CCP4 aimless when unmerged intensities exist; wrapper `scripts/t13_data_quality.py` | (CC½ / ⟨I/σ⟩ / Rmerge require unmerged intensities — gap when artefact ships merged-only) |
@@ -151,9 +151,12 @@ conda activate cryst-oracles && servalcat --version  # 0.4.131
 | T16 | *(none — no PHENIX interface scorer)* | DockQ (interface score + CAPRI class), biotite SASA (buried surface area) | PISA/PDBePISA (deposition-grade BSA reference) |
 | T17 | *(none — no PHENIX NMR restraint validator)* | biotite ensemble precision (`scripts/t17_nmr_ensemble.py`); wwPDB report parser (`scripts/t17_restraint_summary.py`) | PROCHECK-NMR, RPF |
 
-Runnable independent-oracle coverage now spans T01–T17. CCP4/REFMAC hardens T03/T06, while
-the metric-specific gaps listed below remain explicit rather than being filled by a cctbx-only
-substitute.
+Runnable alternatives cover measurements across the T01–T17 catalog; this is not a claim
+that every task or metric has complete independent validation. CCP4/REFMAC can supply
+T03/T06 observations when inputs and conventions match. Coverage is established per metric,
+subject and comparison context, with explicit gaps and waivers where needed. The current
+[1SAR retained-evidence correction](../data/coscientists/openscientist/EVAL_1sar_cdba2c07_2026-09-23.md)
+preserves such gaps; installed tools do not close them retrospectively.
 
 **T14 independence is metric-specific.** In the measured installation, `phenix.reduce` and
 standalone `reduce` both dispatch Richardson `reduce.4.16.250520`; comparing them checks packaging,

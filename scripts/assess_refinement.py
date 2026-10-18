@@ -1,0 +1,1430 @@
+#!/usr/bin/env python3
+"""Reusable before/after refinement assessment workflow and control evaluator.
+
+This module and CLI separate three distinct questions that were previously
+conflated in single-table refinement summaries:
+
+1. Implementation agreement (`implementation_agreement`):
+   Do independent software implementations agree on the same observable when
+   applied to the same model and reflection set?
+2. Final-model quality support (`final_model_quality_support`):
+   What absolute measurements support the final model's suitability for its
+   intended downstream use?
+3. Change relative to input (`change_relative_to_input`):
+   What improved, remained invariant, or regressed relative to the actual
+   starting model and input reflection data?
+
+In addition, every assessment record carries:
+- Explicit provenance (`subject_ref`, SHA-256 digests, atom/residue/water/ligand
+  inventories, reflection-retention audit, and tool versions).
+- Explicit `missing_conflicting_and_inapplicable_evidence` entries so absent
+  artifacts (such as the unarchived 1SAR round-7 model), inapplicable clauses
+  (such as null deposited R-free or merged-MTZ `aimless`), and cross-solver
+  scaling offsets are never silently smoothed over.
+- Explicit `pass_criterion_bindings`: whenever `pass_criterion_bindings` is
+  empty (`[]`), `assessment_verdict_status` is forced to `"informational"`
+  rather than emitting an uncalibrated pass/fail verdict.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+from pathlib import Path
+import sys
+from typing import Any
+import zipfile
+
+import numpy as np
+import yaml
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from audit_1sar_retained_evidence import ARCHIVE, pdb_atoms  # noqa: E402
+from t03_reflection_retention import (  # noqa: E402
+    audit_mtz_retention,
+    deposition_applicability,
+)
+
+DEFAULT_ARCHIVE = REPO_ROOT / ARCHIVE
+DEFAULT_DEPOSITED_PDB = REPO_ROOT / "data/pdb_mtz/1sar_deposited.pdb"
+DEFAULT_1SAR_QDS = (
+    REPO_ROOT / "data/coscientists/openscientist/QDS_1sar_cdba2c07_2026-09-23.yaml"
+)
+DEFAULT_1SAR_EVAL = (
+    REPO_ROOT / "data/coscientists/openscientist/EVAL_1sar_cdba2c07_2026-09-23.yaml"
+)
+DEFAULT_1SAR_COORD_AUDIT = (
+    REPO_ROOT
+    / "data/coscientists/openscientist/retained_evidence_2026-09-23/coordinate_and_t13_audit.json"
+)
+DEFAULT_ROUND3_BENCH = REPO_ROOT / "ref/research/data/negative_control_round3_bench.json"
+DEFAULT_ROUND4_RECOVER = (
+    REPO_ROOT / "ref/research/data/negative_control_round4_recover.json"
+)
+DEFAULT_ROUND10_RECOVER = (
+    REPO_ROOT / "ref/research/data/negative_control_round10_recover.json"
+)
+
+STANDARD_AMINO_ACIDS = frozenset(
+    {
+        "ALA",
+        "ARG",
+        "ASN",
+        "ASP",
+        "CYS",
+        "GLN",
+        "GLU",
+        "GLY",
+        "HIS",
+        "ILE",
+        "LEU",
+        "LYS",
+        "MET",
+        "PHE",
+        "PRO",
+        "SER",
+        "THR",
+        "TRP",
+        "TYR",
+        "VAL",
+    }
+)
+
+
+def sha256_bytes(data: bytes) -> str:
+    """Return the hex SHA-256 digest of raw bytes."""
+    return hashlib.sha256(data).hexdigest()
+
+
+def sha256_file(path: Path) -> str:
+    """Return the hex SHA-256 digest of a file on disk."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(65536), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def kabsch_rmsd(coords_a: np.ndarray, coords_b: np.ndarray) -> float:
+    """Return the optimal right-handed Kabsch-superposed RMSD in Angstroms."""
+    if coords_a.shape != coords_b.shape or coords_a.ndim != 2 or coords_a.shape[1] != 3:
+        raise ValueError("kabsch_rmsd requires matching (N, 3) coordinate arrays")
+    if coords_a.shape[0] == 0:
+        raise ValueError("kabsch_rmsd requires at least one atom")
+    centered_a = coords_a - np.mean(coords_a, axis=0)
+    centered_b = coords_b - np.mean(coords_b, axis=0)
+    cov = centered_a.T @ centered_b
+    u_mat, _, vt_mat = np.linalg.svd(cov)
+    det_sign = 1.0 if np.linalg.det(u_mat @ vt_mat) >= 0.0 else -1.0
+    correction = np.diag([1.0, 1.0, det_sign])
+    rotation = u_mat @ correction @ vt_mat
+    aligned_a = centered_a @ rotation
+    diffs = aligned_a - centered_b
+    return float(np.sqrt(np.mean(np.sum(diffs * diffs, axis=1))))
+
+
+def resolve_verdict_status(
+    pass_criterion_bindings: list[dict[str, Any]] | None,
+    requested_status: str | None = None,
+) -> str:
+    """Enforce informational status whenever pass_criterion_bindings is empty.
+
+    Parameters
+    ----------
+    pass_criterion_bindings:
+        List of explicit threshold/criterion bindings. If empty or None, the
+        returned status is unconditionally ``"informational"``.
+    requested_status:
+        Candidate verdict status when bindings are present.
+    """
+    if not pass_criterion_bindings:
+        return "informational"
+    if requested_status in {"pass", "fail", "NeedsReview", "informational"}:
+        return requested_status
+    return "informational"
+
+
+def summarize_pdb_inventory(pdb_text: str) -> dict[str, Any]:
+    """Summarize atom, residue, water, and non-water heteroatom inventory."""
+    atoms = pdb_atoms(pdb_text)
+    protein_atoms = [a for a in atoms if a["key"][3] in STANDARD_AMINO_ACIDS]
+    water_atoms = [a for a in atoms if a["key"][3] in {"HOH", "WAT"}]
+    hetero_atoms = [
+        a
+        for a in atoms
+        if a["key"][3] not in STANDARD_AMINO_ACIDS
+        and a["key"][3] not in {"HOH", "WAT"}
+    ]
+
+    protein_residues = sorted(
+        {
+            (a["key"][0], int(a["key"][1]), a["key"][2], a["key"][3])
+            for a in protein_atoms
+        }
+    )
+    chains: dict[str, int] = {}
+    for chain_id, _, _, _ in protein_residues:
+        chains[chain_id] = chains.get(chain_id, 0) + 1
+
+    hetero_groups: dict[str, list[dict[str, Any]]] = {}
+    for atom in hetero_atoms:
+        chain_id, resseq_str, icode, resname, _ = atom["key"]
+        key = f"{chain_id}:{resseq_str}{icode}:{resname}"
+        hetero_groups.setdefault(key, []).append(atom)
+
+    hetero_summary = []
+    for key in sorted(hetero_groups):
+        group = hetero_groups[key]
+        b_vals = [float(a["b_factor"]) for a in group]
+        hetero_summary.append(
+            {
+                "group_id": key,
+                "atom_count": len(group),
+                "mean_b_iso": round(float(np.mean(b_vals)), 3),
+                "min_b_iso": round(float(np.min(b_vals)), 3),
+                "max_b_iso": round(float(np.max(b_vals)), 3),
+            }
+        )
+
+    def _b_stats(rows: list[dict[str, Any]]) -> dict[str, float | None]:
+        if not rows:
+            return {"mean": None, "median": None, "min": None, "max": None}
+        vals = [float(r["b_factor"]) for r in rows]
+        return {
+            "mean": round(float(np.mean(vals)), 3),
+            "median": round(float(np.median(vals)), 3),
+            "min": round(float(np.min(vals)), 3),
+            "max": round(float(np.max(vals)), 3),
+        }
+
+    return {
+        "total_non_hydrogen_atoms": len(atoms),
+        "protein_atom_count": len(protein_atoms),
+        "protein_residue_count": len(protein_residues),
+        "protein_residues_by_chain": chains,
+        "water_atom_count": len(water_atoms),
+        "non_water_hetero_atom_count": len(hetero_atoms),
+        "non_water_hetero_groups": hetero_summary,
+        "b_factor_summary": {
+            "all_atoms": _b_stats(atoms),
+            "protein_atoms": _b_stats(protein_atoms),
+            "water_atoms": _b_stats(water_atoms),
+            "non_water_hetero_atoms": _b_stats(hetero_atoms),
+        },
+    }
+
+
+def compare_pdb_pair(start_pdb_text: str, final_pdb_text: str) -> dict[str, Any]:
+    """Compare starting and final PDB models across coordinates, B-factors, and inventory."""
+    start_atoms = pdb_atoms(start_pdb_text)
+    final_atoms = pdb_atoms(final_pdb_text)
+
+    def _atom_key(atom: dict[str, Any]) -> tuple[str, int, str, str, str]:
+        chain_id, resseq_str, icode, resname, atom_name = atom["key"]
+        return (chain_id, int(resseq_str), icode, resname, atom_name)
+
+    start_map = {_atom_key(a): a for a in start_atoms}
+    final_map = {_atom_key(a): a for a in final_atoms}
+
+    shared_keys = sorted(set(start_map).intersection(final_map))
+    added_keys = sorted(set(final_map) - set(start_map))
+    removed_keys = sorted(set(start_map) - set(final_map))
+
+    shared_protein_keys = [k for k in shared_keys if k[3] in STANDARD_AMINO_ACIDS]
+    shared_ca_keys = [k for k in shared_protein_keys if k[4] == "CA"]
+
+    def _unsuperposed_metrics(
+        keys: list[tuple[str, int, str, str, str]],
+    ) -> dict[str, Any]:
+        if not keys:
+            return {
+                "atom_count": 0,
+                "unsuperposed_rmsd_angstrom": None,
+                "mean_shift_angstrom": None,
+                "median_shift_angstrom": None,
+                "p95_shift_angstrom": None,
+                "max_shift_angstrom": None,
+                "max_shift_atom": None,
+                "mean_delta_b_iso": None,
+                "median_delta_b_iso": None,
+            }
+        start_xyz = np.array([start_map[k]["xyz"] for k in keys], dtype=float)
+        final_xyz = np.array([final_map[k]["xyz"] for k in keys], dtype=float)
+        diffs = final_xyz - start_xyz
+        dists = np.linalg.norm(diffs, axis=1)
+        max_idx = int(np.argmax(dists))
+        max_key = keys[max_idx]
+        b_deltas = np.array(
+            [
+                float(final_map[k]["b_factor"]) - float(start_map[k]["b_factor"])
+                for k in keys
+            ],
+            dtype=float,
+        )
+        return {
+            "atom_count": len(keys),
+            "unsuperposed_rmsd_angstrom": round(
+                float(np.sqrt(np.mean(np.sum(diffs * diffs, axis=1)))), 4
+            ),
+            "mean_shift_angstrom": round(float(np.mean(dists)), 4),
+            "median_shift_angstrom": round(float(np.median(dists)), 4),
+            "p95_shift_angstrom": round(float(np.percentile(dists, 95)), 4),
+            "max_shift_angstrom": round(float(dists[max_idx]), 4),
+            "max_shift_atom": (
+                f"{max_key[0]}:{max_key[1]}{max_key[2]}:{max_key[3]}:{max_key[4]}"
+            ),
+            "mean_delta_b_iso": round(float(np.mean(b_deltas)), 4),
+            "median_delta_b_iso": round(float(np.median(b_deltas)), 4),
+        }
+
+    ca_superposed_all: float | None = None
+    if shared_ca_keys:
+        start_ca_xyz = np.array(
+            [start_map[k]["xyz"] for k in shared_ca_keys], dtype=float
+        )
+        final_ca_xyz = np.array(
+            [final_map[k]["xyz"] for k in shared_ca_keys], dtype=float
+        )
+        ca_superposed_all = round(kabsch_rmsd(start_ca_xyz, final_ca_xyz), 4)
+
+    chain_ca_summary: dict[str, dict[str, Any]] = {}
+    chains = sorted({k[0] for k in shared_ca_keys})
+    for chain_id in chains:
+        ckeys = [k for k in shared_ca_keys if k[0] == chain_id]
+        s_xyz = np.array([start_map[k]["xyz"] for k in ckeys], dtype=float)
+        f_xyz = np.array([final_map[k]["xyz"] for k in ckeys], dtype=float)
+        unsuperposed = _unsuperposed_metrics(ckeys)
+        chain_ca_summary[chain_id] = {
+            "ca_count": len(ckeys),
+            "kabsch_superposed_ca_rmsd_angstrom": round(kabsch_rmsd(s_xyz, f_xyz), 4),
+            "unsuperposed_ca_rmsd_angstrom": unsuperposed["unsuperposed_rmsd_angstrom"],
+            "mean_ca_shift_angstrom": unsuperposed["mean_shift_angstrom"],
+            "max_ca_shift_angstrom": unsuperposed["max_shift_angstrom"],
+            "max_ca_shift_atom": unsuperposed["max_shift_atom"],
+        }
+
+    added_waters = [k for k in added_keys if k[3] in {"HOH", "WAT"}]
+    removed_waters = [k for k in removed_keys if k[3] in {"HOH", "WAT"}]
+    added_non_water = [
+        f"{k[0]}:{k[1]}{k[2]}:{k[3]}:{k[4]}"
+        for k in added_keys
+        if k[3] not in {"HOH", "WAT"}
+    ]
+    removed_non_water = [
+        f"{k[0]}:{k[1]}{k[2]}:{k[3]}:{k[4]}"
+        for k in removed_keys
+        if k[3] not in {"HOH", "WAT"}
+    ]
+
+    return {
+        "shared_all_heavy_atoms": _unsuperposed_metrics(shared_keys),
+        "shared_protein_heavy_atoms": _unsuperposed_metrics(shared_protein_keys),
+        "shared_ca_atoms": {
+            **_unsuperposed_metrics(shared_ca_keys),
+            "kabsch_superposed_ca_rmsd_angstrom": ca_superposed_all,
+            "by_chain": chain_ca_summary,
+        },
+        "inventory_deltas": {
+            "added_total_atoms": len(added_keys),
+            "removed_total_atoms": len(removed_keys),
+            "added_water_atoms": len(added_waters),
+            "removed_water_atoms": len(removed_waters),
+            "added_non_water_atoms": added_non_water,
+            "removed_non_water_atoms": removed_non_water,
+        },
+    }
+
+
+def _parse_deposited_r_values(pdb_path: Path) -> dict[str, Any]:
+    """Parse REMARK 3 R VALUE and FREE R VALUE lines from a deposited PDB header."""
+    r_work: float | None = None
+    r_free: float | None = None
+    raw_lines: list[str] = []
+    for line in pdb_path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if line.startswith("REMARK   3   R VALUE") or line.startswith(
+            "REMARK   3   FREE R VALUE"
+        ):
+            raw_lines.append(line.strip())
+            if ":" in line:
+                head, tail = line.split(":", 1)
+                token = tail.strip().split()[0] if tail.strip() else "NULL"
+                if (
+                    "FREE R VALUE" in head
+                    and "TEST SET" not in head
+                    and "ERROR" not in head
+                ):
+                    try:
+                        r_free = float(token)
+                    except ValueError:
+                        r_free = None
+                elif "R VALUE" in head and "FREE" not in head and "ERROR" not in head:
+                    try:
+                        r_work = float(token)
+                    except ValueError:
+                        r_work = None
+    return {
+        "deposited_r_work": r_work,
+        "deposited_r_free": r_free,
+        "deposition_applicability": deposition_applicability(r_free),
+        "header_lines": raw_lines,
+    }
+
+
+def assess_1sar_case_study(
+    archive_path: Path = DEFAULT_ARCHIVE,
+    deposited_pdb_path: Path = DEFAULT_DEPOSITED_PDB,
+    qds_path: Path = DEFAULT_1SAR_QDS,
+    eval_path: Path = DEFAULT_1SAR_EVAL,
+    coord_audit_path: Path = DEFAULT_1SAR_COORD_AUDIT,
+    pass_criterion_bindings: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Build the structured before/after refinement assessment for 1SAR."""
+    bindings = list(pass_criterion_bindings or [])
+    qds_doc = yaml.safe_load(qds_path.read_text(encoding="utf-8"))
+    qds = qds_doc["quality_data_sheets"][0]
+    eval_doc = yaml.safe_load(eval_path.read_text(encoding="utf-8"))
+    eval_run = eval_doc["evaluation_runs"][0]
+    coord_audit = json.loads(coord_audit_path.read_text(encoding="utf-8"))
+
+    with zipfile.ZipFile(archive_path) as zf:
+        start_pdb_bytes = zf.read("data/1sar.pdb")
+        final_pdb_bytes = zf.read("data/1sar_final.pdb")
+        start_mtz_bytes = zf.read("data/1sar.mtz")
+        final_mtz_bytes = zf.read("data/1sar_final.mtz")
+
+    start_pdb_text = start_pdb_bytes.decode("utf-8", errors="replace")
+    final_pdb_text = final_pdb_bytes.decode("utf-8", errors="replace")
+
+    start_inventory = summarize_pdb_inventory(start_pdb_text)
+    final_inventory = summarize_pdb_inventory(final_pdb_text)
+    pair_comparison = compare_pdb_pair(start_pdb_text, final_pdb_text)
+    mtz_labels = ("F-obs", "SIGF-obs", "R-free-flags")
+    mtz_retention = audit_mtz_retention(
+        start_mtz_bytes,
+        final_mtz_bytes,
+        input_labels=mtz_labels,
+        output_labels=mtz_labels,
+        flag_values={0, 1},
+        free_value=1,
+    )
+    deposition_info = _parse_deposited_r_values(deposited_pdb_path)
+
+    # Question 1: Implementation agreement on the same observable (packaged final model)
+    implementation_agreement = {
+        "question": (
+            "Do independent software implementations agree on the same observable "
+            "when applied to the packaged 1SAR round-4 model (data/1sar_final.pdb) "
+            "and reflection set (data/1sar.mtz)?"
+        ),
+        "observables": [
+            {
+                "observable_id": "T03_r_work_r_free",
+                "task_id": "T03",
+                "subject_ref": qds["subject_ref"],
+                "atom_selection": "all_1641_model_heavy_atoms_against_data/1sar.mtz",
+                "implementations": [
+                    {
+                        "tool": "gemmi sfcalc (gemmi_rfactor.py, bin-rescaled)",
+                        "version": "0.7.5",
+                        "r_work": 0.1622,
+                        "r_free": 0.2136,
+                        "r_free_minus_r_work": 0.0515,
+                        "source_measurement_refs": [
+                            "EVAL_1sar_cdba2c07_2026-09-07_M_005",
+                            "EVAL_1sar_cdba2c07_2026-09-07_M_006",
+                            "EVAL_1sar_cdba2c07_2026-09-07_M_007",
+                        ],
+                        "evidence_tier": "retained_qds_primary",
+                    },
+                    {
+                        "tool": "phenix.model_vs_data",
+                        "version": "1.21.2-5419 (historical)",
+                        "r_work": 0.1564,
+                        "r_free": 0.2116,
+                        "r_free_minus_r_work": 0.0552,
+                        "source_measurement_refs": [
+                            "EVAL_1sar_cdba2c07_2026-09-07_M_001",
+                            "EVAL_1sar_cdba2c07_2026-09-07_M_002",
+                            "EVAL_1sar_cdba2c07_2026-09-07_M_003",
+                        ],
+                        "evidence_tier": "historical_eval_row",
+                    },
+                    {
+                        "tool": "REFMAC5 (NCYC=0 evaluation)",
+                        "version": "5.8.0431 (historical)",
+                        "r_work": 0.1693,
+                        "r_free": 0.2128,
+                        "r_free_minus_r_work": 0.0435,
+                        "source_measurement_refs": [
+                            "EVAL_1sar_cdba2c07_2026-09-23_M_refmac_rwork",
+                            "EVAL_1sar_cdba2c07_2026-09-23_M_refmac_rfree",
+                        ],
+                        "evidence_tier": "historical_eval_row",
+                    },
+                    {
+                        "tool": "Servalcat sigmaa",
+                        "version": "0.4.131 (historical, recorded n_free=362)",
+                        "r_work": 0.1705,
+                        "r_free": 0.2209,
+                        "r_free_minus_r_work": 0.0504,
+                        "source_measurement_refs": [
+                            "EVAL_1sar_cdba2c07_2026-09-23_M_servalcat_sigmaa_rwork",
+                            "EVAL_1sar_cdba2c07_2026-09-23_M_servalcat_sigmaa_rfree",
+                            "EVAL_1sar_cdba2c07_2026-09-23_M_servalcat_sigmaa_gap",
+                        ],
+                        "evidence_tier": "historical_eval_row",
+                    },
+                ],
+                "spread_summary": {
+                    "r_work_range": [0.1564, 0.1705],
+                    "r_work_max_abs_delta": 0.0141,
+                    "r_free_range": [0.2116, 0.2209],
+                    "r_free_max_abs_delta": 0.0093,
+                    "gemmi_minus_phenix_r_work": 0.0058,
+                    "gemmi_minus_phenix_r_free": 0.0020,
+                },
+                "agreement_assessment": (
+                    "On matched 723-reflection free sets, gemmi sfcalc, "
+                    "phenix.model_vs_data, and REFMAC5 place R-free within a "
+                    "0.0020 window (0.2116 to 0.2136), while Servalcat sigmaa "
+                    "reports 0.2209 under a different recorded test-set count "
+                    "(n_free=362) and scaling path. The +0.0058 R-work / +0.0020 "
+                    "R-free offset between gemmi_rfactor.py (bin-rescaled) and "
+                    "phenix.model_vs_data is descriptive and informational."
+                ),
+            },
+            {
+                "observable_id": "T05_all_atom_clashscore",
+                "task_id": "T05",
+                "subject_ref": qds["subject_ref"],
+                "atom_selection": "all_atoms_with_explicit_riding_hydrogens",
+                "implementations": [
+                    {
+                        "tool": "MolProbity clashscore (standalone reduce/probe)",
+                        "version": "4.5.2 (historical)",
+                        "clashscore": 3.63,
+                        "source_measurement_refs": [
+                            "EVAL_1sar_cdba2c07_2026-09-23_M_016",
+                        ],
+                        "evidence_tier": "historical_eval_row",
+                    },
+                    {
+                        "tool": "mmtbx.validation_summary",
+                        "version": "1.21.2-5419 (historical)",
+                        "clashscore": 3.13,
+                        "source_measurement_refs": [
+                            "EVAL_1sar_cdba2c07_2026-09-23_M_015",
+                        ],
+                        "evidence_tier": "historical_eval_row",
+                    },
+                ],
+                "spread_summary": {
+                    "clashscore_range": [3.13, 3.63],
+                    "abs_delta": 0.50,
+                },
+                "agreement_assessment": (
+                    "Standalone MolProbity (3.63, 11 bad-overlap pairs over 3,027 "
+                    "H-built atoms) and mmtbx.validation_summary (3.13) differ by "
+                    "0.50 clashes/1000 atoms on data/1sar_final.pdb; raw H-built "
+                    "coordinates were not retained, so the 0.50 difference is "
+                    "recorded without causal attribution."
+                ),
+            },
+            {
+                "observable_id": "T05_bond_and_angle_rmsd",
+                "task_id": "T05",
+                "subject_ref": qds["subject_ref"],
+                "atom_selection": "covalent_protein_and_heteroatom_restraints",
+                "implementations": [
+                    {
+                        "tool": "REFMAC5",
+                        "version": "5.8.0431 (historical)",
+                        "bond_rmsd_angstrom": 0.0105,
+                        "angle_rmsd_deg": 1.4957,
+                        "bond_rmsz": 0.884,
+                        "angle_rmsz": 0.864,
+                        "source_measurement_refs": [
+                            "EVAL_1sar_cdba2c07_2026-09-23_M_refmac_bond_rmsd",
+                            "EVAL_1sar_cdba2c07_2026-09-23_M_refmac_angle_rmsd",
+                            "EVAL_1sar_cdba2c07_2026-09-23_M_refmac_bond_rmsz",
+                            "EVAL_1sar_cdba2c07_2026-09-23_M_refmac_angle_rmsz",
+                        ],
+                        "evidence_tier": "historical_eval_row",
+                    },
+                    {
+                        "tool": "mmtbx.validation_summary",
+                        "version": "1.21.2-5419 (historical)",
+                        "bond_rmsd_angstrom": 0.007,
+                        "angle_rmsd_deg": 0.85,
+                        "bond_rmsz": None,
+                        "angle_rmsz": None,
+                        "source_measurement_refs": [
+                            "EVAL_1sar_cdba2c07_2026-09-23_M_026",
+                            "EVAL_1sar_cdba2c07_2026-09-23_M_027",
+                        ],
+                        "evidence_tier": "historical_eval_row",
+                    },
+                ],
+                "spread_summary": {
+                    "bond_rmsd_abs_delta_angstrom": 0.0035,
+                    "angle_rmsd_abs_delta_deg": 0.6457,
+                },
+                "agreement_assessment": (
+                    "REFMAC5 (0.0105 A / 1.4957 deg) and mmtbx.validation_summary "
+                    "(0.007 A / 0.85 deg) differ by 0.0035 A and 0.6457 deg on "
+                    "data/1sar_final.pdb; matched bond counts and raw restraint-library "
+                    "outputs were not retained, and the agent-reported 0.004 A / 0.99 deg "
+                    "values belong to the absent round-7 model."
+                ),
+            },
+            {
+                "observable_id": "T15_secondary_structure_3state",
+                "task_id": "T15",
+                "subject_ref": qds["subject_ref"],
+                "atom_selection": "192_protein_residues_chains_A_and_B",
+                "implementations": [
+                    {
+                        "tool": "mkdssp (DSSP H-bond/electrostatic)",
+                        "version": "4.6.1",
+                        "he_fraction": 0.375,
+                        "he_residue_count": 72,
+                        "total_residues": 192,
+                        "source_measurement_refs": [
+                            "EVAL_1sar_cdba2c07_2026-09-22_M_001",
+                        ],
+                        "evidence_tier": "recomputed_in_retained_eval",
+                    },
+                    {
+                        "tool": "biotite.structure.annotate_sse (P-SEA CA geometry)",
+                        "version": "1.7.1",
+                        "q3_agreement_vs_dssp": 0.8802,
+                        "matching_residues_vs_dssp": 169,
+                        "total_residues": 192,
+                        "source_measurement_refs": [
+                            "EVAL_1sar_cdba2c07_2026-09-22_M_002",
+                        ],
+                        "evidence_tier": "recomputed_in_retained_eval",
+                    },
+                ],
+                "spread_summary": {
+                    "q3_agreement_fraction": 0.8802,
+                    "discrepant_residue_count": 23,
+                },
+                "agreement_assessment": (
+                    "DSSP and P-SEA agree on 169/192 residues (88.02% Q3); the 23 "
+                    "boundary differences arise because DSSP uses backbone H-bond "
+                    "energies whereas P-SEA uses CA-only distance/dihedral criteria."
+                ),
+            },
+        ],
+    }
+
+    # Question 2: What supports the final model's quality for its intended use?
+    final_model_quality_support = {
+        "question": (
+            "What measurements support the packaged final model's (data/1sar_final.pdb, "
+            "round 4) quality for downstream structural analysis at 2.50 A packaged/MTZ "
+            "dataset resolution (49.972-2.500 A in data/1sar.mtz; 1.80 A deposited 1SAR reference)?"
+        ),
+        "subject_ref": qds["subject_ref"],
+        "packaged_model_resolution_angstrom": 2.50,
+        "mtz_resolution_range_angstrom": [49.972, 2.500],
+        "deposited_reference_resolution_angstrom": 1.80,
+        "domains": {
+            "experimental_fit_and_data_completeness": {
+                "completeness_percent": 99.38,
+                "wilson_b_angstrom2": 14.542,
+                "twin_fraction_l_test": 0.03,
+                "tncs_detected": False,
+                "anisotropy_delta_b_angstrom2": 7.319,
+                "ice_ring_anomaly": "3.44 A shell (I/sigma Z = 5.21)",
+                "r_work_phenix": 0.1564,
+                "r_free_phenix": 0.2116,
+                "r_free_minus_r_work_phenix": 0.0552,
+                "r_work_gemmi": 0.1622,
+                "r_free_gemmi": 0.2136,
+                "r_free_minus_r_work_gemmi": 0.0515,
+                "r_work_pdb_header": 0.1563,
+                "r_free_pdb_header": 0.2114,
+            },
+            "stereochemistry_and_geometry": {
+                "clashscore_molprobity": 3.63,
+                "clashscore_mmtbx": 3.13,
+                "ramachandran_favored_percent": 98.4,
+                "ramachandran_outliers_percent": 0.53,
+                "ramachandran_outlier_residues": ["1sar:A:39 (Asn A 39)"],
+                "rotamer_outliers_percent": 4.88,
+                "c_beta_deviations": 0,
+                "molprobity_composite_score": 1.63,
+                "mmtbx_bond_rmsd_angstrom": 0.007,
+                "mmtbx_angle_rmsd_deg": 0.85,
+                "refmac_bond_rmsz": 0.884,
+                "refmac_angle_rmsz": 0.864,
+                "holton_geom_energy_ratio_sigma": 1.33,
+            },
+            "dimer_interface_and_fold_conservation_vs_deposited_1sar": {
+                "reference_subject_ref": "pdb:1SAR (data/pdb_mtz/1sar_deposited.pdb)",
+                "dockq_identity_mapping_AB_AB": 0.9445,
+                "dockq_identity_capri_class": "High",
+                "dockq_swapped_mapping_AB_BA": 0.0063,
+                "chain_A_kabsch_ca_rmsd_vs_deposited_angstrom": 0.191,
+                "chain_B_kabsch_ca_rmsd_vs_deposited_angstrom": 0.180,
+                "active_site_and_ligand_note": (
+                    "Chainwise backbone fold and AB dimer interface match deposited "
+                    "1SAR closely (DockQ = 0.9445, chain CA RMSD 0.191 / 0.180 A), "
+                    "and A:97:SO4 is retained (mean B = 17.588 A^2), whereas "
+                    "B:97:SO4 was removed in packaged round 4 and A:98:CA (B = 42.73 "
+                    "A^2) and B:98:NA (B = 22.85 A^2) were added."
+                ),
+            },
+        },
+    }
+
+    # Question 3: What improved or regressed relative to the actual input?
+    change_relative_to_input = {
+        "question": (
+            "What improved, stayed invariant, or regressed between the actual "
+            "starting model/data (data/1sar.pdb, data/1sar.mtz) and the packaged "
+            "final model/data (data/1sar_final.pdb, data/1sar_final.mtz)?"
+        ),
+        "starting_subject_ref": "artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar.pdb",
+        "final_subject_ref": qds["subject_ref"],
+        "reflection_data_retention": {
+            "input_mtz": "data/1sar.mtz",
+            "output_mtz": "data/1sar_final.mtz",
+            "audit_status": mtz_retention["audit_status"],
+            "input_total_rows": mtz_retention["input"]["raw_rows"],
+            "output_total_rows": mtz_retention["output"]["raw_rows"],
+            "input_eligible_count": mtz_retention["input"]["eligible_rows"],
+            "output_eligible_count": mtz_retention["output"]["eligible_rows"],
+            "input_work_count": mtz_retention["input"]["work_rows"],
+            "output_work_count": mtz_retention["output"]["work_rows"],
+            "input_free_count": mtz_retention["input"]["free_rows"],
+            "output_free_count": mtz_retention["output"]["free_rows"],
+            "input_zero_f_count": mtz_retention["input"]["zero_f"],
+            "changed_free_flag_count": len(mtz_retention["changed_flags"]),
+            "changed_observation_count": len(mtz_retention["changed_observations"]),
+            "invalidated_input_hkl_count": len(
+                mtz_retention["invalidated_input_hkls"]
+            ),
+            "invalidated_input_hkls": [
+                list(hkl) for hkl in mtz_retention["invalidated_input_hkls"]
+            ],
+            "added_raw_rows": mtz_retention["added_raw_rows"],
+            "added_all_nan_rows": mtz_retention["added_all_nan_rows"],
+            "interpretation": (
+                "All 723 free-R reflections and 6,494 positive-F work reflections "
+                "preserve identical (F-obs, SIGF-obs, R-free-flags) values in "
+                "data/1sar_final.mtz. However, audit_mtz_retention flags "
+                "'not_preserved' because 11 input work reflections with F=0.0 in "
+                "data/1sar.mtz were written as NaN in data/1sar_final.mtz and 14 "
+                "all-NaN reflection rows were appended."
+            ),
+        },
+        "coordinate_and_b_factor_changes": pair_comparison,
+        "retained_pairwise_similarity_metrics": {
+            "openstructure_ca_lddt_global": 0.9725,
+            "openstructure_ca_lddt_per_residue_mean_chain_A": 0.9714,
+            "gemmi_superposed_ca_rmsd_historical_angstrom": 0.423,
+            "phenix_superpose_models_rmsd_historical_angstrom": 0.43,
+            "tmalign_ca_rmsd_96res_historical_angstrom": 0.41,
+            "tmalign_tm_score_historical": 0.987,
+        },
+        "retained_start_to_packaged_quality_deltas": {
+            "phenix_r_work": {
+                "start": 0.3334,
+                "final_packaged": 0.1564,
+                "delta": round(0.1564 - 0.3334, 4),
+                "source_refs": [
+                    "EVAL_1sar_cdba2c07_2026-09-23_M_004",
+                    "EVAL_1sar_cdba2c07_2026-09-07_M_001",
+                ],
+            },
+            "phenix_r_free": {
+                "start": 0.3956,
+                "final_packaged": 0.2116,
+                "delta": -0.1840,
+                "source_refs": [
+                    "EVAL_1sar_cdba2c07_2026-09-23_M_005",
+                    "EVAL_1sar_cdba2c07_2026-09-07_M_002",
+                    "EVAL_1sar_cdba2c07_2026-09-23_M_013",
+                ],
+            },
+            "mmtbx_clashscore": {
+                "start": 31.66,
+                "final_packaged": 3.13,
+                "delta": round(3.13 - 31.66, 2),
+                "source_refs": [
+                    "EVAL_1sar_cdba2c07_2026-09-23_M_014",
+                    "EVAL_1sar_cdba2c07_2026-09-23_M_015",
+                ],
+            },
+            "mmtbx_ramachandran_outliers_percent": {
+                "start": 9.04,
+                "final_packaged": 0.53,
+                "delta": round(0.53 - 9.04, 2),
+                "source_refs": [
+                    "EVAL_1sar_cdba2c07_2026-09-23_M_019",
+                    "EVAL_1sar_cdba2c07_2026-09-23_M_020",
+                ],
+            },
+            "holton_geometry_energy_ratio_sigma": {
+                "start": 3.32,
+                "final_packaged": 1.33,
+                "delta": round(1.33 - 3.32, 2),
+                "source_refs": [
+                    "EVAL_1sar_cdba2c07_2026-09-23_M_028",
+                    "EVAL_1sar_cdba2c07_2026-09-23_M_029",
+                ],
+            },
+        },
+        "model_composition_and_experimental_fit_trajectory": {
+            "starting_model_composition": start_inventory,
+            "packaged_final_model_composition": final_inventory,
+            "water_count_change": (
+                final_inventory["water_atom_count"]
+                - start_inventory["water_atom_count"]
+            ),
+            "non_water_hetero_changes": {
+                "preserved_groups": ["A:97:SO4 (5 atoms)"],
+                "removed_groups_in_packaged_round4": ["B:97:SO4 (5 atoms)"],
+                "added_groups_in_packaged_round4": [
+                    "A:98:CA (1 atom, B=42.73 A^2)",
+                    "B:98:NA (1 atom, B=22.85 A^2)",
+                ],
+            },
+            "r_factor_trajectory_across_retained_eval_and_logs": {
+                "round0_starting_model_phenix": {
+                    "archive_member": "data/1sar.pdb",
+                    "r_work": 0.3334,
+                    "r_free": 0.3956,
+                    "source": "EVAL_1sar_cdba2c07_2026-09-23_M_round0_rwork / M_round0_rfree",
+                },
+                "round2_intermediate_phenix": {
+                    "archive_member": "data/1sar_round2.pdb",
+                    "r_work": 0.1686,
+                    "r_free": 0.2301,
+                    "source": "EVAL_1sar_cdba2c07_2026-09-23_M_round2_rwork / M_round2_rfree",
+                },
+                "round3_intermediate_phenix": {
+                    "archive_member": "data/1sar_round3.pdb",
+                    "r_work": 0.1589,
+                    "r_free": 0.2164,
+                    "source": "EVAL_1sar_cdba2c07_2026-09-23_M_round3_rwork / M_round3_rfree",
+                },
+                "round4_packaged_final_phenix": {
+                    "archive_member": "data/1sar_final.pdb",
+                    "r_work": 0.1564,
+                    "r_free": 0.2116,
+                    "pdb_header_r_work": 0.1563,
+                    "pdb_header_r_free": 0.2114,
+                    "delta_r_work_vs_round0": round(0.1564 - 0.3334, 4),
+                    "delta_r_free_vs_round0": round(0.2116 - 0.3956, 4),
+                    "source": "EVAL_1sar_cdba2c07_2026-09-07_M_001 / M_002 (data/1sar_final.pdb)",
+                },
+                "round5_intermediate_phenix": {
+                    "archive_member": "data/1sar_round5.pdb",
+                    "r_work": 0.1555,
+                    "r_free": 0.2104,
+                    "source": "EVAL_1sar_cdba2c07_2026-09-23_M_round5_rwork / M_round5_rfree",
+                },
+                "round6_intermediate_phenix": {
+                    "archive_member": "data/1sar_round6.pdb",
+                    "r_work": 0.1539,
+                    "r_free": 0.2068,
+                    "source": "EVAL_1sar_cdba2c07_2026-09-23_M_round6_rwork / M_round6_rfree",
+                },
+                "round7_log_reported_unarchived": {
+                    "archive_member": None,
+                    "r_work": 0.1488,
+                    "r_free": 0.1989,
+                    "delta_r_work_vs_round4": round(0.1488 - 0.1564, 4),
+                    "delta_r_free_vs_round4": round(0.1989 - 0.2116, 4),
+                    "source": "claude_iterations.log:510 (coordinate file absent from archive)",
+                },
+            },
+        },
+    }
+
+    missing_conflicting_and_inapplicable_evidence = [
+        {
+            "category": "missing_final_artifact",
+            "id": "1sar_round7_coordinates_absent_from_archive",
+            "severity": "critical_provenance_boundary",
+            "description": (
+                "The trajectory log (claude_iterations.log:510, :752) reports a "
+                "round-7 model with R-work = 0.1488, R-free = 0.1989, 159 waters "
+                "(1,654 heavy atoms), and restored B:97:SO4, but that coordinate "
+                "file was never packaged into cdba2c07-daff-4f60-ae96-12452b3a5fbb_artifacts.zip. "
+                "Instead, data/1sar_final.pdb is the round-4 PHENIX model "
+                "(SHA-256 8cbc1650f8be5a3833f98833fa514ec7d490c2c3bb9aa930413abac05e2a510b, "
+                "146 waters, 1,641 heavy atoms), while intermediate rounds 5 and 6 "
+                "were saved separately as data/1sar_round5.pdb and data/1sar_round6.pdb."
+            ),
+            "handling_rule": (
+                "Assess data/1sar_final.pdb strictly as the round-4 packaged model "
+                "and record round 7 as an unverified log-only claim."
+            ),
+        },
+        {
+            "category": "inapplicable_or_unevaluable_clause",
+            "id": "1sar_deposited_r_free_null",
+            "severity": "clause_inapplicable",
+            "description": (
+                "Deposited PDB entry 1SAR (data/pdb_mtz/1sar_deposited.pdb, 1991 "
+                "deposition) records 'REMARK 3 FREE R VALUE : NULL'. Any pass "
+                "criterion requiring comparison against deposited R-free is "
+                "mathematically unevaluable."
+            ),
+            "handling_rule": (
+                "deposition_applicability(None) returns deposition_clause='unevaluable'."
+            ),
+        },
+        {
+            "category": "inapplicable_or_unevaluable_clause",
+            "id": "1sar_aimless_merged_mtz_input",
+            "severity": "tool_precondition_mismatch",
+            "description": (
+                "Running aimless on data/1sar.mtz fails with 'hkl_unmerge_list::prepare "
+                "- EMPTY' because data/1sar.mtz contains merged structure-factor "
+                "amplitudes (F-obs, SIGF-obs) rather than unmerged diffraction intensities."
+            ),
+            "handling_rule": (
+                "Record T13 merging statistics (R_merge, R_meas, R_pim, CC1/2) as "
+                "not_applicable_merged_input and use ctruncate / phenix.model_vs_data "
+                "for merged reflection diagnostics."
+            ),
+        },
+        {
+            "category": "reflection_retention_boundary",
+            "id": "1sar_mtz_zero_f_work_reflections_invalidated",
+            "severity": "audit_warning",
+            "description": (
+                "11 input work reflections with F=0.0 in data/1sar.mtz became NaN "
+                "in data/1sar_final.mtz (reducing eligible reflections from 7,228 "
+                "to 7,217) and 14 all-NaN HKL rows were added. All 723 free-R "
+                "reflections and 6,494 positive-F work reflections are preserved."
+            ),
+            "handling_rule": (
+                "Compute independent R-factor checks against the original input "
+                "data/1sar.mtz and report the 11 invalidated zero-F work reflections "
+                "explicitly."
+            ),
+        },
+        {
+            "category": "missing_raw_oracle_outputs_on_historical_rows",
+            "id": "1sar_historical_april_may_raw_logs_unretained",
+            "severity": "partial_baseline_coverage",
+            "description": (
+                "Historical April/May oracle measurements in EVAL_1sar_cdba2c07_2026-09-23.yaml "
+                "(such as starting-model phenix.model_vs_data R-work 0.3334 / R-free "
+                "0.3956 and mmtbx.validation_summary clashscore 31.66) are preserved "
+                "from frozen evaluation rows without retained raw stdout logs, whereas "
+                "start-vs-final coordinate, B-factor, atom/water/ligand inventory, "
+                "and MTZ reflection-retention metrics are freshly derived directly "
+                "from the archived PDB and MTZ bytes."
+            ),
+            "handling_rule": (
+                "Distinguish directly recomputed byte-level audit metrics from "
+                "transcribed historical evaluation rows."
+            ),
+        },
+    ]
+
+    return {
+        "case_id": "1sar_cdba2c07_2026-09-23",
+        "pass_criterion_bindings": bindings,
+        "assessment_verdict_status": resolve_verdict_status(
+            bindings, eval_run.get("overall_verdict_status")
+        ),
+        "provenance": {
+            "archive_path": str(archive_path.relative_to(REPO_ROOT)),
+            "archive_sha256": coord_audit["archive"]["sha256"],
+            "starting_model": {
+                "subject_ref": "artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar.pdb",
+                "archive_member": "data/1sar.pdb",
+                "sha256": sha256_bytes(start_pdb_bytes),
+                "inventory": start_inventory,
+            },
+            "packaged_final_model": {
+                "subject_ref": qds["subject_ref"],
+                "archive_member": "data/1sar_final.pdb",
+                "sha256": sha256_bytes(final_pdb_bytes),
+                "packaged_stage_description": (
+                    "Round-4 PHENIX refinement output packaged as data/1sar_final.pdb; "
+                    "subsequent rounds 5 and 6 exist in the archive as data/1sar_round5.pdb "
+                    "and data/1sar_round6.pdb, while reported round 7 is absent."
+                ),
+                "inventory": final_inventory,
+            },
+            "deposited_reference_model": {
+                "subject_ref": "pdb:1SAR",
+                "path": str(deposited_pdb_path.relative_to(REPO_ROOT)),
+                "sha256": sha256_file(deposited_pdb_path),
+                **deposition_info,
+            },
+            "reflection_data": {
+                "input_mtz_member": "data/1sar.mtz",
+                "input_mtz_sha256": sha256_bytes(start_mtz_bytes),
+                "output_mtz_member": "data/1sar_final.mtz",
+                "output_mtz_sha256": sha256_bytes(final_mtz_bytes),
+            },
+            "retained_records": {
+                "qds_path": str(qds_path.relative_to(REPO_ROOT)),
+                "eval_path": str(eval_path.relative_to(REPO_ROOT)),
+                "coordinate_and_t13_audit_path": str(
+                    coord_audit_path.relative_to(REPO_ROOT)
+                ),
+            },
+        },
+        "implementation_agreement": implementation_agreement,
+        "final_model_quality_support": final_model_quality_support,
+        "change_relative_to_input": change_relative_to_input,
+        "missing_conflicting_and_inapplicable_evidence": (
+            missing_conflicting_and_inapplicable_evidence
+        ),
+    }
+
+
+def _extract_control_row_metrics(
+    row: dict[str, Any],
+    state_key: str | None = None,
+    baseline_pre: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Normalize a single row from round3_bench, round4_recover, or round10_recover."""
+    block = row[state_key] if state_key is not None else row
+    numbers = block["numbers"]
+    pre = block.get("pre") or baseline_pre or {}
+    post = block.get("post")
+    flags = block["flags"]
+
+    d_phenix = float(numbers["d_phenix"])
+    d_gemmi = float(numbers["d_gemmi"])
+    d_refmac = (
+        float(numbers["d_refmac"]) if numbers.get("d_refmac") is not None else None
+    )
+    clash_pre = float(numbers["clash_pre"])
+    clash_post = float(numbers["clash_post"])
+    d_zbond = float(numbers["d_zbond"]) if numbers.get("d_zbond") is not None else None
+
+    pre_phenix_r_free = (
+        float(pre["rfree_phenix"]) if pre.get("rfree_phenix") is not None else None
+    )
+    pre_gemmi_r_free = (
+        float(pre["rfree_gemmi"]) if pre.get("rfree_gemmi") is not None else None
+    )
+    pre_refmac_block = pre.get("refmac")
+    pre_refmac_r_free = (
+        float(pre_refmac_block["r_free"])
+        if isinstance(pre_refmac_block, dict)
+        and pre_refmac_block.get("r_free") is not None
+        else None
+    )
+
+    if isinstance(post, dict):
+        post_phenix_r_free = float(post["rfree_phenix"])
+        post_gemmi_r_free = float(post["rfree_gemmi"])
+        post_refmac_block = post.get("refmac")
+        post_refmac_r_free = (
+            float(post_refmac_block["r_free"])
+            if isinstance(post_refmac_block, dict)
+            and post_refmac_block.get("r_free") is not None
+            else None
+        )
+    else:
+        post_phenix_r_free = (
+            round(pre_phenix_r_free + d_phenix, 4)
+            if pre_phenix_r_free is not None
+            else None
+        )
+        post_gemmi_r_free = (
+            round(pre_gemmi_r_free + d_gemmi, 4)
+            if pre_gemmi_r_free is not None
+            else None
+        )
+        post_refmac_r_free = (
+            round(pre_refmac_r_free + d_refmac, 4)
+            if (pre_refmac_r_free is not None and d_refmac is not None)
+            else None
+        )
+
+    return {
+        "pdb_id": row["pdb_id"],
+        "d_min": float(row["d_min"]),
+        "state": block.get("state", row.get("subject", state_key or "unknown")),
+        "d_phenix": d_phenix,
+        "d_gemmi": d_gemmi,
+        "d_refmac": d_refmac,
+        "abs_diff_phenix_gemmi_delta": round(abs(d_phenix - d_gemmi), 6),
+        "abs_diff_phenix_refmac_delta": (
+            round(abs(d_phenix - d_refmac), 6) if d_refmac is not None else None
+        ),
+        "clash_pre": clash_pre,
+        "clash_post": clash_post,
+        "clash_delta": round(clash_post - clash_pre, 4),
+        "d_favored_pp": float(numbers["d_favored_pp"]),
+        "d_rota_pp": float(numbers["d_rota_pp"]),
+        "d_zbond": d_zbond,
+        "shift_unmasked": float(numbers["shift_unmasked"]),
+        "shift_all_residue": float(block["shift_all_residue"]),
+        "n_protected_fixed": int(numbers["n_protected_fixed"]),
+        "post_phenix_r_free": post_phenix_r_free,
+        "post_gemmi_r_free": post_gemmi_r_free,
+        "post_refmac_r_free": post_refmac_r_free,
+        "pre_phenix_r_free": pre_phenix_r_free,
+        "pre_gemmi_r_free": pre_gemmi_r_free,
+        "pre_refmac_r_free": pre_refmac_r_free,
+        "two_path_only": bool(block.get("two_path_only", d_refmac is None)),
+        "flags": {
+            "F-data": bool(flags["F-data"]),
+            "F-geom": bool(flags["F-geom"]),
+            "F-protected": bool(flags["F-protected"]),
+            "F-shift": bool(flags["F-shift"]),
+        },
+        "conflict_count": len(block.get("conflicts", [])),
+        "conflicts": list(block.get("conflicts", [])),
+        "historical_script_verdict": block.get("verdict"),
+    }
+
+
+def _median_and_iqr(values: list[float]) -> dict[str, float]:
+    """Compute median, min, max, p25, and p75 for a numeric list."""
+    arr = np.array(values, dtype=float)
+    return {
+        "median": round(float(np.median(arr)), 4),
+        "mean": round(float(np.mean(arr)), 4),
+        "min": round(float(np.min(arr)), 4),
+        "p25": round(float(np.percentile(arr, 25)), 4),
+        "p75": round(float(np.percentile(arr, 75)), 4),
+        "max": round(float(np.max(arr)), 4),
+    }
+
+
+def summarize_control_cohort(
+    cohort_id: str,
+    description: str,
+    source_path: Path,
+    normalized_rows: list[dict[str, Any]],
+    pass_criterion_bindings: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Summarize a 22-structure control cohort across the three core questions."""
+    bindings = list(pass_criterion_bindings or [])
+    n_total = len(normalized_rows)
+
+    d_phenix_vals = [r["d_phenix"] for r in normalized_rows]
+    d_gemmi_vals = [r["d_gemmi"] for r in normalized_rows]
+    d_refmac_vals = [
+        r["d_refmac"] for r in normalized_rows if r["d_refmac"] is not None
+    ]
+    pg_diffs = [r["abs_diff_phenix_gemmi_delta"] for r in normalized_rows]
+    pr_diffs = [
+        r["abs_diff_phenix_refmac_delta"]
+        for r in normalized_rows
+        if r["abs_diff_phenix_refmac_delta"] is not None
+    ]
+    clash_deltas = [r["clash_delta"] for r in normalized_rows]
+    clash_posts = [r["clash_post"] for r in normalized_rows]
+    post_rfree_phenix = [
+        r["post_phenix_r_free"]
+        for r in normalized_rows
+        if r["post_phenix_r_free"] is not None
+    ]
+    post_rfree_gemmi = [
+        r["post_gemmi_r_free"]
+        for r in normalized_rows
+        if r["post_gemmi_r_free"] is not None
+    ]
+    post_rfree_refmac = [
+        r["post_refmac_r_free"]
+        for r in normalized_rows
+        if r["post_refmac_r_free"] is not None
+    ]
+    d_favored_vals = [r["d_favored_pp"] for r in normalized_rows]
+    d_rota_vals = [r["d_rota_pp"] for r in normalized_rows]
+    d_zbond_vals = [r["d_zbond"] for r in normalized_rows if r["d_zbond"] is not None]
+    shifts = [r["shift_all_residue"] for r in normalized_rows]
+
+    n_conflicts = sum(1 for r in normalized_rows if r["conflict_count"] > 0)
+    n_f_data = sum(1 for r in normalized_rows if r["flags"]["F-data"])
+    n_f_geom = sum(1 for r in normalized_rows if r["flags"]["F-geom"])
+    n_f_prot = sum(1 for r in normalized_rows if r["flags"]["F-protected"])
+    n_f_shift = sum(1 for r in normalized_rows if r["flags"]["F-shift"])
+
+    n_rfree_improved_phenix = sum(1 for r in normalized_rows if r["d_phenix"] < 0.0)
+    n_rfree_unchanged_phenix = sum(
+        1 for r in normalized_rows if abs(r["d_phenix"]) < 1e-9
+    )
+    n_rfree_regressed_phenix = sum(1 for r in normalized_rows if r["d_phenix"] > 0.0)
+    n_clash_non_worse = sum(1 for r in normalized_rows if r["clash_delta"] <= 0.0)
+
+    return {
+        "cohort_id": cohort_id,
+        "description": description,
+        "source_file": str(source_path.relative_to(REPO_ROOT)),
+        "source_sha256": sha256_file(source_path),
+        "target_count": n_total,
+        "refmac_evaluable_target_count": len(d_refmac_vals),
+        "two_path_only_target_count": n_total - len(d_refmac_vals),
+        "pass_criterion_bindings": bindings,
+        "assessment_verdict_status": resolve_verdict_status(bindings, None),
+        "implementation_agreement": {
+            "phenix_vs_gemmi_delta_r_free_abs_diff": _median_and_iqr(pg_diffs),
+            "phenix_vs_refmac_delta_r_free_abs_diff": _median_and_iqr(pr_diffs),
+            "targets_with_solver_or_metric_conflicts": n_conflicts,
+            "d_phenix_summary": _median_and_iqr(d_phenix_vals),
+            "d_gemmi_summary": _median_and_iqr(d_gemmi_vals),
+            "d_refmac_summary": _median_and_iqr(d_refmac_vals),
+        },
+        "final_model_quality_support": {
+            "post_phenix_r_free": _median_and_iqr(post_rfree_phenix),
+            "post_gemmi_r_free": _median_and_iqr(post_rfree_gemmi),
+            "post_refmac_r_free": _median_and_iqr(post_rfree_refmac),
+            "post_clashscore": _median_and_iqr(clash_posts),
+        },
+        "change_relative_to_input": {
+            "delta_r_free_phenix": _median_and_iqr(d_phenix_vals),
+            "delta_r_free_gemmi": _median_and_iqr(d_gemmi_vals),
+            "delta_r_free_refmac": _median_and_iqr(d_refmac_vals),
+            "delta_clashscore": _median_and_iqr(clash_deltas),
+            "delta_ramachandran_favored_pp": _median_and_iqr(d_favored_vals),
+            "delta_rotamer_outliers_pp": _median_and_iqr(d_rota_vals),
+            "delta_refmac_zbond": _median_and_iqr(d_zbond_vals),
+            "all_residue_shift_angstrom": _median_and_iqr(shifts),
+            "direction_counts": {
+                "phenix_r_free_improved": n_rfree_improved_phenix,
+                "phenix_r_free_unchanged": n_rfree_unchanged_phenix,
+                "phenix_r_free_regressed": n_rfree_regressed_phenix,
+                "clashscore_improved_or_unchanged": n_clash_non_worse,
+                "clashscore_regressed": n_total - n_clash_non_worse,
+            },
+            "diagnostic_flag_counts": {
+                "F-data": n_f_data,
+                "F-geom": n_f_geom,
+                "F-protected": n_f_prot,
+                "F-shift": n_f_shift,
+            },
+        },
+        "per_target_rows": normalized_rows,
+    }
+
+
+def evaluate_control_cohorts(
+    round3_path: Path = DEFAULT_ROUND3_BENCH,
+    round4_path: Path = DEFAULT_ROUND4_RECOVER,
+    round10_path: Path = DEFAULT_ROUND10_RECOVER,
+) -> dict[str, Any]:
+    """Evaluate unchanged, damaged, and recovered control cohorts."""
+    round3_data = json.loads(round3_path.read_text(encoding="utf-8"))
+    round4_data = json.loads(round4_path.read_text(encoding="utf-8"))
+    round10_data = json.loads(round10_path.read_text(encoding="utf-8"))
+
+    baseline_pre_by_pdb = {
+        r["pdb_id"]: r["pre"]
+        for r in round3_data["rows"]
+        if r.get("subject") == "null" and "pre" in r
+    }
+
+    null_rows = [
+        _extract_control_row_metrics(r)
+        for r in round3_data["rows"]
+        if r.get("subject") == "null"
+    ]
+    sa_rows = [
+        _extract_control_row_metrics(r)
+        for r in round3_data["rows"]
+        if r.get("subject") == "sa"
+    ]
+    perturbed_rows = [
+        _extract_control_row_metrics(
+            r, state_key="perturbed", baseline_pre=baseline_pre_by_pdb.get(r["pdb_id"])
+        )
+        for r in round4_data["rows"]
+    ]
+    round4_recovered_rows = [
+        _extract_control_row_metrics(
+            r, state_key="recovered", baseline_pre=baseline_pre_by_pdb.get(r["pdb_id"])
+        )
+        for r in round4_data["rows"]
+    ]
+    round10_recovered_rows = [
+        _extract_control_row_metrics(
+            r, state_key="recovered", baseline_pre=baseline_pre_by_pdb.get(r["pdb_id"])
+        )
+        for r in round10_data["rows"]
+    ]
+
+    cohorts = {
+        "unchanged_null": summarize_control_cohort(
+            cohort_id="unchanged_null",
+            description=(
+                "Null re-refinement control (subject='null', n=22; 19 REFMAC-evaluable, "
+                "3 two-path-only): deposited structures re-refined without intentional "
+                "perturbation to calibrate baseline noise and expose cross-solver "
+                "disagreement flags."
+            ),
+            source_path=round3_path,
+            normalized_rows=null_rows,
+        ),
+        "damaged_sa": summarize_control_cohort(
+            cohort_id="damaged_sa",
+            description=(
+                "Simulated-annealing damaged control (subject='sa', n=22; 19 REFMAC-evaluable, "
+                "3 two-path-only): models perturbed via simulated annealing to verify that "
+                "coordinate and fit regressions are separated from solver disagreements."
+            ),
+            source_path=round3_path,
+            normalized_rows=sa_rows,
+        ),
+        "damaged_dynamics": summarize_control_cohort(
+            cohort_id="damaged_dynamics",
+            description=(
+                "Cartesian-dynamics damaged control (stop_at_diff=0.5 A, state='perturbed', "
+                "n=22; 19 REFMAC-evaluable, 3 two-path-only): controlled coordinate "
+                "perturbation prior to recovery refinement."
+            ),
+            source_path=round4_path,
+            normalized_rows=perturbed_rows,
+        ),
+        "recovered_unprotonated_solvent": summarize_control_cohort(
+            cohort_id="recovered_unprotonated_solvent",
+            description=(
+                "Round-4 recovery refinement after Cartesian-dynamics perturbation "
+                "(state='recovered', n=22; 19 REFMAC-evaluable, 3 two-path-only): "
+                "default recovery refinement without ordered_solvent=True + explicit "
+                "riding hydrogens."
+            ),
+            source_path=round4_path,
+            normalized_rows=round4_recovered_rows,
+        ),
+        "recovered_protonated_ordered_solvent": summarize_control_cohort(
+            cohort_id="recovered_protonated_ordered_solvent",
+            description=(
+                "Round-10 recovery refinement with phenix.ready_set explicit riding "
+                "hydrogens followed by ordered_solvent=True (state='osol_h', n=22; "
+                "21 REFMAC-evaluable, 1 two-path-only): recovers R-free and reduces "
+                "F-data degradations compared to round 4."
+            ),
+            source_path=round10_path,
+            normalized_rows=round10_recovered_rows,
+        ),
+    }
+
+    return {
+        "cohorts": cohorts,
+        "cross_cohort_findings": {
+            "unchanged_control_invariance": (
+                "In unchanged_null (subject='null', n=22), phenix and gemmi delta R-free "
+                "agree tightly (median |d_phenix - d_gemmi| = 0.0007), while REFMAC5 "
+                "(evaluable on 19/22 targets; 3/22 two-path-only: 9YGW, 8R5K, 8QXQ) "
+                "shows smaller deltas (median d_refmac = +0.0018 vs median d_phenix = +0.0035) "
+                "and triggers solver-disagreement notes on 2/22 targets (8RFF on F-data, "
+                "9TXE on F-geom). Separating Question 1 (implementation agreement) from "
+                "Question 3 (change relative to input) keeps solver-convention differences "
+                "distinct from physical model changes."
+            ),
+            "damaged_control_sensitivity": (
+                "Both damaged_sa (median d_phenix = +0.0209, 18/22 F-data flags, 2/22 "
+                "F-shift flags) and damaged_dynamics (median d_phenix = +0.2629, median "
+                "shift = 0.2465 A, 22/22 F-data and 22/22 F-shift flags, 13/22 F-geom flags) "
+                "show strong R-free regressions across phenix, gemmi, and REFMAC5, "
+                "confirming cross-solver sensitivity to physical model degradation."
+            ),
+            "recovered_control_protonation_contrast": (
+                "Comparing recovered_unprotonated_solvent (round 4, n=22) with "
+                "recovered_protonated_ordered_solvent (round 10, n=22) isolates the effect "
+                "of phenix.ready_set riding hydrogens + ordered_solvent=True: median "
+                "d_phenix improves from +0.0188 (22/22 F-data flags) in round 4 to "
+                "+0.0063 (9/22 F-data flags; 8/22 improved below deposited R-free) in "
+                "round 10, while median all-residue shift remains small (0.0435 A in "
+                "round 4 vs 0.0422 A in round 10)."
+            ),
+        },
+    }
+
+
+def build_full_assessment_report(
+    pass_criterion_bindings: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Build the complete JSON assessment report for 1SAR and the 5 control cohorts."""
+    bindings = list(pass_criterion_bindings or [])
+    return {
+        "schema_version": "1.0.0",
+        "generated_at": "2026-10-18",
+        "assessment_design": {
+            "three_separated_questions": [
+                {
+                    "id": "implementation_agreement",
+                    "question": "Do implementations agree on the same observable?",
+                    "purpose": (
+                        "Isolate cross-tool parameterization differences (bulk-solvent "
+                        "masking, scaling, restraint dictionaries, hydrogen placement, "
+                        "secondary-structure definitions) on the exact same coordinate "
+                        "and reflection inputs."
+                    ),
+                },
+                {
+                    "id": "final_model_quality_support",
+                    "question": "What supports the final model's quality for its intended use?",
+                    "purpose": (
+                        "Report absolute fit, stereochemistry, data quality, and fold/"
+                        "interface metrics on the final model with explicit resolution "
+                        "and applicability context."
+                    ),
+                },
+                {
+                    "id": "change_relative_to_input",
+                    "question": "What improved or regressed relative to the actual input?",
+                    "purpose": (
+                        "Quantify direct before-vs-after coordinate shifts, B-factor "
+                        "shifts, atom/water/ligand inventory changes, reflection-set "
+                        "retention, and R-factor/geometry deltas relative to the "
+                        "actual starting model."
+                    ),
+                },
+            ],
+            "uncalibrated_verdict_policy": (
+                "When pass_criterion_bindings is empty ([]), assessment_verdict_status "
+                "is unconditionally 'informational'."
+            ),
+        },
+        "case_study_1sar": assess_1sar_case_study(
+            pass_criterion_bindings=bindings,
+        ),
+        "control_cohorts_evaluation": evaluate_control_cohorts(),
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI entrypoint for generating the before/after refinement assessment JSON."""
+    parser = argparse.ArgumentParser(
+        description=(
+            "Run the before/after refinement assessment on the retained 1SAR "
+            "X-ray archive and the 22-structure unchanged/damaged/recovered "
+            "control cohorts."
+        )
+    )
+    parser.add_argument(
+        "--output-json",
+        type=Path,
+        default=None,
+        help="Optional path to write the JSON assessment report.",
+    )
+    args = parser.parse_args(argv)
+
+    report = build_full_assessment_report()
+    serialized = json.dumps(report, indent=2, sort_keys=False) + "\n"
+    if args.output_json is not None:
+        args.output_json.parent.mkdir(parents=True, exist_ok=True)
+        args.output_json.write_text(serialized, encoding="utf-8")
+    else:
+        sys.stdout.write(serialized)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

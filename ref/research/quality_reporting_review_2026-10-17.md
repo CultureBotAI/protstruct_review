@@ -17,6 +17,7 @@ subsequently found the separate registry issue #911, which remains open.
 | [#909](https://github.com/CultureBotAI/protstruct_review/issues/909) | Reduce/Probe credited with unrelated metrics, separate tool names treated as independence, unsupported literature consensus and obsolete 1SAR gap closure | Name metric-producing components, distinguish repository policy from literature, and retain claim-specific evidence gaps |
 | [#910](https://github.com/CultureBotAI/protstruct_review/issues/910) | Recommended content presented as mandatory/automatic QDS behavior; site/ligand identifiers described as arbitrary text | Separate scientific recommendations, schema fields and emitter support; correct directly repeated descriptions without changing field requirements |
 | [#911](https://github.com/CultureBotAI/protstruct_review/issues/911) | ProSMART Rama-Z capability in active recommendations/assumptions is not established by the cited structural-comparison scores | Separate open follow-up: verify producer/output identity and make dated, append-only registry corrections before relying on that recommendation |
+| [#913](https://github.com/CultureBotAI/protstruct_review/issues/913) | The skill's summary table still presents unrouted fields as emitted content and applies prediction-ensemble requirements to T17 NMR | Identify routed map/confidence examples and schema-only gaps; distinguish T07 prediction, T17 NMR and other ensemble row requirements |
 
 The correction covers `ref/quality_reporting.md` and its directly repeated
 descriptions in the evaluation skill, oracle guidance, reference index and schema. The Python
@@ -65,6 +66,12 @@ delivery, the guide work and the next proposed before/after assessment. Its
 generated threshold block and historical evidence qualifications are preserved.
 No stopped campaign is restarted and no installation availability is inferred.
 
+The fresh PR #912 review snapshot (2026-10-18 UTC, still 2026-10-17 in
+America/Los_Angeles) contains thirteen open issues and one open PR after filing
+#913. Both lists match independent API totals, main remains `d06475e`, and the
+previous twelve issue bodies/comments are unchanged. `NEXT_TASKS.md` now carries
+that complete snapshot and includes #913 in this PR's pending correction.
+
 ## Validation and independent review
 
 A separate read-only reviewer checked the completed diff against primary sources,
@@ -88,3 +95,23 @@ results and the separate read-only review are recorded with the PR. CI must pass
 on both Linux and macOS for the reviewed head before any approved merge. These
 checks validate repository consistency; scientific interpretation also requires
 the source review described above.
+
+## Fresh adversarial review of PR #912
+
+At the user's merge instruction, two independent read-only reviews examined head
+`55462e9`: scientific interpretation against primary sources and retained 1SAR
+evidence, and reporting instructions against the schema and current contract-4
+implementation. The scientific pass found no new material defect. The contract
+pass found #913 in the directly reconciled skill table: CC_mask and pLDDT/PAE
+fields have no current scalar routes, and T17 ensemble observations require NMR
+rows rather than prediction rows. The root reviewer verified the inherited
+contract-1 route table/builders and task-specific implied-content checks before
+filing #913 and editing the instructions. A sibling scope paragraph was clarified
+at the same time. Searches for these repeated instructions included hidden and
+ignored files within `.claude`, `ref`, `schemas` and emitter modules, excluding
+Git internals and virtual environments.
+
+The fix changes only reporting prose and this backlog/audit trail. The corrected
+rows receive a separate read-only review, followed by the required locked gate
+and Linux/macOS CI on the final reviewed commit. Intended issue completion is
+#907–#910 and #913; #911 and the seven preceding scientific issues remain open.

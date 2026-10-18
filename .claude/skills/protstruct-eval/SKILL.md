@@ -329,16 +329,16 @@ The QDS can hold these summary blocks. Populate them from retained source observ
 | `geometry_summary` | `GeometrySummary` | when eligible geometry measurements exist (clashscore, Ramachandran, rotamer, MolProbity score, RMSZ); state missing measurements |
 | `data_quality_summary` | `DataQualitySummary` | X-ray only — populated from `stage: all` measurements (completeness, ⟨I/σ⟩ outer, CC½ outer, R-merge/R-meas) |
 | `refinement_summary` | `RefinementSummary` | X-ray only (R-work, R-free, gap) |
-| `map_summary` | `MapSummary` | cryo-EM only (CC_mask, d_FSC_model) |
-| `predicted_confidence_summary` | `PredictedConfidenceSummary` | predicted models only (mean pLDDT + distribution shape, PAE max, multimer-block min) |
+| `map_summary` | `MapSummary` | supported map/model and cryo-EM measurements, including CC_box, CC_volume and d_FSC_model; the schema's CC_mask field has no current scalar route |
+| `predicted_confidence_summary` | `PredictedConfidenceSummary` | supported final/all T07 pTM, ipTM and convergence measurements; a predicted model without routed values receives an ID-only block. The schema's pLDDT/distribution/PAE fields are not currently populated by the emitter |
 | `pairwise_comparisons[]` | `PairwiseComparison` | one per relevant reference (deposited / starting / AlphaFold / truth); choose RMSD, TM-score and/or lDDT for the question and retain their comparison context |
 | `per_residue_quality` | `PerResidueQuality` | populate when local/per-residue measurements exist (per-residue lDDT, displacement, RSRZ; outlier residue list; difference-density peaks; flagged regions) |
 | `site_qualities[]` | `SiteQuality` | declared sites and supported site/ligand measurements imply corresponding blocks; available fields are not all mandatory measurements |
 | `packing_summary` | `PackingSummary` | when packing / B-factor-outlier indicators were measured (packing Z-score, unsatisfied buried H-bonds, per-residue B-factor outlier Z) |
 | `classification_summary` | `ClassificationSummary` | T15 — informational DSSP H+E content diagnostic plus secondary-structure agreement (informational pending exact-denominator recalibration), with SS / domain / fold labels (informational) |
 | `interface_quality_summary` | `InterfaceQualitySummary` | T16 — total two-sided buried surface area (`ΣSASA(chains) − SASA(complex)`), DockQ, CAPRI class. Double PISA's per-side `interface_area` before comparison; BSA tolerance is `max(3% of mean, 30 Å²)`. Required when any `scope=interface` measurement exists |
-| `prediction_ensemble_summary` | `PredictionEnsembleSummary` | T07/T17 — ensemble convergence across predicted models. Required when any `scope=ensemble` measurement exists |
-| `nmr_validation_summary` | `NmrValidationSummary` | T17 — restraint violations, ensemble precision RMSD |
+| `prediction_ensemble_summary` | `PredictionEnsembleSummary` | predicted-model ensemble convergence and supplied prediction ensemble rows; T07 `scope=ensemble` measurements require `prediction_ensemble_qualities` rows |
+| `nmr_validation_summary` | `NmrValidationSummary` | T17 restraint violations and ensemble precision RMSD; T17 `scope=ensemble` measurements require `nmr_ensemble_qualities` rows |
 | `assumptions_report` | assumption records | when a measurement's validity depends on a tool assumption that could change the verdict (schema v5) |
 | `cross_tool_coverage` | `CrossToolCoverage` | always — surfaces tool-family coverage and explicit gaps per metric and comparison context |
 | `tool_recommendations_applied[]` | `ToolRecommendation` | snapshot of recommendations active at issue time |
@@ -348,10 +348,11 @@ The QDS can hold these summary blocks. Populate them from retained source observ
 
 A `MeasurementValue.scope` can override the canonical scope on its `MetricDefinition`. Declare it explicitly when needed to preserve comparison context or route scoped evidence. The `MeasurementScope` enum has values: `complex`, `chain`, `site`, `residue`, `atom`, `dataset`, `ligand`, `domain`, `interface`, `ensemble`, `assembly`, `cohort`.
 
-`domain`, `interface`, and `ensemble` are the T15–T17 scopes. Each has a fail-hard rule in the
-emitter: a measurement at that scope implies its structured block (`ClassificationSummary`,
-`InterfaceQualitySummary` / `PredictionEnsembleSummary`, `NmrValidationSummary`), and emitting the
-scalar without the rows raises `QdsCompletenessError`.
+The emitter requires matching structured rows for published `scope=domain` and
+`scope=interface` measurements, in `ClassificationSummary` and `InterfaceQualitySummary`
+respectively. For `scope=ensemble`, T07 requires prediction ensemble rows and T17 requires
+NMR ensemble rows; other tasks require at least one of those two row types. A scalar or an
+ID-only block does not satisfy these rules; missing rows raise `QdsCompletenessError`.
 
 Use `scope_selector` to identify the measured subset. For `site` and `ligand`, it must equal the exact declared Site or Ligand id; the ligand must be bound to exactly one declared Site. Put human-readable details in `notes`. Other selectors can describe a chain or residue selection; `cohort` requires the exact named preregistered cohort. Keep `subject_ref` and `reference_subject_ref` separate from selectors.
 

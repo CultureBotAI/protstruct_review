@@ -6,8 +6,9 @@ for what is open; this file carries execution detail and context, and names ever
 
 **Last reconciled: 2026-10-17**, against `main` at
 [`d06475e`](https://github.com/CultureBotAI/protstruct_review/commit/d06475eb378f32e948c2eca177a92aad3ca99121)
-(PR #905): **12 open issues, 0 open PRs**, with both complete lists checked against API totals
-before publication of the quality-guide correction branch.
+(PR #905): **13 open issues, 1 open PR** ([#912](https://github.com/CultureBotAI/protstruct_review/pull/912)),
+with both complete lists checked against API totals after the PR's fresh adversarial review.
+The date is local (America/Los_Angeles; the review snapshot is 2026-10-18 UTC).
 Issue bodies and comments, exact merged PRs, current code and retained records were reviewed;
 this was a documentation reconciliation, not a scientific rerun or a new installation inventory.
 The live ledger and proposed work directions are under [Open](#open). **Check GitHub before execution;
@@ -15,8 +16,9 @@ this file does not mirror it in real time.**
 
 **Previous reconciliation history:** the 2026-10-15 review checked `main` at `8aef21c` (PR #878),
 with seven open issues and no open PRs. PR #905 delivered that reconciliation, the project goals,
-and the backlog-update skill. Four additional issues track the quality-guide defects found while
-starting its first recommended task; a fifth tracks the related ProSMART capability audit.
+and the backlog-update skill. The initial 2026-10-17 prepublication snapshot contained twelve
+issues and no PRs: four additional issues tracked the quality-guide defects and a fifth the
+related ProSMART capability audit. PR #912's fresh review added the residual reporting issue #913.
 The seven preceding scientific issues retain their dispositions.
 The 2026-09-26 review checked `main` at `121d088` (PR #754).
 The queue was empty then; that reconciliation filed #760–#767, and its reviews filed #769–#780
@@ -329,22 +331,24 @@ Record new ones there. The operative few, for anyone about to add a tolerance or
 ## Open
 
 The live ledger, reconciled **2026-10-17** against `main` at **`d06475e`** (PR #905):
-**12 open issues, 0 open PRs**, verified against API totals before publication of the quality-guide
-correction branch. Every open issue is listed below; the guide corrections are local work pending
-review and merge, not delivered on main. GitHub is authoritative for tracker state. Items marked
+**13 open issues, 1 open PR** (#912), verified against API totals after its fresh adversarial review
+(2026-10-18 UTC / 2026-10-17 local). Every open issue is listed below; the guide corrections are
+unmerged work in PR #912. GitHub is authoritative for tracker state. Items marked
 **proposed / no issue** are work recommendations, not delivered features or scheduled experiments.
 Engineering and policy delivery do not complete a scientific measurement or authorize grading.
 
 ### Tracked on GitHub
 
 - **Correct the scientific quality-reporting guide** — first recommended task, implemented on
-  `correct-quality-reporting-2026-10-17`, pending review and merge. The findings are
+  `correct-quality-reporting-2026-10-17` in PR #912, pending final checks and merge. The findings are
   [#907](https://github.com/CultureBotAI/protstruct_review/issues/907) (P1, confidence conversion
   and interpretation), [#908](https://github.com/CultureBotAI/protstruct_review/issues/908)
   (P1, unsupported quality/refinement verdicts),
   [#909](https://github.com/CultureBotAI/protstruct_review/issues/909) (P1, tool independence,
   literature and 1SAR coverage), and
   [#910](https://github.com/CultureBotAI/protstruct_review/issues/910) (P2, schema/emitter instructions).
+  The fresh review added [#913](https://github.com/CultureBotAI/protstruct_review/issues/913)
+  (P2, residual summary-routing and T07/T17 ensemble instructions), corrected in the same PR.
   The correction aligns [`quality_reporting.md`](ref/quality_reporting.md) and directly repeated
   descriptions with primary sources and the executable contract. It distinguishes measurement
   agreement, final-model quality, and benefit over the actual starting model; it retains 1SAR's
@@ -480,7 +484,7 @@ Use the two [project goals](CLAUDE.md#project-goals) together: assess refinement
 the landscape of tools and measurements. Direction 1 is now tracked and under correction;
 directions 2 and 3 remain **proposed / no issue** and do not schedule experiments.
 
-1. **Finish the scientific-guide correction** (#907–#910, tracked above). The local revision covers
+1. **Finish the scientific-guide correction** (#907–#910 and #913, PR #912, tracked above). The revision covers
    confidence, contextual metric interpretation, tool capabilities and independence, retained 1SAR
    limits, and actual reporting support. **Done when:** the reviewed correction is merged and the
    guide and directly repeated descriptions agree with canonical sources without competing grading

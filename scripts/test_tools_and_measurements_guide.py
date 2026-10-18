@@ -160,6 +160,9 @@ class TestToolsAndMeasurementsGuide(unittest.TestCase):
                 text,
                 f"Expected cross-link to tools_and_measurements_guide.md in {path.name}",
             )
+        self.assertIn("1,493", self.guide_text)
+        self.assertIn("scripts/gemmi_rfactor.py", self.guide_text)
+        self.assertNotIn("1506", self.guide_text)
 
     def test_negative_mutations_fail_validation(self) -> None:
         # 1. Removing a task heading must fail

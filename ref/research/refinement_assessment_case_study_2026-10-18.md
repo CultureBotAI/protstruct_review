@@ -29,7 +29,7 @@ Earlier evaluation artifacts and ad-hoc negative-control scripts conflated solve
 
 ### Uncalibrated Verdict Policy
 
-In accordance with `ref/quality_reporting.md`, `scripts/assess_refinement.py` does **not** emit uncalibrated `PASS` / `WARN` / `FAIL` verdicts when `pass_criterion_bindings` is empty (`[]`). When `pass_criterion_bindings: []`, `resolve_verdict_status()` unconditionally returns `assessment_verdict_status: "informational"`. A non-informational verdict (`"pass"`, `"fail"`, or `"unevaluable"`) is produced only when an explicit caller-supplied `pass_criterion_bindings` list is bound to concrete metric paths and thresholds.
+In accordance with `ref/quality_reporting.md`, `scripts/assess_refinement.py` does **not** emit uncalibrated `PASS` / `WARN` / `FAIL` verdicts when `pass_criterion_bindings` is empty (`[]`). When `pass_criterion_bindings: []`, `resolve_verdict_status()` unconditionally returns `assessment_verdict_status: "informational"`. A non-informational verdict (`"pass"`, `"fail"`, or `"NeedsReview"`) is produced only when an explicit caller-supplied `pass_criterion_bindings` list is bound to concrete metric paths and thresholds (while `deposition_applicability(None)` records `deposition_clause: "unevaluable"` when a deposited resolution is absent).
 
 ---
 
@@ -57,24 +57,24 @@ In accordance with `ref/quality_reporting.md`, `scripts/assess_refinement.py` do
 
 | Implementation | Role | $R_{\text{work}}$ | $R_{\text{free}}$ | $R_{\text{free}} - R_{\text{work}}$ | $n_{\text{work}}$ | $n_{\text{free}}$ | Notes |
 |---|---|---:|---:|---:|---:|---:|---|
-| `gemmi sfcalc` (`1sar.mtz`) | Primary fast diagnostic | `0.1622` | `0.2136` | `0.0515` | `6,494` | `723` | Direct bulk-solvent/anisotropic scaling on input `1sar.mtz` |
-| `gemmi sfcalc` (`1sar_final.mtz`) | Cross-MTZ check | `0.1622` | `0.2136` | `0.0515` | `6,494` | `723` | Identical to $10^{-6}$ on positive-$F$ reflections |
-| `phenix.model_vs_data` (`1.21.2_5419`) | Primary full solver | `0.1564` | `0.2116` | `0.0552` | `6,494` | `723` | Matches `REMARK 3` header (`0.1563 / 0.2114`) within `0.0002` |
-| `REFMAC5` (`5.8.0430`, 0 cycles) | Orthogonal CCP4 solver | `0.1693` | `0.2128` | `0.0435` | `6,494` | `723` | Orthogonal CCP4 bulk-solvent mask |
-| `Servalcat` (`0.4.101`, `sigmaa`) | Orthogonal diagnostic | `0.1705` | `0.2209` | `0.0504` | `6,855` | `362` | `FREE=0` convention splits free set differently (`n_free = 362`) |
+| `gemmi sfcalc` (`0.7.5`, `gemmi_rfactor.py`, `1sar.mtz`) | Primary fast diagnostic | `0.1622` | `0.2136` | `0.0515` | `6,494` | `723` | `gemmi sfcalc --scale-to` bulk-solvent/anisotropic scaling + 10-shell work-set bin rescaling on input `1sar.mtz` |
+| `gemmi sfcalc` (`0.7.5`, `gemmi_rfactor.py`, `1sar_final.mtz`) | Cross-MTZ check | `0.1622` | `0.2136` | `0.0515` | `6,494` | `723` | Identical to $10^{-6}$ on positive-$F$ reflections |
+| `phenix.model_vs_data` (`1.21.2-5419`) | Primary full solver | `0.1564` | `0.2116` | `0.0552` | `6,494` | `723` | Matches `REMARK 3` header (`0.1563 / 0.2114`) within `0.0002` |
+| `REFMAC5` (`5.8.0431`, 0 cycles) | Orthogonal CCP4 solver | `0.1693` | `0.2128` | `0.0435` | `6,494` | `723` | Orthogonal CCP4 bulk-solvent mask |
+| `Servalcat` (`0.4.131`, `sigmaa`) | Orthogonal diagnostic | `0.1705` | `0.2209` | `0.0504` | `6,855` | `362` | `FREE=0` convention splits free set differently (`n_free = 362`) |
 
-- Across the three solvers using the identical `723`-reflection free set (`gemmi sfcalc`, `phenix.model_vs_data`, and `REFMAC5`), $R_{\text{free}}$ spans `0.2116` to `0.2136` (`spread = 0.0020`), and $R_{\text{work}}$ spans `0.1564` to `0.1693` (`spread = 0.0129`) due to bulk-solvent masking differences.
+- Across the three solvers using the identical `723`-reflection free set (`gemmi sfcalc` via `scripts/gemmi_rfactor.py`, `phenix.model_vs_data`, and `REFMAC5`), $R_{\text{free}}$ spans `0.2116` to `0.2136` (`spread = 0.0020`), and $R_{\text{work}}$ spans `0.1564` to `0.1693` (`spread = 0.0129`) due to bulk-solvent masking differences.
 - `Servalcat` reports `R_free = 0.2209` (`spread = 0.0093` across all four tools) because its `FREE=0` flag interpretation selects `362` free reflections rather than `723`.
 
 #### `T05` Stereochemical Agreement (`MolProbity` vs `mmtbx` vs `REFMAC5`)
 
-- **All-atom clashscore:** Standalone `MolProbity` (`4.2`, with fresh `Reduce` hydrogen placement) reports `3.63` (`11` clashes $\ge 0.4\text{ \AA}$), whereas `mmtbx.validation_summary` reports `3.13` (`|\Delta| = 0.50` clashscore units).
-- **Covalent bond/angle RMSDs:** `REFMAC5` (0 cycles, CCP4 Monomer Library) reports bond RMSD `0.0105 Å` (`RMSZ = 0.884`) and angle RMSD `1.4957°` (`RMSZ = 0.864`), whereas `mmtbx.validation_summary` (cctbx GeoStd) reports bond RMSD `0.007 Å` and angle RMSD `0.85°` (`|\Delta| = 0.0035 Å` and `0.6457°`). Both dictionaries agree that covalent geometry is well within normal target bounds (`RMSZ < 1.0`).
+- **All-atom clashscore:** Standalone `MolProbity` (`4.5.2 (historical)`, with fresh `Reduce` hydrogen placement) reports `3.63` (`11` clashes $\ge 0.4\text{ \AA}$), whereas `mmtbx.validation_summary` (`1.21.2-5419 (historical)`) reports `3.13` (`|\Delta| = 0.50` clashscore units).
+- **Covalent bond/angle RMSDs:** `REFMAC5` (`5.8.0431`, 0 cycles, CCP4 Monomer Library) reports bond RMSD `0.0105 Å` (`RMSZ = 0.884`) and angle RMSD `1.4957°` (`RMSZ = 0.864`), whereas `mmtbx.validation_summary` (cctbx GeoStd) reports bond RMSD `0.007 Å` and angle RMSD `0.85°` (`|\Delta| = 0.0035 Å` and `0.6457°`). Both dictionaries agree that covalent geometry is well within normal target bounds (`RMSZ < 1.0`).
 
 #### `T15` Secondary-Structure Assignment Agreement (`mkdssp` vs `biotite`)
 
-- `mkdssp` (`4.4.0`, 8-state reduced to 3-state) assigns `29` H (`15.10%`), `43` E (`22.40%`), and `120` C (`62.50%`) across `192` residues (`37.50%` H+E).
-- `biotite.structure.annotate_sse` (`1.6.0`, P-SEA `Cα` criteria) assigns `28` `a` (`14.58%`), `39` `b` (`20.31%`), and `125` `c` (`65.10%`) (`34.90%` H+E).
+- `mkdssp` (`4.6.1`, 8-state reduced to 3-state) assigns `29` H (`15.10%`), `43` E (`22.40%`), and `120` C (`62.50%`) across `192` residues (`37.50%` H+E).
+- `biotite.structure.annotate_sse` (`1.7.1`, P-SEA `Cα` criteria) assigns `28` `a` (`14.58%`), `39` `b` (`20.31%`), and `125` `c` (`65.10%`) (`34.90%` H+E).
 - Residue-by-residue Q3 agreement is `169 / 192` (`88.02%`), with `23` boundary differences at helix/strand termini (`11` in chain A, `12` in chain B).
 
 ---
@@ -147,7 +147,7 @@ To verify that separating Question 1 (implementation agreement), Question 2 (fin
 
 | Cohort ID | Source File / State | Targets (`n`) | REFMAC-Evaluable / Two-Path-Only | Q1: Median $\|\Delta R_{\text{free}}^{\text{phenix}} - \Delta R_{\text{free}}^{\text{gemmi}}\|$ | Q1: Median $\|\Delta R_{\text{free}}^{\text{phenix}} - \Delta R_{\text{free}}^{\text{refmac}}\|$ | Q1: Conflict Targets | Q2: Median Post $R_{\text{free}}$ (`phenix` / `gemmi` / `refmac`) | Q2: Median Post Clashscore | Q3: Median $\Delta R_{\text{free}}^{\text{phenix}}$ (Improved / Regressed) | Q3: Median $\Delta$ Clashscore | Q3: Median All-Residue Shift (`Å`) | Diagnostic Flags (`F-data` / `F-geom` / `F-prot` / `F-shift`) |
 |---|---|---:|---:|---:|---:|---:|---|---:|---|---:|---:|---|
-| `unchanged_null` | `round3_bench.json` (`subject="null"`) | `22` | `19 / 3` (`9YGW, 8R5K, 8QXQ`) | `0.0007` (max `0.0019`) | `0.0024` (max `0.0336`) | `2` (`8RFF`, `9TXE`) | `0.1459 / 0.1499 / 0.1676` | `1.045` | `+0.0035` (`4 / 18`) | `-0.095` | `0.0139` | `3 / 0 / 0 / 0` |
+| `unchanged_null` | `round3_bench.json` (`subject="null"`) | `22` | `19 / 3` (`9YGW, 8R5K, 8QXQ`) | `0.0007` (max `0.0019`) | `0.0024` (max `0.0336`) | `2` (`2VXN`, `9TXE`) | `0.1459 / 0.1499 / 0.1676` | `1.045` | `+0.0035` (`4 / 18`) | `-0.095` | `0.0139` | `3 / 0 / 0 / 0` |
 | `damaged_sa` | `round3_bench.json` (`subject="sa"`) | `22` | `19 / 3` | `0.0008` (max `0.0045`) | `0.0094` (max `0.0477`) | `2` | `0.1679 / 0.1702 / 0.1845` | `1.275` | `+0.0209` (`0 / 22`) | `0.000` | `0.0244` (mean `0.1780`, max `1.6486`) | `18 / 1 / 0 / 2` |
 | `damaged_dynamics` | `round4_recover.json` (`state="perturbed"`) | `22` | `19 / 3` | `0.0011` (max `0.0144`) | `0.0256` (max `0.0636`) | `9` | `0.3906 / 0.3922 / 0.3941` | `7.555` | `+0.2629` (`0 / 22`) | `+6.270` | `0.2465` | `22 / 13 / 2 / 22` |
 | `recovered_unprotonated_solvent` | `round4_recover.json` (`state="recovered"`) | `22` | `19 / 3` | `0.0007` (max `0.0020`) | `0.0059` (max `0.0419`) | `1` | `0.1601 / 0.1633 / 0.1825` | `1.675` | `+0.0188` (`0 / 22`) | `+0.315` | `0.0435` | `22 / 1 / 0 / 0` |
@@ -156,7 +156,7 @@ To verify that separating Question 1 (implementation agreement), Question 2 (fin
 ### Key Cross-Cohort Findings
 
 1. **Unchanged control invariance and solver-disagreement isolation (`unchanged_null`, `n=22`):**
-   - `phenix.model_vs_data` and `gemmi sfcalc` agree tightly on before/after $\Delta R_{\text{free}}$ (`median |d_phenix - d_gemmi| = 0.0007`, max `0.0019`), whereas `REFMAC5` (`19/22` evaluable; `3/22` two-path-only targets `9YGW`, `8R5K`, `8QXQ`) exhibits a smaller median delta (`+0.0018` vs `+0.0035`) and records solver-disagreement notes on `2/22` targets (`8RFF` on `F-data` where PHENIX/gemmi exceed $+0.005$ while REFMAC is $+0.0020$, and `9TXE` on `F-geom` where cctbx clashscore/rotamer deltas stand down against improved REFMAC `zBOND = -0.043`). Keeping Question 1 separate from Question 3 prevents solver-convention differences from being misclassified as physical model changes.
+   - `phenix.model_vs_data` and `gemmi sfcalc` (`scripts/gemmi_rfactor.py`) agree tightly on before/after $\Delta R_{\text{free}}$ (`median |d_phenix - d_gemmi| = 0.0007`, max `0.0019`), whereas `REFMAC5` (`19/22` evaluable; `3/22` two-path-only targets `9YGW`, `8R5K`, `8QXQ`) exhibits a smaller median delta (`+0.0018` vs `+0.0035`) and records solver-disagreement notes on `2/22` targets (`2VXN` on `F-data` where PHENIX/gemmi are positive `+0.0053 / +0.0067` while REFMAC sign is negative `-0.0122`, and `9TXE` on `F-geom` where cctbx clashscore/rotamer deltas stand down against improved REFMAC `zBOND = -0.043`). Keeping Question 1 separate from Question 3 prevents solver-convention differences from being misclassified as physical model changes.
 2. **Damaged control sensitivity (`damaged_sa` and `damaged_dynamics`, `n=22`):**
    - Simulated-annealing perturbation (`damaged_sa`) produces `22/22` $R_{\text{free}}$ regressions (`median d_phenix = +0.0209`, `18/22` `F-data` flags, `2/22` `F-shift` flags).
    - Controlled Cartesian-dynamics perturbation (`damaged_dynamics`, `stop_at_diff = 0.5 Å`) triggers `22/22` `F-data` flags (`median d_phenix = +0.2629`, `median d_gemmi = +0.2656`, `median d_refmac = +0.2247`), `22/22` `F-shift` flags (`median all-residue shift = 0.2465 Å`), and `13/22` `F-geom` flags (`median clashscore delta = +6.27`, `median Ramachandran favored delta = -5.695 pp`), while also surfacing `9/22` targets where cctbx local geometry worsens (`clashscore`/`Ramachandran`/`rotamers`) even as REFMAC `zBOND` improves or stays neutral (`median d_zbond = 0.000`).

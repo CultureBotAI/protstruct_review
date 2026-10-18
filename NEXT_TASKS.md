@@ -5,7 +5,7 @@ for what is open; this file carries execution detail and context, and names ever
 **no** issue as such, so an empty queue is never mistaken for an empty backlog.
 
 **Last reconciled: 2026-10-18**, against `main` at
-[`922fae2`](https://github.com/CultureBotAI/protstruct_review/commit/922fae29356e204642fb80c8ab18f2b22f0a0bb0)
+[`922fae2`](https://github.com/CultureBotAI/protstruct_review/commit/922fae212f1dff41a1b4727bbb7cc13dce043a66)
 (PR [#912](https://github.com/CultureBotAI/protstruct_review/pull/912)): **8 open issues, 0 open PRs**,
 with both complete lists checked against independent GitHub API totals (`search/issues` 8 open issues, 0 open PRs).
 The date is local (America/Los_Angeles; 2026-10-18 UTC).

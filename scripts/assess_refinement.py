@@ -1322,10 +1322,12 @@ def evaluate_control_cohorts(
                 "agree tightly (median |d_phenix - d_gemmi| = 0.0007), while REFMAC5 "
                 "(evaluable on 19/22 targets; 3/22 two-path-only: 9YGW, 8R5K, 8QXQ) "
                 "shows smaller deltas (median d_refmac = +0.0018 vs median d_phenix = +0.0035) "
-                "and triggers solver-disagreement notes on 2/22 targets (8RFF on F-data, "
-                "9TXE on F-geom). Separating Question 1 (implementation agreement) from "
-                "Question 3 (change relative to input) keeps solver-convention differences "
-                "distinct from physical model changes."
+                "and triggers solver-disagreement notes on 2/22 targets (2VXN on F-data, "
+                "where PHENIX/gemmi are positive (+0.0053 / +0.0067) while REFMAC sign is "
+                "negative (-0.0122); 9TXE on F-geom, where cctbx worsening stands down "
+                "against improved REFMAC zBOND (-0.043)). Separating Question 1 "
+                "(implementation agreement) from Question 3 (change relative to input) "
+                "keeps solver-convention differences distinct from physical model changes."
             ),
             "damaged_control_sensitivity": (
                 "Both damaged_sa (median d_phenix = +0.0209, 18/22 F-data flags, 2/22 "

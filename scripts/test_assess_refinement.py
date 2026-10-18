@@ -268,6 +268,19 @@ class AssessRefinementTests(unittest.TestCase):
                 n_f_data,
             )
 
+        unchanged_conflicts = [
+            r["pdb_id"]
+            for r in cohorts["unchanged_null"]["per_target_rows"]
+            if r["conflict_count"] > 0
+        ]
+        self.assertEqual(unchanged_conflicts, ["2VXN", "9TXE"])
+        invariance_note = self.saved_report["control_cohorts_evaluation"][
+            "cross_cohort_findings"
+        ]["unchanged_control_invariance"]
+        self.assertIn("2VXN", invariance_note)
+        self.assertIn("9TXE", invariance_note)
+        self.assertNotIn("8RFF", invariance_note)
+
     def test_case_study_markdown_exists_and_documents_required_findings(self) -> None:
         """Verify case study markdown report exists, cites existing repo paths, and documents 1SAR and the 5 control cohorts."""
         self.assertTrue(CASE_STUDY_MD_PATH.is_file())
@@ -289,10 +302,19 @@ class AssessRefinementTests(unittest.TestCase):
             "damaged_dynamics",
             "recovered_unprotonated_solvent",
             "recovered_protonated_ordered_solvent",
+            "2VXN",
+            "9TXE",
+            "NeedsReview",
+            "5.8.0431",
+            "0.4.131",
+            "4.5.2 (historical)",
+            "4.6.1",
+            "1.7.1",
         ):
             self.assertIn(token, text)
         self.assertNotIn("Thr39", text)
         self.assertNotIn("1.8007", text)
+        self.assertNotIn("8RFF", text)
 
         for rel_path in (
             "scripts/assess_refinement.py",

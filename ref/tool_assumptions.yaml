@@ -762,3 +762,62 @@ assumptions:
     tool_ref: phenix.find_peaks_holes
     evidence_refs:
       - EVAL_1sar_cdba2c07_2026-09-07
+
+  - id: ASSUM_prosmart_reference_dependent_2026_10_18
+    as_of_date: '2026-10-18'
+    effective_at: '2026-10-18T00:00:00+00:00'
+    supersedes_assumption_ref: ASSUM_prosmart_reference_dependent
+    kind: explicit
+    scope: tool
+    title: ProSMART comparative fragment scores are reference-dependent
+    description: >-
+      ProSMART computes per-residue local backbone fragment alignment scores
+      (Procrustes RMSD, Flexible, Hinging, and central-atom displacement;
+      Nicholls et al. 2014) for a target chain against an explicit reference
+      structure (-p1/-p2). Choosing a different reference structure or
+      fragment length changes every score; there is no reference-free
+      single-model ProSMART geometry or Ramachandran-Z score.
+    consequences: >-
+      A ProSMART Procrustes or hinge score against reference X is not comparable
+      to a score against reference Y, and must never be reported as a
+      single-model Ramachandran-Z score (T05_rama_z_score) or RSRZ.
+    mitigation: >-
+      Pin and report both target and reference structure digests and fragment
+      parameters for every ProSMART comparison (T02). For single-model
+      Ramachandran distribution Z-scores (T05_rama_z_score), use the wwPDB
+      validation pipeline / Tortoize rather than ProSMART.
+    status: mitigated
+    tool_ref: ProSMART
+    evidence_refs:
+      - Nicholls2014
+      - EVAL_1sar_cdba2c07_2026-09-23
+      - ref/research/prosmart_rama_z_correction_2026-10-18.md
+
+  - id: ASSUM_prosmart_no_top8000_default_2026_10_18
+    as_of_date: '2026-10-18'
+    effective_at: '2026-10-18T00:00:00+00:00'
+    supersedes_assumption_ref: ASSUM_prosmart_no_top8000_default
+    kind: implicit
+    scope: tool
+    title: ProSMART requires an explicit comparator structure or fragment library
+    description: >-
+      ProSMART is a pairwise comparative structure-analysis tool (Nicholls et al.
+      2014) requiring explicit target and reference coordinate inputs (-p1/-p2)
+      or an explicit secondary-structure fragment library; it does not evaluate
+      single-model Ramachandran contours against MolProbity's Top8000 dataset or
+      emit a Top8000 Ramachandran-Z score.
+    consequences: >-
+      Invoking ProSMART without a defined reference comparator (or treating a
+      pairwise target-vs-reference Procrustes run as a reference-free geometry
+      check) conflates pairwise conformational change with intrinsic stereochemical
+      quality.
+    mitigation: >-
+      Always specify and record the explicit comparator structure on the command
+      line (-p1/-p2) and file resulting scores under per-residue structural
+      comparison (T02), not T05 geometry validation.
+    status: mitigated
+    tool_ref: ProSMART
+    evidence_refs:
+      - Nicholls2014
+      - EVAL_1sar_cdba2c07_2026-09-23
+      - ref/research/prosmart_rama_z_correction_2026-10-18.md

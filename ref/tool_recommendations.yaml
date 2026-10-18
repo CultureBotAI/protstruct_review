@@ -498,11 +498,12 @@ tool_recommendations:
     effective_at: '2026-04-30T00:00:00+00:00'
 
   # ----- CCP4 / REFMAC5 / ProSMART (closes cctbx-only gap on
-  # ----- MolProbity composite and adds T03 refinement second-opinion).
-  # ----- ProSMART's non-cctbx contribution is a Ramachandran-Z score, so it is
-  # ----- recommended for T05_rama_z_score (below), NOT for the discrete
-  # ----- Ramachandran/rotamer outlier percentages (which it does not classify —
-  # ----- MolProbity is the oracle for those).
+  # ----- geometry RMSZ and adds T03 refinement second-opinion).
+  # ----- Historical REC_T05_rama_z_score_top_performing below attributed a
+  # ----- Ramachandran-Z score to ProSMART; it is superseded and deprecated by
+  # ----- REC_T05_rama_z_score_top_performing_2026_10_18_capability_correction
+  # ----- (#911) because ProSMART computes reference-dependent Procrustes/hinge
+  # ----- comparative fragment scores (T02), not T05_rama_z_score.
 
   - id: REC_T05_bond_length_rmsz_top_performing
     metric_definition_ref: T05_bond-length_rmsz
@@ -2063,3 +2064,31 @@ tool_recommendations:
     as_of_date: '2026-09-27'
     effective_at: '2026-09-27T21:11:57-07:00'
     supersedes_recommendation_ref: REC_T06_overall_b_top_considered
+  - id: REC_T05_rama_z_score_top_performing_2026_10_18_capability_correction
+    metric_definition_ref: T05_rama_z_score
+    tool_ref: ProSMART
+    role: deprecated
+    justification: >-
+      Deprecated unsupported capability claim: ProSMART (Nicholls et al. 2014)
+      computes reference-dependent local backbone fragment Procrustes RMSD,
+      Flexible, Hinging, and central-atom displacement scores between a target
+      and an explicit reference structure (-p1/-p2; task T02), not the catalog's
+      single-model Ramachandran distribution Z-score (T05_rama_z_score /
+      ramachandran_z_score). No retained command, wrapper, or output in this
+      repository produces a Ramachandran-Z score from ProSMART, and the only
+      retained 1SAR ProSMART rows (EVAL_1sar_cdba2c07_2026-04-24) were
+      comparative Procrustes/displacement metrics withdrawn from T01/T05 in
+      EVAL_1sar_cdba2c07_2026-09-23. Use the wwPDB validation pipeline /
+      Tortoize (REC_T05_rama_z_score_top_considered) for T05_rama_z_score and
+      route ProSMART fragment comparisons to T02.
+    notes: >-
+      Supersedes REC_T05_rama_z_score_top_performing (#911). Predecessor row is
+      retained unchanged for historical QDS reproducibility.
+    evidence_refs:
+      - Nicholls2014
+      - EVAL_1sar_cdba2c07_2026-09-23
+      - data/coscientists/openscientist/EVAL_1sar_cdba2c07_2026-09-23.md
+      - ref/research/prosmart_rama_z_correction_2026-10-18.md
+    as_of_date: '2026-10-18'
+    effective_at: '2026-10-18T00:00:00+00:00'
+    supersedes_recommendation_ref: REC_T05_rama_z_score_top_performing

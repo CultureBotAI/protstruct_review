@@ -23,6 +23,7 @@ This directory holds offline reference material and the key **task × evaluation
 | `structural_criteria.yaml` | **Self-describing criterion and verdict-binding registry**: criterion definitions/citations/recipes/ranges/examples plus `PassCriterionBinding` rows that select one whole threshold-registry cell, declare typed comparison/applicability/preconditions, and preserve inclusive effective intervals with append-only supersession. Schema: `schemas/structural_criteria.yaml`. |
 | `protein_structure_quality_refinement_indicators.md` | Survey of quality/refinement indicators behind the T15–T17 tasks and the newer QDS summary blocks (classification, interface, prediction-ensemble, NMR). |
 | `quality_reporting.md` | Reporting guide for structure quality and refinement comparisons: metric meaning, required context, independent evidence and modality-specific reporting. Links primary sources and scoped criteria, and distinguishes recommended evidence from schema/emitter support. |
+| `tools_and_measurements_guide.md` | Question-based guide across all 17 tasks (`T01`–`T17`) organized into 6 scientific question categories (experimental fit, geometry, structural change, sites/interfaces, prediction confidence, and classification), distinguishing documented capability, runnable local integration, retained independent evidence, and calibrated vs informational interpretation. |
 
 ## Creating a local PHENIX docs cache
 

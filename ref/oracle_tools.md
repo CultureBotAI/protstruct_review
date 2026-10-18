@@ -2,7 +2,7 @@
 
 <!-- catalog-state: tasks=T01–T17; count=17; drivers=17 -->
 
-The protstruct_review trust model requires that PHENIX outputs be cross-checked by **at least one non-cctbx tool** per task (see `tasks_and_evaluations.md` philosophy section). This page records which oracles are installed locally on this machine and how to invoke them. The **canonical per-metric recommendations** live in `ref/tool_recommendations.yaml` (LinkML-validated, schema-class `ToolRecommendation`).
+The protstruct_review trust model requires that PHENIX outputs be cross-checked by **at least one non-cctbx tool** per task (see `tasks_and_evaluations.md` philosophy section). This page records which oracles are installed locally on this machine and how to invoke them. The **canonical per-metric recommendations** live in `ref/tool_recommendations.yaml` (LinkML-validated, schema-class `ToolRecommendation`), and a question-organized synthesis across all 17 tasks (`T01`–`T17`) lives in [`ref/tools_and_measurements_guide.md`](tools_and_measurements_guide.md).
 
 ## Recommendations vocabulary
 

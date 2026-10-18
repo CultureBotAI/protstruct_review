@@ -10,8 +10,9 @@ Use the [catalog](catalog.yaml) for metric identities and the
 The [evidence-status ledger](threshold_evidence_status.yaml) records qualifications,
 suspensions and evidence limits; a historical benchmark label is not sufficient grading authority.
 [Structural criteria](structural_criteria.yaml) bind eligible verdicts to registry cells.
-[Tool recommendations](tool_recommendations.yaml), [tool assumptions](tool_assumptions.yaml)
-and [oracle capabilities](oracle_tools.md) describe the available measurement paths.
+[Tool recommendations](tool_recommendations.yaml), [tool assumptions](tool_assumptions.yaml),
+[oracle capabilities](oracle_tools.md), and the [question-based tools and measurements guide](tools_and_measurements_guide.md)
+describe the available measurement paths across documented capability, runnable integration, retained evidence, and calibrated interpretation.
 
 ## State the question and identify the evidence
 

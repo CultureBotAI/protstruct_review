@@ -23,6 +23,7 @@ from assess_refinement import (  # noqa: E402
     DEFAULT_ARCHIVE,
     EXPECTED_1SAR_ARCHIVE_SHA256,
     REPO_ROOT,
+    _extract_control_row_metrics,
     _median_and_iqr,
     assess_1sar_case_study,
     audit_mtz_retention,
@@ -32,6 +33,7 @@ from assess_refinement import (  # noqa: E402
     kabsch_rmsd,
     resolve_verdict_status,
     sha256_file,
+    summarize_control_cohort,
     summarize_pdb_inventory,
 )
 
@@ -94,6 +96,129 @@ class AssessRefinementTests(unittest.TestCase):
         self.assertEqual(avail_summary["count"], 3)
         self.assertEqual(avail_summary["unavailable_count"], 2)
         self.assertAlmostEqual(avail_summary["median"], 2.0, places=4)
+
+    def test_control_cohort_baseline_matching_and_denominator_counts(self) -> None:
+        """Verify ISOT-baseline + ANIS-delta is rejected while matching CIF-pinned provenance reconstructs endpoints with exact per-metric counts."""
+        sample_block = {
+            "state": "osol_h",
+            "shift_all_residue": 0.0422,
+            "two_path_only": False,
+            "numbers": {
+                "d_phenix": 0.0050,
+                "d_gemmi": 0.0060,
+                "d_refmac": 0.0092,
+                "clash_pre": 1.0,
+                "clash_post": 1.5,
+                "d_favored_pp": -0.2,
+                "d_rota_pp": 0.1,
+                "d_zbond": -0.01,
+                "shift_unmasked": 0.0400,
+                "n_protected_fixed": 0,
+            },
+            "flags": {
+                "F-data": False,
+                "F-geom": False,
+                "F-protected": False,
+                "F-shift": False,
+            },
+            "conflicts": [],
+            "verdict": "not-degraded",
+        }
+        matching_hashes = {
+            "model": "m" * 64,
+            "mtz": "t" * 64,
+            "cif": "c" * 64,
+        }
+        sample_row = {
+            "pdb_id": "4M7G",
+            "d_min": 1.9,
+            "refmac_convention": "ANIS",
+            "input_hashes": matching_hashes,
+            "recovered": sample_block,
+        }
+        isot_baseline_pre = {
+            "rfree_phenix": 0.1500,
+            "rfree_gemmi": 0.1520,
+            "refmac": {"r_free": 0.1738},
+        }
+
+        # 1. Mixed convention (ISOT baseline + ANIS delta) or missing CIF hash must NOT produce post R-free
+        mixed_norm = _extract_control_row_metrics(
+            sample_row,
+            state_key="recovered",
+            baseline_pre=isot_baseline_pre,
+            baseline_input_hashes=matching_hashes,
+            baseline_convention_matches=False,
+        )
+        self.assertAlmostEqual(mixed_norm["d_refmac"], 0.0092, places=4)
+        self.assertIsNone(mixed_norm["post_phenix_r_free"])
+        self.assertIsNone(mixed_norm["post_gemmi_r_free"])
+        self.assertIsNone(mixed_norm["post_refmac_r_free"])
+
+        missing_cif_norm = _extract_control_row_metrics(
+            sample_row,
+            state_key="recovered",
+            baseline_pre=isot_baseline_pre,
+            baseline_input_hashes={"model": "m" * 64, "mtz": "t" * 64},
+            baseline_convention_matches=True,
+        )
+        self.assertIsNone(missing_cif_norm["post_refmac_r_free"])
+
+        # 2. Genuinely matching provenance (model, mtz, cif hashes + convention) reconstructs endpoints
+        # and distinguishes delta count (n=2) from reconstructed post-REFMAC count (n=1).
+        matched_norm_1 = _extract_control_row_metrics(
+            sample_row,
+            state_key="recovered",
+            baseline_pre={
+                "rfree_phenix": 0.1400,
+                "rfree_gemmi": 0.1420,
+                "refmac": {"r_free": 0.1193},
+            },
+            baseline_input_hashes=matching_hashes,
+            baseline_convention_matches=True,
+        )
+        self.assertAlmostEqual(matched_norm_1["post_refmac_r_free"], 0.1285, places=4)
+
+        sample_row_2 = dict(sample_row, pdb_id="8QXQ")
+        matched_norm_2 = _extract_control_row_metrics(
+            sample_row_2,
+            state_key="recovered",
+            baseline_pre={
+                "rfree_phenix": 0.1600,
+                "rfree_gemmi": 0.1620,
+                "refmac": None,
+            },
+            baseline_input_hashes=matching_hashes,
+            baseline_convention_matches=True,
+        )
+        self.assertAlmostEqual(matched_norm_2["d_refmac"], 0.0092, places=4)
+        self.assertIsNone(matched_norm_2["post_refmac_r_free"])
+
+        summary = summarize_control_cohort(
+            cohort_id="synthetic_matched",
+            description="Synthetic cohort with 2 REFMAC deltas and 1 usable REFMAC baseline.",
+            source_path=ASSESSMENT_JSON_PATH,
+            normalized_rows=[matched_norm_1, matched_norm_2],
+        )
+        self.assertEqual(summary["target_count"], 2)
+        self.assertEqual(summary["refmac_evaluable_target_count"], 2)
+        self.assertEqual(
+            summary["change_relative_to_input"]["delta_r_free_refmac"]["count"], 2
+        )
+        self.assertEqual(
+            summary["final_model_quality_support"]["post_refmac_r_free"]["count"], 1
+        )
+        self.assertEqual(
+            summary["final_model_quality_support"]["post_refmac_r_free"][
+                "unavailable_count"
+            ],
+            1,
+        )
+        self.assertAlmostEqual(
+            summary["final_model_quality_support"]["post_refmac_r_free"]["median"],
+            0.1285,
+            places=4,
+        )
 
     def test_archive_sha256_verification_and_corruption_rejection(self) -> None:
         """Verify assess_1sar_case_study computes and checks archive SHA-256."""

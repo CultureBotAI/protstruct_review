@@ -57,9 +57,18 @@ REQUIRED_REGISTRY_IDS = [
 def validate_guide_content(
     guide_text: str,
     catalog_tasks: list[dict],
+    metric_definitions: list[dict] | None = None,
 ) -> list[str]:
     """Validate tools_and_measurements_guide.md text and return any errors."""
     errors: list[str] = []
+
+    if metric_definitions is None:
+        metric_definitions = yaml.safe_load(CATALOG_PATH.read_text(encoding="utf-8"))[
+            "metric_definitions"
+        ]
+    metrics_by_id: dict[str, set[str]] = {
+        m["id"]: set(m.get("applicable_task_refs") or []) for m in metric_definitions
+    }
 
     if "<!-- catalog-state: tasks=T01–T17; count=17; drivers=17 -->" not in guide_text:
         errors.append("Missing catalog-state header comment")
@@ -78,6 +87,15 @@ def validate_guide_content(
     )
     sections = {m.group(1): (m.group(2).strip(), m.group(3)) for m in section_pattern.finditer(guide_text)}
 
+    # Verify every complete backticked TXX_* token in the guide exists in catalog.yaml metric_definitions
+    metric_token_pattern = re.compile(r"`(T\d{2}_[^`]*)`")
+    for match in metric_token_pattern.finditer(guide_text):
+        token = match.group(1)
+        if token not in metrics_by_id:
+            errors.append(
+                f"Unknown or non-canonical metric ID in guide (not in catalog.yaml metric_definitions): {token}"
+            )
+
     for task in catalog_tasks:
         tid = task["id"]
         tname = task["task_name"]
@@ -90,6 +108,13 @@ def validate_guide_content(
         for layer in REQUIRED_EPISTEMIC_LAYERS:
             if f"**{layer}" not in sec_body:
                 errors.append(f"Task {tid} subsection missing epistemic layer: {layer}")
+        for match in metric_token_pattern.finditer(sec_body):
+            token = match.group(1)
+            if token in metrics_by_id and tid not in metrics_by_id[token]:
+                errors.append(
+                    f"Metric {token} cited in task {tid} subsection is not applicable to {tid} "
+                    f"(applicable_task_refs={sorted(metrics_by_id[token])})"
+                )
 
     for reg_id in REQUIRED_REGISTRY_IDS:
         if reg_id not in guide_text:
@@ -183,8 +208,8 @@ class TestToolsAndMeasurementsGuide(unittest.TestCase):
 
         # 3. Removing an epistemic layer from a task section must fail
         mutated_no_layer = self.guide_text.replace(
-            "- **Retained independent evidence**: `T08_docked_map_cc`",
-            "- **Evidence summary**: `T08_docked_map_cc`",
+            "- **Retained independent evidence**: `T08_placement_cc`",
+            "- **Evidence summary**: `T08_placement_cc`",
         )
         errors_no_layer = validate_guide_content(mutated_no_layer, self.catalog_tasks)
         self.assertTrue(any("T08" in err and "Retained independent evidence" in err for err in errors_no_layer))
@@ -210,6 +235,31 @@ class TestToolsAndMeasurementsGuide(unittest.TestCase):
         errors_bad_path = validate_guide_content(mutated_bad_path, self.catalog_tasks)
         self.assertTrue(
             any("nonexistent_artifact_2026-10-18.json" in err for err in errors_bad_path)
+        )
+
+        # 6. Citing a bogus, whitespace-malformed, or criterion-only metric ID must fail
+        for bad_metric in (
+            "T03_totally_nonexistent",
+            "T06_ anomalous_peak_heights",
+            "T01_ca_rmsd",
+        ):
+            mutated_bad_metric = self.guide_text.replace("`T03_r-work`", f"`{bad_metric}`", 1)
+            errors_bad_metric = validate_guide_content(mutated_bad_metric, self.catalog_tasks)
+            self.assertTrue(
+                any(bad_metric in err for err in errors_bad_metric),
+                f"Expected validation error for non-canonical metric token {bad_metric!r}",
+            )
+
+        # 7. Citing a valid metric ID inside a task section where it is not applicable must fail
+        mutated_wrong_task = self.guide_text.replace(
+            "Catalog metrics: `T04_cc_mask`",
+            "Catalog metrics: `T03_r-work`",
+            1,
+        )
+        errors_wrong_task = validate_guide_content(mutated_wrong_task, self.catalog_tasks)
+        self.assertTrue(
+            any("T03_r-work" in err and "T04" in err for err in errors_wrong_task),
+            f"Expected wrong-task error for T03_r-work in T04, got {errors_wrong_task}",
         )
 
 

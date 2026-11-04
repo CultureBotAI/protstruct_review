@@ -58,7 +58,7 @@ In accordance with `ref/quality_reporting.md`, `scripts/assess_refinement.py` do
 
 | Implementation | Role | $R_{\text{work}}$ | $R_{\text{free}}$ | $R_{\text{free}} - R_{\text{work}}$ | $n_{\text{work}}$ | $n_{\text{free}}$ | Notes |
 |---|---|---:|---:|---:|---:|---:|---|
-| `gemmi sfcalc` (`0.7.5`, `gemmi_rfactor.py`, `1sar.mtz`) | Primary fast diagnostic | `0.1622` | `0.2136` | `0.0515` | `6,494` | `723` | `gemmi sfcalc --scale-to` bulk-solvent/anisotropic scaling + 10-shell work-set bin rescaling on input `1sar.mtz` |
+| `gemmi sfcalc` (`0.7.5`, `gemmi_rfactor.py`, `1sar.mtz`) | Primary fast diagnostic | `0.1622` | `0.2136` | `0.0515` | `6,494` | `723` | `gemmi sfcalc --scale-to` bulk-solvent/anisotropic scaling + 20-bin work-set rescaling (`gemmi_rfactor.py`, `nbins=20`) on input `1sar.mtz` |
 | `gemmi sfcalc` (`0.7.5`, `gemmi_rfactor.py`, `1sar_final.mtz`) | Cross-MTZ check | `0.1622` | `0.2136` | `0.0515` | `6,494` | `723` | Identical to $10^{-6}$ on positive-$F$ reflections |
 | `phenix.model_vs_data` (`1.21.2-5419`) | Primary full solver | `0.1564` | `0.2116` | `0.0552` | `6,494` | `723` | Matches `REMARK 3` header (`0.1563 / 0.2114`) within `0.0002` |
 | `REFMAC5` (`5.8.0431`, 0 cycles) | Orthogonal CCP4 solver | `0.1693` | `0.2128` | `0.0435` | `6,494` | `723` | Orthogonal CCP4 bulk-solvent mask |

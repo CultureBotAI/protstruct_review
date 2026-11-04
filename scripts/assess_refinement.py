@@ -32,7 +32,9 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
+import math
 from pathlib import Path
 import sys
 from typing import Any
@@ -101,7 +103,49 @@ STANDARD_AMINO_ACIDS = frozenset(
 EXPECTED_1SAR_ARCHIVE_SHA256 = (
     "9fc5352284b7ffa7763c633a3eb4d3d0db96b8c25a1be9bcea361722d2c53054"
 )
+EXPECTED_1SAR_DEPOSITED_PDB_SHA256 = (
+    "e60e5db6c7eb554a3ac4e184bdf7cbb7d69b682e287579bdcf5f8bf279d51f86"
+)
+EXPECTED_1SAR_QDS_SHA256 = (
+    "4548cb4c36355938687ffef840ecb0b3a9b91c9eacad2157bc1124d962d82db2"
+)
+EXPECTED_1SAR_EVAL_SHA256 = (
+    "1d971c69997d19456d288fa5882547bcdde608c689407d275186f2319a1ae310"
+)
+EXPECTED_1SAR_COORD_AUDIT_SHA256 = (
+    "5a03ab678c26970a4a1bdeaf5742ed46a6bd7ffd982ac22d656c1a0b5189cbdf"
+)
+EXPECTED_1SAR_START_SUBJECT_REF = (
+    "artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar.pdb"
+)
+EXPECTED_1SAR_FINAL_SUBJECT_REF = (
+    "artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb"
+)
+EXPECTED_1SAR_MTZ_SUBJECT_REF = (
+    "mtz:sha256:f36d5fe685a3e524e8809d17d19ce12073acdf339eba2cfd3b0347a818850ab2"
+)
 VALID_VERDICT_STATUSES = frozenset({"pass", "fail", "NeedsReview", "informational"})
+
+
+def _require_finite_float(raw_val: Any, context: str) -> float:
+    """Convert raw_val to float and reject None, booleans, NaN, and Inf."""
+    if raw_val is None or isinstance(raw_val, (bool, np.bool_)):
+        raise ValueError(f"Missing or non-numeric value for {context}: {raw_val!r}")
+    try:
+        val = float(raw_val)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid numeric value for {context}: {raw_val!r}") from exc
+    if not math.isfinite(val):
+        raise ValueError(f"Non-finite numeric value for {context}: {raw_val!r}")
+    return val
+
+
+def _require_finite_int(raw_val: Any, context: str) -> int:
+    """Convert raw_val to an exact integer and reject None, booleans, NaN, and Inf."""
+    val = _require_finite_float(raw_val, context)
+    if not val.is_integer():
+        raise ValueError(f"Non-integer numeric value for {context}: {raw_val!r}")
+    return int(val)
 
 
 def _display_path(path: Path) -> str:
@@ -128,12 +172,16 @@ def sha256_file(path: Path) -> str:
 
 def kabsch_rmsd(coords_a: np.ndarray, coords_b: np.ndarray) -> float:
     """Return the optimal right-handed Kabsch-superposed RMSD in Angstroms."""
-    if coords_a.shape != coords_b.shape or coords_a.ndim != 2 or coords_a.shape[1] != 3:
+    arr_a = np.asarray(coords_a, dtype=float)
+    arr_b = np.asarray(coords_b, dtype=float)
+    if arr_a.shape != arr_b.shape or arr_a.ndim != 2 or arr_a.shape[1] != 3:
         raise ValueError("kabsch_rmsd requires matching (N, 3) coordinate arrays")
-    if coords_a.shape[0] == 0:
+    if arr_a.shape[0] == 0:
         raise ValueError("kabsch_rmsd requires at least one atom")
-    centered_a = coords_a - np.mean(coords_a, axis=0)
-    centered_b = coords_b - np.mean(coords_b, axis=0)
+    if not (np.all(np.isfinite(arr_a)) and np.all(np.isfinite(arr_b))):
+        raise ValueError("kabsch_rmsd requires finite coordinate arrays")
+    centered_a = arr_a - np.mean(arr_a, axis=0)
+    centered_b = arr_b - np.mean(arr_b, axis=0)
     cov = centered_a.T @ centered_b
     u_mat, _, vt_mat = np.linalg.svd(cov)
     det_sign = 1.0 if np.linalg.det(u_mat @ vt_mat) >= 0.0 else -1.0
@@ -141,7 +189,10 @@ def kabsch_rmsd(coords_a: np.ndarray, coords_b: np.ndarray) -> float:
     rotation = u_mat @ correction @ vt_mat
     aligned_a = centered_a @ rotation
     diffs = aligned_a - centered_b
-    return float(np.sqrt(np.mean(np.sum(diffs * diffs, axis=1))))
+    rmsd = float(np.sqrt(np.mean(np.sum(diffs * diffs, axis=1))))
+    if not math.isfinite(rmsd):
+        raise ValueError("kabsch_rmsd produced a non-finite RMSD")
+    return rmsd
 
 
 def resolve_verdict_status(
@@ -360,12 +411,25 @@ def compare_pdb_pair(start_pdb_text: str, final_pdb_text: str) -> dict[str, Any]
     }
 
 
-def _parse_deposited_r_values(pdb_path: Path) -> dict[str, Any]:
+def _parse_deposited_r_values(
+    pdb_path: Path,
+    *,
+    pdb_text: str | None = None,
+    require_1sar_header: bool = False,
+) -> dict[str, Any]:
     """Parse REMARK 3 R VALUE and FREE R VALUE lines from a deposited PDB header."""
+    text = (
+        pdb_text
+        if pdb_text is not None
+        else pdb_path.read_text(encoding="utf-8", errors="replace")
+    )
     r_work: float | None = None
     r_free: float | None = None
     raw_lines: list[str] = []
-    for line in pdb_path.read_text(encoding="utf-8", errors="replace").splitlines():
+    has_1sar_header = False
+    for line in text.splitlines():
+        if line.startswith("HEADER") and "1SAR" in line:
+            has_1sar_header = True
         if line.startswith("REMARK   3   R VALUE") or line.startswith(
             "REMARK   3   FREE R VALUE"
         ):
@@ -378,15 +442,39 @@ def _parse_deposited_r_values(pdb_path: Path) -> dict[str, Any]:
                     and "TEST SET" not in head
                     and "ERROR" not in head
                 ):
-                    try:
-                        r_free = float(token)
-                    except ValueError:
+                    if token.upper() in {"NULL", "NONE", "N/A", "."}:
                         r_free = None
+                    else:
+                        r_free = _require_finite_float(
+                            token, f"{pdb_path} REMARK 3 FREE R VALUE"
+                        )
                 elif "R VALUE" in head and "FREE" not in head and "ERROR" not in head:
-                    try:
-                        r_work = float(token)
-                    except ValueError:
+                    if token.upper() in {"NULL", "NONE", "N/A", "."}:
                         r_work = None
+                    else:
+                        r_work = _require_finite_float(
+                            token, f"{pdb_path} REMARK 3 R VALUE"
+                        )
+    if require_1sar_header:
+        if not has_1sar_header:
+            raise ValueError(
+                f"Deposited PDB {pdb_path} is missing expected HEADER for 1SAR"
+            )
+        if r_work is not None or r_free is not None:
+            raise ValueError(
+                f"Deposited PDB {pdb_path} R-work={r_work!r} or R-free={r_free!r} "
+                "does not match expected NULL working/free R values for 1SAR"
+            )
+        required_1sar_lines = (
+            "REMARK   3   R VALUE     (WORKING + TEST SET) : 0.172",
+            "REMARK   3   R VALUE            (WORKING SET) : NULL",
+            "REMARK   3   FREE R VALUE                     : NULL",
+        )
+        for req_line in required_1sar_lines:
+            if req_line not in raw_lines:
+                raise ValueError(
+                    f"Deposited PDB {pdb_path} is missing expected REMARK 3 line {req_line!r}"
+                )
     return {
         "deposited_r_work": r_work,
         "deposited_r_free": r_free,
@@ -395,19 +483,73 @@ def _parse_deposited_r_values(pdb_path: Path) -> dict[str, Any]:
     }
 
 
+def _validate_eval_measurement_context(
+    row: dict[str, Any],
+    measurement_id: str,
+    *,
+    expected_task_ref: str | None = None,
+    expected_metric_ref: str | None = None,
+    expected_oracle_ref: str | None = None,
+    expected_stage: str | None = None,
+    expected_subject_ref: str | None = None,
+) -> None:
+    """Validate semantic context fields on an EvaluationRun measurement row."""
+    for required_field in (
+        "catalog_task_ref",
+        "metric_definition_ref",
+        "oracle_tool_ref",
+        "stage",
+        "subject_ref",
+    ):
+        val = row.get(required_field)
+        if not isinstance(val, str) or not val.strip():
+            raise ValueError(
+                f"Measurement {measurement_id!r} missing non-empty {required_field!r}"
+            )
+    checks = (
+        ("catalog_task_ref", expected_task_ref),
+        ("metric_definition_ref", expected_metric_ref),
+        ("oracle_tool_ref", expected_oracle_ref),
+        ("stage", expected_stage),
+        ("subject_ref", expected_subject_ref),
+    )
+    for field_name, expected_val in checks:
+        if expected_val is not None and row.get(field_name) != expected_val:
+            raise ValueError(
+                f"Measurement {measurement_id!r} {field_name}={row.get(field_name)!r} "
+                f"does not match expected {expected_val!r}"
+            )
+
+
 def _require_eval_numeric(
     measurements_by_id: dict[str, dict[str, Any]],
     measurement_id: str,
     expected: float,
     *,
     tol: float = 1e-4,
+    expected_task_ref: str | None = None,
+    expected_metric_ref: str | None = None,
+    expected_oracle_ref: str | None = None,
+    expected_stage: str | None = None,
+    expected_subject_ref: str | None = None,
 ) -> float:
-    """Return a validated numeric measurement from an EvaluationRun."""
+    """Return a validated finite numeric measurement from an EvaluationRun."""
+    expected_val = _require_finite_float(expected, f"{measurement_id}.expected")
+    tol_val = _require_finite_float(tol, f"{measurement_id}.tol")
     row = measurements_by_id.get(measurement_id)
     if not isinstance(row, dict):
         raise ValueError(
             f"Missing required numeric measurement {measurement_id!r} in evaluation_run"
         )
+    _validate_eval_measurement_context(
+        row,
+        measurement_id,
+        expected_task_ref=expected_task_ref,
+        expected_metric_ref=expected_metric_ref,
+        expected_oracle_ref=expected_oracle_ref,
+        expected_stage=expected_stage,
+        expected_subject_ref=expected_subject_ref,
+    )
     oracle_measure = row.get("oracle_measure")
     raw_val = (
         oracle_measure.get("value_numeric")
@@ -418,11 +560,11 @@ def _require_eval_numeric(
         raise ValueError(
             f"Missing required numeric measurement {measurement_id!r} in evaluation_run"
         )
-    val = float(raw_val)
-    if abs(val - expected) > tol:
+    val = _require_finite_float(raw_val, f"measurement {measurement_id!r}")
+    if abs(val - expected_val) > tol_val:
         raise ValueError(
             f"Measurement {measurement_id!r} value_numeric={val} does not match "
-            f"expected {expected} (tol={tol})"
+            f"expected {expected_val} (tol={tol_val})"
         )
     return val
 
@@ -431,6 +573,12 @@ def _require_eval_text(
     measurements_by_id: dict[str, dict[str, Any]],
     measurement_id: str,
     expected: str,
+    *,
+    expected_task_ref: str | None = None,
+    expected_metric_ref: str | None = None,
+    expected_oracle_ref: str | None = None,
+    expected_stage: str | None = None,
+    expected_subject_ref: str | None = None,
 ) -> str:
     """Return a validated text measurement from an EvaluationRun."""
     row = measurements_by_id.get(measurement_id)
@@ -438,23 +586,31 @@ def _require_eval_text(
         raise ValueError(
             f"Missing required text measurement {measurement_id!r} in evaluation_run"
         )
+    _validate_eval_measurement_context(
+        row,
+        measurement_id,
+        expected_task_ref=expected_task_ref,
+        expected_metric_ref=expected_metric_ref,
+        expected_oracle_ref=expected_oracle_ref,
+        expected_stage=expected_stage,
+        expected_subject_ref=expected_subject_ref,
+    )
     oracle_measure = row.get("oracle_measure")
     raw_val = (
         oracle_measure.get("value_text")
         if isinstance(oracle_measure, dict) and "value_text" in oracle_measure
         else row.get("value_text")
     )
-    if raw_val is None:
+    if not isinstance(raw_val, str):
         raise ValueError(
             f"Missing required text measurement {measurement_id!r} in evaluation_run"
         )
-    val = str(raw_val)
-    if val != expected:
+    if raw_val != expected:
         raise ValueError(
-            f"Measurement {measurement_id!r} value_text={val!r} does not match "
+            f"Measurement {measurement_id!r} value_text={raw_val!r} does not match "
             f"expected {expected!r}"
         )
-    return val
+    return raw_val
 
 
 def _require_qds_numeric(
@@ -465,7 +621,9 @@ def _require_qds_numeric(
     *,
     tol: float = 1e-4,
 ) -> float:
-    """Return a validated numeric field from a QualityDataSheet summary block."""
+    """Return a validated finite numeric field from a QualityDataSheet summary block."""
+    expected_val = _require_finite_float(expected, f"QDS {field_name}.expected")
+    tol_val = _require_finite_float(tol, f"QDS {field_name}.tol")
     if not isinstance(summary_block, dict):
         raise ValueError(f"Missing QDS summary block for {field_name!r}")
     entry = summary_block.get(field_name)
@@ -477,11 +635,13 @@ def _require_qds_numeric(
         raise ValueError(
             f"QDS field {field_name!r} missing or does not bind {expected_ref!r}"
         )
-    val = float(entry["value_numeric"])
-    if abs(val - expected) > tol:
+    val = _require_finite_float(
+        entry.get("value_numeric"), f"QDS field {field_name!r}"
+    )
+    if abs(val - expected_val) > tol_val:
         raise ValueError(
             f"QDS field {field_name!r} value_numeric={val} does not match "
-            f"expected {expected} (tol={tol})"
+            f"expected {expected_val} (tol={tol_val})"
         )
     return val
 
@@ -499,18 +659,51 @@ def _require_qds_text(
     if (
         not isinstance(entry, dict)
         or entry.get("source_measurement_ref") != expected_ref
-        or entry.get("value_text") is None
+        or not isinstance(entry.get("value_text"), str)
     ):
         raise ValueError(
             f"QDS field {field_name!r} missing or does not bind {expected_ref!r}"
         )
-    val = str(entry["value_text"])
+    val = entry["value_text"]
     if val != expected:
         raise ValueError(
             f"QDS field {field_name!r} value_text={val!r} does not match "
             f"expected {expected!r}"
         )
     return val
+
+
+def _read_verified_1sar_bytes(
+    path: Path,
+    expected_sha256: str,
+    source_label: str,
+) -> tuple[bytes, str]:
+    """Read a fixed 1SAR source once as bytes and verify its SHA-256 digest."""
+    raw_bytes = path.read_bytes()
+    actual_sha256 = sha256_bytes(raw_bytes)
+    if actual_sha256 != expected_sha256:
+        raise ValueError(
+            f"{source_label} SHA-256 mismatch for {path}: "
+            f"actual={actual_sha256!r}, expected={expected_sha256!r}"
+        )
+    return raw_bytes, actual_sha256
+
+
+def _read_verified_1sar_text(
+    path: Path,
+    expected_sha256: str,
+    source_label: str,
+) -> tuple[str, str]:
+    """Read a fixed 1SAR text source once as bytes, verify its SHA-256, and decode UTF-8."""
+    raw_bytes, actual_sha256 = _read_verified_1sar_bytes(
+        path, expected_sha256, source_label
+    )
+    try:
+        return raw_bytes.decode("utf-8"), actual_sha256
+    except UnicodeDecodeError as exc:
+        raise ValueError(
+            f"Non-UTF-8 content in {source_label} source {path}"
+        ) from exc
 
 
 def assess_1sar_case_study(
@@ -521,9 +714,37 @@ def assess_1sar_case_study(
     coord_audit_path: Path = DEFAULT_1SAR_COORD_AUDIT,
     pass_criterion_bindings: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Build the structured before/after refinement assessment for 1SAR."""
+    """Build the structured before/after refinement assessment for 1SAR.
+
+    Fixed retained-bundle boundary: this specialized 1SAR reader admits the
+    five retained case-study inputs (`archive_path`, `deposited_pdb_path`,
+    `qds_path`, `eval_path`, `coord_audit_path`) at default or alternate file
+    paths only when their exact byte SHA-256 digests match the retained 1SAR
+    bundle BEFORE parsing or deriving any case-study output.
+    """
     bindings = list(pass_criterion_bindings or [])
-    qds_doc = yaml.safe_load(qds_path.read_text(encoding="utf-8"))
+    resolve_verdict_status(bindings, None)
+
+    archive_bytes, actual_archive_sha256 = _read_verified_1sar_bytes(
+        archive_path, EXPECTED_1SAR_ARCHIVE_SHA256, "Archive"
+    )
+    deposited_pdb_text, actual_deposited_sha256 = _read_verified_1sar_text(
+        deposited_pdb_path, EXPECTED_1SAR_DEPOSITED_PDB_SHA256, "Deposited PDB"
+    )
+    qds_text, _ = _read_verified_1sar_text(
+        qds_path, EXPECTED_1SAR_QDS_SHA256, "QDS"
+    )
+    eval_text, _ = _read_verified_1sar_text(
+        eval_path, EXPECTED_1SAR_EVAL_SHA256, "EvaluationRun"
+    )
+    coord_audit_text, _ = _read_verified_1sar_text(
+        coord_audit_path, EXPECTED_1SAR_COORD_AUDIT_SHA256, "Coordinate/T13 audit"
+    )
+
+    try:
+        qds_doc = yaml.safe_load(qds_text)
+    except yaml.YAMLError as exc:
+        raise ValueError(f"Invalid QDS YAML in {qds_path}") from exc
     if (
         not isinstance(qds_doc, dict)
         or not isinstance(qds_doc.get("quality_data_sheets"), list)
@@ -531,9 +752,7 @@ def assess_1sar_case_study(
     ):
         raise ValueError(f"Invalid QDS document in {qds_path}")
     qds = qds_doc["quality_data_sheets"][0]
-    expected_subject_ref = (
-        "artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb"
-    )
+    expected_subject_ref = EXPECTED_1SAR_FINAL_SUBJECT_REF
     if (
         not isinstance(qds, dict)
         or qds.get("id") != "QDS_1sar_cdba2c07_2026-09-23"
@@ -544,7 +763,10 @@ def assess_1sar_case_study(
             "QDS record does not match expected 1SAR id, structure_ref, or subject_ref"
         )
 
-    eval_doc = yaml.safe_load(eval_path.read_text(encoding="utf-8"))
+    try:
+        eval_doc = yaml.safe_load(eval_text)
+    except yaml.YAMLError as exc:
+        raise ValueError(f"Invalid EvaluationRun YAML in {eval_path}") from exc
     if (
         not isinstance(eval_doc, dict)
         or not isinstance(eval_doc.get("evaluation_runs"), list)
@@ -565,7 +787,10 @@ def assess_1sar_case_study(
         bindings, eval_run.get("overall_verdict_status")
     )
 
-    coord_audit = json.loads(coord_audit_path.read_text(encoding="utf-8"))
+    try:
+        coord_audit = json.loads(coord_audit_text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid coordinate audit JSON in {coord_audit_path}") from exc
     if not isinstance(coord_audit, dict):
         raise ValueError(f"Invalid coordinate audit JSON in {coord_audit_path}")
     recorded_archive_sha256 = (
@@ -573,7 +798,6 @@ def assess_1sar_case_study(
         if isinstance(coord_audit.get("archive"), dict)
         else None
     )
-    actual_archive_sha256 = sha256_file(archive_path)
     if (
         recorded_archive_sha256 != EXPECTED_1SAR_ARCHIVE_SHA256
         or actual_archive_sha256 != recorded_archive_sha256
@@ -583,7 +807,7 @@ def assess_1sar_case_study(
             f"coord_audit={recorded_archive_sha256!r}, expected={EXPECTED_1SAR_ARCHIVE_SHA256!r}"
         )
 
-    with zipfile.ZipFile(archive_path) as zf:
+    with zipfile.ZipFile(io.BytesIO(archive_bytes)) as zf:
         start_pdb_bytes = zf.read("data/1sar.pdb")
         final_pdb_bytes = zf.read("data/1sar_final.pdb")
         start_mtz_bytes = zf.read("data/1sar.mtz")
@@ -591,20 +815,25 @@ def assess_1sar_case_study(
 
     final_pdb_sha256 = sha256_bytes(final_pdb_bytes)
     start_mtz_sha256 = sha256_bytes(start_mtz_bytes)
+    model_block = coord_audit.get("model")
     if (
-        not isinstance(coord_audit.get("model"), dict)
-        or coord_audit["model"].get("sha256") != final_pdb_sha256
-        or coord_audit["model"].get("subject_ref") != qds["subject_ref"]
+        not isinstance(model_block, dict)
+        or model_block.get("sha256") != final_pdb_sha256
+        or model_block.get("subject_ref") != qds["subject_ref"]
+        or model_block.get("member") != "data/1sar_final.pdb"
     ):
         raise ValueError(
             "Coordinate audit model SHA-256 or subject_ref does not match archived data/1sar_final.pdb"
         )
+    dataset_block = coord_audit.get("dataset")
     if (
-        not isinstance(coord_audit.get("dataset"), dict)
-        or coord_audit["dataset"].get("sha256") != start_mtz_sha256
+        not isinstance(dataset_block, dict)
+        or dataset_block.get("sha256") != start_mtz_sha256
+        or dataset_block.get("subject_ref") != EXPECTED_1SAR_MTZ_SUBJECT_REF
+        or dataset_block.get("member") != "data/1sar.mtz"
     ):
         raise ValueError(
-            "Coordinate audit dataset SHA-256 does not match archived data/1sar.mtz"
+            "Coordinate audit dataset SHA-256 or subject_ref does not match archived data/1sar.mtz"
         )
 
     eval_measurements = {
@@ -631,11 +860,27 @@ def assess_1sar_case_study(
         "EVAL_1sar_cdba2c07_2026-09-07_M_007",
         "EVAL_1sar_cdba2c07_2026-09-22_T15_SS_97824701cc681ebe_M_content",
         "EVAL_1sar_cdba2c07_2026-09-22_T15_SS_97824701cc681ebe_M_agreement",
+        "EVAL_1sar_cdba2c07_2026-09-21_M_006",
+        "EVAL_1sar_cdba2c07_2026-09-21_M_007",
+        "EVAL_1sar_cdba2c07_2026-09-23_M_016",
     ):
-        if required_origin_ref not in qds_origins:
+        origin_entry = qds_origins.get(required_origin_ref)
+        if not isinstance(origin_entry, dict):
             raise ValueError(
                 f"QDS measurement_evidence_origins missing {required_origin_ref!r}"
             )
+        for origin_field in (
+            "source_evaluation_run_ref",
+            "origin_evaluation_run_ref",
+            "origin_measurement_ref",
+            "origin_run_date",
+        ):
+            field_val = origin_entry.get(origin_field)
+            if not isinstance(field_val, str) or not field_val.strip():
+                raise ValueError(
+                    f"QDS measurement_evidence_origins[{required_origin_ref!r}] "
+                    f"missing non-empty {origin_field!r}"
+                )
 
     gemmi_rwork = _require_qds_numeric(
         qds.get("refinement_summary", {}),
@@ -663,21 +908,56 @@ def assess_1sar_case_study(
         raise ValueError(
             "Missing EVAL_1sar_cdba2c07_2026-09-23_R_packaged_round4_historical in evaluation_run"
         )
-    phenix_final_rwork = float(round4_hist["r_work"]["value_numeric"])
-    phenix_final_rfree = float(round4_hist["r_free"]["value_numeric"])
-    phenix_final_rgap = float(round4_hist["r_free_gap"]["value_numeric"])
+    for metric_key in ("r_work", "r_free", "r_free_gap"):
+        metric_block = round4_hist.get(metric_key)
+        if (
+            not isinstance(metric_block, dict)
+            or metric_block.get("subject_ref") != EXPECTED_1SAR_FINAL_SUBJECT_REF
+        ):
+            raise ValueError(
+                f"Refinement EVAL_1sar_cdba2c07_2026-09-23_R_packaged_round4_historical.{metric_key} "
+                f"missing or does not match expected subject_ref {EXPECTED_1SAR_FINAL_SUBJECT_REF!r}"
+            )
+    phenix_final_rwork = _require_finite_float(
+        round4_hist["r_work"].get("value_numeric"),
+        "round4_hist.r_work.value_numeric",
+    )
+    phenix_final_rfree = _require_finite_float(
+        round4_hist["r_free"].get("value_numeric"),
+        "round4_hist.r_free.value_numeric",
+    )
+    phenix_final_rgap = _require_finite_float(
+        round4_hist["r_free_gap"].get("value_numeric"),
+        "round4_hist.r_free_gap.value_numeric",
+    )
     if (
         abs(phenix_final_rwork - 0.1564) > 1e-4
         or abs(phenix_final_rfree - 0.2116) > 1e-4
         or abs(phenix_final_rgap - 0.0552) > 1e-4
     ):
-        raise ValueError("Unexpected packaged round-4 historical PHENIX R-values")
+        raise ValueError(
+            "Unexpected packaged round-4 historical PHENIX R-values in evaluation_run"
+        )
 
     refmac_rwork = _require_eval_numeric(
-        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_refmac_rwork", 0.1693
+        eval_measurements,
+        "EVAL_1sar_cdba2c07_2026-09-23_M_refmac_rwork",
+        0.1693,
+        expected_task_ref="T03",
+        expected_metric_ref="T03_r-work",
+        expected_oracle_ref="REFMAC5",
+        expected_stage="final",
+        expected_subject_ref=EXPECTED_1SAR_FINAL_SUBJECT_REF,
     )
     refmac_rfree = _require_eval_numeric(
-        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_refmac_rfree", 0.2128
+        eval_measurements,
+        "EVAL_1sar_cdba2c07_2026-09-23_M_refmac_rfree",
+        0.2128,
+        expected_task_ref="T03",
+        expected_metric_ref="T03_r-free",
+        expected_oracle_ref="REFMAC5",
+        expected_stage="final",
+        expected_subject_ref=EXPECTED_1SAR_FINAL_SUBJECT_REF,
     )
     servalcat_rwork = _require_eval_numeric(
         eval_measurements,
@@ -779,10 +1059,11 @@ def assess_1sar_case_study(
     rotamer_outliers_final = _require_eval_numeric(
         eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_023", 4.88
     )
-    c_beta_deviations = int(
+    c_beta_deviations = _require_finite_int(
         _require_eval_numeric(
             eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_024", 0.0
-        )
+        ),
+        "EVAL_1sar_cdba2c07_2026-09-23_M_024",
     )
     molprobity_score = _require_eval_numeric(
         eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_025", 1.63
@@ -860,6 +1141,12 @@ def assess_1sar_case_study(
         eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_round6_rfree", 0.2068
     )
 
+    deposition_info = _parse_deposited_r_values(
+        deposited_pdb_path,
+        pdb_text=deposited_pdb_text,
+        require_1sar_header=True,
+    )
+
     start_pdb_text = start_pdb_bytes.decode("utf-8", errors="replace")
     final_pdb_text = final_pdb_bytes.decode("utf-8", errors="replace")
 
@@ -875,7 +1162,6 @@ def assess_1sar_case_study(
         flag_values={0, 1},
         free_value=1,
     )
-    deposition_info = _parse_deposited_r_values(deposited_pdb_path)
 
     # Question 1: Implementation agreement on the same observable (packaged final model)
     implementation_agreement = {
@@ -1445,7 +1731,7 @@ def assess_1sar_case_study(
             "deposited_reference_model": {
                 "subject_ref": "pdb:1SAR",
                 "path": _display_path(deposited_pdb_path),
-                "sha256": sha256_file(deposited_pdb_path),
+                "sha256": actual_deposited_sha256,
                 **deposition_info,
             },
             "reflection_data": {
@@ -1498,8 +1784,16 @@ def _extract_control_row_metrics(
     baseline_convention_matches: bool = False,
 ) -> dict[str, Any]:
     """Normalize a single row from round3_bench, round4_recover, or round10_recover."""
+    if not isinstance(row, dict) or not isinstance(row.get("pdb_id"), str):
+        raise ValueError("Control row must be a dict with string 'pdb_id'")
+    pdb_id = row["pdb_id"]
+    d_min = _require_finite_float(row.get("d_min"), f"{pdb_id}.d_min")
     block = row[state_key] if state_key is not None else row
-    numbers = block["numbers"]
+    if not isinstance(block, dict):
+        raise ValueError(f"Control row {pdb_id!r} block must be a dict")
+    numbers = block.get("numbers")
+    if not isinstance(numbers, dict):
+        raise ValueError(f"Control row {pdb_id!r} numbers must be a dict")
     direct_pre = block.get("pre")
     can_use_cross_file_baseline = (
         direct_pre is None
@@ -1517,37 +1811,88 @@ def _extract_control_row_metrics(
         else (baseline_pre if can_use_cross_file_baseline else {})
     ) or {}
     post = block.get("post")
-    flags = block["flags"]
+    flags = block.get("flags")
+    if not isinstance(flags, dict):
+        raise ValueError(f"Control row {pdb_id!r} flags must be a dict")
 
-    d_phenix = float(numbers["d_phenix"])
-    d_gemmi = float(numbers["d_gemmi"])
-    d_refmac = (
-        float(numbers["d_refmac"]) if numbers.get("d_refmac") is not None else None
+    d_phenix = _require_finite_float(
+        numbers.get("d_phenix"), f"{pdb_id}.numbers.d_phenix"
     )
-    clash_pre = float(numbers["clash_pre"])
-    clash_post = float(numbers["clash_post"])
-    d_zbond = float(numbers["d_zbond"]) if numbers.get("d_zbond") is not None else None
+    d_gemmi = _require_finite_float(
+        numbers.get("d_gemmi"), f"{pdb_id}.numbers.d_gemmi"
+    )
+    d_refmac = (
+        _require_finite_float(
+            numbers.get("d_refmac"), f"{pdb_id}.numbers.d_refmac"
+        )
+        if numbers.get("d_refmac") is not None
+        else None
+    )
+    clash_pre = _require_finite_float(
+        numbers.get("clash_pre"), f"{pdb_id}.numbers.clash_pre"
+    )
+    clash_post = _require_finite_float(
+        numbers.get("clash_post"), f"{pdb_id}.numbers.clash_post"
+    )
+    d_favored_pp = _require_finite_float(
+        numbers.get("d_favored_pp"), f"{pdb_id}.numbers.d_favored_pp"
+    )
+    d_rota_pp = _require_finite_float(
+        numbers.get("d_rota_pp"), f"{pdb_id}.numbers.d_rota_pp"
+    )
+    d_zbond = (
+        _require_finite_float(
+            numbers.get("d_zbond"), f"{pdb_id}.numbers.d_zbond"
+        )
+        if numbers.get("d_zbond") is not None
+        else None
+    )
+    shift_unmasked = _require_finite_float(
+        numbers.get("shift_unmasked"), f"{pdb_id}.numbers.shift_unmasked"
+    )
+    shift_all_residue = _require_finite_float(
+        block.get("shift_all_residue"), f"{pdb_id}.shift_all_residue"
+    )
+    n_protected_fixed = _require_finite_int(
+        numbers.get("n_protected_fixed"), f"{pdb_id}.numbers.n_protected_fixed"
+    )
 
     pre_phenix_r_free = (
-        float(pre["rfree_phenix"]) if pre.get("rfree_phenix") is not None else None
+        _require_finite_float(
+            pre.get("rfree_phenix"), f"{pdb_id}.pre.rfree_phenix"
+        )
+        if pre.get("rfree_phenix") is not None
+        else None
     )
     pre_gemmi_r_free = (
-        float(pre["rfree_gemmi"]) if pre.get("rfree_gemmi") is not None else None
+        _require_finite_float(
+            pre.get("rfree_gemmi"), f"{pdb_id}.pre.rfree_gemmi"
+        )
+        if pre.get("rfree_gemmi") is not None
+        else None
     )
     pre_refmac_block = pre.get("refmac")
     pre_refmac_r_free = (
-        float(pre_refmac_block["r_free"])
+        _require_finite_float(
+            pre_refmac_block.get("r_free"), f"{pdb_id}.pre.refmac.r_free"
+        )
         if isinstance(pre_refmac_block, dict)
         and pre_refmac_block.get("r_free") is not None
         else None
     )
 
     if isinstance(post, dict):
-        post_phenix_r_free = float(post["rfree_phenix"])
-        post_gemmi_r_free = float(post["rfree_gemmi"])
+        post_phenix_r_free = _require_finite_float(
+            post.get("rfree_phenix"), f"{pdb_id}.post.rfree_phenix"
+        )
+        post_gemmi_r_free = _require_finite_float(
+            post.get("rfree_gemmi"), f"{pdb_id}.post.rfree_gemmi"
+        )
         post_refmac_block = post.get("refmac")
         post_refmac_r_free = (
-            float(post_refmac_block["r_free"])
+            _require_finite_float(
+                post_refmac_block.get("r_free"), f"{pdb_id}.post.refmac.r_free"
+            )
             if isinstance(post_refmac_block, dict)
             and post_refmac_block.get("r_free") is not None
             else None
@@ -1574,8 +1919,8 @@ def _extract_control_row_metrics(
         post_refmac_r_free = None
 
     return {
-        "pdb_id": row["pdb_id"],
-        "d_min": float(row["d_min"]),
+        "pdb_id": pdb_id,
+        "d_min": d_min,
         "state": block.get("state", row.get("subject", state_key or "unknown")),
         "d_phenix": d_phenix,
         "d_gemmi": d_gemmi,
@@ -1587,12 +1932,12 @@ def _extract_control_row_metrics(
         "clash_pre": clash_pre,
         "clash_post": clash_post,
         "clash_delta": round(clash_post - clash_pre, 4),
-        "d_favored_pp": float(numbers["d_favored_pp"]),
-        "d_rota_pp": float(numbers["d_rota_pp"]),
+        "d_favored_pp": d_favored_pp,
+        "d_rota_pp": d_rota_pp,
         "d_zbond": d_zbond,
-        "shift_unmasked": float(numbers["shift_unmasked"]),
-        "shift_all_residue": float(block["shift_all_residue"]),
-        "n_protected_fixed": int(numbers["n_protected_fixed"]),
+        "shift_unmasked": shift_unmasked,
+        "shift_all_residue": shift_all_residue,
+        "n_protected_fixed": n_protected_fixed,
         "post_phenix_r_free": post_phenix_r_free,
         "post_gemmi_r_free": post_gemmi_r_free,
         "post_refmac_r_free": post_refmac_r_free,
@@ -1617,8 +1962,21 @@ def _median_and_iqr(
     total_count: int | None = None,
 ) -> dict[str, Any]:
     """Compute availability status, counts, median, mean, min, p25, p75, and max."""
-    effective_total = len(values) if total_count is None else int(total_count)
-    if not values:
+    checked_values = [
+        _require_finite_float(v, f"_median_and_iqr.values[{idx}]")
+        for idx, v in enumerate(values)
+    ]
+    effective_total = (
+        len(checked_values)
+        if total_count is None
+        else _require_finite_int(total_count, "_median_and_iqr.total_count")
+    )
+    if effective_total < len(checked_values):
+        raise ValueError(
+            f"_median_and_iqr total_count={effective_total} is smaller than "
+            f"len(values)={len(checked_values)}"
+        )
+    if not checked_values:
         return {
             "status": "unavailable",
             "count": 0,
@@ -1630,11 +1988,11 @@ def _median_and_iqr(
             "p75": None,
             "max": None,
         }
-    arr = np.array(values, dtype=float)
+    arr = np.array(checked_values, dtype=float)
     return {
         "status": "available",
-        "count": len(values),
-        "unavailable_count": effective_total - len(values),
+        "count": len(checked_values),
+        "unavailable_count": effective_total - len(checked_values),
         "median": round(float(np.median(arr)), 4),
         "mean": round(float(np.mean(arr)), 4),
         "min": round(float(np.min(arr)), 4),
@@ -1983,6 +2341,11 @@ def build_full_assessment_report(
     }
 
 
+def serialize_assessment_report(report: dict[str, Any]) -> str:
+    """Serialize an assessment report to strict JSON, rejecting NaN and Inf."""
+    return json.dumps(report, indent=2, sort_keys=False, allow_nan=False) + "\n"
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entrypoint for generating the before/after refinement assessment JSON."""
     parser = argparse.ArgumentParser(
@@ -2001,7 +2364,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     report = build_full_assessment_report()
-    serialized = json.dumps(report, indent=2, sort_keys=False) + "\n"
+    serialized = serialize_assessment_report(report)
     if args.output_json is not None:
         args.output_json.parent.mkdir(parents=True, exist_ok=True)
         args.output_json.write_text(serialized, encoding="utf-8")

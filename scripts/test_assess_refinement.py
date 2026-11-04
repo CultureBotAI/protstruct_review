@@ -19,12 +19,23 @@ if str(SCRIPTS_DIR) not in sys.path:
 
 from assess_refinement import (  # noqa: E402
     DEFAULT_1SAR_COORD_AUDIT,
+    DEFAULT_1SAR_EVAL,
     DEFAULT_1SAR_QDS,
     DEFAULT_ARCHIVE,
+    DEFAULT_DEPOSITED_PDB,
     EXPECTED_1SAR_ARCHIVE_SHA256,
+    EXPECTED_1SAR_COORD_AUDIT_SHA256,
+    EXPECTED_1SAR_DEPOSITED_PDB_SHA256,
+    EXPECTED_1SAR_EVAL_SHA256,
+    EXPECTED_1SAR_FINAL_SUBJECT_REF,
+    EXPECTED_1SAR_QDS_SHA256,
     REPO_ROOT,
     _extract_control_row_metrics,
     _median_and_iqr,
+    _parse_deposited_r_values,
+    _require_eval_numeric,
+    _require_eval_text,
+    _require_qds_numeric,
     assess_1sar_case_study,
     audit_mtz_retention,
     build_full_assessment_report,
@@ -32,6 +43,7 @@ from assess_refinement import (  # noqa: E402
     deposition_applicability,
     kabsch_rmsd,
     resolve_verdict_status,
+    serialize_assessment_report,
     sha256_file,
     summarize_control_cohort,
     summarize_pdb_inventory,
@@ -279,6 +291,300 @@ class AssessRefinementTests(unittest.TestCase):
             corrupted_qds.write_text(yaml.safe_dump(qds_doc), encoding="utf-8")
             with self.assertRaises(ValueError):
                 assess_1sar_case_study(qds_path=corrupted_qds)
+
+    def test_1sar_fixed_source_digests_and_alternate_path_bundle(self) -> None:
+        """Verify all five 1SAR fixed source digests and support exact source bundle at alternate paths."""
+        self.assertEqual(sha256_file(DEFAULT_ARCHIVE), EXPECTED_1SAR_ARCHIVE_SHA256)
+        self.assertEqual(
+            sha256_file(DEFAULT_DEPOSITED_PDB), EXPECTED_1SAR_DEPOSITED_PDB_SHA256
+        )
+        self.assertEqual(sha256_file(DEFAULT_1SAR_QDS), EXPECTED_1SAR_QDS_SHA256)
+        self.assertEqual(sha256_file(DEFAULT_1SAR_EVAL), EXPECTED_1SAR_EVAL_SHA256)
+        self.assertEqual(
+            sha256_file(DEFAULT_1SAR_COORD_AUDIT), EXPECTED_1SAR_COORD_AUDIT_SHA256
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_root = Path(tmpdir)
+            alt_archive = tmp_root / "alt_artifacts.zip"
+            alt_deposited = tmp_root / "alt_1sar_deposited.pdb"
+            alt_qds = tmp_root / "alt_qds.yaml"
+            alt_eval = tmp_root / "alt_eval.yaml"
+            alt_audit = tmp_root / "alt_coord_audit.json"
+
+            alt_archive.write_bytes(DEFAULT_ARCHIVE.read_bytes())
+            alt_deposited.write_bytes(DEFAULT_DEPOSITED_PDB.read_bytes())
+            alt_qds.write_bytes(DEFAULT_1SAR_QDS.read_bytes())
+            alt_eval.write_bytes(DEFAULT_1SAR_EVAL.read_bytes())
+            alt_audit.write_bytes(DEFAULT_1SAR_COORD_AUDIT.read_bytes())
+
+            alt_case = assess_1sar_case_study(
+                archive_path=alt_archive,
+                deposited_pdb_path=alt_deposited,
+                qds_path=alt_qds,
+                eval_path=alt_eval,
+                coord_audit_path=alt_audit,
+            )
+            default_case = self.saved_report["case_study_1sar"]
+
+            self.assertEqual(alt_case["provenance"]["archive_path"], str(alt_archive))
+            self.assertEqual(
+                alt_case["provenance"]["archive_sha256"], EXPECTED_1SAR_ARCHIVE_SHA256
+            )
+            self.assertEqual(
+                alt_case["provenance"]["deposited_reference_model"]["path"],
+                str(alt_deposited),
+            )
+            self.assertEqual(
+                alt_case["provenance"]["deposited_reference_model"]["sha256"],
+                EXPECTED_1SAR_DEPOSITED_PDB_SHA256,
+            )
+            self.assertEqual(
+                alt_case["provenance"]["retained_records"]["qds_path"], str(alt_qds)
+            )
+            self.assertEqual(
+                alt_case["provenance"]["retained_records"]["eval_path"], str(alt_eval)
+            )
+            self.assertEqual(
+                alt_case["provenance"]["retained_records"][
+                    "coordinate_and_t13_audit_path"
+                ],
+                str(alt_audit),
+            )
+            for section in (
+                "implementation_agreement",
+                "final_model_quality_support",
+                "change_relative_to_input",
+                "missing_conflicting_and_inapplicable_evidence",
+            ):
+                self.assertEqual(alt_case[section], default_case[section])
+
+    def test_1sar_source_admission_rejects_altered_context_origins_deposition_and_nan(
+        self,
+    ) -> None:
+        """Verify assess_1sar_case_study rejects altered metric/tool context, QDS origins, deposition bytes, and NaN."""
+        eval_doc = yaml.safe_load(DEFAULT_1SAR_EVAL.read_text(encoding="utf-8"))
+        qds_doc = yaml.safe_load(DEFAULT_1SAR_QDS.read_text(encoding="utf-8"))
+        audit_doc = json.loads(DEFAULT_1SAR_COORD_AUDIT.read_text(encoding="utf-8"))
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_root = Path(tmpdir)
+
+            # 1. Altered EVAL metric_definition_ref / oracle_tool_ref / subject_ref / NaN
+            for label, field_name, bad_val in (
+                ("wrong_metric", "metric_definition_ref", "T05_clashscore"),
+                ("wrong_tool", "oracle_tool_ref", "ProSMART"),
+                ("wrong_task", "catalog_task_ref", "T05"),
+                ("wrong_stage", "stage", "initial"),
+                ("wrong_subject", "subject_ref", "pdb:9XYZ"),
+            ):
+                bad_eval_doc = json.loads(json.dumps(eval_doc))
+                refmac_row = next(
+                    m
+                    for m in bad_eval_doc["evaluation_runs"][0]["measurements"]
+                    if m["id"] == "EVAL_1sar_cdba2c07_2026-09-23_M_refmac_rfree"
+                )
+                refmac_row[field_name] = bad_val
+                bad_eval_path = tmp_root / f"eval_{label}.yaml"
+                bad_eval_path.write_text(
+                    yaml.safe_dump(bad_eval_doc), encoding="utf-8"
+                )
+                with self.assertRaisesRegex(
+                    ValueError, "EvaluationRun SHA-256 mismatch"
+                ):
+                    assess_1sar_case_study(eval_path=bad_eval_path)
+
+            nan_eval_doc = json.loads(json.dumps(eval_doc))
+            refmac_row = next(
+                m
+                for m in nan_eval_doc["evaluation_runs"][0]["measurements"]
+                if m["id"] == "EVAL_1sar_cdba2c07_2026-09-23_M_refmac_rfree"
+            )
+            refmac_row["oracle_measure"]["value_numeric"] = float("nan")
+            nan_eval_path = tmp_root / "eval_nan.yaml"
+            nan_eval_path.write_text(yaml.safe_dump(nan_eval_doc), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "EvaluationRun SHA-256 mismatch"):
+                assess_1sar_case_study(eval_path=nan_eval_path)
+
+            # 2. Altered QDS measurement_evidence_origins or NaN value
+            stripped_qds_doc = json.loads(json.dumps(qds_doc))
+            for origin in stripped_qds_doc["quality_data_sheets"][0][
+                "measurement_evidence_origins"
+            ]:
+                for k in list(origin):
+                    if k != "source_measurement_ref":
+                        del origin[k]
+            stripped_qds_path = tmp_root / "qds_stripped_origins.yaml"
+            stripped_qds_path.write_text(
+                yaml.safe_dump(stripped_qds_doc), encoding="utf-8"
+            )
+            with self.assertRaisesRegex(ValueError, "QDS SHA-256 mismatch"):
+                assess_1sar_case_study(qds_path=stripped_qds_path)
+
+            # 3. Unrelated or altered deposited PDB bytes
+            other_pdb = tmp_root / "unrelated_9xyz.pdb"
+            other_pdb.write_text(
+                "HEADER    UNRELATED STRUCTURE                     01-JAN-00   9XYZ\n"
+                "REMARK   3   FREE R VALUE                     : 0.001\n"
+                "END\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "Deposited PDB SHA-256 mismatch"):
+                assess_1sar_case_study(deposited_pdb_path=other_pdb)
+
+            # 4. Altered coordinate audit model/dataset fields
+            bad_audit_doc = json.loads(json.dumps(audit_doc))
+            bad_audit_doc["dataset"]["subject_ref"] = "mtz:unrelated"
+            bad_audit_path = tmp_root / "audit_bad_dataset.json"
+            bad_audit_path.write_text(json.dumps(bad_audit_doc), encoding="utf-8")
+            with self.assertRaisesRegex(
+                ValueError, "Coordinate/T13 audit SHA-256 mismatch"
+            ):
+                assess_1sar_case_study(coord_audit_path=bad_audit_path)
+
+    def test_numeric_helpers_semantic_context_and_strict_json_guards(self) -> None:
+        """Verify helper-level semantic context checks, non-finite rejection, and strict JSON emission."""
+        base_row = {
+            "id": "EVAL_1sar_cdba2c07_2026-09-23_M_refmac_rfree",
+            "catalog_task_ref": "T03",
+            "metric_definition_ref": "T03_r-free",
+            "oracle_tool_ref": "REFMAC5",
+            "stage": "final",
+            "subject_ref": EXPECTED_1SAR_FINAL_SUBJECT_REF,
+            "oracle_measure": {"value_numeric": 0.2128},
+        }
+        self.assertAlmostEqual(
+            _require_eval_numeric(
+                {base_row["id"]: base_row},
+                base_row["id"],
+                0.2128,
+                expected_task_ref="T03",
+                expected_metric_ref="T03_r-free",
+                expected_oracle_ref="REFMAC5",
+                expected_stage="final",
+                expected_subject_ref=EXPECTED_1SAR_FINAL_SUBJECT_REF,
+            ),
+            0.2128,
+            places=4,
+        )
+
+        # Reject altered metric, tool, task, stage, or subject_ref in _require_eval_numeric
+        for field_name, wrong_val in (
+            ("metric_definition_ref", "T05_clashscore"),
+            ("oracle_tool_ref", "ProSMART"),
+            ("catalog_task_ref", "T05"),
+            ("stage", "initial"),
+            ("subject_ref", "pdb:9XYZ"),
+        ):
+            mutated = dict(base_row, **{field_name: wrong_val})
+            with self.assertRaises(ValueError):
+                _require_eval_numeric(
+                    {base_row["id"]: mutated},
+                    base_row["id"],
+                    0.2128,
+                    expected_task_ref="T03",
+                    expected_metric_ref="T03_r-free",
+                    expected_oracle_ref="REFMAC5",
+                    expected_stage="final",
+                    expected_subject_ref=EXPECTED_1SAR_FINAL_SUBJECT_REF,
+                )
+
+        # Reject stripped context even without optional expected_* arguments
+        stripped_row = {
+            "id": base_row["id"],
+            "oracle_measure": {"value_numeric": 0.2128},
+        }
+        with self.assertRaises(ValueError):
+            _require_eval_numeric({base_row["id"]: stripped_row}, base_row["id"], 0.2128)
+
+        text_row = {
+            "id": "EVAL_1sar_cdba2c07_2026-09-23_M_t13_tncs_flag",
+            "catalog_task_ref": "T13",
+            "metric_definition_ref": "T13_tncs",
+            "oracle_tool_ref": "ctruncate",
+            "stage": "all",
+            "subject_ref": "mtz:test",
+            "oracle_measure": {"value_text": "false"},
+        }
+        self.assertEqual(
+            _require_eval_text(
+                {text_row["id"]: text_row},
+                text_row["id"],
+                "false",
+                expected_task_ref="T13",
+                expected_oracle_ref="ctruncate",
+            ),
+            "false",
+        )
+        with self.assertRaises(ValueError):
+            _require_eval_text(
+                {text_row["id"]: dict(text_row, oracle_tool_ref="wrong_tool")},
+                text_row["id"],
+                "false",
+                expected_oracle_ref="ctruncate",
+            )
+
+        # Reject non-finite values in _require_eval_numeric, _require_qds_numeric, _median_and_iqr, kabsch_rmsd
+        for bad_num in (float("nan"), float("inf"), float("-inf"), True, None):
+            bad_eval_row = dict(base_row, oracle_measure={"value_numeric": bad_num})
+            with self.assertRaises(ValueError):
+                _require_eval_numeric(
+                    {base_row["id"]: bad_eval_row}, base_row["id"], 0.2128
+                )
+            bad_qds_block = {
+                "r_free": {
+                    "source_measurement_ref": "EVAL_1sar_cdba2c07_2026-09-07_M_006",
+                    "value_numeric": bad_num,
+                }
+            }
+            with self.assertRaises(ValueError):
+                _require_qds_numeric(
+                    bad_qds_block,
+                    "r_free",
+                    "EVAL_1sar_cdba2c07_2026-09-07_M_006",
+                    0.2136,
+                )
+            with self.assertRaises(ValueError):
+                _median_and_iqr([1.0, bad_num])  # type: ignore[list-item]
+
+        with self.assertRaises(ValueError):
+            kabsch_rmsd(
+                np.array([[0.0, 0.0, 0.0], [float("nan"), 1.0, 0.0]]),
+                np.array([[0.0, 0.0, 0.0], [1.0, 1.0, 0.0]]),
+            )
+
+        # Reject unrelated or non-finite deposited PDB header in _parse_deposited_r_values
+        valid_dep = _parse_deposited_r_values(
+            DEFAULT_DEPOSITED_PDB, require_1sar_header=True
+        )
+        self.assertIsNone(valid_dep["deposited_r_work"])
+        self.assertIsNone(valid_dep["deposited_r_free"])
+        with self.assertRaises(ValueError):
+            _parse_deposited_r_values(
+                DEFAULT_DEPOSITED_PDB,
+                pdb_text=(
+                    "HEADER    UNRELATED STRUCTURE                     01-JAN-00   9XYZ\n"
+                    "REMARK   3   FREE R VALUE                     : 0.001\n"
+                ),
+                require_1sar_header=True,
+            )
+        with self.assertRaises(ValueError):
+            _parse_deposited_r_values(
+                DEFAULT_DEPOSITED_PDB,
+                pdb_text=(
+                    "HEADER    HYDROLASE (ENDORIBONUCLEASE)            13-DEC-90   1SAR\n"
+                    "REMARK   3   FREE R VALUE                     : NaN\n"
+                ),
+                require_1sar_header=False,
+            )
+
+        # Verify strict JSON serializer rejects NaN and Inf
+        serialized = serialize_assessment_report(self.saved_report)
+        self.assertTrue(serialized.endswith("\n"))
+        self.assertEqual(json.loads(serialized), self.saved_report)
+        for non_finite in (float("nan"), float("inf"), float("-inf")):
+            with self.assertRaises(ValueError):
+                serialize_assessment_report({"bad_metric": non_finite})
 
     def test_deposition_applicability_null_and_numeric(self) -> None:
         """Verify deposited R-free applicability handling for None, negative, and valid values."""

@@ -33,7 +33,7 @@ for r in d['tool_recommendations']:
 
 | Oracle | Version | Path | Catalog tasks served |
 |---|---|---|---|
-| **gemmi** | 0.7.5 | PATH or `PROTSTRUCT_GEMMI` (locally `/opt/homebrew/bin/gemmi`, brew tap `brewsci/bio`); resolved per call by `toolchain.gemmi_executable()` to an absolute path | T01 (`gemmi align`), T06 (`gemmi sfcalc`), T14 (`gemmi h`), T05 (**`gemmi rmsz`** — there is no `gemmi validate` subcommand) |
+| **gemmi** | 0.7.5 | PATH or `PROTSTRUCT_GEMMI` (locally `/opt/homebrew/bin/gemmi`, brew tap `brewsci/bio`); resolved per call by `toolchain.gemmi_executable()` to an absolute path | T01 (`gemmi align`), T06 (`gemmi sfcalc`), T14 (`gemmi h`), T05 (**`gemmi rmsz`** for coordinate-model geometry; `gemmi validate` is CIF syntax/DDL and `-m` monomer-dictionary validation) |
 | **TM-align** | 20220412 | `$HOME/tools/tmalign/TMalign` | T01 (TM-score, sequence-independent superposition) |
 | **probe** (Richardson lab) | 2.26.021123 | `$HOME/tools/probe-src/probe` | T05 (clash detection — feeds clashscore) |
 | **reduce** (Richardson lab) | 4.16.250520 | `$HOME/tools/reduce-src/build/reduce_src/reduce` | T14 (H-atom placement); T05 (input prep for clashscore) |

@@ -1246,13 +1246,17 @@ def assess_1sar_case_study(
                     ),
                 },
                 "agreement_assessment": (
-                    "On matched 723-reflection free sets, gemmi sfcalc, "
-                    "phenix.model_vs_data, and REFMAC5 place R-free within a "
-                    "0.0020 window (0.2116 to 0.2136), while Servalcat sigmaa "
-                    "reports 0.2209 under a different recorded test-set count "
-                    "(n_free=362) and scaling path. The +0.0058 R-work / +0.0020 "
-                    "R-free offset between gemmi_rfactor.py (bin-rescaled) and "
-                    "phenix.model_vs_data is descriptive and informational."
+                    "Retained gemmi sfcalc (bin-rescaled), phenix.model_vs_data, "
+                    "and REFMAC5 R-free values span 0.2116 to 0.2136 (range "
+                    "0.0020); Servalcat sigmaa reports 0.2209 with recorded "
+                    "n_free=362. The archive audit preserves 723 stored "
+                    "free-reflection entries, but this does not establish "
+                    "matched effective reflection selections/free flags across "
+                    "the historical tool invocations. Historical REFMAC5 raw "
+                    "oracle output is not retained. The +0.0058 R-work / "
+                    "+0.0020 R-free offset between gemmi_rfactor.py "
+                    "(bin-rescaled) and phenix.model_vs_data remains "
+                    "descriptive and informational."
                 ),
             },
             {
@@ -1433,17 +1437,24 @@ def assess_1sar_case_study(
             },
             "dimer_interface_and_fold_conservation_vs_deposited_1sar": {
                 "reference_subject_ref": "pdb:1SAR (data/pdb_mtz/1sar_deposited.pdb)",
+                "interface_context": (
+                    "Deposited 1SAR A/B crystallographic contact; DockQ/CAPRI here "
+                    "do not certify a biological assembly."
+                ),
                 "dockq_identity_mapping_AB_AB": dockq_ab,
                 "dockq_identity_capri_class": dockq_capri,
                 "dockq_swapped_mapping_AB_BA": 0.0063,
                 "chain_A_kabsch_ca_rmsd_vs_deposited_angstrom": 0.191,
                 "chain_B_kabsch_ca_rmsd_vs_deposited_angstrom": 0.180,
                 "active_site_and_ligand_note": (
-                    "Chainwise backbone fold and AB dimer interface match deposited "
-                    "1SAR closely (DockQ = 0.9445, chain CA RMSD 0.191 / 0.180 A), "
-                    "and A:97:SO4 is retained (mean B = 17.588 A^2), whereas "
-                    "B:97:SO4 was removed in packaged round 4 and A:98:CA (B = 42.73 "
-                    "A^2) and B:98:NA (B = 22.85 A^2) were added."
+                    "Chainwise backbone fold and the A/B crystallographic "
+                    "contact match deposited 1SAR closely (DockQ = 0.9445, "
+                    "chain CA RMSD 0.191 / 0.180 A). The identity mapping is "
+                    "supported by independent chainwise fits; these interface "
+                    "scores do not certify a biological assembly. A:97:SO4 is "
+                    "retained (mean B = 17.588 A^2), whereas B:97:SO4 was "
+                    "removed in packaged round 4 and A:98:CA (B = 42.73 A^2) "
+                    "and B:98:NA (B = 22.85 A^2) were added."
                 ),
             },
         },

@@ -1384,9 +1384,10 @@ def assess_1sar_case_study(
                     - int(round(psea_q3_agreement * 192)),
                 },
                 "agreement_assessment": (
-                    "DSSP and P-SEA agree on 169/192 residues (88.02% Q3); the 23 "
-                    "boundary differences arise because DSSP uses backbone H-bond "
-                    "energies whereas P-SEA uses CA-only distance/dihedral criteria."
+                    "DSSP and P-SEA agree on 169/192 residues (88.02% Q3); 23 "
+                    "residues have different H/E/C assignments. DSSP uses "
+                    "backbone H-bond energies, whereas P-SEA uses CA-only "
+                    "distance/dihedral criteria."
                 ),
             },
         ],

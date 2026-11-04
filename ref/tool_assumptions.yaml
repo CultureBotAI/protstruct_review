@@ -772,20 +772,25 @@ assumptions:
     title: ProSMART comparative fragment scores are reference-dependent
     description: >-
       ProSMART computes per-residue local backbone fragment alignment scores
-      (Procrustes RMSD, Flexible, Hinging, and central-atom displacement;
-      Nicholls et al. 2014) for a target chain against an explicit reference
-      structure (-p1/-p2). Choosing a different reference structure or
-      fragment length changes every score; there is no reference-free
-      single-model ProSMART geometry or Ramachandran-Z score.
+      (Procrustes, Flexible, and Hinging, plus side-chain RMSD scores when
+      applicable; Nicholls et al. 2014) relative to a comparison structure,
+      chain set, or secondary-structure motif library (task T02). Choosing a
+      different comparator or fragment length can change the resulting scores;
+      there is no reference-free single-model ProSMART geometry or
+      Ramachandran-Z score.
     consequences: >-
-      A ProSMART Procrustes or hinge score against reference X is not comparable
-      to a score against reference Y, and must never be reported as a
-      single-model Ramachandran-Z score (T05_rama_z_score) or RSRZ.
+      A ProSMART Procrustes or hinge score against comparator X is not
+      comparable to a score against comparator Y, and must never be reported as
+      a single-model Ramachandran-Z score (T05_rama_z_score) or RSRZ. Reports
+      must always quote the comparison structure/chains or motif-library mode
+      and fragment parameters.
     mitigation: >-
-      Pin and report both target and reference structure digests and fragment
-      parameters for every ProSMART comparison (T02). For single-model
-      Ramachandran distribution Z-scores (T05_rama_z_score), use the wwPDB
-      validation pipeline / Tortoize rather than ProSMART.
+      Pin and report the comparison structure/chains or motif-library mode and
+      fragment parameters for every ProSMART comparison (T02), recording
+      -p1/-p2 when comparing two structures or the single--p1 multi-chain or
+      -helix/-lib motif configuration when used. For single-model Ramachandran
+      distribution Z-scores (T05_rama_z_score), use the wwPDB validation
+      pipeline / Tortoize rather than ProSMART.
     status: mitigated
     tool_ref: ProSMART
     evidence_refs:
@@ -799,22 +804,25 @@ assumptions:
     supersedes_assumption_ref: ASSUM_prosmart_no_top8000_default
     kind: implicit
     scope: tool
-    title: ProSMART requires an explicit comparator structure or fragment library
+    title: ProSMART requires an explicit comparison mode or fragment library and does not use Top8000 Ramachandran contours
     description: >-
-      ProSMART is a pairwise comparative structure-analysis tool (Nicholls et al.
-      2014) requiring explicit target and reference coordinate inputs (-p1/-p2)
-      or an explicit secondary-structure fragment library; it does not evaluate
-      single-model Ramachandran contours against MolProbity's Top8000 dataset or
-      emit a Top8000 Ramachandran-Z score.
+      ProSMART is a comparative structure-analysis tool (Nicholls et al. 2014)
+      comparing local backbone fragments across specified chains or structures
+      (for example two-structure -p1/-p2 comparison or single--p1 multi-chain
+      comparison) or against an explicit secondary-structure motif library
+      (-helix/-lib); it does not evaluate single-model Ramachandran contours
+      against MolProbity's Top8000 dataset or emit a Top8000 Ramachandran-Z
+      score.
     consequences: >-
-      Invoking ProSMART without a defined reference comparator (or treating a
-      pairwise target-vs-reference Procrustes run as a reference-free geometry
-      check) conflates pairwise conformational change with intrinsic stereochemical
-      quality.
+      Invoking ProSMART without a defined comparison mode (or treating a
+      comparative fragment Procrustes run as a reference-free geometry check)
+      conflates comparative conformational analysis with intrinsic
+      stereochemical quality.
     mitigation: >-
-      Always specify and record the explicit comparator structure on the command
-      line (-p1/-p2) and file resulting scores under per-residue structural
-      comparison (T02), not T05 geometry validation.
+      Always specify and record the comparison inputs and mode on the command
+      line (such as -p1/-p2, single--p1 multi-chain comparison, or -helix/-lib)
+      and file resulting scores under per-residue structural comparison (T02),
+      not T05 geometry validation.
     status: mitigated
     tool_ref: ProSMART
     evidence_refs:

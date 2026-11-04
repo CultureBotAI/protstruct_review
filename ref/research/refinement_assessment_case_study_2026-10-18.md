@@ -69,13 +69,13 @@ In accordance with `ref/quality_reporting.md`, `scripts/assess_refinement.py` do
 #### `T05` Stereochemical Agreement (`MolProbity` vs `mmtbx` vs `REFMAC5`)
 
 - **All-atom clashscore:** Standalone `MolProbity` (`4.5.2 (historical)`, with fresh `Reduce` hydrogen placement) reports `3.63` (`11` clashes $\ge 0.4\text{ \AA}$), whereas `mmtbx.validation_summary` (`1.21.2-5419 (historical)`) reports `3.13` (`|\Delta| = 0.50` clashscore units).
-- **Covalent bond/angle RMSDs and RMSZ availability (`#932`):** `REFMAC5` (`5.8.0431`, 0 cycles, CCP4 Monomer Library) reports bond RMSD `0.0105 Å` (`RMSZ = 0.884`) and angle RMSD `1.4957°` (`RMSZ = 0.864`), whereas `mmtbx.validation_summary` (cctbx GeoStd) reports only covalent RMSDs (`0.007 Å` and `0.85°`; `|\Delta| = 0.0035 Å` and `0.6457°`) with `mmtbx_bond_rmsz: null` and `mmtbx_angle_rmsz: null`. Because matched second-dictionary RMSZ operands and atom-selection parity are absent in the retained summary (`EVAL_1sar_cdba2c07_2026-09-23.yaml`), cross-dictionary RMSZ agreement and a two-dictionary absolute-quality pass are not asserted.
+- **Covalent bond/angle RMSDs and RMSZ availability (`#932`):** `REFMAC5` (`5.8.0431`, 0 cycles, CCP4 Monomer Library) reports bond RMSD `0.0105 Å` (`RMSZ = 0.884`) and angle RMSD `1.4957°` (`RMSZ = 0.864`), whereas `mmtbx.validation_summary` (cctbx GeoStd) reports only covalent RMSDs (`0.007 Å` and `0.85°`; `|\Delta| = 0.0035 Å` and `0.6457°`) while matched `mmtbx` RMSZ operands are unavailable. Because matched second-dictionary RMSZ operands and atom-selection parity are absent in the retained summary (`EVAL_1sar_cdba2c07_2026-09-23.yaml`), cross-dictionary RMSZ agreement and a two-dictionary absolute-quality pass are not asserted.
 
 #### `T15` Secondary-Structure Assignment Agreement (`mkdssp` vs `biotite`)
 
 - `mkdssp` (`4.6.1`, 8-state reduced to 3-state) assigns `29` H (`15.10%`), `43` E (`22.40%`), and `120` C (`62.50%`) across `192` residues (`37.50%` H+E).
-- `biotite.structure.annotate_sse` (`1.7.1`, P-SEA `Cα` criteria) assigns `28` `a` (`14.58%`), `39` `b` (`20.31%`), and `125` `c` (`65.10%`) (`34.90%` H+E).
-- Residue-by-residue Q3 agreement is `169 / 192` (`88.02%`), with `23` boundary differences at helix/strand termini (`11` in chain A, `12` in chain B).
+- `biotite.structure.annotate_sse` (`1.7.1`, P-SEA `Cα` criteria) assigns `24` `a` (`12.50%`), `49` `b` (`25.52%`), and `119` `c` (`61.98%`) (`38.02%` H+E).
+- Residue-by-residue Q3 agreement is `169 / 192` (`88.02%`), with `23` residues having different H/E/C assignments (`12` in chain A, `11` in chain B).
 
 ---
 

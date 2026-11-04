@@ -6,24 +6,32 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 import zipfile
 
 import numpy as np
+import yaml
 
 SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
 from assess_refinement import (  # noqa: E402
+    DEFAULT_1SAR_COORD_AUDIT,
+    DEFAULT_1SAR_QDS,
     DEFAULT_ARCHIVE,
+    EXPECTED_1SAR_ARCHIVE_SHA256,
     REPO_ROOT,
+    _median_and_iqr,
+    assess_1sar_case_study,
     audit_mtz_retention,
     build_full_assessment_report,
     compare_pdb_pair,
     deposition_applicability,
     kabsch_rmsd,
     resolve_verdict_status,
+    sha256_file,
     summarize_pdb_inventory,
 )
 
@@ -52,19 +60,100 @@ class AssessRefinementTests(unittest.TestCase):
             cls.final_mtz_bytes = zf.read("data/1sar_final.mtz")
 
     def test_resolve_verdict_status_uncalibrated_and_bound(self) -> None:
-        """Verify pass_criterion_bindings policy across empty and bound states."""
-        # Empty bindings unconditionally return 'informational' even if pass/fail requested
+        """Verify pass_criterion_bindings policy rejects unevaluated bindings and unknown statuses."""
+        # Empty bindings unconditionally return 'informational' for valid or None requested_status
         self.assertEqual(resolve_verdict_status([], "pass"), "informational")
         self.assertEqual(resolve_verdict_status([], "fail"), "informational")
+        self.assertEqual(resolve_verdict_status([], "NeedsReview"), "informational")
+        self.assertEqual(resolve_verdict_status([], "informational"), "informational")
+        self.assertEqual(resolve_verdict_status([], None), "informational")
         self.assertEqual(resolve_verdict_status(None, "pass"), "informational")
 
-        # Non-empty bindings honor valid statuses and fall back to informational otherwise
+        # Unknown requested_status raises ValueError
+        with self.assertRaises(ValueError):
+            resolve_verdict_status([], "unknown")
+
+        # Non-empty bindings raise ValueError until criterion evaluation is implemented
         bound = [{"metric": "r_free", "operator": "<=", "threshold": 0.25}]
-        self.assertEqual(resolve_verdict_status(bound, "pass"), "pass")
-        self.assertEqual(resolve_verdict_status(bound, "fail"), "fail")
-        self.assertEqual(resolve_verdict_status(bound, "NeedsReview"), "NeedsReview")
-        self.assertEqual(resolve_verdict_status(bound, None), "informational")
-        self.assertEqual(resolve_verdict_status(bound, "unknown"), "informational")
+        for status in ("pass", "fail", "NeedsReview", "informational", None, "unknown"):
+            with self.assertRaises(ValueError):
+                resolve_verdict_status(bound, status)
+
+    def test_median_and_iqr_empty_and_unavailable_counts(self) -> None:
+        """Verify _median_and_iqr handles empty lists safely and reports counts."""
+        empty_summary = _median_and_iqr([], total_count=22)
+        self.assertEqual(empty_summary["status"], "unavailable")
+        self.assertEqual(empty_summary["count"], 0)
+        self.assertEqual(empty_summary["unavailable_count"], 22)
+        self.assertIsNone(empty_summary["median"])
+        self.assertIsNone(empty_summary["p25"])
+        self.assertIsNone(empty_summary["p75"])
+
+        avail_summary = _median_and_iqr([1.0, 2.0, 3.0], total_count=5)
+        self.assertEqual(avail_summary["status"], "available")
+        self.assertEqual(avail_summary["count"], 3)
+        self.assertEqual(avail_summary["unavailable_count"], 2)
+        self.assertAlmostEqual(avail_summary["median"], 2.0, places=4)
+
+    def test_archive_sha256_verification_and_corruption_rejection(self) -> None:
+        """Verify assess_1sar_case_study computes and checks archive SHA-256."""
+        self.assertEqual(sha256_file(DEFAULT_ARCHIVE), EXPECTED_1SAR_ARCHIVE_SHA256)
+        self.assertEqual(
+            self.saved_report["case_study_1sar"]["provenance"]["archive_sha256"],
+            EXPECTED_1SAR_ARCHIVE_SHA256,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bad_archive = Path(tmpdir) / "corrupted_artifacts.zip"
+            bad_archive.write_bytes(DEFAULT_ARCHIVE.read_bytes() + b"\x00")
+            with self.assertRaises(ValueError):
+                assess_1sar_case_study(archive_path=bad_archive)
+
+            bad_coord_audit = Path(tmpdir) / "bad_coord_audit.json"
+            audit_data = json.loads(
+                DEFAULT_1SAR_COORD_AUDIT.read_text(encoding="utf-8")
+            )
+            audit_data["archive"]["sha256"] = "0" * 64
+            bad_coord_audit.write_text(json.dumps(audit_data), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                assess_1sar_case_study(coord_audit_path=bad_coord_audit)
+
+    def test_qds_and_eval_validation_and_t15_canonical_ids(self) -> None:
+        """Verify assess_1sar_case_study validates QDS and EVAL inputs and uses canonical T15 IDs."""
+        case_1sar = self.saved_report["case_study_1sar"]
+        q1_obs = {
+            row["observable_id"]: row
+            for row in case_1sar["implementation_agreement"]["observables"]
+        }
+        t15_impls = q1_obs["T15_secondary_structure_3state"]["implementations"]
+        self.assertEqual(
+            t15_impls[0]["source_measurement_refs"],
+            ["EVAL_1sar_cdba2c07_2026-09-22_T15_SS_97824701cc681ebe_M_content"],
+        )
+        self.assertEqual(
+            t15_impls[1]["source_measurement_refs"],
+            ["EVAL_1sar_cdba2c07_2026-09-22_T15_SS_97824701cc681ebe_M_agreement"],
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            empty_qds = Path(tmpdir) / "empty_qds.yaml"
+            empty_qds.write_text("quality_data_sheets:\n  - {}\n", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                assess_1sar_case_study(qds_path=empty_qds)
+
+            empty_eval = Path(tmpdir) / "empty_eval.yaml"
+            empty_eval.write_text("evaluation_runs:\n  - {}\n", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                assess_1sar_case_study(eval_path=empty_eval)
+
+            corrupted_qds = Path(tmpdir) / "corrupted_qds.yaml"
+            qds_doc = yaml.safe_load(DEFAULT_1SAR_QDS.read_text(encoding="utf-8"))
+            qds_doc["quality_data_sheets"][0]["geometry_summary"]["clashscore"][
+                "value_numeric"
+            ] = 99.99
+            corrupted_qds.write_text(yaml.safe_dump(qds_doc), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                assess_1sar_case_study(qds_path=corrupted_qds)
 
     def test_deposition_applicability_null_and_numeric(self) -> None:
         """Verify deposited R-free applicability handling for None, negative, and valid values."""
@@ -242,17 +331,18 @@ class AssessRefinementTests(unittest.TestCase):
         # Check all 5 control cohorts have n=22 and all 3 question sections
         cohorts = self.saved_report["control_cohorts_evaluation"]["cohorts"]
         expected_cohorts = {
-            "unchanged_null": (22, 19, 3, 3),
-            "damaged_sa": (22, 19, 3, 18),
-            "damaged_dynamics": (22, 19, 3, 22),
-            "recovered_unprotonated_solvent": (22, 19, 3, 22),
-            "recovered_protonated_ordered_solvent": (22, 21, 1, 9),
+            "unchanged_null": (22, 19, 3, 3, "available"),
+            "damaged_sa": (22, 19, 3, 18, "available"),
+            "damaged_dynamics": (22, 19, 3, 22, "unavailable"),
+            "recovered_unprotonated_solvent": (22, 19, 3, 22, "unavailable"),
+            "recovered_protonated_ordered_solvent": (22, 21, 1, 9, "unavailable"),
         }
         for cohort_id, (
             n_total,
             n_refmac,
             n_two_path,
             n_f_data,
+            post_rfree_status,
         ) in expected_cohorts.items():
             self.assertIn(cohort_id, cohorts)
             c = cohorts[cohort_id]
@@ -267,6 +357,20 @@ class AssessRefinementTests(unittest.TestCase):
                 c["change_relative_to_input"]["diagnostic_flag_counts"]["F-data"],
                 n_f_data,
             )
+            post_phenix = c["final_model_quality_support"]["post_phenix_r_free"]
+            self.assertEqual(post_phenix["status"], post_rfree_status)
+            if post_rfree_status == "unavailable":
+                self.assertEqual(post_phenix["count"], 0)
+                self.assertEqual(post_phenix["unavailable_count"], 22)
+                self.assertIsNone(post_phenix["median"])
+                for row in c["per_target_rows"]:
+                    self.assertIsNone(row["post_phenix_r_free"])
+                    self.assertIsNone(row["post_gemmi_r_free"])
+                    self.assertIsNone(row["post_refmac_r_free"])
+            else:
+                self.assertEqual(post_phenix["count"], 22)
+                self.assertEqual(post_phenix["unavailable_count"], 0)
+                self.assertIsNotNone(post_phenix["median"])
 
         unchanged_conflicts = [
             r["pdb_id"]
@@ -280,6 +384,13 @@ class AssessRefinementTests(unittest.TestCase):
         self.assertIn("2VXN", invariance_note)
         self.assertIn("9TXE", invariance_note)
         self.assertNotIn("8RFF", invariance_note)
+
+        protonation_note = self.saved_report["control_cohorts_evaluation"][
+            "cross_cohort_findings"
+        ]["recovered_control_protonation_contrast"]
+        self.assertIn("multi-factor protocol change", protonation_note)
+        self.assertIn("BREF ANIS", protonation_note)
+        self.assertNotIn("isolates the effect", protonation_note)
 
     def test_case_study_markdown_exists_and_documents_required_findings(self) -> None:
         """Verify case study markdown report exists, cites existing repo paths, and documents 1SAR and the 5 control cohorts."""
@@ -335,4 +446,3 @@ class AssessRefinementTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

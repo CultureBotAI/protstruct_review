@@ -23,7 +23,9 @@ In addition, every assessment record carries:
   scaling offsets are never silently smoothed over.
 - Explicit `pass_criterion_bindings`: whenever `pass_criterion_bindings` is
   empty (`[]`), `assessment_verdict_status` is forced to `"informational"`
-  rather than emitting an uncalibrated pass/fail verdict.
+  rather than emitting an uncalibrated pass/fail verdict; non-empty bindings
+  and unknown `requested_status` values raise `ValueError` until criterion
+  evaluation is implemented.
 """
 
 from __future__ import annotations
@@ -96,6 +98,20 @@ STANDARD_AMINO_ACIDS = frozenset(
 )
 
 
+EXPECTED_1SAR_ARCHIVE_SHA256 = (
+    "9fc5352284b7ffa7763c633a3eb4d3d0db96b8c25a1be9bcea361722d2c53054"
+)
+VALID_VERDICT_STATUSES = frozenset({"pass", "fail", "NeedsReview", "informational"})
+
+
+def _display_path(path: Path) -> str:
+    """Return a repository-relative path string when inside REPO_ROOT, else str(path)."""
+    try:
+        return str(path.relative_to(REPO_ROOT))
+    except ValueError:
+        return str(path)
+
+
 def sha256_bytes(data: bytes) -> str:
     """Return the hex SHA-256 digest of raw bytes."""
     return hashlib.sha256(data).hexdigest()
@@ -134,18 +150,22 @@ def resolve_verdict_status(
 ) -> str:
     """Enforce informational status whenever pass_criterion_bindings is empty.
 
-    Parameters
-    ----------
-    pass_criterion_bindings:
-        List of explicit threshold/criterion bindings. If empty or None, the
-        returned status is unconditionally ``"informational"``.
-    requested_status:
-        Candidate verdict status when bindings are present.
+    Until pass_criterion_bindings evaluation is implemented, non-empty
+    pass_criterion_bindings are rejected with ValueError so caller-supplied
+    requested_status values cannot bypass criterion evaluation. Unknown
+    non-None requested_status strings are also rejected with ValueError.
     """
-    if not pass_criterion_bindings:
-        return "informational"
-    if requested_status in {"pass", "fail", "NeedsReview", "informational"}:
-        return requested_status
+    if requested_status is not None and requested_status not in VALID_VERDICT_STATUSES:
+        raise ValueError(
+            f"Unknown requested_status {requested_status!r}; expected one of "
+            f"{sorted(VALID_VERDICT_STATUSES)} or None"
+        )
+    if pass_criterion_bindings:
+        raise ValueError(
+            "Non-empty pass_criterion_bindings are not yet supported: "
+            "resolve_verdict_status does not evaluate pass criteria and refuses "
+            "to echo caller-supplied requested_status values."
+        )
     return "informational"
 
 
@@ -375,6 +395,124 @@ def _parse_deposited_r_values(pdb_path: Path) -> dict[str, Any]:
     }
 
 
+def _require_eval_numeric(
+    measurements_by_id: dict[str, dict[str, Any]],
+    measurement_id: str,
+    expected: float,
+    *,
+    tol: float = 1e-4,
+) -> float:
+    """Return a validated numeric measurement from an EvaluationRun."""
+    row = measurements_by_id.get(measurement_id)
+    if not isinstance(row, dict):
+        raise ValueError(
+            f"Missing required numeric measurement {measurement_id!r} in evaluation_run"
+        )
+    oracle_measure = row.get("oracle_measure")
+    raw_val = (
+        oracle_measure.get("value_numeric")
+        if isinstance(oracle_measure, dict) and "value_numeric" in oracle_measure
+        else row.get("value_numeric")
+    )
+    if raw_val is None:
+        raise ValueError(
+            f"Missing required numeric measurement {measurement_id!r} in evaluation_run"
+        )
+    val = float(raw_val)
+    if abs(val - expected) > tol:
+        raise ValueError(
+            f"Measurement {measurement_id!r} value_numeric={val} does not match "
+            f"expected {expected} (tol={tol})"
+        )
+    return val
+
+
+def _require_eval_text(
+    measurements_by_id: dict[str, dict[str, Any]],
+    measurement_id: str,
+    expected: str,
+) -> str:
+    """Return a validated text measurement from an EvaluationRun."""
+    row = measurements_by_id.get(measurement_id)
+    if not isinstance(row, dict):
+        raise ValueError(
+            f"Missing required text measurement {measurement_id!r} in evaluation_run"
+        )
+    oracle_measure = row.get("oracle_measure")
+    raw_val = (
+        oracle_measure.get("value_text")
+        if isinstance(oracle_measure, dict) and "value_text" in oracle_measure
+        else row.get("value_text")
+    )
+    if raw_val is None:
+        raise ValueError(
+            f"Missing required text measurement {measurement_id!r} in evaluation_run"
+        )
+    val = str(raw_val)
+    if val != expected:
+        raise ValueError(
+            f"Measurement {measurement_id!r} value_text={val!r} does not match "
+            f"expected {expected!r}"
+        )
+    return val
+
+
+def _require_qds_numeric(
+    summary_block: dict[str, Any],
+    field_name: str,
+    expected_ref: str,
+    expected: float,
+    *,
+    tol: float = 1e-4,
+) -> float:
+    """Return a validated numeric field from a QualityDataSheet summary block."""
+    if not isinstance(summary_block, dict):
+        raise ValueError(f"Missing QDS summary block for {field_name!r}")
+    entry = summary_block.get(field_name)
+    if (
+        not isinstance(entry, dict)
+        or entry.get("source_measurement_ref") != expected_ref
+        or entry.get("value_numeric") is None
+    ):
+        raise ValueError(
+            f"QDS field {field_name!r} missing or does not bind {expected_ref!r}"
+        )
+    val = float(entry["value_numeric"])
+    if abs(val - expected) > tol:
+        raise ValueError(
+            f"QDS field {field_name!r} value_numeric={val} does not match "
+            f"expected {expected} (tol={tol})"
+        )
+    return val
+
+
+def _require_qds_text(
+    summary_block: dict[str, Any],
+    field_name: str,
+    expected_ref: str,
+    expected: str,
+) -> str:
+    """Return a validated text field from a QualityDataSheet summary block."""
+    if not isinstance(summary_block, dict):
+        raise ValueError(f"Missing QDS summary block for {field_name!r}")
+    entry = summary_block.get(field_name)
+    if (
+        not isinstance(entry, dict)
+        or entry.get("source_measurement_ref") != expected_ref
+        or entry.get("value_text") is None
+    ):
+        raise ValueError(
+            f"QDS field {field_name!r} missing or does not bind {expected_ref!r}"
+        )
+    val = str(entry["value_text"])
+    if val != expected:
+        raise ValueError(
+            f"QDS field {field_name!r} value_text={val!r} does not match "
+            f"expected {expected!r}"
+        )
+    return val
+
+
 def assess_1sar_case_study(
     archive_path: Path = DEFAULT_ARCHIVE,
     deposited_pdb_path: Path = DEFAULT_DEPOSITED_PDB,
@@ -386,16 +524,341 @@ def assess_1sar_case_study(
     """Build the structured before/after refinement assessment for 1SAR."""
     bindings = list(pass_criterion_bindings or [])
     qds_doc = yaml.safe_load(qds_path.read_text(encoding="utf-8"))
+    if (
+        not isinstance(qds_doc, dict)
+        or not isinstance(qds_doc.get("quality_data_sheets"), list)
+        or len(qds_doc["quality_data_sheets"]) != 1
+    ):
+        raise ValueError(f"Invalid QDS document in {qds_path}")
     qds = qds_doc["quality_data_sheets"][0]
+    expected_subject_ref = (
+        "artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb"
+    )
+    if (
+        not isinstance(qds, dict)
+        or qds.get("id") != "QDS_1sar_cdba2c07_2026-09-23"
+        or qds.get("structure_ref") != "1sar"
+        or qds.get("subject_ref") != expected_subject_ref
+    ):
+        raise ValueError(
+            "QDS record does not match expected 1SAR id, structure_ref, or subject_ref"
+        )
+
     eval_doc = yaml.safe_load(eval_path.read_text(encoding="utf-8"))
+    if (
+        not isinstance(eval_doc, dict)
+        or not isinstance(eval_doc.get("evaluation_runs"), list)
+        or not eval_doc["evaluation_runs"]
+    ):
+        raise ValueError(f"Invalid EvaluationRun document in {eval_path}")
     eval_run = eval_doc["evaluation_runs"][0]
+    if (
+        not isinstance(eval_run, dict)
+        or eval_run.get("id") != "EVAL_1sar_cdba2c07_2026-09-23"
+        or eval_run.get("structure_ref") != "1sar"
+    ):
+        raise ValueError(
+            "EvaluationRun record does not match expected 1SAR id or structure_ref"
+        )
+
+    verdict_status = resolve_verdict_status(
+        bindings, eval_run.get("overall_verdict_status")
+    )
+
     coord_audit = json.loads(coord_audit_path.read_text(encoding="utf-8"))
+    if not isinstance(coord_audit, dict):
+        raise ValueError(f"Invalid coordinate audit JSON in {coord_audit_path}")
+    recorded_archive_sha256 = (
+        coord_audit.get("archive", {}).get("sha256")
+        if isinstance(coord_audit.get("archive"), dict)
+        else None
+    )
+    actual_archive_sha256 = sha256_file(archive_path)
+    if (
+        recorded_archive_sha256 != EXPECTED_1SAR_ARCHIVE_SHA256
+        or actual_archive_sha256 != recorded_archive_sha256
+    ):
+        raise ValueError(
+            f"Archive SHA-256 mismatch for {archive_path}: actual={actual_archive_sha256!r}, "
+            f"coord_audit={recorded_archive_sha256!r}, expected={EXPECTED_1SAR_ARCHIVE_SHA256!r}"
+        )
 
     with zipfile.ZipFile(archive_path) as zf:
         start_pdb_bytes = zf.read("data/1sar.pdb")
         final_pdb_bytes = zf.read("data/1sar_final.pdb")
         start_mtz_bytes = zf.read("data/1sar.mtz")
         final_mtz_bytes = zf.read("data/1sar_final.mtz")
+
+    final_pdb_sha256 = sha256_bytes(final_pdb_bytes)
+    start_mtz_sha256 = sha256_bytes(start_mtz_bytes)
+    if (
+        not isinstance(coord_audit.get("model"), dict)
+        or coord_audit["model"].get("sha256") != final_pdb_sha256
+        or coord_audit["model"].get("subject_ref") != qds["subject_ref"]
+    ):
+        raise ValueError(
+            "Coordinate audit model SHA-256 or subject_ref does not match archived data/1sar_final.pdb"
+        )
+    if (
+        not isinstance(coord_audit.get("dataset"), dict)
+        or coord_audit["dataset"].get("sha256") != start_mtz_sha256
+    ):
+        raise ValueError(
+            "Coordinate audit dataset SHA-256 does not match archived data/1sar.mtz"
+        )
+
+    eval_measurements = {
+        m["id"]: m
+        for m in eval_run.get("measurements", [])
+        if isinstance(m, dict) and isinstance(m.get("id"), str)
+    }
+    eval_refinements = {
+        r["id"]: r
+        for r in eval_run.get("refinements", [])
+        if isinstance(r, dict) and isinstance(r.get("id"), str)
+    }
+    qds_origins = {
+        o["source_measurement_ref"]: o
+        for o in qds.get("measurement_evidence_origins", [])
+        if isinstance(o, dict) and isinstance(o.get("source_measurement_ref"), str)
+    }
+    for required_origin_ref in (
+        "EVAL_1sar_cdba2c07_2026-09-07_M_001",
+        "EVAL_1sar_cdba2c07_2026-09-07_M_002",
+        "EVAL_1sar_cdba2c07_2026-09-07_M_003",
+        "EVAL_1sar_cdba2c07_2026-09-07_M_005",
+        "EVAL_1sar_cdba2c07_2026-09-07_M_006",
+        "EVAL_1sar_cdba2c07_2026-09-07_M_007",
+        "EVAL_1sar_cdba2c07_2026-09-22_T15_SS_97824701cc681ebe_M_content",
+        "EVAL_1sar_cdba2c07_2026-09-22_T15_SS_97824701cc681ebe_M_agreement",
+    ):
+        if required_origin_ref not in qds_origins:
+            raise ValueError(
+                f"QDS measurement_evidence_origins missing {required_origin_ref!r}"
+            )
+
+    gemmi_rwork = _require_qds_numeric(
+        qds.get("refinement_summary", {}),
+        "r_work",
+        "EVAL_1sar_cdba2c07_2026-09-07_M_005",
+        0.1622,
+    )
+    gemmi_rfree = _require_qds_numeric(
+        qds.get("refinement_summary", {}),
+        "r_free",
+        "EVAL_1sar_cdba2c07_2026-09-07_M_006",
+        0.2136,
+    )
+    gemmi_rgap = _require_qds_numeric(
+        qds.get("refinement_summary", {}),
+        "r_free_gap",
+        "EVAL_1sar_cdba2c07_2026-09-07_M_007",
+        0.0515,
+    )
+
+    round4_hist = eval_refinements.get(
+        "EVAL_1sar_cdba2c07_2026-09-23_R_packaged_round4_historical"
+    )
+    if not isinstance(round4_hist, dict):
+        raise ValueError(
+            "Missing EVAL_1sar_cdba2c07_2026-09-23_R_packaged_round4_historical in evaluation_run"
+        )
+    phenix_final_rwork = float(round4_hist["r_work"]["value_numeric"])
+    phenix_final_rfree = float(round4_hist["r_free"]["value_numeric"])
+    phenix_final_rgap = float(round4_hist["r_free_gap"]["value_numeric"])
+    if (
+        abs(phenix_final_rwork - 0.1564) > 1e-4
+        or abs(phenix_final_rfree - 0.2116) > 1e-4
+        or abs(phenix_final_rgap - 0.0552) > 1e-4
+    ):
+        raise ValueError("Unexpected packaged round-4 historical PHENIX R-values")
+
+    refmac_rwork = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_refmac_rwork", 0.1693
+    )
+    refmac_rfree = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_refmac_rfree", 0.2128
+    )
+    servalcat_rwork = _require_eval_numeric(
+        eval_measurements,
+        "EVAL_1sar_cdba2c07_2026-09-23_M_servalcat_sigmaa_rwork",
+        0.1705,
+    )
+    servalcat_rfree = _require_eval_numeric(
+        eval_measurements,
+        "EVAL_1sar_cdba2c07_2026-09-23_M_servalcat_sigmaa_rfree",
+        0.2209,
+    )
+    servalcat_rgap = _require_eval_numeric(
+        eval_measurements,
+        "EVAL_1sar_cdba2c07_2026-09-23_M_servalcat_sigmaa_gap",
+        0.0504,
+    )
+    clash_molprobity = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_016", 3.63
+    )
+    _require_qds_numeric(
+        qds.get("geometry_summary", {}),
+        "clashscore",
+        "EVAL_1sar_cdba2c07_2026-09-23_M_016",
+        clash_molprobity,
+    )
+    clash_mmtbx_final = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_015", 3.13
+    )
+    clash_mmtbx_start = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_014", 31.66
+    )
+    refmac_bond_rmsd = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_refmac_bond_rmsd", 0.0105
+    )
+    refmac_angle_rmsd = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_refmac_angle_rmsd", 1.4957
+    )
+    refmac_bond_rmsz = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_refmac_bond_rmsz", 0.884
+    )
+    refmac_angle_rmsz = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_refmac_angle_rmsz", 0.864
+    )
+    mmtbx_bond_rmsd = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_026", 0.007
+    )
+    mmtbx_angle_rmsd = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_027", 0.85
+    )
+    dssp_he_fraction = _require_qds_numeric(
+        qds.get("classification_summary", {}),
+        "secondary_structure_content",
+        "EVAL_1sar_cdba2c07_2026-09-22_T15_SS_97824701cc681ebe_M_content",
+        0.375,
+    )
+    psea_q3_agreement = _require_qds_numeric(
+        qds.get("classification_summary", {}),
+        "secondary_structure_agreement",
+        "EVAL_1sar_cdba2c07_2026-09-22_T15_SS_97824701cc681ebe_M_agreement",
+        0.8802,
+    )
+    completeness_pct = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_030", 99.38
+    )
+    wilson_b = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_t13_wilson_b", 14.542
+    )
+    twin_fraction_l = _require_eval_numeric(
+        eval_measurements,
+        "EVAL_1sar_cdba2c07_2026-09-23_M_t13_twin_fraction_l",
+        0.03,
+    )
+    delta_b_aniso_raw = _require_eval_numeric(
+        eval_measurements,
+        "EVAL_1sar_cdba2c07_2026-09-23_M_t13_delta_b_aniso",
+        7.3188,
+        tol=1e-3,
+    )
+    tncs_text = _require_eval_text(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_t13_tncs_flag", "false"
+    )
+    _require_eval_text(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_t13_ice_ring_flags", "3.44Å"
+    )
+    _require_eval_text(
+        eval_measurements,
+        "EVAL_1sar_cdba2c07_2026-09-23_M_t13_aimless_attempt",
+        "failed",
+    )
+    rama_favored_pct = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_022", 98.4
+    )
+    rama_outliers_start = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_019", 9.04
+    )
+    rama_outliers_final = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_020", 0.53
+    )
+    rotamer_outliers_final = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_023", 4.88
+    )
+    c_beta_deviations = int(
+        _require_eval_numeric(
+            eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_024", 0.0
+        )
+    )
+    molprobity_score = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_025", 1.63
+    )
+    holton_start = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_028", 3.32
+    )
+    holton_final = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_029", 1.33
+    )
+    dockq_ab = round(
+        _require_qds_numeric(
+            qds.get("interface_quality_summary", {}),
+            "interface_dockq_score",
+            "EVAL_1sar_cdba2c07_2026-09-21_M_006",
+            0.9445,
+        ),
+        4,
+    )
+    dockq_capri = _require_qds_text(
+        qds.get("interface_quality_summary", {}),
+        "capri_interface_quality_class",
+        "EVAL_1sar_cdba2c07_2026-09-21_M_007",
+        "High",
+    )
+    phenix_start_rwork = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_004", 0.3334
+    )
+    phenix_start_rfree = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_005", 0.3956
+    )
+    phenix_delta_rfree = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_013", -0.1840
+    )
+    lddt_global = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_lddt_global", 0.9725
+    )
+    phenix_superpose_rmsd = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_001", 0.43
+    )
+    tmalign_rmsd = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_002", 0.41
+    )
+    tmalign_tmscore = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_003", 0.987
+    )
+    round0_rwork = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_round0_rwork", 0.3334
+    )
+    round0_rfree = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_round0_rfree", 0.3956
+    )
+    round2_rwork = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_round2_rwork", 0.1686
+    )
+    round2_rfree = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_round2_rfree", 0.2301
+    )
+    round3_rwork = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_round3_rwork", 0.1589
+    )
+    round3_rfree = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_round3_rfree", 0.2164
+    )
+    round5_rwork = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_round5_rwork", 0.1555
+    )
+    round5_rfree = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_round5_rfree", 0.2104
+    )
+    round6_rwork = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_round6_rwork", 0.1539
+    )
+    round6_rfree = _require_eval_numeric(
+        eval_measurements, "EVAL_1sar_cdba2c07_2026-09-23_M_round6_rfree", 0.2068
+    )
 
     start_pdb_text = start_pdb_bytes.decode("utf-8", errors="replace")
     final_pdb_text = final_pdb_bytes.decode("utf-8", errors="replace")
@@ -431,9 +894,9 @@ def assess_1sar_case_study(
                     {
                         "tool": "gemmi sfcalc (gemmi_rfactor.py, bin-rescaled)",
                         "version": "0.7.5",
-                        "r_work": 0.1622,
-                        "r_free": 0.2136,
-                        "r_free_minus_r_work": 0.0515,
+                        "r_work": gemmi_rwork,
+                        "r_free": gemmi_rfree,
+                        "r_free_minus_r_work": gemmi_rgap,
                         "source_measurement_refs": [
                             "EVAL_1sar_cdba2c07_2026-09-07_M_005",
                             "EVAL_1sar_cdba2c07_2026-09-07_M_006",
@@ -444,9 +907,9 @@ def assess_1sar_case_study(
                     {
                         "tool": "phenix.model_vs_data",
                         "version": "1.21.2-5419 (historical)",
-                        "r_work": 0.1564,
-                        "r_free": 0.2116,
-                        "r_free_minus_r_work": 0.0552,
+                        "r_work": phenix_final_rwork,
+                        "r_free": phenix_final_rfree,
+                        "r_free_minus_r_work": phenix_final_rgap,
                         "source_measurement_refs": [
                             "EVAL_1sar_cdba2c07_2026-09-07_M_001",
                             "EVAL_1sar_cdba2c07_2026-09-07_M_002",
@@ -457,9 +920,9 @@ def assess_1sar_case_study(
                     {
                         "tool": "REFMAC5 (NCYC=0 evaluation)",
                         "version": "5.8.0431 (historical)",
-                        "r_work": 0.1693,
-                        "r_free": 0.2128,
-                        "r_free_minus_r_work": 0.0435,
+                        "r_work": refmac_rwork,
+                        "r_free": refmac_rfree,
+                        "r_free_minus_r_work": round(refmac_rfree - refmac_rwork, 4),
                         "source_measurement_refs": [
                             "EVAL_1sar_cdba2c07_2026-09-23_M_refmac_rwork",
                             "EVAL_1sar_cdba2c07_2026-09-23_M_refmac_rfree",
@@ -469,9 +932,9 @@ def assess_1sar_case_study(
                     {
                         "tool": "Servalcat sigmaa",
                         "version": "0.4.131 (historical, recorded n_free=362)",
-                        "r_work": 0.1705,
-                        "r_free": 0.2209,
-                        "r_free_minus_r_work": 0.0504,
+                        "r_work": servalcat_rwork,
+                        "r_free": servalcat_rfree,
+                        "r_free_minus_r_work": servalcat_rgap,
                         "source_measurement_refs": [
                             "EVAL_1sar_cdba2c07_2026-09-23_M_servalcat_sigmaa_rwork",
                             "EVAL_1sar_cdba2c07_2026-09-23_M_servalcat_sigmaa_rfree",
@@ -481,12 +944,20 @@ def assess_1sar_case_study(
                     },
                 ],
                 "spread_summary": {
-                    "r_work_range": [0.1564, 0.1705],
-                    "r_work_max_abs_delta": 0.0141,
-                    "r_free_range": [0.2116, 0.2209],
-                    "r_free_max_abs_delta": 0.0093,
-                    "gemmi_minus_phenix_r_work": 0.0058,
-                    "gemmi_minus_phenix_r_free": 0.0020,
+                    "r_work_range": [phenix_final_rwork, servalcat_rwork],
+                    "r_work_max_abs_delta": round(
+                        servalcat_rwork - phenix_final_rwork, 4
+                    ),
+                    "r_free_range": [phenix_final_rfree, servalcat_rfree],
+                    "r_free_max_abs_delta": round(
+                        servalcat_rfree - phenix_final_rfree, 4
+                    ),
+                    "gemmi_minus_phenix_r_work": round(
+                        gemmi_rwork - phenix_final_rwork, 4
+                    ),
+                    "gemmi_minus_phenix_r_free": round(
+                        gemmi_rfree - phenix_final_rfree, 4
+                    ),
                 },
                 "agreement_assessment": (
                     "On matched 723-reflection free sets, gemmi sfcalc, "
@@ -507,7 +978,7 @@ def assess_1sar_case_study(
                     {
                         "tool": "MolProbity clashscore (standalone reduce/probe)",
                         "version": "4.5.2 (historical)",
-                        "clashscore": 3.63,
+                        "clashscore": clash_molprobity,
                         "source_measurement_refs": [
                             "EVAL_1sar_cdba2c07_2026-09-23_M_016",
                         ],
@@ -516,7 +987,7 @@ def assess_1sar_case_study(
                     {
                         "tool": "mmtbx.validation_summary",
                         "version": "1.21.2-5419 (historical)",
-                        "clashscore": 3.13,
+                        "clashscore": clash_mmtbx_final,
                         "source_measurement_refs": [
                             "EVAL_1sar_cdba2c07_2026-09-23_M_015",
                         ],
@@ -524,8 +995,8 @@ def assess_1sar_case_study(
                     },
                 ],
                 "spread_summary": {
-                    "clashscore_range": [3.13, 3.63],
-                    "abs_delta": 0.50,
+                    "clashscore_range": [clash_mmtbx_final, clash_molprobity],
+                    "abs_delta": round(clash_molprobity - clash_mmtbx_final, 2),
                 },
                 "agreement_assessment": (
                     "Standalone MolProbity (3.63, 11 bad-overlap pairs over 3,027 "
@@ -544,10 +1015,10 @@ def assess_1sar_case_study(
                     {
                         "tool": "REFMAC5",
                         "version": "5.8.0431 (historical)",
-                        "bond_rmsd_angstrom": 0.0105,
-                        "angle_rmsd_deg": 1.4957,
-                        "bond_rmsz": 0.884,
-                        "angle_rmsz": 0.864,
+                        "bond_rmsd_angstrom": refmac_bond_rmsd,
+                        "angle_rmsd_deg": refmac_angle_rmsd,
+                        "bond_rmsz": refmac_bond_rmsz,
+                        "angle_rmsz": refmac_angle_rmsz,
                         "source_measurement_refs": [
                             "EVAL_1sar_cdba2c07_2026-09-23_M_refmac_bond_rmsd",
                             "EVAL_1sar_cdba2c07_2026-09-23_M_refmac_angle_rmsd",
@@ -559,8 +1030,8 @@ def assess_1sar_case_study(
                     {
                         "tool": "mmtbx.validation_summary",
                         "version": "1.21.2-5419 (historical)",
-                        "bond_rmsd_angstrom": 0.007,
-                        "angle_rmsd_deg": 0.85,
+                        "bond_rmsd_angstrom": mmtbx_bond_rmsd,
+                        "angle_rmsd_deg": mmtbx_angle_rmsd,
                         "bond_rmsz": None,
                         "angle_rmsz": None,
                         "source_measurement_refs": [
@@ -571,8 +1042,12 @@ def assess_1sar_case_study(
                     },
                 ],
                 "spread_summary": {
-                    "bond_rmsd_abs_delta_angstrom": 0.0035,
-                    "angle_rmsd_abs_delta_deg": 0.6457,
+                    "bond_rmsd_abs_delta_angstrom": round(
+                        refmac_bond_rmsd - mmtbx_bond_rmsd, 4
+                    ),
+                    "angle_rmsd_abs_delta_deg": round(
+                        refmac_angle_rmsd - mmtbx_angle_rmsd, 4
+                    ),
                 },
                 "agreement_assessment": (
                     "REFMAC5 (0.0105 A / 1.4957 deg) and mmtbx.validation_summary "
@@ -591,29 +1066,32 @@ def assess_1sar_case_study(
                     {
                         "tool": "mkdssp (DSSP H-bond/electrostatic)",
                         "version": "4.6.1",
-                        "he_fraction": 0.375,
-                        "he_residue_count": 72,
+                        "he_fraction": dssp_he_fraction,
+                        "he_residue_count": int(round(dssp_he_fraction * 192)),
                         "total_residues": 192,
                         "source_measurement_refs": [
-                            "EVAL_1sar_cdba2c07_2026-09-22_M_001",
+                            "EVAL_1sar_cdba2c07_2026-09-22_T15_SS_97824701cc681ebe_M_content",
                         ],
                         "evidence_tier": "recomputed_in_retained_eval",
                     },
                     {
                         "tool": "biotite.structure.annotate_sse (P-SEA CA geometry)",
                         "version": "1.7.1",
-                        "q3_agreement_vs_dssp": 0.8802,
-                        "matching_residues_vs_dssp": 169,
+                        "q3_agreement_vs_dssp": psea_q3_agreement,
+                        "matching_residues_vs_dssp": int(
+                            round(psea_q3_agreement * 192)
+                        ),
                         "total_residues": 192,
                         "source_measurement_refs": [
-                            "EVAL_1sar_cdba2c07_2026-09-22_M_002",
+                            "EVAL_1sar_cdba2c07_2026-09-22_T15_SS_97824701cc681ebe_M_agreement",
                         ],
                         "evidence_tier": "recomputed_in_retained_eval",
                     },
                 ],
                 "spread_summary": {
-                    "q3_agreement_fraction": 0.8802,
-                    "discrepant_residue_count": 23,
+                    "q3_agreement_fraction": psea_q3_agreement,
+                    "discrepant_residue_count": 192
+                    - int(round(psea_q3_agreement * 192)),
                 },
                 "agreement_assessment": (
                     "DSSP and P-SEA agree on 169/192 residues (88.02% Q3); the 23 "
@@ -637,40 +1115,40 @@ def assess_1sar_case_study(
         "deposited_reference_resolution_angstrom": 1.80,
         "domains": {
             "experimental_fit_and_data_completeness": {
-                "completeness_percent": 99.38,
-                "wilson_b_angstrom2": 14.542,
-                "twin_fraction_l_test": 0.03,
-                "tncs_detected": False,
-                "anisotropy_delta_b_angstrom2": 7.319,
+                "completeness_percent": completeness_pct,
+                "wilson_b_angstrom2": wilson_b,
+                "twin_fraction_l_test": twin_fraction_l,
+                "tncs_detected": tncs_text.lower() == "true",
+                "anisotropy_delta_b_angstrom2": round(delta_b_aniso_raw, 3),
                 "ice_ring_anomaly": "3.44 A shell (I/sigma Z = 5.21)",
-                "r_work_phenix": 0.1564,
-                "r_free_phenix": 0.2116,
-                "r_free_minus_r_work_phenix": 0.0552,
-                "r_work_gemmi": 0.1622,
-                "r_free_gemmi": 0.2136,
-                "r_free_minus_r_work_gemmi": 0.0515,
+                "r_work_phenix": phenix_final_rwork,
+                "r_free_phenix": phenix_final_rfree,
+                "r_free_minus_r_work_phenix": phenix_final_rgap,
+                "r_work_gemmi": gemmi_rwork,
+                "r_free_gemmi": gemmi_rfree,
+                "r_free_minus_r_work_gemmi": gemmi_rgap,
                 "r_work_pdb_header": 0.1563,
                 "r_free_pdb_header": 0.2114,
             },
             "stereochemistry_and_geometry": {
-                "clashscore_molprobity": 3.63,
-                "clashscore_mmtbx": 3.13,
-                "ramachandran_favored_percent": 98.4,
-                "ramachandran_outliers_percent": 0.53,
+                "clashscore_molprobity": clash_molprobity,
+                "clashscore_mmtbx": clash_mmtbx_final,
+                "ramachandran_favored_percent": rama_favored_pct,
+                "ramachandran_outliers_percent": rama_outliers_final,
                 "ramachandran_outlier_residues": ["1sar:A:39 (Asn A 39)"],
-                "rotamer_outliers_percent": 4.88,
-                "c_beta_deviations": 0,
-                "molprobity_composite_score": 1.63,
-                "mmtbx_bond_rmsd_angstrom": 0.007,
-                "mmtbx_angle_rmsd_deg": 0.85,
-                "refmac_bond_rmsz": 0.884,
-                "refmac_angle_rmsz": 0.864,
-                "holton_geom_energy_ratio_sigma": 1.33,
+                "rotamer_outliers_percent": rotamer_outliers_final,
+                "c_beta_deviations": c_beta_deviations,
+                "molprobity_composite_score": molprobity_score,
+                "mmtbx_bond_rmsd_angstrom": mmtbx_bond_rmsd,
+                "mmtbx_angle_rmsd_deg": mmtbx_angle_rmsd,
+                "refmac_bond_rmsz": refmac_bond_rmsz,
+                "refmac_angle_rmsz": refmac_angle_rmsz,
+                "holton_geom_energy_ratio_sigma": holton_final,
             },
             "dimer_interface_and_fold_conservation_vs_deposited_1sar": {
                 "reference_subject_ref": "pdb:1SAR (data/pdb_mtz/1sar_deposited.pdb)",
-                "dockq_identity_mapping_AB_AB": 0.9445,
-                "dockq_identity_capri_class": "High",
+                "dockq_identity_mapping_AB_AB": dockq_ab,
+                "dockq_identity_capri_class": dockq_capri,
                 "dockq_swapped_mapping_AB_BA": 0.0063,
                 "chain_A_kabsch_ca_rmsd_vs_deposited_angstrom": 0.191,
                 "chain_B_kabsch_ca_rmsd_vs_deposited_angstrom": 0.180,
@@ -728,27 +1206,27 @@ def assess_1sar_case_study(
         },
         "coordinate_and_b_factor_changes": pair_comparison,
         "retained_pairwise_similarity_metrics": {
-            "openstructure_ca_lddt_global": 0.9725,
+            "openstructure_ca_lddt_global": lddt_global,
             "openstructure_ca_lddt_per_residue_mean_chain_A": 0.9714,
             "gemmi_superposed_ca_rmsd_historical_angstrom": 0.423,
-            "phenix_superpose_models_rmsd_historical_angstrom": 0.43,
-            "tmalign_ca_rmsd_96res_historical_angstrom": 0.41,
-            "tmalign_tm_score_historical": 0.987,
+            "phenix_superpose_models_rmsd_historical_angstrom": phenix_superpose_rmsd,
+            "tmalign_ca_rmsd_96res_historical_angstrom": tmalign_rmsd,
+            "tmalign_tm_score_historical": tmalign_tmscore,
         },
         "retained_start_to_packaged_quality_deltas": {
             "phenix_r_work": {
-                "start": 0.3334,
-                "final_packaged": 0.1564,
-                "delta": round(0.1564 - 0.3334, 4),
+                "start": phenix_start_rwork,
+                "final_packaged": phenix_final_rwork,
+                "delta": round(phenix_final_rwork - phenix_start_rwork, 4),
                 "source_refs": [
                     "EVAL_1sar_cdba2c07_2026-09-23_M_004",
                     "EVAL_1sar_cdba2c07_2026-09-07_M_001",
                 ],
             },
             "phenix_r_free": {
-                "start": 0.3956,
-                "final_packaged": 0.2116,
-                "delta": -0.1840,
+                "start": phenix_start_rfree,
+                "final_packaged": phenix_final_rfree,
+                "delta": phenix_delta_rfree,
                 "source_refs": [
                     "EVAL_1sar_cdba2c07_2026-09-23_M_005",
                     "EVAL_1sar_cdba2c07_2026-09-07_M_002",
@@ -756,27 +1234,27 @@ def assess_1sar_case_study(
                 ],
             },
             "mmtbx_clashscore": {
-                "start": 31.66,
-                "final_packaged": 3.13,
-                "delta": round(3.13 - 31.66, 2),
+                "start": clash_mmtbx_start,
+                "final_packaged": clash_mmtbx_final,
+                "delta": round(clash_mmtbx_final - clash_mmtbx_start, 2),
                 "source_refs": [
                     "EVAL_1sar_cdba2c07_2026-09-23_M_014",
                     "EVAL_1sar_cdba2c07_2026-09-23_M_015",
                 ],
             },
             "mmtbx_ramachandran_outliers_percent": {
-                "start": 9.04,
-                "final_packaged": 0.53,
-                "delta": round(0.53 - 9.04, 2),
+                "start": rama_outliers_start,
+                "final_packaged": rama_outliers_final,
+                "delta": round(rama_outliers_final - rama_outliers_start, 2),
                 "source_refs": [
                     "EVAL_1sar_cdba2c07_2026-09-23_M_019",
                     "EVAL_1sar_cdba2c07_2026-09-23_M_020",
                 ],
             },
             "holton_geometry_energy_ratio_sigma": {
-                "start": 3.32,
-                "final_packaged": 1.33,
-                "delta": round(1.33 - 3.32, 2),
+                "start": holton_start,
+                "final_packaged": holton_final,
+                "delta": round(holton_final - holton_start, 2),
                 "source_refs": [
                     "EVAL_1sar_cdba2c07_2026-09-23_M_028",
                     "EVAL_1sar_cdba2c07_2026-09-23_M_029",
@@ -801,50 +1279,54 @@ def assess_1sar_case_study(
             "r_factor_trajectory_across_retained_eval_and_logs": {
                 "round0_starting_model_phenix": {
                     "archive_member": "data/1sar.pdb",
-                    "r_work": 0.3334,
-                    "r_free": 0.3956,
+                    "r_work": round0_rwork,
+                    "r_free": round0_rfree,
                     "source": "EVAL_1sar_cdba2c07_2026-09-23_M_round0_rwork / M_round0_rfree",
                 },
                 "round2_intermediate_phenix": {
                     "archive_member": "data/1sar_round2.pdb",
-                    "r_work": 0.1686,
-                    "r_free": 0.2301,
+                    "r_work": round2_rwork,
+                    "r_free": round2_rfree,
                     "source": "EVAL_1sar_cdba2c07_2026-09-23_M_round2_rwork / M_round2_rfree",
                 },
                 "round3_intermediate_phenix": {
                     "archive_member": "data/1sar_round3.pdb",
-                    "r_work": 0.1589,
-                    "r_free": 0.2164,
+                    "r_work": round3_rwork,
+                    "r_free": round3_rfree,
                     "source": "EVAL_1sar_cdba2c07_2026-09-23_M_round3_rwork / M_round3_rfree",
                 },
                 "round4_packaged_final_phenix": {
                     "archive_member": "data/1sar_final.pdb",
-                    "r_work": 0.1564,
-                    "r_free": 0.2116,
+                    "r_work": phenix_final_rwork,
+                    "r_free": phenix_final_rfree,
                     "pdb_header_r_work": 0.1563,
                     "pdb_header_r_free": 0.2114,
-                    "delta_r_work_vs_round0": round(0.1564 - 0.3334, 4),
-                    "delta_r_free_vs_round0": round(0.2116 - 0.3956, 4),
+                    "delta_r_work_vs_round0": round(
+                        phenix_final_rwork - round0_rwork, 4
+                    ),
+                    "delta_r_free_vs_round0": round(
+                        phenix_final_rfree - round0_rfree, 4
+                    ),
                     "source": "EVAL_1sar_cdba2c07_2026-09-07_M_001 / M_002 (data/1sar_final.pdb)",
                 },
                 "round5_intermediate_phenix": {
                     "archive_member": "data/1sar_round5.pdb",
-                    "r_work": 0.1555,
-                    "r_free": 0.2104,
+                    "r_work": round5_rwork,
+                    "r_free": round5_rfree,
                     "source": "EVAL_1sar_cdba2c07_2026-09-23_M_round5_rwork / M_round5_rfree",
                 },
                 "round6_intermediate_phenix": {
                     "archive_member": "data/1sar_round6.pdb",
-                    "r_work": 0.1539,
-                    "r_free": 0.2068,
+                    "r_work": round6_rwork,
+                    "r_free": round6_rfree,
                     "source": "EVAL_1sar_cdba2c07_2026-09-23_M_round6_rwork / M_round6_rfree",
                 },
                 "round7_log_reported_unarchived": {
                     "archive_member": None,
                     "r_work": 0.1488,
                     "r_free": 0.1989,
-                    "delta_r_work_vs_round4": round(0.1488 - 0.1564, 4),
-                    "delta_r_free_vs_round4": round(0.1989 - 0.2116, 4),
+                    "delta_r_work_vs_round4": round(0.1488 - phenix_final_rwork, 4),
+                    "delta_r_free_vs_round4": round(0.1989 - phenix_final_rfree, 4),
                     "source": "claude_iterations.log:510 (coordinate file absent from archive)",
                 },
             },
@@ -939,12 +1421,10 @@ def assess_1sar_case_study(
     return {
         "case_id": "1sar_cdba2c07_2026-09-23",
         "pass_criterion_bindings": bindings,
-        "assessment_verdict_status": resolve_verdict_status(
-            bindings, eval_run.get("overall_verdict_status")
-        ),
+        "assessment_verdict_status": verdict_status,
         "provenance": {
-            "archive_path": str(archive_path.relative_to(REPO_ROOT)),
-            "archive_sha256": coord_audit["archive"]["sha256"],
+            "archive_path": _display_path(archive_path),
+            "archive_sha256": actual_archive_sha256,
             "starting_model": {
                 "subject_ref": "artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar.pdb",
                 "archive_member": "data/1sar.pdb",
@@ -954,7 +1434,7 @@ def assess_1sar_case_study(
             "packaged_final_model": {
                 "subject_ref": qds["subject_ref"],
                 "archive_member": "data/1sar_final.pdb",
-                "sha256": sha256_bytes(final_pdb_bytes),
+                "sha256": final_pdb_sha256,
                 "packaged_stage_description": (
                     "Round-4 PHENIX refinement output packaged as data/1sar_final.pdb; "
                     "subsequent rounds 5 and 6 exist in the archive as data/1sar_round5.pdb "
@@ -964,22 +1444,20 @@ def assess_1sar_case_study(
             },
             "deposited_reference_model": {
                 "subject_ref": "pdb:1SAR",
-                "path": str(deposited_pdb_path.relative_to(REPO_ROOT)),
+                "path": _display_path(deposited_pdb_path),
                 "sha256": sha256_file(deposited_pdb_path),
                 **deposition_info,
             },
             "reflection_data": {
                 "input_mtz_member": "data/1sar.mtz",
-                "input_mtz_sha256": sha256_bytes(start_mtz_bytes),
+                "input_mtz_sha256": start_mtz_sha256,
                 "output_mtz_member": "data/1sar_final.mtz",
                 "output_mtz_sha256": sha256_bytes(final_mtz_bytes),
             },
             "retained_records": {
-                "qds_path": str(qds_path.relative_to(REPO_ROOT)),
-                "eval_path": str(eval_path.relative_to(REPO_ROOT)),
-                "coordinate_and_t13_audit_path": str(
-                    coord_audit_path.relative_to(REPO_ROOT)
-                ),
+                "qds_path": _display_path(qds_path),
+                "eval_path": _display_path(eval_path),
+                "coordinate_and_t13_audit_path": _display_path(coord_audit_path),
             },
         },
         "implementation_agreement": implementation_agreement,
@@ -991,15 +1469,53 @@ def assess_1sar_case_study(
     }
 
 
+def _has_verified_matching_baseline(
+    row: dict[str, Any],
+    block: dict[str, Any],
+    baseline_input_hashes: dict[str, Any] | None,
+    baseline_convention_matches: bool,
+) -> bool:
+    """Return True only when cross-file baseline provenance is explicitly verified."""
+    if not baseline_convention_matches or not isinstance(baseline_input_hashes, dict):
+        return False
+    target_hashes = block.get("input_hashes") or row.get("input_hashes")
+    if not isinstance(target_hashes, dict):
+        return False
+    for key in ("model", "mtz", "cif"):
+        base_val = baseline_input_hashes.get(key)
+        targ_val = target_hashes.get(key)
+        if not isinstance(base_val, str) or not base_val or base_val != targ_val:
+            return False
+    return True
+
+
 def _extract_control_row_metrics(
     row: dict[str, Any],
     state_key: str | None = None,
     baseline_pre: dict[str, Any] | None = None,
+    *,
+    baseline_input_hashes: dict[str, Any] | None = None,
+    baseline_convention_matches: bool = False,
 ) -> dict[str, Any]:
     """Normalize a single row from round3_bench, round4_recover, or round10_recover."""
     block = row[state_key] if state_key is not None else row
     numbers = block["numbers"]
-    pre = block.get("pre") or baseline_pre or {}
+    direct_pre = block.get("pre")
+    can_use_cross_file_baseline = (
+        direct_pre is None
+        and baseline_pre is not None
+        and _has_verified_matching_baseline(
+            row,
+            block,
+            baseline_input_hashes=baseline_input_hashes,
+            baseline_convention_matches=baseline_convention_matches,
+        )
+    )
+    pre = (
+        direct_pre
+        if isinstance(direct_pre, dict)
+        else (baseline_pre if can_use_cross_file_baseline else {})
+    ) or {}
     post = block.get("post")
     flags = block["flags"]
 
@@ -1036,7 +1552,7 @@ def _extract_control_row_metrics(
             and post_refmac_block.get("r_free") is not None
             else None
         )
-    else:
+    elif isinstance(direct_pre, dict) or can_use_cross_file_baseline:
         post_phenix_r_free = (
             round(pre_phenix_r_free + d_phenix, 4)
             if pre_phenix_r_free is not None
@@ -1052,6 +1568,10 @@ def _extract_control_row_metrics(
             if (pre_refmac_r_free is not None and d_refmac is not None)
             else None
         )
+    else:
+        post_phenix_r_free = None
+        post_gemmi_r_free = None
+        post_refmac_r_free = None
 
     return {
         "pdb_id": row["pdb_id"],
@@ -1092,10 +1612,29 @@ def _extract_control_row_metrics(
     }
 
 
-def _median_and_iqr(values: list[float]) -> dict[str, float]:
-    """Compute median, min, max, p25, and p75 for a numeric list."""
+def _median_and_iqr(
+    values: list[float],
+    total_count: int | None = None,
+) -> dict[str, Any]:
+    """Compute availability status, counts, median, mean, min, p25, p75, and max."""
+    effective_total = len(values) if total_count is None else int(total_count)
+    if not values:
+        return {
+            "status": "unavailable",
+            "count": 0,
+            "unavailable_count": effective_total,
+            "median": None,
+            "mean": None,
+            "min": None,
+            "p25": None,
+            "p75": None,
+            "max": None,
+        }
     arr = np.array(values, dtype=float)
     return {
+        "status": "available",
+        "count": len(values),
+        "unavailable_count": effective_total - len(values),
         "median": round(float(np.median(arr)), 4),
         "mean": round(float(np.mean(arr)), 4),
         "min": round(float(np.min(arr)), 4),
@@ -1165,7 +1704,7 @@ def summarize_control_cohort(
     return {
         "cohort_id": cohort_id,
         "description": description,
-        "source_file": str(source_path.relative_to(REPO_ROOT)),
+        "source_file": _display_path(source_path),
         "source_sha256": sha256_file(source_path),
         "target_count": n_total,
         "refmac_evaluable_target_count": len(d_refmac_vals),
@@ -1173,28 +1712,40 @@ def summarize_control_cohort(
         "pass_criterion_bindings": bindings,
         "assessment_verdict_status": resolve_verdict_status(bindings, None),
         "implementation_agreement": {
-            "phenix_vs_gemmi_delta_r_free_abs_diff": _median_and_iqr(pg_diffs),
-            "phenix_vs_refmac_delta_r_free_abs_diff": _median_and_iqr(pr_diffs),
+            "phenix_vs_gemmi_delta_r_free_abs_diff": _median_and_iqr(
+                pg_diffs, total_count=n_total
+            ),
+            "phenix_vs_refmac_delta_r_free_abs_diff": _median_and_iqr(
+                pr_diffs, total_count=n_total
+            ),
             "targets_with_solver_or_metric_conflicts": n_conflicts,
-            "d_phenix_summary": _median_and_iqr(d_phenix_vals),
-            "d_gemmi_summary": _median_and_iqr(d_gemmi_vals),
-            "d_refmac_summary": _median_and_iqr(d_refmac_vals),
+            "d_phenix_summary": _median_and_iqr(d_phenix_vals, total_count=n_total),
+            "d_gemmi_summary": _median_and_iqr(d_gemmi_vals, total_count=n_total),
+            "d_refmac_summary": _median_and_iqr(d_refmac_vals, total_count=n_total),
         },
         "final_model_quality_support": {
-            "post_phenix_r_free": _median_and_iqr(post_rfree_phenix),
-            "post_gemmi_r_free": _median_and_iqr(post_rfree_gemmi),
-            "post_refmac_r_free": _median_and_iqr(post_rfree_refmac),
-            "post_clashscore": _median_and_iqr(clash_posts),
+            "post_phenix_r_free": _median_and_iqr(
+                post_rfree_phenix, total_count=n_total
+            ),
+            "post_gemmi_r_free": _median_and_iqr(post_rfree_gemmi, total_count=n_total),
+            "post_refmac_r_free": _median_and_iqr(
+                post_rfree_refmac, total_count=n_total
+            ),
+            "post_clashscore": _median_and_iqr(clash_posts, total_count=n_total),
         },
         "change_relative_to_input": {
-            "delta_r_free_phenix": _median_and_iqr(d_phenix_vals),
-            "delta_r_free_gemmi": _median_and_iqr(d_gemmi_vals),
-            "delta_r_free_refmac": _median_and_iqr(d_refmac_vals),
-            "delta_clashscore": _median_and_iqr(clash_deltas),
-            "delta_ramachandran_favored_pp": _median_and_iqr(d_favored_vals),
-            "delta_rotamer_outliers_pp": _median_and_iqr(d_rota_vals),
-            "delta_refmac_zbond": _median_and_iqr(d_zbond_vals),
-            "all_residue_shift_angstrom": _median_and_iqr(shifts),
+            "delta_r_free_phenix": _median_and_iqr(d_phenix_vals, total_count=n_total),
+            "delta_r_free_gemmi": _median_and_iqr(d_gemmi_vals, total_count=n_total),
+            "delta_r_free_refmac": _median_and_iqr(d_refmac_vals, total_count=n_total),
+            "delta_clashscore": _median_and_iqr(clash_deltas, total_count=n_total),
+            "delta_ramachandran_favored_pp": _median_and_iqr(
+                d_favored_vals, total_count=n_total
+            ),
+            "delta_rotamer_outliers_pp": _median_and_iqr(
+                d_rota_vals, total_count=n_total
+            ),
+            "delta_refmac_zbond": _median_and_iqr(d_zbond_vals, total_count=n_total),
+            "all_residue_shift_angstrom": _median_and_iqr(shifts, total_count=n_total),
             "direction_counts": {
                 "phenix_r_free_improved": n_rfree_improved_phenix,
                 "phenix_r_free_unchanged": n_rfree_unchanged_phenix,
@@ -1223,8 +1774,8 @@ def evaluate_control_cohorts(
     round4_data = json.loads(round4_path.read_text(encoding="utf-8"))
     round10_data = json.loads(round10_path.read_text(encoding="utf-8"))
 
-    baseline_pre_by_pdb = {
-        r["pdb_id"]: r["pre"]
+    baseline_rows_by_pdb = {
+        r["pdb_id"]: r
         for r in round3_data["rows"]
         if r.get("subject") == "null" and "pre" in r
     }
@@ -1241,19 +1792,37 @@ def evaluate_control_cohorts(
     ]
     perturbed_rows = [
         _extract_control_row_metrics(
-            r, state_key="perturbed", baseline_pre=baseline_pre_by_pdb.get(r["pdb_id"])
+            r,
+            state_key="perturbed",
+            baseline_pre=baseline_rows_by_pdb.get(r["pdb_id"], {}).get("pre"),
+            baseline_input_hashes=baseline_rows_by_pdb.get(r["pdb_id"], {}).get(
+                "input_hashes"
+            ),
+            baseline_convention_matches=False,
         )
         for r in round4_data["rows"]
     ]
     round4_recovered_rows = [
         _extract_control_row_metrics(
-            r, state_key="recovered", baseline_pre=baseline_pre_by_pdb.get(r["pdb_id"])
+            r,
+            state_key="recovered",
+            baseline_pre=baseline_rows_by_pdb.get(r["pdb_id"], {}).get("pre"),
+            baseline_input_hashes=baseline_rows_by_pdb.get(r["pdb_id"], {}).get(
+                "input_hashes"
+            ),
+            baseline_convention_matches=False,
         )
         for r in round4_data["rows"]
     ]
     round10_recovered_rows = [
         _extract_control_row_metrics(
-            r, state_key="recovered", baseline_pre=baseline_pre_by_pdb.get(r["pdb_id"])
+            r,
+            state_key="recovered",
+            baseline_pre=baseline_rows_by_pdb.get(r["pdb_id"], {}).get("pre"),
+            baseline_input_hashes=baseline_rows_by_pdb.get(r["pdb_id"], {}).get(
+                "input_hashes"
+            ),
+            baseline_convention_matches=False,
         )
         for r in round10_data["rows"]
     ]
@@ -1285,7 +1854,8 @@ def evaluate_control_cohorts(
             description=(
                 "Cartesian-dynamics damaged control (stop_at_diff=0.5 A, state='perturbed', "
                 "n=22; 19 REFMAC-evaluable, 3 two-path-only): controlled coordinate "
-                "perturbation prior to recovery refinement."
+                "perturbation prior to recovery refinement (within-round deltas retained; "
+                "absolute post R-free not recorded in round4_recover.json)."
             ),
             source_path=round4_path,
             normalized_rows=perturbed_rows,
@@ -1294,9 +1864,10 @@ def evaluate_control_cohorts(
             cohort_id="recovered_unprotonated_solvent",
             description=(
                 "Round-4 recovery refinement after Cartesian-dynamics perturbation "
-                "(state='recovered', n=22; 19 REFMAC-evaluable, 3 two-path-only): "
-                "default recovery refinement without ordered_solvent=True + explicit "
-                "riding hydrogens."
+                "(state='recovered', n=22; 19 REFMAC-evaluable under BREF ISOT, 3 two-path-only): "
+                "baseline recovery refinement without ordered_solvent=True and without "
+                "phenix.ready_set explicit riding hydrogens (within-round deltas retained; "
+                "absolute post R-free not recorded in round4_recover.json)."
             ),
             source_path=round4_path,
             normalized_rows=round4_recovered_rows,
@@ -1304,10 +1875,11 @@ def evaluate_control_cohorts(
         "recovered_protonated_ordered_solvent": summarize_control_cohort(
             cohort_id="recovered_protonated_ordered_solvent",
             description=(
-                "Round-10 recovery refinement with phenix.ready_set explicit riding "
-                "hydrogens followed by ordered_solvent=True (state='osol_h', n=22; "
-                "21 REFMAC-evaluable, 1 two-path-only): recovers R-free and reduces "
-                "F-data degradations compared to round 4."
+                "Round-10 multi-factor recovery refinement (state='osol_h', n=22; "
+                "21 REFMAC-evaluable under ANISOU-aware BREF ANIS, 1 two-path-only): "
+                "combines regenerated Cartesian-dynamics perturbations with phenix.ready_set "
+                "explicit riding hydrogens followed by ordered_solvent=True (within-round "
+                "deltas retained; absolute post R-free not recorded in round10_recover.json)."
             ),
             source_path=round10_path,
             normalized_rows=round10_recovered_rows,
@@ -1337,13 +1909,20 @@ def evaluate_control_cohorts(
                 "confirming cross-solver sensitivity to physical model degradation."
             ),
             "recovered_control_protonation_contrast": (
-                "Comparing recovered_unprotonated_solvent (round 4, n=22) with "
-                "recovered_protonated_ordered_solvent (round 10, n=22) isolates the effect "
-                "of phenix.ready_set riding hydrogens + ordered_solvent=True: median "
-                "d_phenix improves from +0.0188 (22/22 F-data flags) in round 4 to "
-                "+0.0063 (9/22 F-data flags; 8/22 improved below deposited R-free) in "
-                "round 10, while median all-residue shift remains small (0.0435 A in "
-                "round 4 vs 0.0422 A in round 10)."
+                "Historical protocol comparison between recovered_unprotonated_solvent "
+                "(round 4, n=22; 19/22 REFMAC-evaluable under BREF ISOT) and "
+                "recovered_protonated_ordered_solvent (round 10, n=22; 21/22 REFMAC-evaluable "
+                "under ANISOU-aware BREF ANIS) reflects a multi-factor protocol change "
+                "rather than a single-variable ablation: between round 4 and round 10, "
+                "Cartesian-dynamics perturbations were regenerated in intermediate rounds, "
+                "refinement added phenix.ready_set explicit riding hydrogens plus a second "
+                "ordered_solvent=True pass (round 6 tested ordered_solvent=True without "
+                "hydrogens and still flagged 18/22 targets on F-data, median d_phenix = +0.0155), "
+                "and REFMAC5 switched from BREF ISOT to ANISOU-aware BREF ANIS (rounds 9-10). "
+                "Across these combined changes, median d_phenix shifts from +0.0188 "
+                "(22/22 F-data flags) in round 4 to +0.0063 (9/22 F-data flags; 8/22 improved "
+                "below pre-perturbation R-free) in round 10, while median all-residue shift "
+                "remains small (0.0435 A in round 4 vs 0.0422 A in round 10)."
             ),
         },
     }
@@ -1354,6 +1933,7 @@ def build_full_assessment_report(
 ) -> dict[str, Any]:
     """Build the complete JSON assessment report for 1SAR and the 5 control cohorts."""
     bindings = list(pass_criterion_bindings or [])
+    resolve_verdict_status(bindings, None)
     return {
         "schema_version": "1.0.0",
         "generated_at": "2026-10-18",
@@ -1391,7 +1971,9 @@ def build_full_assessment_report(
             ],
             "uncalibrated_verdict_policy": (
                 "When pass_criterion_bindings is empty ([]), assessment_verdict_status "
-                "is unconditionally 'informational'."
+                "is unconditionally 'informational'; non-empty pass_criterion_bindings "
+                "and unknown requested_status values raise ValueError until criterion "
+                "evaluation is implemented."
             ),
         },
         "case_study_1sar": assess_1sar_case_study(

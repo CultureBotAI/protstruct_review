@@ -109,7 +109,7 @@ In accordance with `ref/quality_reporting.md`, `scripts/assess_refinement.py` do
 |---|---:|---:|---|
 | Total HKL rows | `7,248` (`20` all-`NaN`) | `7,262` (`45` `NaN` in `F-obs`) | `+14` all-`NaN` HKL rows appended |
 | Non-`NaN` (`F-obs`) reflections | `7,228` | `7,217` | `-11` reflections (`audit_status: "not_preserved"`) |
-| Positive-$F$ work reflections (`R-free-flags == 0`, $F > 0$) | `6,494` | `6,494` | `100%` preserved (`max |\Delta F| = 3.64 \times 10^{-5}`) |
+| Positive-$F$ work reflections (`R-free-flags == 0`, $F > 0$) | `6,494` | `6,494` | `100%` preserved |
 | Zero-$F$ work reflections (`R-free-flags == 0`, $F = 0$) | `11` | `0` (`NaN`) | `11` zero-$F$ work reflections converted to `NaN` by PHENIX |
 | Free-$R$ reflections (`R-free-flags == 1`, $F > 0$) | `723` | `723` | `100%` preserved (`0` free reflections lost or swapped) |
 

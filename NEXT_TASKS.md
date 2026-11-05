@@ -4,19 +4,24 @@ A curated working view of substantive work not yet done. **GitHub Issues are the
 for what is open; this file carries execution detail and context, and names every open item that has
 **no** issue as such, so an empty queue is never mistaken for an empty backlog.
 
-**Last reconciled: 2026-10-18**, against `main` at
-[`922fae2`](https://github.com/CultureBotAI/protstruct_review/commit/922fae212f1dff41a1b4727bbb7cc13dce043a66)
-(PR [#912](https://github.com/CultureBotAI/protstruct_review/pull/912)): **8 open issues, 0 open PRs**,
-with both complete lists checked against independent GitHub API totals (`search/issues` 8 open issues, 0 open PRs).
-The date is local (America/Los_Angeles; 2026-10-18 UTC).
+**Last reconciled: 2026-11-05**, against `main` at
+[`0320d1a2`](https://github.com/CultureBotAI/protstruct_review/commit/0320d1a2b95301076e59056d2ab390a5a844a305)
+(PR [#916](https://github.com/CultureBotAI/protstruct_review/pull/916)): **7 open issues, 0 open PRs**,
+with both complete lists checked against independent GitHub API totals (`search/issues` 7 open issues, 0 open PRs).
+The date is local (America/Los_Angeles; 2026-11-05 UTC).
 Issue bodies and comments, exact merged PRs, current code and retained records were reviewed;
-this was a documentation reconciliation alongside local branch deliverables on `fix-911-prosmart-rama-z`, not a new scientific benchmark campaign or installation inventory.
+this was a documentation reconciliation after PR [#916](https://github.com/CultureBotAI/protstruct_review/pull/916) merged to `main`, not a new scientific benchmark campaign or installation inventory.
 The live ledger and proposed work directions are under [Open](#open). **Check GitHub before execution;
 this file does not mirror it in real time.**
 
-**Previous reconciliation history:** the 2026-10-17 review checked `main` at `d06475e` (PR #905),
+**Previous reconciliation history:** the 2026-10-18 review checked `main` at `922fae2` (PR #912),
+with 8 open issues and 0 open PRs; merging PR [#916](https://github.com/CultureBotAI/protstruct_review/pull/916)
+([`0320d1a2`](https://github.com/CultureBotAI/protstruct_review/commit/0320d1a2b95301076e59056d2ab390a5a844a305))
+subsequently closed #911 and its 32 accepted review-finding issues (#917–#922 and #926–#951;
+#923–#925 were rejected and closed as not planned), leaving the seven scientific issues open (7 total).
+The 2026-10-17 review checked `main` at `d06475e` (PR #905),
 with 13 open issues and 1 open PR (#912); merging PR #912 (`922fae2`) closed #907–#910 and #913,
-leaving #911 and the seven preceding scientific issues open (8 total). The 2026-10-15 review checked
+leaving #911 and the seven preceding scientific issues open at that time (8 total). The 2026-10-15 review checked
 `main` at `8aef21c` (PR #878), with seven open issues and no open PRs; PR #905 delivered that
 reconciliation, the project goals, and the backlog-update skill.
 The 2026-09-26 review checked `main` at `121d088` (PR #754).
@@ -329,30 +334,17 @@ Record new ones there. The operative few, for anyone about to add a tolerance or
 
 ## Open
 
-The live ledger, reconciled **2026-10-18** against `main` at **`922fae2`** (PR #912):
-**8 open issues, 0 open PRs**, verified against independent GitHub API totals (`search/issues`
-8 open issues, 0 open PRs). Every open issue is listed below. GitHub is authoritative for tracker
+The live ledger, reconciled **2026-11-05** against `main` at
+[`0320d1a2`](https://github.com/CultureBotAI/protstruct_review/commit/0320d1a2b95301076e59056d2ab390a5a844a305)
+(PR [#916](https://github.com/CultureBotAI/protstruct_review/pull/916)):
+**7 open issues, 0 open PRs**, verified against independent GitHub API totals (`search/issues`
+7 open issues, 0 open PRs). Every open issue is listed below. GitHub is authoritative for tracker
 state. Items marked **proposed / no issue** are work recommendations, not delivered features or
-scheduled experiments; local branch work is labeled explicitly and does not close an issue until
-merged to `main`. Engineering and policy delivery do not complete a scientific measurement or
+scheduled experiments. Engineering and policy delivery do not complete a scientific measurement or
 authorize grading.
 
 ### Tracked on GitHub
 
-- **Audit the ProSMART Ramachandran-Z recommendation**
-  ([#911](https://github.com/CultureBotAI/protstruct_review/issues/911), P1; implemented on local
-  branch `fix-911-prosmart-rama-z`, pending merge).
-  `REC_T05_rama_z_score_top_performing` and two historical assumptions (`ASSUM_prosmart_reference_dependent`,
-  `ASSUM_prosmart_no_top8000_default`) described a ProSMART `T05_rama_z_score` capability that the
-  primary source (`Nicholls2014`) and retained 1SAR correction (`EVAL_1sar_cdba2c07_2026-09-23_CORR_SCALAR_062` / `063`)
-  do not establish: ProSMART is a reference-dependent Procrustes/hinge structural-comparison and
-  external-restraint tool (`T02`), whereas Ramachandran Z-score validation is performed by Tortoize
-  (`T05_rama_z_score`, `Sobolev2020`). On this branch, append-only dated entries
-  (`REC_T05_rama_z_score_top_performing_2026_10_18_capability_correction`,
-  `ASSUM_prosmart_reference_dependent_2026_10_18`, and `ASSUM_prosmart_no_top8000_default_2026_10_18`,
-  effective `2026-10-18T00:00:00+00:00`) supersede those descriptions while preserving historical
-  rows and frozen `EVAL_*`/`QDS_*` snapshots byte-identically. See the
-  [audit note](ref/research/prosmart_rama_z_correction_2026-10-18.md).
 - **Standalone dictionary benchmark — incomplete and intentionally stopped**
   ([#799](https://github.com/CultureBotAI/protstruct_review/issues/799), P1). PR #811 delivered explicit
   dictionary loading and error retention; later evidence/admission work culminated in PR #875's
@@ -426,6 +418,37 @@ authorize grading.
 
 ### Delivered prerequisites (not open reruns)
 
+- **#911 ProSMART Ramachandran-Z capability correction, X-ray refinement assessment, and T01–T17 tools guide:**
+  PR [#916](https://github.com/CultureBotAI/protstruct_review/pull/916)
+  ([`0320d1a2`](https://github.com/CultureBotAI/protstruct_review/commit/0320d1a2b95301076e59056d2ab390a5a844a305))
+  closed [#911](https://github.com/CultureBotAI/protstruct_review/issues/911) and its 32 accepted
+  review-finding issues ([#917](https://github.com/CultureBotAI/protstruct_review/issues/917)–[#922](https://github.com/CultureBotAI/protstruct_review/issues/922)
+  and [#926](https://github.com/CultureBotAI/protstruct_review/issues/926)–[#951](https://github.com/CultureBotAI/protstruct_review/issues/951);
+  `#923`–`#925` were rejected and closed as not planned).
+  `REC_T05_rama_z_score_top_performing` and two historical assumptions (`ASSUM_prosmart_reference_dependent`,
+  `ASSUM_prosmart_no_top8000_default`) described a ProSMART `T05_rama_z_score` capability that the
+  primary source (`Nicholls2014`) and retained 1SAR correction (`EVAL_1sar_cdba2c07_2026-09-23_CORR_SCALAR_062` / `063`)
+  do not establish: ProSMART is a reference-dependent Procrustes/hinge structural-comparison and
+  external-restraint tool (`T02`), whereas Ramachandran Z-score validation is performed by Tortoize
+  (`T05_rama_z_score`, `Sobolev2020`). Append-only dated entries
+  (`REC_T05_rama_z_score_top_performing_2026_10_18_capability_correction`,
+  `ASSUM_prosmart_reference_dependent_2026_10_18`, and `ASSUM_prosmart_no_top8000_default_2026_10_18`,
+  effective `2026-10-18T00:00:00+00:00`) supersede those descriptions while preserving historical
+  rows and frozen `EVAL_*`/`QDS_*` snapshots byte-identically
+  ([#911](https://github.com/CultureBotAI/protstruct_review/issues/911),
+  [#949](https://github.com/CultureBotAI/protstruct_review/issues/949); see the
+  [audit note](ref/research/prosmart_rama_z_correction_2026-10-18.md) and
+  [cutoff tests](scripts/test_prosmart_capability_recommendations.py)). The same PR delivered the
+  byte-verified X-ray before/after refinement assessment workflow and `1SAR`/control-cohort case study
+  ([`scripts/assess_refinement.py`](scripts/assess_refinement.py),
+  [`ref/research/refinement_assessment_case_study_2026-10-18.md`](ref/research/refinement_assessment_case_study_2026-10-18.md),
+  [#920](https://github.com/CultureBotAI/protstruct_review/issues/920),
+  [#951](https://github.com/CultureBotAI/protstruct_review/issues/951)) and the question-based
+  `T01`–`T17` tools-and-measurements guide
+  ([`ref/tools_and_measurements_guide.md`](ref/tools_and_measurements_guide.md),
+  [#921](https://github.com/CultureBotAI/protstruct_review/issues/921),
+  [#950](https://github.com/CultureBotAI/protstruct_review/issues/950);
+  [review audit trail](ref/research/pr916_review_audit_trail_2026-10-18.md)).
 - **#907–#910 and #913 scientific quality-reporting guide correction:** PR #912 (`922fae2`) corrected
   [`quality_reporting.md`](ref/quality_reporting.md) and directly repeated skill, oracle, schema, and
   generated-model descriptions ([dated audit](ref/research/quality_reporting_review_2026-10-17.md)).
@@ -479,28 +502,42 @@ authorize grading.
 ### Recommended next directions
 
 Use the two [project goals](CLAUDE.md#project-goals) together: assess refinement results and explain
-the landscape of tools and measurements. The scientific-guide correction (PR #912) is now delivered
-on `main` and recorded above. Direction 1 is tracked under #911, while directions 2 and 3 remain
-**proposed / no issue** on GitHub and do not schedule benchmark campaigns; all three are implemented
-on local branch `fix-911-prosmart-rama-z` pending merge to `main`:
+the landscape of tools and measurements. The scientific-guide correction (PR #912, `922fae2`), the
+ProSMART Ramachandran-Z capability correction (#911/#949), the X-ray before/after refinement assessment
+(#920/#951), and the question-based `T01`–`T17` tools guide (#921/#950) are now delivered on `main`
+(PR [#916](https://github.com/CultureBotAI/protstruct_review/pull/916),
+[`0320d1a2`](https://github.com/CultureBotAI/protstruct_review/commit/0320d1a2b95301076e59056d2ab390a5a844a305))
+and recorded above; only the cryo-EM real-space extension under direction 2 remains
+**proposed / no issue** on GitHub and does not schedule benchmark campaigns:
 
-1. **Resolve the ProSMART Ramachandran-Z recommendation audit** (#911, tracked above; implemented on
-   local branch `fix-911-prosmart-rama-z`, pending merge). Verify the exact documented producer and
-   output identity, and supersede unsupported registry descriptions through append-only dated
-   recommendations and assumptions (`REC_T05_rama_z_score_top_performing_2026_10_18_capability_correction`,
+1. **ProSMART Ramachandran-Z recommendation audit** (delivered on `main` in PR
+   [#916](https://github.com/CultureBotAI/protstruct_review/pull/916),
+   [`0320d1a2`](https://github.com/CultureBotAI/protstruct_review/commit/0320d1a2b95301076e59056d2ab390a5a844a305);
+   closed [#911](https://github.com/CultureBotAI/protstruct_review/issues/911) and
+   [#949](https://github.com/CultureBotAI/protstruct_review/issues/949)). Verified the exact
+   documented producer and output identity (`Nicholls2014`, `Sobolev2020`), and superseded unsupported
+   registry descriptions through append-only dated recommendations and assumptions
+   (`REC_T05_rama_z_score_top_performing_2026_10_18_capability_correction`,
    `ASSUM_prosmart_reference_dependent_2026_10_18`, `ASSUM_prosmart_no_top8000_default_2026_10_18`)
-   without mutating historical rows or frozen `EVAL_*`/`QDS_*` snapshots. **Done when:** the dated
-   superseding rows, [oracle-table clarification](ref/oracle_tools.md),
+   without mutating historical rows or frozen `EVAL_*`/`QDS_*` snapshots, alongside the
+   [oracle-table clarification](ref/oracle_tools.md),
    [audit note](ref/research/prosmart_rama_z_correction_2026-10-18.md), and
-   [hermetic cutoff tests](scripts/test_prosmart_capability_recommendations.py) pass the full gate
-   and merge to `main`.
-2. **Deliver a reusable before/after refinement assessment** (**proposed / no issue**; X-ray workflow
-   implemented on local branch `fix-911-prosmart-rama-z`, pending merge). Build on the existing
-   negative-control and agent-evaluation work with the retained `1SAR` missing-artifact case study and
-   the 5 retained 22-structure sub-Å X-ray control cohorts. Preserve exact starting/final model identities,
-   observations/free flags, selections, and tool versions; report paired experimental-fit, geometry,
-   structural-change, and important-site measurements with independent checks. **Local branch
-   delivery:** [`scripts/assess_refinement.py`](scripts/assess_refinement.py),
+   [hermetic cutoff tests](scripts/test_prosmart_capability_recommendations.py).
+2. **Reusable before/after refinement assessment** (X-ray workflow delivered on `main` in PR
+   [#916](https://github.com/CultureBotAI/protstruct_review/pull/916),
+   [`0320d1a2`](https://github.com/CultureBotAI/protstruct_review/commit/0320d1a2b95301076e59056d2ab390a5a844a305),
+   closing [#918](https://github.com/CultureBotAI/protstruct_review/issues/918)–[#920](https://github.com/CultureBotAI/protstruct_review/issues/920),
+   [#922](https://github.com/CultureBotAI/protstruct_review/issues/922),
+   [#932](https://github.com/CultureBotAI/protstruct_review/issues/932)–[#936](https://github.com/CultureBotAI/protstruct_review/issues/936),
+   [#945](https://github.com/CultureBotAI/protstruct_review/issues/945),
+   [#948](https://github.com/CultureBotAI/protstruct_review/issues/948), and
+   [#951](https://github.com/CultureBotAI/protstruct_review/issues/951); cryo-EM extension remains
+   **proposed / no issue**). Built on the existing negative-control and agent-evaluation work with the
+   retained `1SAR` missing-artifact case study and the 5 retained 22-structure sub-Å X-ray control
+   cohorts, preserving exact byte-verified starting/final model and source-bundle identities,
+   observations/free flags, selections, and tool versions, and reporting paired experimental-fit,
+   geometry, structural-change, and important-site measurements with independent checks. **Delivered on
+   `main`:** [`scripts/assess_refinement.py`](scripts/assess_refinement.py),
    [`ref/research/data/refinement_assessment_1sar_and_controls_2026-10-18.json`](ref/research/data/refinement_assessment_1sar_and_controls_2026-10-18.json),
    [`ref/research/refinement_assessment_case_study_2026-10-18.md`](ref/research/refinement_assessment_case_study_2026-10-18.md),
    and [`scripts/test_assess_refinement.py`](scripts/test_assess_refinement.py) separately evaluate
@@ -508,13 +545,19 @@ on local branch `fix-911-prosmart-rama-z` pending merge to `main`:
    packaged vs round-7 missing-artifact boundary) and the 5 22-structure control cohorts (`unchanged_null`,
    `damaged_sa`, `damaged_dynamics`, `recovered_unprotonated_solvent`, and
    `recovered_protonated_ordered_solvent`) while keeping `pass_criterion_bindings: []`
-   informational. **Next step after merge:** extend the reusable assessment harness to cryo-EM
-   real-space refinement (`T04`/`T08`/`T12`).
-3. **Make a question-based tools-and-measurements guide** (**proposed / no issue**; implemented on
-   local branch `fix-911-prosmart-rama-z`, pending merge). Reuse `ref/catalog.yaml`,
-   `ref/tool_recommendations.yaml`, `ref/tool_assumptions.yaml`, and the scoped evidence ledger.
-   Organize experimental fit, geometry, structural change, sites/interfaces, prediction confidence,
-   and classification by the question each answers. **Local branch delivery:**
+   informational. **Remaining proposed future work (no issue):** extend the reusable assessment harness
+   to cryo-EM real-space refinement (`T04`/`T08`/`T12`).
+3. **Question-based tools-and-measurements guide** (delivered on `main` in PR
+   [#916](https://github.com/CultureBotAI/protstruct_review/pull/916),
+   [`0320d1a2`](https://github.com/CultureBotAI/protstruct_review/commit/0320d1a2b95301076e59056d2ab390a5a844a305);
+   closed [#921](https://github.com/CultureBotAI/protstruct_review/issues/921),
+   [#927](https://github.com/CultureBotAI/protstruct_review/issues/927)–[#931](https://github.com/CultureBotAI/protstruct_review/issues/931),
+   [#937](https://github.com/CultureBotAI/protstruct_review/issues/937)–[#944](https://github.com/CultureBotAI/protstruct_review/issues/944),
+   [#946](https://github.com/CultureBotAI/protstruct_review/issues/946)–[#947](https://github.com/CultureBotAI/protstruct_review/issues/947),
+   and [#950](https://github.com/CultureBotAI/protstruct_review/issues/950)). Reuses `ref/catalog.yaml`,
+   `ref/tool_recommendations.yaml`, `ref/tool_assumptions.yaml`, and the scoped evidence ledger,
+   organizing experimental fit, geometry, structural change, sites/interfaces, prediction confidence,
+   and classification by the question each answers. **Delivered on `main`:**
    [`ref/tools_and_measurements_guide.md`](ref/tools_and_measurements_guide.md) (cross-linked from
    [`ref/README.md`](ref/README.md), [`ref/oracle_tools.md`](ref/oracle_tools.md), and
    [`ref/quality_reporting.md`](ref/quality_reporting.md), with hermetic regression suite
@@ -525,7 +568,8 @@ on local branch `fix-911-prosmart-rama-z` pending merge to `main`:
 
 For the tracked benchmark work, prioritize #876's diagnostic **design** and #765's input-population
 design when their measurements are needed. Resolve #872/#873 before scheduling optional #790; retain
-#760 as access-blocked. These dependencies do not prevent the guide and general assessment work.
+#760 as access-blocked. These benchmark dependencies are independent of the delivered X-ray assessment
+and tools guide and of the optional cryo-EM assessment extension.
 Apply the existing [stopping criteria](ref/research/stopping_criteria.md) when choosing another
 benchmark or assurance pass; a further audit is a deliberate scoped investment, not the default task.
 

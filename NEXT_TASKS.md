@@ -532,11 +532,11 @@ and recorded above; only the cryo-EM real-space extension under direction 2 rema
    [#945](https://github.com/CultureBotAI/protstruct_review/issues/945),
    [#948](https://github.com/CultureBotAI/protstruct_review/issues/948), and
    [#951](https://github.com/CultureBotAI/protstruct_review/issues/951); cryo-EM extension remains
-   **proposed / no issue**). Built on the existing negative-control and agent-evaluation work with the
-   retained `1SAR` missing-artifact case study and the 5 retained 22-structure sub-Å X-ray control
-   cohorts, preserving exact byte-verified starting/final model and source-bundle identities,
-   observations/free flags, selections, and tool versions, and reporting paired experimental-fit,
-   geometry, structural-change, and important-site measurements with independent checks. **Delivered on
+   **proposed / no issue**). Assesses the available retained `1SAR` measurements and the 5 retained
+   22-structure sub-Å X-ray control cohorts across experimental-fit, geometry, structural-change, and
+   important-site evidence, verifying `1SAR` retained archive/model/MTZ input bytes and binding the three
+   retained control JSON summary sources by exact byte digest while preserving historical provenance,
+   effective-reflection/free-flag selection, missing-raw-log, and independent-coverage limits. **Delivered on
    `main`:** [`scripts/assess_refinement.py`](scripts/assess_refinement.py),
    [`ref/research/data/refinement_assessment_1sar_and_controls_2026-10-18.json`](ref/research/data/refinement_assessment_1sar_and_controls_2026-10-18.json),
    [`ref/research/refinement_assessment_case_study_2026-10-18.md`](ref/research/refinement_assessment_case_study_2026-10-18.md),

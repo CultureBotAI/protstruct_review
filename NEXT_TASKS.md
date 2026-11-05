@@ -4,22 +4,21 @@ A curated working view of substantive work not yet done. **GitHub Issues are the
 for what is open; this file carries execution detail and context, and names every open item that has
 **no** issue as such, so an empty queue is never mistaken for an empty backlog.
 
-**Last reconciled: 2026-10-17**, against `main` at
-[`d06475e`](https://github.com/CultureBotAI/protstruct_review/commit/d06475eb378f32e948c2eca177a92aad3ca99121)
-(PR #905): **13 open issues, 1 open PR** ([#912](https://github.com/CultureBotAI/protstruct_review/pull/912)),
-with both complete lists checked against API totals after the PR's fresh adversarial review.
-The date is local (America/Los_Angeles; the review snapshot is 2026-10-18 UTC).
+**Last reconciled: 2026-10-18**, against `main` at
+[`922fae2`](https://github.com/CultureBotAI/protstruct_review/commit/922fae212f1dff41a1b4727bbb7cc13dce043a66)
+(PR [#912](https://github.com/CultureBotAI/protstruct_review/pull/912)): **8 open issues, 0 open PRs**,
+with both complete lists checked against independent GitHub API totals (`search/issues` 8 open issues, 0 open PRs).
+The date is local (America/Los_Angeles; 2026-10-18 UTC).
 Issue bodies and comments, exact merged PRs, current code and retained records were reviewed;
-this was a documentation reconciliation, not a scientific rerun or a new installation inventory.
+this was a documentation reconciliation alongside local branch deliverables on `fix-911-prosmart-rama-z`, not a new scientific benchmark campaign or installation inventory.
 The live ledger and proposed work directions are under [Open](#open). **Check GitHub before execution;
 this file does not mirror it in real time.**
 
-**Previous reconciliation history:** the 2026-10-15 review checked `main` at `8aef21c` (PR #878),
-with seven open issues and no open PRs. PR #905 delivered that reconciliation, the project goals,
-and the backlog-update skill. The initial 2026-10-17 prepublication snapshot contained twelve
-issues and no PRs: four additional issues tracked the quality-guide defects and a fifth the
-related ProSMART capability audit. PR #912's fresh review added the residual reporting issue #913.
-The seven preceding scientific issues retain their dispositions.
+**Previous reconciliation history:** the 2026-10-17 review checked `main` at `d06475e` (PR #905),
+with 13 open issues and 1 open PR (#912); merging PR #912 (`922fae2`) closed #907–#910 and #913,
+leaving #911 and the seven preceding scientific issues open (8 total). The 2026-10-15 review checked
+`main` at `8aef21c` (PR #878), with seven open issues and no open PRs; PR #905 delivered that
+reconciliation, the project goals, and the backlog-update skill.
 The 2026-09-26 review checked `main` at `121d088` (PR #754).
 The queue was empty then; that reconciliation filed #760–#767, and its reviews filed #769–#780
 (#769–#773 and #778–#780 fixed in PR #768). Its coverage since 2026-08-29 included the
@@ -330,40 +329,30 @@ Record new ones there. The operative few, for anyone about to add a tolerance or
 
 ## Open
 
-The live ledger, reconciled **2026-10-17** against `main` at **`d06475e`** (PR #905):
-**13 open issues, 1 open PR** (#912), verified against API totals after its fresh adversarial review
-(2026-10-18 UTC / 2026-10-17 local). Every open issue is listed below; the guide corrections are
-unmerged work in PR #912. GitHub is authoritative for tracker state. Items marked
-**proposed / no issue** are work recommendations, not delivered features or scheduled experiments.
-Engineering and policy delivery do not complete a scientific measurement or authorize grading.
+The live ledger, reconciled **2026-10-18** against `main` at **`922fae2`** (PR #912):
+**8 open issues, 0 open PRs**, verified against independent GitHub API totals (`search/issues`
+8 open issues, 0 open PRs). Every open issue is listed below. GitHub is authoritative for tracker
+state. Items marked **proposed / no issue** are work recommendations, not delivered features or
+scheduled experiments; local branch work is labeled explicitly and does not close an issue until
+merged to `main`. Engineering and policy delivery do not complete a scientific measurement or
+authorize grading.
 
 ### Tracked on GitHub
 
-- **Correct the scientific quality-reporting guide** — first recommended task, implemented on
-  `correct-quality-reporting-2026-10-17` in PR #912, pending final checks and merge. The findings are
-  [#907](https://github.com/CultureBotAI/protstruct_review/issues/907) (P1, confidence conversion
-  and interpretation), [#908](https://github.com/CultureBotAI/protstruct_review/issues/908)
-  (P1, unsupported quality/refinement verdicts),
-  [#909](https://github.com/CultureBotAI/protstruct_review/issues/909) (P1, tool independence,
-  literature and 1SAR coverage), and
-  [#910](https://github.com/CultureBotAI/protstruct_review/issues/910) (P2, schema/emitter instructions).
-  The fresh review added [#913](https://github.com/CultureBotAI/protstruct_review/issues/913)
-  (P2, residual summary-routing and T07/T17 ensemble instructions), corrected in the same PR.
-  The correction aligns [`quality_reporting.md`](ref/quality_reporting.md) and directly repeated
-  descriptions with primary sources and the executable contract. It distinguishes measurement
-  agreement, final-model quality, and benefit over the actual starting model; it retains 1SAR's
-  missing evidence and points grading decisions to applicable registry bindings. Next: complete
-  independent review and the required gates, then merge with approval. These documentation issues
-  require no scientific rerun. See the
-  [dated audit](ref/research/quality_reporting_review_2026-10-17.md).
 - **Audit the ProSMART Ramachandran-Z recommendation**
-  ([#911](https://github.com/CultureBotAI/protstruct_review/issues/911), P1; newly tracked).
-  `REC_T05_rama_z_score_top_performing` and two active assumptions describe a ProSMART Rama-Z
-  capability that the cited structural-comparison scores and retained 1SAR correction do not
-  establish. Next: verify the exact producer/output identity and supersede unsupported registry
-  descriptions through dated, append-only recommendations/assumptions. Preserve frozen snapshots.
-  The guide correction limits its claims to supported observations; this registry audit remains
-  separate work and must precede reliance on the disputed Rama-Z recommendation.
+  ([#911](https://github.com/CultureBotAI/protstruct_review/issues/911), P1; implemented on local
+  branch `fix-911-prosmart-rama-z`, pending merge).
+  `REC_T05_rama_z_score_top_performing` and two historical assumptions (`ASSUM_prosmart_reference_dependent`,
+  `ASSUM_prosmart_no_top8000_default`) described a ProSMART `T05_rama_z_score` capability that the
+  primary source (`Nicholls2014`) and retained 1SAR correction (`EVAL_1sar_cdba2c07_2026-09-23_CORR_SCALAR_062` / `063`)
+  do not establish: ProSMART is a reference-dependent Procrustes/hinge structural-comparison and
+  external-restraint tool (`T02`), whereas Ramachandran Z-score validation is performed by Tortoize
+  (`T05_rama_z_score`, `Sobolev2020`). On this branch, append-only dated entries
+  (`REC_T05_rama_z_score_top_performing_2026_10_18_capability_correction`,
+  `ASSUM_prosmart_reference_dependent_2026_10_18`, and `ASSUM_prosmart_no_top8000_default_2026_10_18`,
+  effective `2026-10-18T00:00:00+00:00`) supersede those descriptions while preserving historical
+  rows and frozen `EVAL_*`/`QDS_*` snapshots byte-identically. See the
+  [audit note](ref/research/prosmart_rama_z_correction_2026-10-18.md).
 - **Standalone dictionary benchmark — incomplete and intentionally stopped**
   ([#799](https://github.com/CultureBotAI/protstruct_review/issues/799), P1). PR #811 delivered explicit
   dictionary loading and error retention; later evidence/admission work culminated in PR #875's
@@ -437,6 +426,15 @@ Engineering and policy delivery do not complete a scientific measurement or auth
 
 ### Delivered prerequisites (not open reruns)
 
+- **#907–#910 and #913 scientific quality-reporting guide correction:** PR #912 (`922fae2`) corrected
+  [`quality_reporting.md`](ref/quality_reporting.md) and directly repeated skill, oracle, schema, and
+  generated-model descriptions ([dated audit](ref/research/quality_reporting_review_2026-10-17.md)).
+  It distinguishes measurement agreement, final-model quality, and benefit over the actual starting
+  model; corrects the pLDDT conversion (#907), unsupported universal verdicts (#908), tool-independence
+  claims and retained 1SAR coverage (#909), schema/emitter instructions (#910), and residual
+  summary-routing / T07 vs T17 ensemble instructions (#913). These documentation and contract-alignment
+  fixes required no scientific rerun and left runtime behavior, adopted thresholds, and frozen
+  `EVAL_*`/`QDS_*` snapshots unchanged.
 - **Project goals and backlog updates:** PR #905 (`d06475e`) delivered the two goals in
   `CLAUDE.md`, `.claude/skills/reconcile-next-tasks/SKILL.md`, and the preceding complete issue
   reconciliation. Use that existing skill to update this file; no duplicate update skill is needed.
@@ -481,34 +479,49 @@ Engineering and policy delivery do not complete a scientific measurement or auth
 ### Recommended next directions
 
 Use the two [project goals](CLAUDE.md#project-goals) together: assess refinement results and explain
-the landscape of tools and measurements. Direction 1 is now tracked and under correction;
-directions 2 and 3 remain **proposed / no issue** and do not schedule experiments.
+the landscape of tools and measurements. The scientific-guide correction (PR #912) is now delivered
+on `main` and recorded above. Direction 1 is tracked under #911, while directions 2 and 3 remain
+**proposed / no issue** on GitHub and do not schedule benchmark campaigns; all three are implemented
+on local branch `fix-911-prosmart-rama-z` pending merge to `main`:
 
-1. **Finish the scientific-guide correction** (#907–#910 and #913, PR #912, tracked above). The revision covers
-   confidence, contextual metric interpretation, tool capabilities and independence, retained 1SAR
-   limits, and actual reporting support. **Done when:** the reviewed correction is merged and the
-   guide and directly repeated descriptions agree with canonical sources without competing grading
-   thresholds. Keep the separately filed ProSMART recommendation audit (#911) visible and resolve it
-   before using that capability. This prepares the next deliverable; it does not itself implement a
-   reusable assessment.
-2. **Deliver a reusable before/after refinement assessment.** Build on the existing negative-control
-   and agent-evaluation work with one fully retained X-ray case. Preserve exact starting/final model
-   identities, observations/free flags, selections, and tool versions; report paired experimental-fit,
-   geometry, structural-change, and important-site measurements with independent checks. **Done when:**
-   a reproducible human-readable comparison and EvaluationRun/QDS records separately explain
-   measurement agreement, final-model quality, and benefit over the actual input, including missing,
-   conflicting, and inapplicable evidence. Exercise unchanged, damaged, and recovered controls under
-   an appropriate reviewed protocol. New verdicts require applicable registry bindings; unsupported
-   comparisons remain informational. Use 1SAR as a missing-artifact case, not proof of an adjudicated
-   final round whose coordinates are absent. Extend to cryo-EM after the first workflow is usable.
-3. **Make a question-based tools-and-measurements guide.** Reuse `ref/catalog.yaml`,
+1. **Resolve the ProSMART Ramachandran-Z recommendation audit** (#911, tracked above; implemented on
+   local branch `fix-911-prosmart-rama-z`, pending merge). Verify the exact documented producer and
+   output identity, and supersede unsupported registry descriptions through append-only dated
+   recommendations and assumptions (`REC_T05_rama_z_score_top_performing_2026_10_18_capability_correction`,
+   `ASSUM_prosmart_reference_dependent_2026_10_18`, `ASSUM_prosmart_no_top8000_default_2026_10_18`)
+   without mutating historical rows or frozen `EVAL_*`/`QDS_*` snapshots. **Done when:** the dated
+   superseding rows, [oracle-table clarification](ref/oracle_tools.md),
+   [audit note](ref/research/prosmart_rama_z_correction_2026-10-18.md), and
+   [hermetic cutoff tests](scripts/test_prosmart_capability_recommendations.py) pass the full gate
+   and merge to `main`.
+2. **Deliver a reusable before/after refinement assessment** (**proposed / no issue**; X-ray workflow
+   implemented on local branch `fix-911-prosmart-rama-z`, pending merge). Build on the existing
+   negative-control and agent-evaluation work with the retained `1SAR` missing-artifact case study and
+   the 5 retained 22-structure sub-Å X-ray control cohorts. Preserve exact starting/final model identities,
+   observations/free flags, selections, and tool versions; report paired experimental-fit, geometry,
+   structural-change, and important-site measurements with independent checks. **Local branch
+   delivery:** [`scripts/assess_refinement.py`](scripts/assess_refinement.py),
+   [`ref/research/data/refinement_assessment_1sar_and_controls_2026-10-18.json`](ref/research/data/refinement_assessment_1sar_and_controls_2026-10-18.json),
+   [`ref/research/refinement_assessment_case_study_2026-10-18.md`](ref/research/refinement_assessment_case_study_2026-10-18.md),
+   and [`scripts/test_assess_refinement.py`](scripts/test_assess_refinement.py) separately evaluate
+   measurement agreement, final-model quality, and benefit over the actual input across `1SAR` (round-4
+   packaged vs round-7 missing-artifact boundary) and the 5 22-structure control cohorts (`unchanged_null`,
+   `damaged_sa`, `damaged_dynamics`, `recovered_unprotonated_solvent`, and
+   `recovered_protonated_ordered_solvent`) while keeping `pass_criterion_bindings: []`
+   informational. **Next step after merge:** extend the reusable assessment harness to cryo-EM
+   real-space refinement (`T04`/`T08`/`T12`).
+3. **Make a question-based tools-and-measurements guide** (**proposed / no issue**; implemented on
+   local branch `fix-911-prosmart-rama-z`, pending merge). Reuse `ref/catalog.yaml`,
    `ref/tool_recommendations.yaml`, `ref/tool_assumptions.yaml`, and the scoped evidence ledger.
    Organize experimental fit, geometry, structural change, sites/interfaces, prediction confidence,
-   and classification by the question each answers. **Done when:** users can determine required inputs,
-   modality, scope, reference dependence, implementation dependencies, available integrations, and
-   grading eligibility for a proposed assessment. Distinguish documented capability, runnable
-   integration, retained independent evidence, and calibrated interpretation; shared code or separate
-   executable names alone do not establish independence.
+   and classification by the question each answers. **Local branch delivery:**
+   [`ref/tools_and_measurements_guide.md`](ref/tools_and_measurements_guide.md) (cross-linked from
+   [`ref/README.md`](ref/README.md), [`ref/oracle_tools.md`](ref/oracle_tools.md), and
+   [`ref/quality_reporting.md`](ref/quality_reporting.md), with hermetic regression suite
+   [`scripts/test_tools_and_measurements_guide.py`](scripts/test_tools_and_measurements_guide.py))
+   covers all 17 catalog tasks (`T01`–`T17`) across the six scientific question categories and four
+   epistemic layers (documented capability, runnable local integration, retained independent evidence,
+   and calibrated interpretation vs informational reporting).
 
 For the tracked benchmark work, prioritize #876's diagnostic **design** and #765's input-population
 design when their measurements are needed. Resolve #872/#873 before scheduling optional #790; retain

@@ -2,7 +2,7 @@
 
 <!-- catalog-state: tasks=T01–T17; count=17; drivers=17 -->
 
-The protstruct_review trust model requires that PHENIX outputs be cross-checked by **at least one non-cctbx tool** per task (see `tasks_and_evaluations.md` philosophy section). This page records which oracles are installed locally on this machine and how to invoke them. The **canonical per-metric recommendations** live in `ref/tool_recommendations.yaml` (LinkML-validated, schema-class `ToolRecommendation`).
+The protstruct_review trust model requires that PHENIX outputs be cross-checked by **at least one non-cctbx tool** per task (see `tasks_and_evaluations.md` philosophy section). This page records which oracles are installed locally on this machine and how to invoke them. The **canonical per-metric recommendations** live in `ref/tool_recommendations.yaml` (LinkML-validated, schema-class `ToolRecommendation`), and a question-organized synthesis across all 17 tasks (`T01`–`T17`) lives in [`ref/tools_and_measurements_guide.md`](tools_and_measurements_guide.md).
 
 ## Recommendations vocabulary
 
@@ -33,13 +33,13 @@ for r in d['tool_recommendations']:
 
 | Oracle | Version | Path | Catalog tasks served |
 |---|---|---|---|
-| **gemmi** | 0.7.5 | PATH or `PROTSTRUCT_GEMMI` (locally `/opt/homebrew/bin/gemmi`, brew tap `brewsci/bio`); resolved per call by `toolchain.gemmi_executable()` to an absolute path | T01 (`gemmi align`), T06 (`gemmi sfcalc`), T14 (`gemmi h`), T05 (**`gemmi rmsz`** — there is no `gemmi validate` subcommand) |
+| **gemmi** | 0.7.5 | PATH or `PROTSTRUCT_GEMMI` (locally `/opt/homebrew/bin/gemmi`, brew tap `brewsci/bio`); resolved per call by `toolchain.gemmi_executable()` to an absolute path | T01 (`gemmi align`), T06 (`gemmi sfcalc`), T14 (`gemmi h`), T05 (**`gemmi rmsz`** for coordinate-model geometry; `gemmi validate` is CIF syntax/DDL and `-m` monomer-dictionary validation) |
 | **TM-align** | 20220412 | `$HOME/tools/tmalign/TMalign` | T01 (TM-score, sequence-independent superposition) |
 | **probe** (Richardson lab) | 2.26.021123 | `$HOME/tools/probe-src/probe` | T05 (clash detection — feeds clashscore) |
 | **reduce** (Richardson lab) | 4.16.250520 | `$HOME/tools/reduce-src/build/reduce_src/reduce` | T14 (H-atom placement); T05 (input prep for clashscore) |
 | **Servalcat** | 0.4.131 | conda env `cryst-oracles` (`mamba activate cryst-oracles`) | T03 (`servalcat refine_xtal_norefmac`), T06 (`servalcat fsc`, `fofc`, `sigmaa`), T12 |
 | **OpenStructure (OST)** | 2.11.1 | conda env `cryst-oracles` (CLI `lddt`, Python `import ost`) | T01 (`lddt` — global + per-residue local distance comparison), T02 (per-residue Cα distance + structural comparison), T05 (Ramachandran φ/ψ extraction; outlier classification needs external Top8000 contour data), T07 (per-residue lDDT for predicted-vs-experimental) |
-| **CCP4 suite** (REFMAC5, ProSMART, aimless, ctruncate, pointless) | 9.0.015 | `/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/` (source `bin/ccp4.setup-sh` first) | T02/T05 (ProSMART — Procrustes per-residue comparison; not a Ramachandran outlier classifier), T03 (REFMAC5 — independent refiner / R-factors), T13 (ctruncate — Wilson B / twinning / anisotropy / tNCS / ice rings on merged data; aimless — canonical when unmerged intensities are available; pointless — space-group sanity) |
+| **CCP4 suite** (REFMAC5, ProSMART, aimless, ctruncate, pointless) | 9.0.015 | `/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/` (source `bin/ccp4.setup-sh` first) | T02 (ProSMART — reference-dependent Procrustes/hinge per-residue comparison via `-p1`/`-p2`; not a Ramachandran outlier classifier or `T05_rama_z_score` producer; `T05` retained on `ref/catalog.yaml::tools` only for historical 2026-04-24 1SAR record resolution), T03 (REFMAC5 — independent refiner / R-factors), T13 (ctruncate — Wilson B / twinning / anisotropy / tNCS / ice rings on merged data; aimless — canonical when unmerged intensities are available; pointless — space-group sanity) |
 | **DSSP** (`mkdssp`) | 4.6.1 | `/opt/homebrew/bin/mkdssp` (`brew install brewsci/bio/dssp`) | T15 (secondary-structure assignment; H-bond energetics half of the agreement metric) |
 | **biotite** | 1.7.1 | locked `benchmark` extra (`uv sync --locked --extra benchmark`) | T15 (P-SEA Cα-geometry secondary structure, `scripts/t15_ss_agreement.py`); T16 (Shrake-Rupley SASA buried surface area, `scripts/t16_interface_quality.py`); T17 (ensemble Cα-RMSF precision, `scripts/t17_nmr_ensemble.py`) |
 | **DockQ** | 2.1.3 | locked `benchmark` extra (`uv sync --locked --extra benchmark`; pins numpy < 2) | T16 (interface DockQ score + CAPRI class via `scripts/t16_interface_quality.py`) |
@@ -139,10 +139,10 @@ conda activate cryst-oracles && servalcat --version  # 0.4.131
 
 | Task | Primary PHENIX tool | Oracle (now installed) | Oracle (still missing) |
 |---|---|---|---|
-| T01 | `phenix.superpose_models` | TM-align, `gemmi align`, OpenStructure (`lddt`), CCP4 ProSMART | ChimeraX matchmaker, US-align |
-| T02 | `phenix.structure_comparison` (PHENIX 2.0-5936 launcher is GUI/project-bound; a headless two-file invocation exits without a report) | OpenStructure, CCP4 ProSMART, gemmi coordinate analysis, DSSP | — |
+| T01 | `phenix.superpose_models` | TM-align, `gemmi align`, OpenStructure (`lddt`) | ChimeraX matchmaker, US-align |
+| T02 | `phenix.structure_comparison` (PHENIX 2.0-5936 launcher is GUI/project-bound; a headless two-file invocation exits without a report) | OpenStructure, CCP4 ProSMART (reference-dependent Procrustes/hinge fragment comparison), gemmi coordinate analysis, DSSP | — |
 | T03 | `phenix.refine` | `servalcat refine_xtal_norefmac`, CCP4 REFMAC5 (`NCYC=0` for in-place R-factors) | BUSTER |
-| T05 | `phenix.holton_geometry_validation` | `probe` + `reduce` (clashscore path), `gemmi rmsz` (documented geometry fields), CCP4 ProSMART (local deformation; not a Rama classifier) | Independent classification/composite coverage remains metric- and subject-specific; wwPDB reports can reproduce deposition classifications but may share methods |
+| T05 | `phenix.holton_geometry_validation` | `probe` + `reduce` (clashscore path), `gemmi rmsz` (documented geometry fields) | Independent classification/composite and `T05_rama_z_score` coverage remains metric- and subject-specific (ProSMART is comparative `T02`, not a Ramachandran classifier or `T05_rama_z_score` producer); wwPDB reports can reproduce deposition classifications/Rama-Z but may share methods |
 | T06 | `phenix.model_vs_data` | `gemmi sfcalc`, `servalcat fsc`/`fofc`/`sigmaa`, CCP4 REFMAC5 | CCP4 sfcheck |
 | T12 | `phenix.mtriage` | `servalcat fsc`, `servalcat localcc` | RELION postprocess, ResMap |
 | T13 | `phenix.model_vs_data` (completeness, resolution range) | CCP4 ctruncate (Wilson B, L-test twinning, ΔB aniso, tNCS, ice rings); CCP4 aimless when unmerged intensities exist; wrapper `scripts/t13_data_quality.py` | (CC½ / ⟨I/σ⟩ / Rmerge require unmerged intensities — gap when artefact ships merged-only) |

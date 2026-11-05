@@ -115,6 +115,15 @@ EXPECTED_1SAR_EVAL_SHA256 = (
 EXPECTED_1SAR_COORD_AUDIT_SHA256 = (
     "5a03ab678c26970a4a1bdeaf5742ed46a6bd7ffd982ac22d656c1a0b5189cbdf"
 )
+EXPECTED_ROUND3_BENCH_SHA256 = (
+    "3635bd878d160c770594c2c5ed92a1139dbbd8d63daa28a48aa249656d7f6dee"
+)
+EXPECTED_ROUND4_RECOVER_SHA256 = (
+    "dee4b3994c81ec2e5aecfe86569c36b720f8fd0a9c04581dc96585edb275afdf"
+)
+EXPECTED_ROUND10_RECOVER_SHA256 = (
+    "1c6e710e87bb08c23d77b1fa3a7aea2fe18a136b00cec6d35d40e2d171b78bb7"
+)
 EXPECTED_1SAR_START_SUBJECT_REF = (
     "artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar.pdb"
 )
@@ -2020,6 +2029,7 @@ def summarize_control_cohort(
     source_path: Path,
     normalized_rows: list[dict[str, Any]],
     pass_criterion_bindings: list[dict[str, Any]] | None = None,
+    source_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Summarize a 22-structure control cohort across the three core questions."""
     bindings = list(pass_criterion_bindings or [])
@@ -2075,7 +2085,9 @@ def summarize_control_cohort(
         "cohort_id": cohort_id,
         "description": description,
         "source_file": _display_path(source_path),
-        "source_sha256": sha256_file(source_path),
+        "source_sha256": (
+            source_sha256 if source_sha256 is not None else sha256_file(source_path)
+        ),
         "target_count": n_total,
         "refmac_evaluable_target_count": len(d_refmac_vals),
         "two_path_only_target_count": n_total - len(d_refmac_vals),
@@ -2134,15 +2146,52 @@ def summarize_control_cohort(
     }
 
 
+def _read_verified_control_json(
+    path: Path,
+    expected_sha256: str,
+    source_label: str,
+) -> tuple[dict[str, Any], str]:
+    """Read a fixed retained control-cohort JSON source once as bytes, verify its SHA-256 digest before parsing, and return the parsed dictionary and verified digest."""
+    raw_text, actual_sha256 = _read_verified_1sar_text(
+        path, expected_sha256, source_label
+    )
+    try:
+        parsed = json.loads(raw_text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid control-cohort JSON in {path}") from exc
+    if not isinstance(parsed, dict) or not isinstance(parsed.get("rows"), list):
+        raise ValueError(f"Invalid control-cohort JSON structure in {path}")
+    return parsed, actual_sha256
+
+
 def evaluate_control_cohorts(
     round3_path: Path = DEFAULT_ROUND3_BENCH,
     round4_path: Path = DEFAULT_ROUND4_RECOVER,
     round10_path: Path = DEFAULT_ROUND10_RECOVER,
 ) -> dict[str, Any]:
-    """Evaluate unchanged, damaged, and recovered control cohorts."""
-    round3_data = json.loads(round3_path.read_text(encoding="utf-8"))
-    round4_data = json.loads(round4_path.read_text(encoding="utf-8"))
-    round10_data = json.loads(round10_path.read_text(encoding="utf-8"))
+    """Evaluate the fixed retained unchanged, damaged, and recovered control cohorts.
+
+    Fixed retained-bundle boundary: this specialized control-cohort reader admits
+    the three retained 22-structure control inputs (`round3_path`, `round4_path`,
+    `round10_path`) at default or alternate file paths only when their exact byte
+    SHA-256 digests match the retained control bundle BEFORE parsing or deriving
+    any cohort summary or scientific conclusion.
+    """
+    round3_data, round3_sha256 = _read_verified_control_json(
+        round3_path,
+        EXPECTED_ROUND3_BENCH_SHA256,
+        "Round 3 unchanged/SA control cohort",
+    )
+    round4_data, round4_sha256 = _read_verified_control_json(
+        round4_path,
+        EXPECTED_ROUND4_RECOVER_SHA256,
+        "Round 4 damaged/recovered control cohort",
+    )
+    round10_data, round10_sha256 = _read_verified_control_json(
+        round10_path,
+        EXPECTED_ROUND10_RECOVER_SHA256,
+        "Round 10 recovered control cohort",
+    )
 
     baseline_rows_by_pdb = {
         r["pdb_id"]: r
@@ -2208,6 +2257,7 @@ def evaluate_control_cohorts(
             ),
             source_path=round3_path,
             normalized_rows=null_rows,
+            source_sha256=round3_sha256,
         ),
         "damaged_sa": summarize_control_cohort(
             cohort_id="damaged_sa",
@@ -2218,6 +2268,7 @@ def evaluate_control_cohorts(
             ),
             source_path=round3_path,
             normalized_rows=sa_rows,
+            source_sha256=round3_sha256,
         ),
         "damaged_dynamics": summarize_control_cohort(
             cohort_id="damaged_dynamics",
@@ -2229,6 +2280,7 @@ def evaluate_control_cohorts(
             ),
             source_path=round4_path,
             normalized_rows=perturbed_rows,
+            source_sha256=round4_sha256,
         ),
         "recovered_unprotonated_solvent": summarize_control_cohort(
             cohort_id="recovered_unprotonated_solvent",
@@ -2241,6 +2293,7 @@ def evaluate_control_cohorts(
             ),
             source_path=round4_path,
             normalized_rows=round4_recovered_rows,
+            source_sha256=round4_sha256,
         ),
         "recovered_protonated_ordered_solvent": summarize_control_cohort(
             cohort_id="recovered_protonated_ordered_solvent",
@@ -2253,6 +2306,7 @@ def evaluate_control_cohorts(
             ),
             source_path=round10_path,
             normalized_rows=round10_recovered_rows,
+            source_sha256=round10_sha256,
         ),
     }
 

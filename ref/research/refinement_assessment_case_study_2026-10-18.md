@@ -88,7 +88,7 @@ In accordance with `ref/quality_reporting.md`, `scripts/assess_refinement.py` do
    - **Data anomaly:** `ctruncate` flags one of four ice-ring sensitive shells at `3.44 Å` (`mean I/sigma Z-score = 5.21`, completeness `1.00`, intensity ratio `1.17`).
    - **Inapplicable clause (`aimless`):** Running `aimless` on `data/1sar.mtz` is inapplicable (`not_applicable_merged_input`) because `1sar.mtz` contains already-merged structure-factor amplitudes (`F-obs, SIGF-obs`), not unmerged intensities.
 2. **Reciprocal-Space Fit (`T03`):**
-   - `phenix.model_vs_data` $R_{\text{work}} = 0.1564$, $R_{\text{free}} = 0.2116$, gap `0.0552` (`723` free reflections).
+   - `phenix.model_vs_data` $R_{\text{work}} = 0.1564$, $R_{\text{free}} = 0.2116$, gap `0.0552` (archive `data/1sar.mtz` `R-free-flags == 1` and packaged `data/1sar_final.pdb` `REMARK 3` refinement-header context record `723` free reflections; the historical `phenix.model_vs_data` effective reflection count and selection are not retained, `#934`).
    - Deposited `1SAR` (`1991`) has `REMARK 3 FREE R VALUE : NULL` (`R VALUE (WORKING + TEST SET) : 0.172`), so any comparison against a deposited $R_{\text{free}}$ is recorded as `deposition_clause: "unevaluable"`.
 3. **Stereochemistry (`T05`):**
    - Ramachandran (`mmtbx` Top8000): `98.40%` favored (`185/188` non-terminal residues), `1.06%` allowed, `0.53%` outlier (`1` residue: `1sar:A:39` Asn39 (`Asn A 39`) in a surface loop).

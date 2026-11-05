@@ -8,6 +8,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest import mock
 import zipfile
 
 import numpy as np
@@ -23,12 +24,18 @@ from assess_refinement import (  # noqa: E402
     DEFAULT_1SAR_QDS,
     DEFAULT_ARCHIVE,
     DEFAULT_DEPOSITED_PDB,
+    DEFAULT_ROUND10_RECOVER,
+    DEFAULT_ROUND3_BENCH,
+    DEFAULT_ROUND4_RECOVER,
     EXPECTED_1SAR_ARCHIVE_SHA256,
     EXPECTED_1SAR_COORD_AUDIT_SHA256,
     EXPECTED_1SAR_DEPOSITED_PDB_SHA256,
     EXPECTED_1SAR_EVAL_SHA256,
     EXPECTED_1SAR_FINAL_SUBJECT_REF,
     EXPECTED_1SAR_QDS_SHA256,
+    EXPECTED_ROUND10_RECOVER_SHA256,
+    EXPECTED_ROUND3_BENCH_SHA256,
+    EXPECTED_ROUND4_RECOVER_SHA256,
     REPO_ROOT,
     _extract_control_row_metrics,
     _median_and_iqr,
@@ -41,6 +48,7 @@ from assess_refinement import (  # noqa: E402
     build_full_assessment_report,
     compare_pdb_pair,
     deposition_applicability,
+    evaluate_control_cohorts,
     kabsch_rmsd,
     resolve_verdict_status,
     serialize_assessment_report,
@@ -441,6 +449,119 @@ class AssessRefinementTests(unittest.TestCase):
                 ValueError, "Coordinate/T13 audit SHA-256 mismatch"
             ):
                 assess_1sar_case_study(coord_audit_path=bad_audit_path)
+
+    def test_control_cohorts_fixed_source_digests_alternate_paths_and_admission_rejection(
+        self,
+    ) -> None:
+        """Verify evaluate_control_cohorts pins the 3 control source digests, reuses admitted digests without re-reading, and rejects empty/altered inputs."""
+        self.assertEqual(
+            sha256_file(DEFAULT_ROUND3_BENCH), EXPECTED_ROUND3_BENCH_SHA256
+        )
+        self.assertEqual(
+            sha256_file(DEFAULT_ROUND4_RECOVER), EXPECTED_ROUND4_RECOVER_SHA256
+        )
+        self.assertEqual(
+            sha256_file(DEFAULT_ROUND10_RECOVER), EXPECTED_ROUND10_RECOVER_SHA256
+        )
+
+        default_controls = evaluate_control_cohorts()
+        self.assertEqual(
+            default_controls, self.saved_report["control_cohorts_evaluation"]
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_root = Path(tmpdir)
+            alt_round3 = tmp_root / "alt_round3_bench.json"
+            alt_round4 = tmp_root / "alt_round4_recover.json"
+            alt_round10 = tmp_root / "alt_round10_recover.json"
+
+            alt_round3.write_bytes(DEFAULT_ROUND3_BENCH.read_bytes())
+            alt_round4.write_bytes(DEFAULT_ROUND4_RECOVER.read_bytes())
+            alt_round10.write_bytes(DEFAULT_ROUND10_RECOVER.read_bytes())
+
+            with mock.patch(
+                "assess_refinement.sha256_file",
+                side_effect=AssertionError(
+                    "summarize_control_cohort must use admitted source_sha256 without re-reading source_path"
+                ),
+            ):
+                alt_controls = evaluate_control_cohorts(
+                    round3_path=alt_round3,
+                    round4_path=alt_round4,
+                    round10_path=alt_round10,
+                )
+
+            self.assertEqual(
+                alt_controls["cross_cohort_findings"],
+                default_controls["cross_cohort_findings"],
+            )
+            expected_sources = {
+                "unchanged_null": (str(alt_round3), EXPECTED_ROUND3_BENCH_SHA256),
+                "damaged_sa": (str(alt_round3), EXPECTED_ROUND3_BENCH_SHA256),
+                "damaged_dynamics": (str(alt_round4), EXPECTED_ROUND4_RECOVER_SHA256),
+                "recovered_unprotonated_solvent": (
+                    str(alt_round4),
+                    EXPECTED_ROUND4_RECOVER_SHA256,
+                ),
+                "recovered_protonated_ordered_solvent": (
+                    str(alt_round10),
+                    EXPECTED_ROUND10_RECOVER_SHA256,
+                ),
+            }
+            for cohort_id, (expected_path, expected_sha) in expected_sources.items():
+                alt_cohort = alt_controls["cohorts"][cohort_id]
+                def_cohort = default_controls["cohorts"][cohort_id]
+                self.assertEqual(alt_cohort["source_file"], expected_path)
+                self.assertEqual(alt_cohort["source_sha256"], expected_sha)
+                for key, val in def_cohort.items():
+                    if key != "source_file":
+                        self.assertEqual(alt_cohort[key], val)
+
+            # Empty control payloads must be rejected before parsing or emitting 22-target prose
+            empty_json = tmp_root / "empty_rows.json"
+            empty_json.write_text('{"rows": []}\n', encoding="utf-8")
+            with self.assertRaisesRegex(
+                ValueError, "Round 3 unchanged/SA control cohort SHA-256 mismatch"
+            ):
+                evaluate_control_cohorts(round3_path=empty_json)
+            with self.assertRaisesRegex(
+                ValueError, "Round 4 damaged/recovered control cohort SHA-256 mismatch"
+            ):
+                evaluate_control_cohorts(round4_path=empty_json)
+            with self.assertRaisesRegex(
+                ValueError, "Round 10 recovered control cohort SHA-256 mismatch"
+            ):
+                evaluate_control_cohorts(round10_path=empty_json)
+
+            # Altered metric payloads for each of the 3 control sources must be rejected
+            round3_doc = json.loads(DEFAULT_ROUND3_BENCH.read_text(encoding="utf-8"))
+            round3_doc["rows"][0]["numbers"]["d_phenix"] = 0.9999
+            bad_round3 = tmp_root / "bad_round3.json"
+            bad_round3.write_text(json.dumps(round3_doc), encoding="utf-8")
+            with self.assertRaisesRegex(
+                ValueError, "Round 3 unchanged/SA control cohort SHA-256 mismatch"
+            ):
+                evaluate_control_cohorts(round3_path=bad_round3)
+
+            round4_doc = json.loads(DEFAULT_ROUND4_RECOVER.read_text(encoding="utf-8"))
+            round4_doc["rows"][0]["perturbed"]["numbers"]["d_phenix"] = 0.9999
+            bad_round4 = tmp_root / "bad_round4.json"
+            bad_round4.write_text(json.dumps(round4_doc), encoding="utf-8")
+            with self.assertRaisesRegex(
+                ValueError, "Round 4 damaged/recovered control cohort SHA-256 mismatch"
+            ):
+                evaluate_control_cohorts(round4_path=bad_round4)
+
+            round10_doc = json.loads(
+                DEFAULT_ROUND10_RECOVER.read_text(encoding="utf-8")
+            )
+            round10_doc["rows"][0]["recovered"]["numbers"]["d_phenix"] = 0.9999
+            bad_round10 = tmp_root / "bad_round10.json"
+            bad_round10.write_text(json.dumps(round10_doc), encoding="utf-8")
+            with self.assertRaisesRegex(
+                ValueError, "Round 10 recovered control cohort SHA-256 mismatch"
+            ):
+                evaluate_control_cohorts(round10_path=bad_round10)
 
     def test_numeric_helpers_semantic_context_and_strict_json_guards(self) -> None:
         """Verify helper-level semantic context checks, non-finite rejection, and strict JSON emission."""

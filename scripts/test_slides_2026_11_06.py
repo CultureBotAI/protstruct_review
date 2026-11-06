@@ -8,6 +8,7 @@ import copy
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import re
 import statistics
@@ -1200,8 +1201,12 @@ def historical_filtered_fig05(out_dir, source_hashes):
             or importlib.util.find_spec("PIL") is None
         ):
             self.skipTest("Optional 'slides' extra (matplotlib/pillow) not installed in current env")
+        cmd = [sys.executable, str(PACKAGE_DIR / "build_figures.py"), "--check"]
+        diag_dir = os.environ.get("SLIDES_DIAGNOSTICS_DIR", "").strip()
+        if diag_dir:
+            cmd.extend(["--diagnostics-dir", diag_dir])
         proc = subprocess.run(
-            [sys.executable, str(PACKAGE_DIR / "build_figures.py"), "--check"],
+            cmd,
             cwd=str(REPO_ROOT),
             capture_output=True,
             text=True,

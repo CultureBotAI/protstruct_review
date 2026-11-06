@@ -15,21 +15,26 @@ import hashlib
 import io
 import json
 from pathlib import Path
+import platform
 import re
+import shutil
 import statistics
 import subprocess
+import sys
 import tempfile
 from typing import Any
+import zlib
 
 import matplotlib
 
 matplotlib.use("Agg")
+from matplotlib import font_manager, ft2font
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from matplotlib.text import Text
 from matplotlib.transforms import Bbox
 import numpy as np
-from PIL import Image
+from PIL import Image, features as pil_features
 import yaml
 
 DECK_DIR = Path(__file__).resolve().parent
@@ -2449,11 +2454,429 @@ def generate_all(out_dir: Path) -> dict[str, Any]:
     return manifest
 
 
-def check_deterministic(target_dir: Path) -> None:
+def _collect_runtime_diagnostics() -> dict[str, Any]:
+    """Collect runtime, FreeType, zlib/zlib-ng, and DejaVu Sans font diagnostics."""
+    configure_matplotlib()
+    pil_ft_version: str | None = None
+    pil_zlib_version: str | None = None
+    pilinfo_lines: list[str] = []
+    try:
+        pil_ft_version = pil_features.version_module("freetype2") or pil_features.version(
+            "freetype2"
+        )
+    except Exception:
+        pil_ft_version = None
+    try:
+        pil_zlib_version = pil_features.version("zlib")
+    except Exception:
+        pil_zlib_version = None
+    try:
+        buf = io.StringIO()
+        pil_features.pilinfo(out=buf, supported_formats=False)
+        pilinfo_lines = [
+            ln.strip()
+            for ln in buf.getvalue().splitlines()
+            if any(
+                tok in ln.lower()
+                for tok in ("zlib", "freetype", "libpng", "png", "pillow", "pil")
+            )
+        ]
+    except Exception as exc:
+        pilinfo_lines = [f"pilinfo_error: {exc}"]
+
+    core_obj = getattr(Image, "core", None)
+    core_zlib_version = getattr(core_obj, "zlib_version", None)
+    core_ft_version = getattr(core_obj, "freetype2_version", None)
+    py_zlib_version = getattr(zlib, "ZLIB_VERSION", None)
+    py_zlib_runtime_version = getattr(zlib, "ZLIB_RUNTIME_VERSION", None)
+
+    zlib_candidates = [
+        str(v)
+        for v in (
+            py_zlib_version,
+            py_zlib_runtime_version,
+            core_zlib_version,
+            pil_zlib_version,
+            *pilinfo_lines,
+        )
+        if v is not None
+    ]
+    zlib_ng_detected = any("zlib-ng" in s.lower() or ".ng" in s.lower() for s in zlib_candidates)
+
+    dejavu_fonts: dict[str, Any] = {}
+    for label, weight in (("regular", "normal"), ("bold", "bold")):
+        try:
+            prop = font_manager.FontProperties(family="DejaVu Sans", weight=weight)
+            resolved_str = font_manager.findfont(prop, fallback_to_default=True)
+            font_path = Path(resolved_str)
+            font_sha = (
+                hashlib.sha256(font_path.read_bytes()).hexdigest()
+                if font_path.is_file()
+                else None
+            )
+            dejavu_fonts[label] = {
+                "path": str(font_path),
+                "exists": font_path.is_file(),
+                "sha256": font_sha,
+            }
+        except Exception as exc:
+            dejavu_fonts[label] = {"error": str(exc)}
+
+    return {
+        "python_version": sys.version,
+        "python_implementation": platform.python_implementation(),
+        "platform": platform.platform(),
+        "system": platform.system(),
+        "release": platform.release(),
+        "machine": platform.machine(),
+        "numpy_version": getattr(np, "__version__", None),
+        "matplotlib_version": getattr(matplotlib, "__version__", None),
+        "pillow_version": getattr(Image, "__version__", None),
+        "freetype": {
+            "matplotlib_freetype_version": getattr(ft2font, "__freetype_version__", None),
+            "matplotlib_freetype_build_type": getattr(ft2font, "__freetype_build_type__", None),
+            "pillow_core_freetype2_version": core_ft_version,
+            "pillow_features_freetype2_version": pil_ft_version,
+        },
+        "zlib": {
+            "python_zlib_version": py_zlib_version,
+            "python_zlib_runtime_version": py_zlib_runtime_version,
+            "pillow_core_zlib_version": core_zlib_version,
+            "pillow_features_zlib_version": pil_zlib_version,
+            "zlib_ng_detected": zlib_ng_detected,
+            "pilinfo_relevant_lines": pilinfo_lines,
+        },
+        "dejavu_sans_fonts": dejavu_fonts,
+    }
+
+
+def _diff_json_nodes(
+    committed_val: Any, fresh_val: Any, path: str = "$"
+) -> list[dict[str, Any]]:
+    """Recursively diff two parsed JSON structures without crashing on type or length differences."""
+    diffs: list[dict[str, Any]] = []
+    if isinstance(committed_val, dict) and isinstance(fresh_val, dict):
+        all_keys = sorted(set(committed_val.keys()) | set(fresh_val.keys()), key=str)
+        for key in all_keys:
+            sub_path = f"{path}.{key}"
+            if key not in committed_val:
+                diffs.append(
+                    {
+                        "path": sub_path,
+                        "kind": "missing_in_committed",
+                        "committed": None,
+                        "fresh": fresh_val[key],
+                        "is_figure_sha256": False,
+                    }
+                )
+            elif key not in fresh_val:
+                diffs.append(
+                    {
+                        "path": sub_path,
+                        "kind": "missing_in_fresh",
+                        "committed": committed_val[key],
+                        "fresh": None,
+                        "is_figure_sha256": False,
+                    }
+                )
+            else:
+                diffs.extend(_diff_json_nodes(committed_val[key], fresh_val[key], sub_path))
+        return diffs
+
+    if isinstance(committed_val, list) and isinstance(fresh_val, list):
+        if len(committed_val) != len(fresh_val):
+            diffs.append(
+                {
+                    "path": f"{path}.__len__",
+                    "kind": "list_length_mismatch",
+                    "committed": len(committed_val),
+                    "fresh": len(fresh_val),
+                    "is_figure_sha256": False,
+                }
+            )
+        max_len = max(len(committed_val), len(fresh_val))
+        for idx in range(max_len):
+            sub_path = f"{path}[{idx}]"
+            if idx >= len(committed_val):
+                diffs.append(
+                    {
+                        "path": sub_path,
+                        "kind": "missing_in_committed",
+                        "committed": None,
+                        "fresh": fresh_val[idx],
+                        "is_figure_sha256": False,
+                    }
+                )
+            elif idx >= len(fresh_val):
+                diffs.append(
+                    {
+                        "path": sub_path,
+                        "kind": "missing_in_fresh",
+                        "committed": committed_val[idx],
+                        "fresh": None,
+                        "is_figure_sha256": False,
+                    }
+                )
+            else:
+                diffs.extend(_diff_json_nodes(committed_val[idx], fresh_val[idx], sub_path))
+        return diffs
+
+    c_is_bool = isinstance(committed_val, bool)
+    f_is_bool = isinstance(fresh_val, bool)
+    c_is_num = isinstance(committed_val, (int, float)) and not c_is_bool
+    f_is_num = isinstance(fresh_val, (int, float)) and not f_is_bool
+    types_compatible = (type(committed_val) is type(fresh_val)) or (c_is_num and f_is_num)
+    if not types_compatible or committed_val != fresh_val:
+        diffs.append(
+            {
+                "path": path,
+                "kind": "value_mismatch" if types_compatible else "type_mismatch",
+                "committed": committed_val,
+                "fresh": fresh_val,
+                "is_figure_sha256": bool(re.fullmatch(r"\$\.figures\[\d+\]\.sha256", path)),
+            }
+        )
+    return diffs
+
+
+def _compare_png_pair(
+    fig_id: str | None,
+    rel_file: str,
+    committed_png: Path,
+    fresh_png: Path,
+    committed_manifest_sha: str | None,
+    fresh_manifest_sha: str | None,
+) -> dict[str, Any]:
+    """Compare committed and freshly generated PNG files at both byte and decoded RGB pixel levels."""
+    committed_exists = committed_png.is_file()
+    fresh_exists = fresh_png.is_file()
+    c_sha = (
+        hashlib.sha256(committed_png.read_bytes()).hexdigest() if committed_exists else None
+    )
+    f_sha = hashlib.sha256(fresh_png.read_bytes()).hexdigest() if fresh_exists else None
+    c_matches_manifest = (
+        c_sha is not None
+        and committed_manifest_sha is not None
+        and c_sha == committed_manifest_sha
+    )
+    f_matches_manifest = (
+        f_sha is not None and fresh_manifest_sha is not None and f_sha == fresh_manifest_sha
+    )
+    png_bytes_match = c_sha is not None and f_sha is not None and c_sha == f_sha
+
+    entry: dict[str, Any] = {
+        "id": fig_id,
+        "file": rel_file,
+        "committed_png_path": str(committed_png),
+        "fresh_png_path": str(fresh_png),
+        "committed_exists": committed_exists,
+        "fresh_exists": fresh_exists,
+        "committed_file_sha256": c_sha,
+        "fresh_file_sha256": f_sha,
+        "committed_manifest_sha256": committed_manifest_sha,
+        "fresh_manifest_sha256": fresh_manifest_sha,
+        "committed_matches_committed_manifest": c_matches_manifest,
+        "fresh_matches_fresh_manifest": f_matches_manifest,
+        "png_bytes_match": png_bytes_match,
+    }
+
+    if not committed_exists or not fresh_exists:
+        entry["status"] = "MISSING_FILE"
+        entry["rgb_pixels_match"] = None
+        return entry
+
+    try:
+        with Image.open(committed_png) as c_img, Image.open(fresh_png) as f_img:
+            c_dims = [c_img.width, c_img.height]
+            f_dims = [f_img.width, f_img.height]
+            entry["committed_mode"] = c_img.mode
+            entry["fresh_mode"] = f_img.mode
+            entry["committed_dimensions_px"] = c_dims
+            entry["fresh_dimensions_px"] = f_dims
+
+            c_rgb = c_img.convert("RGB")
+            f_rgb = f_img.convert("RGB")
+            c_rgb_sha = hashlib.sha256(c_rgb.tobytes()).hexdigest()
+            f_rgb_sha = hashlib.sha256(f_rgb.tobytes()).hexdigest()
+            entry["committed_rgb_sha256"] = c_rgb_sha
+            entry["fresh_rgb_sha256"] = f_rgb_sha
+
+            if c_dims != f_dims:
+                entry["rgb_pixels_match"] = False
+                entry["dimension_mismatch"] = True
+                entry["changed_pixel_count"] = None
+                entry["total_pixel_count"] = None
+                entry["changed_pixel_fraction"] = None
+                entry["diff_bbox_xyxy"] = None
+                entry["max_abs_channel_diff"] = None
+            elif c_rgb_sha == f_rgb_sha:
+                entry["rgb_pixels_match"] = True
+                entry["dimension_mismatch"] = False
+                entry["changed_pixel_count"] = 0
+                entry["total_pixel_count"] = int(c_dims[0] * c_dims[1])
+                entry["changed_pixel_fraction"] = 0.0
+                entry["diff_bbox_xyxy"] = None
+                entry["max_abs_channel_diff"] = 0
+            else:
+                entry["rgb_pixels_match"] = False
+                entry["dimension_mismatch"] = False
+                c_arr = np.asarray(c_rgb, dtype=np.int16)
+                f_arr = np.asarray(f_rgb, dtype=np.int16)
+                abs_diff = np.abs(c_arr - f_arr)
+                changed_mask = np.any(abs_diff > 0, axis=2)
+                changed_count = int(np.count_nonzero(changed_mask))
+                total_count = int(c_dims[0] * c_dims[1])
+                ys, xs = np.nonzero(changed_mask)
+                entry["changed_pixel_count"] = changed_count
+                entry["total_pixel_count"] = total_count
+                entry["changed_pixel_fraction"] = round(changed_count / total_count, 8)
+                entry["diff_bbox_xyxy"] = [
+                    int(xs.min()),
+                    int(ys.min()),
+                    int(xs.max()),
+                    int(ys.max()),
+                ]
+                entry["max_abs_channel_diff"] = int(abs_diff.max())
+    except Exception as exc:
+        entry["status"] = "DECODE_ERROR"
+        entry["decode_error"] = str(exc)
+        entry["rgb_pixels_match"] = False
+        return entry
+
+    if png_bytes_match and c_matches_manifest and f_matches_manifest:
+        entry["status"] = "OK"
+    elif png_bytes_match and (not c_matches_manifest or not f_matches_manifest):
+        entry["status"] = "MANIFEST_DIGEST_MISMATCH"
+    elif entry["rgb_pixels_match"]:
+        entry["status"] = "PNG_CONTAINER_ONLY_DIFF"
+    else:
+        entry["status"] = "PIXEL_DIFF"
+    return entry
+
+
+def _persist_diagnostics(
+    diagnostics_dir: Path,
+    target_dir: Path,
+    report: dict[str, Any],
+    fresh_dir: Path | None,
+) -> None:
+    """Write diagnostics.json and freshly generated artifacts to an external diagnostics directory."""
+    diag_root = diagnostics_dir.resolve()
+    deck_root = target_dir.resolve()
+    if diag_root == deck_root or deck_root in diag_root.parents:
+        raise SystemExit(
+            f"Refusing to write diagnostics inside target deck directory {deck_root}: {diag_root}"
+        )
+    diag_root.mkdir(parents=True, exist_ok=True)
+    if fresh_dir is not None and fresh_dir.is_dir():
+        fresh_manifest_file = fresh_dir / "figures.json"
+        if fresh_manifest_file.is_file():
+            shutil.copy2(fresh_manifest_file, diag_root / "figures.json")
+        fresh_figs_dir = fresh_dir / "figures"
+        if fresh_figs_dir.is_dir():
+            out_figs_dir = diag_root / "figures"
+            out_figs_dir.mkdir(parents=True, exist_ok=True)
+            for png_file in sorted(fresh_figs_dir.glob("*.png")):
+                shutil.copy2(png_file, out_figs_dir / png_file.name)
+    diag_json_path = diag_root / "diagnostics.json"
+    diag_json_path.write_text(
+        json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+
+
+def _format_diagnostic_stderr_summary(report: dict[str, Any]) -> str:
+    """Format a concise multi-line diagnostic summary for stderr on determinism failure."""
+    lines: list[str] = ["=== Figure Determinism Diagnostic Summary ==="]
+    rt = report.get("runtime", {})
+    ft = rt.get("freetype", {})
+    zb = rt.get("zlib", {})
+    fonts = rt.get("dejavu_sans_fonts", {})
+    lines.append(
+        f"Runtime: platform={rt.get('platform')} | python={str(rt.get('python_version', '')).splitlines()[0]} "
+        f"| numpy={rt.get('numpy_version')} | matplotlib={rt.get('matplotlib_version')} "
+        f"| pillow={rt.get('pillow_version')}"
+    )
+    lines.append(
+        f"Libraries: mpl_freetype={ft.get('matplotlib_freetype_version')} ({ft.get('matplotlib_freetype_build_type')}) "
+        f"| pil_freetype={ft.get('pillow_core_freetype2_version') or ft.get('pillow_features_freetype2_version')} "
+        f"| py_zlib={zb.get('python_zlib_version')}/{zb.get('python_zlib_runtime_version')} "
+        f"| pil_zlib={zb.get('pillow_core_zlib_version') or zb.get('pillow_features_zlib_version')} "
+        f"| zlib_ng={zb.get('zlib_ng_detected')}"
+    )
+    for weight_label, finfo in fonts.items():
+        if isinstance(finfo, dict):
+            lines.append(
+                f"Font[{weight_label}]: path={finfo.get('path')} sha256={finfo.get('sha256')}"
+            )
+
+    mc = report.get("manifest_comparison")
+    if isinstance(mc, dict):
+        lines.append(
+            f"Manifest: bytes_equal={mc.get('bytes_equal')} | figure_sha256_diffs={mc.get('figure_sha256_diff_count')} "
+            f"| other_metadata_diffs={mc.get('other_scientific_metadata_diff_count')} "
+            f"| only_figure_sha256_changed={mc.get('only_figure_sha256_changed')} "
+            f"| formatting_only_diff={mc.get('formatting_only_diff')}"
+        )
+        for d in mc.get("figure_sha256_diffs", []):
+            lines.append(
+                f"  JSON[figure_sha256] {d['path']}: committed={d['committed']} fresh={d['fresh']}"
+            )
+        for d in mc.get("other_scientific_metadata_diffs", [])[:25]:
+            lines.append(
+                f"  JSON[metadata:{d['kind']}] {d['path']}: committed={d['committed']!r} fresh={d['fresh']!r}"
+            )
+
+    for fig_rep in report.get("figures", []):
+        st = fig_rep.get("status")
+        if st == "OK":
+            continue
+        lines.append(
+            f"PNG[{fig_rep.get('file')}] status={st} | committed_exists={fig_rep.get('committed_exists')} "
+            f"fresh_exists={fig_rep.get('fresh_exists')} | committed_sha={fig_rep.get('committed_file_sha256')} "
+            f"fresh_sha={fig_rep.get('fresh_file_sha256')} manifest_sha={fig_rep.get('committed_manifest_sha256')}"
+        )
+        if fig_rep.get("committed_exists") and fig_rep.get("fresh_exists"):
+            lines.append(
+                f"  decoded: dims={fig_rep.get('committed_dimensions_px')}->{fig_rep.get('fresh_dimensions_px')} "
+                f"modes={fig_rep.get('committed_mode')}->{fig_rep.get('fresh_mode')} "
+                f"rgb_match={fig_rep.get('rgb_pixels_match')} "
+                f"committed_rgb={fig_rep.get('committed_rgb_sha256')} fresh_rgb={fig_rep.get('fresh_rgb_sha256')} "
+                f"changed_px={fig_rep.get('changed_pixel_count')}/{fig_rep.get('total_pixel_count')} "
+                f"bbox={fig_rep.get('diff_bbox_xyxy')} max_abs_diff={fig_rep.get('max_abs_channel_diff')}"
+            )
+    return "\n".join(lines)
+
+
+def check_deterministic(
+    target_dir: Path, diagnostics_dir: Path | None = None
+) -> None:
     """Re-render into a fresh temporary directory and verify byte-for-byte SHA-256 identity."""
+    if diagnostics_dir is not None:
+        diag_root = diagnostics_dir.resolve()
+        deck_root = target_dir.resolve()
+        if diag_root == deck_root or deck_root in diag_root.parents:
+            raise SystemExit(
+                f"Refusing to write diagnostics inside target deck directory {deck_root}: {diag_root}"
+            )
+
+    runtime_info = _collect_runtime_diagnostics()
     existing_manifest_path = target_dir / "figures.json"
     if not existing_manifest_path.is_file():
-        raise SystemExit(f"Missing manifest: {existing_manifest_path}")
+        msg = f"Missing manifest: {existing_manifest_path}"
+        report: dict[str, Any] = {
+            "status": "FAILED",
+            "source_revision": SOURCE_REVISION,
+            "target_dir": str(target_dir),
+            "runtime": runtime_info,
+            "manifest_comparison": None,
+            "figures": [],
+            "failures": [msg],
+        }
+        if diagnostics_dir is not None:
+            _persist_diagnostics(diagnostics_dir, target_dir, report, None)
+        print(_format_diagnostic_stderr_summary(report), file=sys.stderr)
+        raise SystemExit(msg)
+
     existing_manifest_bytes = existing_manifest_path.read_bytes()
     existing_manifest = json.loads(existing_manifest_bytes.decode("utf-8"))
 
@@ -2461,22 +2884,115 @@ def check_deterministic(target_dir: Path) -> None:
         tmp_dir = Path(tmp)
         fresh_manifest = generate_all(tmp_dir)
         fresh_manifest_bytes = (tmp_dir / "figures.json").read_bytes()
-        if fresh_manifest_bytes != existing_manifest_bytes:
-            raise SystemExit(
+
+        manifest_bytes_match = fresh_manifest_bytes == existing_manifest_bytes
+        all_json_diffs = _diff_json_nodes(existing_manifest, fresh_manifest)
+        figure_sha256_diffs = [d for d in all_json_diffs if d.get("is_figure_sha256")]
+        other_metadata_diffs = [
+            d for d in all_json_diffs if not d.get("is_figure_sha256")
+        ]
+
+        failures: list[str] = []
+        if not manifest_bytes_match:
+            failures.append(
                 "Determinism check FAILED: regenerated figures.json differs from committed file."
             )
-        for fig_entry in existing_manifest["figures"]:
+
+        existing_figs = existing_manifest.get("figures", [])
+        fresh_figs = fresh_manifest.get("figures", [])
+        fresh_by_file = {
+            f.get("file"): f
+            for f in fresh_figs
+            if isinstance(f, dict) and isinstance(f.get("file"), str)
+        }
+        seen_files: set[str] = set()
+        png_reports: list[dict[str, Any]] = []
+
+        for fig_entry in existing_figs:
+            if not isinstance(fig_entry, dict) or not isinstance(
+                fig_entry.get("file"), str
+            ):
+                continue
             rel_file = fig_entry["file"]
+            seen_files.add(rel_file)
+            fresh_entry = fresh_by_file.get(rel_file, {})
             committed_png = target_dir / rel_file
             fresh_png = tmp_dir / rel_file
-            if not committed_png.is_file():
-                raise SystemExit(f"Missing committed PNG: {committed_png}")
-            c_sha = hashlib.sha256(committed_png.read_bytes()).hexdigest()
-            f_sha = hashlib.sha256(fresh_png.read_bytes()).hexdigest()
-            if c_sha != fig_entry["sha256"] or c_sha != f_sha:
-                raise SystemExit(
-                    f"Determinism check FAILED for {rel_file}: committed={c_sha}, fresh={f_sha}, manifest={fig_entry['sha256']}"
-                )
+            png_rep = _compare_png_pair(
+                fig_id=fig_entry.get("id"),
+                rel_file=rel_file,
+                committed_png=committed_png,
+                fresh_png=fresh_png,
+                committed_manifest_sha=fig_entry.get("sha256"),
+                fresh_manifest_sha=fresh_entry.get("sha256"),
+            )
+            png_reports.append(png_rep)
+            if not png_rep["committed_exists"]:
+                failures.append(f"Missing committed PNG: {committed_png}")
+            elif not png_rep["fresh_exists"]:
+                failures.append(f"Missing fresh PNG: {fresh_png}")
+            else:
+                c_sha = png_rep["committed_file_sha256"]
+                f_sha = png_rep["fresh_file_sha256"]
+                if c_sha != fig_entry.get("sha256") or c_sha != f_sha:
+                    failures.append(
+                        f"Determinism check FAILED for {rel_file}: committed={c_sha}, fresh={f_sha}, manifest={fig_entry.get('sha256')}"
+                    )
+
+        for fresh_entry in fresh_figs:
+            if not isinstance(fresh_entry, dict) or not isinstance(
+                fresh_entry.get("file"), str
+            ):
+                continue
+            rel_file = fresh_entry["file"]
+            if rel_file in seen_files:
+                continue
+            committed_png = target_dir / rel_file
+            fresh_png = tmp_dir / rel_file
+            png_rep = _compare_png_pair(
+                fig_id=fresh_entry.get("id"),
+                rel_file=rel_file,
+                committed_png=committed_png,
+                fresh_png=fresh_png,
+                committed_manifest_sha=None,
+                fresh_manifest_sha=fresh_entry.get("sha256"),
+            )
+            png_reports.append(png_rep)
+            failures.append(
+                f"Determinism check FAILED: unexpected fresh figure entry {rel_file}"
+            )
+
+        report = {
+            "status": "OK" if not failures else "FAILED",
+            "source_revision": SOURCE_REVISION,
+            "target_dir": str(target_dir),
+            "runtime": runtime_info,
+            "manifest_comparison": {
+                "bytes_equal": manifest_bytes_match,
+                "committed_sha256": hashlib.sha256(existing_manifest_bytes).hexdigest(),
+                "fresh_sha256": hashlib.sha256(fresh_manifest_bytes).hexdigest(),
+                "total_json_diffs": len(all_json_diffs),
+                "figure_sha256_diff_count": len(figure_sha256_diffs),
+                "other_scientific_metadata_diff_count": len(other_metadata_diffs),
+                "only_figure_sha256_changed": bool(all_json_diffs)
+                and len(other_metadata_diffs) == 0,
+                "formatting_only_diff": (
+                    not manifest_bytes_match and len(all_json_diffs) == 0
+                ),
+                "figure_sha256_diffs": figure_sha256_diffs,
+                "other_scientific_metadata_diffs": other_metadata_diffs,
+            },
+            "figures": png_reports,
+            "failures": failures,
+        }
+
+        if diagnostics_dir is not None:
+            _persist_diagnostics(diagnostics_dir, target_dir, report, tmp_dir)
+
+        if failures:
+            summary_str = _format_diagnostic_stderr_summary(report)
+            raise SystemExit("\n".join([*failures, summary_str]))
+
     print(
         f"OK: {len(fresh_manifest['figures'])} figures and figures.json verified deterministic at {SOURCE_REVISION[:12]}."
     )
@@ -2495,9 +3011,20 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Verify that committed figures.json and figures/*.png match a fresh deterministic render.",
     )
+    parser.add_argument(
+        "--diagnostics-dir",
+        type=Path,
+        default=None,
+        help="Optional directory outside the deck to write diagnostics.json and fresh check artifacts.",
+    )
     args = parser.parse_args(argv)
     if args.check:
-        check_deterministic(args.out_dir.resolve())
+        check_deterministic(
+            args.out_dir.resolve(),
+            diagnostics_dir=args.diagnostics_dir.resolve()
+            if args.diagnostics_dir is not None
+            else None,
+        )
     else:
         manifest = generate_all(args.out_dir.resolve())
         print(

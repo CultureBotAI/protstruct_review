@@ -28,8 +28,8 @@ instead of merely measured:
 - **A vs C** — the cross-library figure PR #28 published.
 
 "Near-matched" is load-bearing in B vs C: the CCP4 monomer library is E&H-derived but not identical
-to PHENIX's non-CDL targets, and the two tools may restrain different populations. B vs C is
-therefore an **upper bound** on the matched-library floor, not the floor itself.
+to PHENIX's non-CDL targets, and the two tools may restrain different populations. The B-vs-C
+contrast therefore includes non-identical dictionaries and potentially different populations; it does not isolate or bound an unmeasured matched-library contrast.
 
 ## Results
 

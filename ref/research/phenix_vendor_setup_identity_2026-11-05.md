@@ -1,4 +1,4 @@
-# PHENIX Configured-Install Vendor Setup Build Identity (#954, #955, #956, #958, #959, #960, #961, #409) — 2026-11-05
+# PHENIX Configured-Install Vendor Setup Build Identity (#954, #955, #956, #958, #959, #960, #961, #962, #409) — 2026-11-05
 
 ## Problem statement and root cause (#954)
 
@@ -36,13 +36,13 @@ Without `Version:` or `Release tag:` lines, `parse_phenix_build()` returns `None
    - Version-variable classification (`PHENIX_VERSION`, `PHENIX_RELEASE_TAG`) takes precedence over `_is_shell_hook_variable`, so function-shaped `PHENIX_VERSION='() { ... }'` or `PHENIX_RELEASE_TAG='() { ... }'` values are removed and recorded only in `ignored_inherited_version_variables` without overlapping `ignored_inherited_shell_hooks` (#956).
    - The setup probe invokes `/bin/bash --noprofile --norc -c <_PHENIX_SETUP_SCRIPT> protstruct-phenix-setup <resolved_setup_path>` with positional argument `$1` (`builtin . "$1"`), never interpolating file paths into shell text, and first unsets shell builtins/functions (`export`, `unset`, `printf`, `.`, `exit`) and `PHENIX_VERSION`, `PHENIX_RELEASE_TAG`, `BASH_ENV`, and `ENV`.
 
-3. **Deliberate version-only field transfer, independent normalization, and single-banner rule (#954, #959, #961):**
+3. **Deliberate version-only field transfer, independent normalization, and single-banner rule (#954, #959, #961, #962):**
    - The setup probe sources `<prefix>/phenix_env.sh` in the isolated child shell, separates any setup stdout/stderr chatter from the NUL-delimited final `PHENIX_VERSION` / `PHENIX_RELEASE_TAG` record, and requires zero exit status and empty `setup_stdout` / `setup_stderr`.
    - `parse_phenix_setup_build()` normalizes the final setup-exported `PHENIX_VERSION` / `PHENIX_RELEASE_TAG` fields independently of the banner parser, rejecting missing, malformed, or contradictory final fields (#959).
    - **Version-only transfer:** Only the two setup-derived version variables (`PHENIX_VERSION` and `PHENIX_RELEASE_TAG`) are overlaid onto the sanitized `base_env` when invoking `<prefix>/bin/phenix.version` (`shell=False`). The adapter deliberately does **not** transfer the complete sourced setup environment (such as `PATH`, `PHENIX`, or library variables) to `phenix.version` or to scientific runners.
    - `parse_phenix_build()` accepts **one** consistent `Version:` / `Release tag:` pair within a single PHENIX banner header (as explicitly confirmed by the user) and rejects multiple PHENIX banner headers, duplicate `Version:` or `Release tag:` lines, contradictory single-line and split-line values, or fragments split across banners or stdout/stderr.
    - If either the setup child or the dispatcher child (in vendor or bare mode) raises `subprocess.TimeoutExpired`, partial `stdout` and `stderr` (`str` or `bytes`) are preserved in `setup_stdout`/`setup_stderr` or `stdout`/`stderr` with `None` return code and unknown admission (#961).
-   - Setup and dispatcher files, symlink targets, executable permissions, and SHA-256 digests are verified before and after execution; any mid-probe change invalidates the probe.
+   - Configured setup and dispatcher targets are re-resolved and their regular-file SHA-256 content digests (`setup_sha256`, `sha256`) are compared before and after execution; an observed mismatch between the before and after observations leaves the build unknown (`reported_version=None`, `reported_version_source=None`), without claiming to detect transient changes that revert between observations or checking executable-permission stability in `phenix_build_evidence()` (#962).
 
 4. **Explicit bare probe retained:**
    - `phenix_bare_build_evidence()` (or `phenix_build_evidence(..., use_vendor_setup=False)`) preserves direct `phenix.version` probing with `reported_version_source="command_output"`.
@@ -52,7 +52,7 @@ Without `Version:` or `Release tag:` lines, `parse_phenix_build()` returns `None
    - `_build_is_measured()` validates all required `vendor_setup_environment` bindings: non-empty `parsed_build`, exact `reported_version` banner match, `configured_prefix` / `resolved_prefix` / `setup_configured_path` / `setup_resolved_path` / `configured_path` / `resolved_path` containment within the installation prefix, 64-hex `sha256` and `setup_sha256`, exact `argv == [resolved_path]` and `setup_argv == phenix_setup_argv(setup_resolved_path)`, `int` zero `returncode` and `setup_returncode`, empty `setup_stdout` and `setup_stderr`, no banner fragments in `stderr`, valid `setup_version_fields`, equality of `parse_phenix_setup_build(setup_version_fields) == parse_phenix_build(stdout) == setup_parsed_build == parsed_build`, and well-formed `ignored_inherited_version_variables` and `ignored_inherited_shell_hooks`.
    - Because `version_probe` (including `setup_configured_path`, `setup_resolved_path`, `setup_sha256`, `setup_argv`, `setup_returncode`, `setup_stdout`, `setup_stderr`, and `setup_version_fields`) is embedded in `measured_build` inside `refinement_cache_v1` `key_material`, changing either `phenix_env.sh` or `phenix.version` bytes produces a distinct cache key and invalidates stale reuse.
 
-## PRIMARY acceptance and fresh-review triage (#955, #956, #958, #959, #960, #961, #409)
+## PRIMARY acceptance and fresh-review triage (#955, #956, #958, #959, #960, #961, #962, #409)
 
 1. **#955 (`scripts/test_benchmark_environment.py` hermetic isolation):**
    - Isolated default-route metadata/announcement assertions in `scripts/test_benchmark_environment.py` using deterministic synthetic tool reports, preserved an explicit assertion that omitting `external_tools` dispatches through `external_tool_report()` (`call_count == 2`), and added a `toolchain.subprocess.run` tripwire proving the unit suite cannot spawn external tool subprocesses.
@@ -74,6 +74,9 @@ Without `Version:` or `Release tag:` lines, `parse_phenix_build()` returns `None
 
 7. **#409 regression (`external_tool_report` executable availability for mode-`0644` `phenix.version`):**
    - Required `os.access(discovered, os.X_OK)` in `external_tool_report()` (separate from version identity verification and with no `PATH` fallback), so a non-executable (`0644`) or absent `phenix.version` reports `available=False`, `discovered_executable=None`, `version_divergence=None`, while preserving `available=True`, `reported_version=None`, `version_divergence=True` when `phenix.version` is executable (`0755`) but `phenix_env.sh` is missing.
+
+8. **#962 (audit accuracy on before/after target and digest comparison vs executable availability):**
+   - Corrected line 45 of this audit record so it states what `phenix_build_evidence()` actually verifies after successful execution: configured targets are re-resolved (`_resolve_phenix_dispatcher`, `_resolve_phenix_setup`) and setup/dispatcher regular-file SHA-256 digests (`setup_sha256`, `sha256`) are compared at the before and after observation points, with an observed mismatch leaving the build unknown. Removed the overstated claim that `phenix_build_evidence()` checks executable-permission stability before/after or detects every transient mid-probe change; executable permission (`os.access(discovered, os.X_OK)`) remains the separate `external_tool_report()` availability check (#409).
 
 ## Explicit scope limits
 

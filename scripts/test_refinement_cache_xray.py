@@ -23,6 +23,8 @@ class PhenixCacheTests(unittest.TestCase):
         self.bin.mkdir()
         for name in ("phenix.version", "phenix.refine", "phenix.clashscore"):
             (self.bin / name).write_text(f"fake {name} executable bytes\n")
+        self.setup = self.bin / "phenix_env.sh"
+        self.setup.write_text("export PHENIX_VERSION=2.0-5936\n")
         self.model = self.root / "model [literal] {operation_dir}.pdb"
         self.mtz = self.root / "data.mtz"
         self.model.write_text("model bytes\n")
@@ -126,9 +128,10 @@ class PhenixCacheTests(unittest.TestCase):
         self.assertEqual(first, self.refine()[0])
         self.assertEqual(len(self.calls), 1)
         outputs = [first]
-        for path in (self.model, self.mtz, self.bin / "phenix.refine", self.bin / "phenix.version"):
-            path.write_text(path.read_text() + "changed\n")
+        for path in (self.model, self.mtz, self.bin / "phenix.refine", self.bin / "phenix.version", self.setup):
+            path.write_text(path.read_text() + "# changed\n")
             outputs.append(self.refine()[0])
+        self.setup.write_text("export PHENIX_VERSION=2.0-9999\n")
         self.version_text = "PHENIX version: 2.0-9999\n"
         outputs.append(self.refine()[0])
         with mock.patch.object(xray, "MACRO_CYCLES", 8):
@@ -136,8 +139,8 @@ class PhenixCacheTests(unittest.TestCase):
         outputs.append(self.refine(restraints=True)[0])
         with mock.patch.object(xray, "LOW_RES_RESTRAINTS", "ncs_search.enabled=False"):
             outputs.append(self.refine(restraints=True)[0])
-        self.assertEqual(len(set(outputs)), 9)
-        self.assertEqual(len(self.calls), 9)
+        self.assertEqual(len(set(outputs)), 10)
+        self.assertEqual(len(self.calls), 10)
 
     def test_literal_scientific_paths_reach_refiner_unchanged(self):
         self.refine()

@@ -70,12 +70,198 @@ def file_identity(path: Path) -> dict:
     return {"path": str(resolved), "sha256": sha256(resolved)}
 
 
-def _build_is_measured(build: Mapping) -> bool:
+_SHA256_RE = re.compile(r"[0-9a-f]{64}")
+
+
+def _valid_string_sequence(value: object) -> bool:
     return (
-        build.get("reported_version_source") == "command_output"
-        and isinstance(build.get("reported_version"), str)
-        and toolchain.parse_phenix_build(build["reported_version"]) is not None
+        isinstance(value, (list, tuple))
+        and all(isinstance(item, str) for item in value)
     )
+
+
+def _valid_ignored_variables(value: object) -> bool:
+    return (
+        _valid_string_sequence(value)
+        and list(value) == sorted(set(value))
+        and set(value) <= set(toolchain._PHENIX_VERSION_VARIABLES)
+    )
+
+
+def _valid_ignored_hooks(value: object) -> bool:
+    return (
+        _valid_string_sequence(value)
+        and list(value) == sorted(set(value))
+        and all(
+            item in toolchain._SHELL_HOOK_VARIABLES or item.startswith("BASH_FUNC_")
+            for item in value
+        )
+    )
+
+
+def _vendor_setup_probe_is_valid(
+    probe: object, reported_version: str, top_parsed_build: object
+) -> bool:
+    if not isinstance(probe, Mapping):
+        return False
+    if probe.get("error") is not None:
+        return False
+    if probe.get("probe_mode") != "vendor_setup_environment":
+        return False
+    path_keys = (
+        "configured_prefix",
+        "resolved_prefix",
+        "setup_configured_path",
+        "setup_resolved_path",
+        "configured_path",
+        "resolved_path",
+    )
+    for key in path_keys:
+        raw = probe.get(key)
+        if not isinstance(raw, str) or not raw or not Path(raw).is_absolute():
+            return False
+    configured_prefix = Path(probe["configured_prefix"])
+    resolved_prefix = Path(probe["resolved_prefix"])
+    setup_configured = Path(probe["setup_configured_path"])
+    setup_resolved = Path(probe["setup_resolved_path"])
+    dispatcher_configured = Path(probe["configured_path"])
+    dispatcher_resolved = Path(probe["resolved_path"])
+    if (
+        dispatcher_configured.name != "phenix.version"
+        or dispatcher_resolved.name != "phenix.version"
+        or setup_configured.name != "phenix_env.sh"
+        or setup_resolved.name != "phenix_env.sh"
+    ):
+        return False
+    expected_prefix = toolchain._phenix_configured_prefix(dispatcher_configured.parent)
+    if (
+        configured_prefix != expected_prefix
+        or setup_configured != configured_prefix / "phenix_env.sh"
+        or setup_resolved.parent != resolved_prefix
+        or not setup_resolved.is_relative_to(resolved_prefix)
+        or not dispatcher_resolved.is_relative_to(resolved_prefix)
+        or dispatcher_resolved.parent
+        not in {resolved_prefix, resolved_prefix / "bin", resolved_prefix / "phenix_bin"}
+    ):
+        return False
+    for digest_key in ("setup_sha256", "sha256"):
+        digest_value = probe.get(digest_key)
+        if not isinstance(digest_value, str) or not _SHA256_RE.fullmatch(digest_value):
+            return False
+    setup_argv = probe.get("setup_argv")
+    argv = probe.get("argv")
+    if (
+        not _valid_string_sequence(setup_argv)
+        or list(setup_argv) != toolchain.phenix_setup_argv(setup_resolved)
+        or not _valid_string_sequence(argv)
+        or list(argv) != [str(dispatcher_resolved)]
+    ):
+        return False
+    if (
+        type(probe.get("setup_returncode")) is not int
+        or probe["setup_returncode"] != 0
+        or type(probe.get("returncode")) is not int
+        or probe["returncode"] != 0
+    ):
+        return False
+    if (
+        probe.get("setup_stdout") != ""
+        or probe.get("setup_stderr") != ""
+        or not isinstance(probe.get("stdout"), str)
+        or not isinstance(probe.get("stderr"), str)
+        or toolchain._has_phenix_banner_fragment(probe["stderr"])
+    ):
+        return False
+    stdout = probe["stdout"]
+    if not stdout.strip() or stdout.strip() != reported_version:
+        return False
+    setup_fields = probe.get("setup_version_fields")
+    setup_build = toolchain.parse_phenix_setup_build(setup_fields)
+    banner_build = toolchain.parse_phenix_build(stdout)
+    if setup_build is None or banner_build is None or setup_build != banner_build:
+        return False
+    if (
+        probe.get("setup_parsed_build") != setup_build
+        or probe.get("parsed_build") != banner_build
+        or top_parsed_build != banner_build
+    ):
+        return False
+    if not _valid_ignored_variables(probe.get("ignored_inherited_version_variables")):
+        return False
+    if "ignored_inherited_shell_hooks" in probe and not _valid_ignored_hooks(
+        probe.get("ignored_inherited_shell_hooks")
+    ):
+        return False
+    return True
+
+
+def _bare_probe_is_valid(
+    probe: object, reported_version: str, banner_build: str
+) -> bool:
+    if not isinstance(probe, Mapping):
+        return False
+    if probe.get("error") is not None:
+        return False
+    if "probe_mode" in probe and probe.get("probe_mode") != "command_output":
+        return False
+    for key in ("configured_path", "resolved_path"):
+        raw = probe.get(key)
+        if not isinstance(raw, str) or not raw or not Path(raw).is_absolute():
+            return False
+    digest_value = probe.get("sha256")
+    if not isinstance(digest_value, str) or not _SHA256_RE.fullmatch(digest_value):
+        return False
+    argv = probe.get("argv")
+    if not _valid_string_sequence(argv) or list(argv) != [probe["resolved_path"]]:
+        return False
+    if type(probe.get("returncode")) is not int or probe["returncode"] != 0:
+        return False
+    if (
+        not isinstance(probe.get("stdout"), str)
+        or probe["stdout"].strip() != reported_version
+        or not isinstance(probe.get("stderr"), str)
+        or toolchain._has_phenix_banner_fragment(probe["stderr"])
+    ):
+        return False
+    if (
+        "parsed_build" in probe
+        and probe.get("parsed_build") is not None
+        and probe.get("parsed_build") != banner_build
+    ):
+        return False
+    if not _valid_ignored_variables(probe.get("ignored_inherited_version_variables")):
+        return False
+    if "ignored_inherited_shell_hooks" in probe and not _valid_ignored_hooks(
+        probe.get("ignored_inherited_shell_hooks")
+    ):
+        return False
+    return True
+
+
+def _build_is_measured(build: Mapping) -> bool:
+    if not isinstance(build, Mapping):
+        return False
+    source = build.get("reported_version_source")
+    reported_version = build.get("reported_version")
+    if not isinstance(reported_version, str) or not reported_version:
+        return False
+    banner_build = toolchain.parse_phenix_build(reported_version)
+    if banner_build is None:
+        return False
+    top_parsed = build.get("parsed_build")
+    if top_parsed is not None and top_parsed != banner_build:
+        return False
+    if source == "vendor_setup_environment":
+        return _vendor_setup_probe_is_valid(
+            build.get("version_probe"), reported_version, top_parsed
+        )
+    if source == "command_output":
+        if "version_probe" in build:
+            return _bare_probe_is_valid(
+                build.get("version_probe"), reported_version, banner_build
+            )
+        return True
+    return False
 
 
 def _artifact(root: Path, relative: str) -> Path:

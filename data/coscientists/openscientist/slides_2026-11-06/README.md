@@ -1,0 +1,95 @@
+# `slides_2026-11-06` — Slide Content Package for XMechBay / Claude Slides
+
+Content-only slide narrative and figure package for the `protstruct_review` technical review presentation, derived from committed scientific records pinned to `main` commit `f3cfad326f28ddbf652dcdb0c5858443bee6e413`.
+
+## Package Paths & Inventory
+
+All package files in `data/coscientists/openscientist/slides_2026-11-06/`:
+
+| Path | Purpose |
+| :--- | :--- |
+| `outline.md` | 5-section outline with one-sentence section summaries and 39 slides (`S01`–`S09`, triplet `S09a`/`S09f`/`S09b`, `S10`–`S12`, triplets `S13a`/`S13`/`S13b`–`S18a`/`S18`/`S18b`, `S19`–`S24`), each carrying `title_general` and `subtitle_technical` |
+| `slides.md` | Full 39-slide specification: slide ID, section, `title_general`, `subtitle_technical`, one-line message, `Terms` panel on figure intros (`S09a`, `S13a`–`S18a`), concise slide body, figure path/caption, pinned `Sources` (`file:line` and JSON pointers at `f3cfad326f28ddbf652dcdb0c5858443bee6e413`), separate `Package artifacts`, and speaker notes (`<= 1,500` characters) |
+| `questions.md` | User-input specifications for open framing questions `Q1`, `Q2`, and `Q4` (matching `[USER INPUT: Q<N> ...]` placeholders on `S02` and `S24`) plus the recorded `2026-11-06` `Q3` decision on `S06` and `S24` |
+| `README.md` | Package guide, source pin, historical three-deck source context, figure build/check commands, design specifications, XMechBay two-column handoff instructions, and scope limitations |
+| `build_figures.py` | Deterministic single-command figure builder and `--check` verifier reading committed blobs at `f3cfad326f28ddbf652dcdb0c5858443bee6e413` via `git show` |
+| `figures.json` | Machine-readable manifest recording per-figure SHA-256 digests, pixel dimensions (`[3328, 1360]`), units, selection criteria, sample sizes, PDB IDs, source blob hashes, thresholds, and derived summary statistics across the 6 protein-distribution figures (`fig01`–`fig06`) and 1 threshold-ledger/registration-history figure (`fig07`) |
+| `figures/fig01_cohort_resolution.png` | Figure 1 (`Slide S13`, triplet `S13a`/`S13`/`S13b`): Enrolled extreme-resolution control cohort (`n = 22`, `0.79–1.00 Å`, `median 0.895 Å`) actual `d_min` (`15 ≤ 0.90 Å`, `7 > 0.90 Å`) vs stored `stratum` (`20 true`, `2 false`) |
+| `figures/fig02_r9_null_delta_rfree.png` | Figure 2 (`Slide S14`, triplet `S14a`/`S14`/`S14b`): Regenerated Round-9 null `ΔR-free` (`post − deposited baseline`) across `PHENIX` (`n = 22`, `median +0.00330`), `Gemmi` (`n = 22`, `median +0.00365`), and `REFMAC5 BREF ANIS` (`n = 21`, `median +0.00370`, `9YGW` absent) |
+| `figures/fig03_r9_isot_vs_anis_paired.png` | Figure 3 (`Slide S15`, triplet `S15a`/`S15`/`S15b`): Paired `n = 21` `REFMAC5 BREF ISOT` (`median +0.00180`, `17/21` sign agreement) vs `BREF ANIS` (`median +0.00370`, `20/21` sign agreement; `9YGW` absent), highlighting `2VXN` (`-0.0122 → +0.0130`) |
+| `figures/fig04_r10_recovery_delta_rfree.png` | Figure 4 (`Slide S16`, triplet `S16a`/`S16`/`S16b`): Round-10 `osol_h` recovery `ΔR-free` relative to deposited baselines (`n = 22` / `n = 21`; medians `+0.00630`, `+0.00800`, `+0.00730`), highlighting `2VXN` (`+0.0221 / +0.0211` vs `REFMAC -0.0095`) |
+| `figures/fig05_bond_rmsd_abc.png` | Figure 5 (`Slide S17`, triplet `S17a`/`S17`/`S17b`): Reconstructed 17-model bond-length RMSD (`Å`, not `RMSZ`) across `A: PHENIX CDL` (`0.00872 Å`), `B: PHENIX E&H` (`0.00914 Å`), and `C: Gemmi 0.7.4` (`0.01100 Å`), split by equal (`n = 6`) vs different (`n = 11`) bond counts |
+| `figures/fig06_round46_rotamer_outlier_pct.png` | Figure 6 (`Slide S18`, triplet `S18a`/`S18`/`S18b`): Separate 41-protein Round-46 cohort (`12CI` excluded for zero shared rotamer and Ramachandran keys) raw reported rotamer outlier `%` (`14ZZ -1.52 pp`, `2YOL +0.57 pp`) vs `1.0000` shared-key binary `OUTLIER` verdict agreement (`38,744 / 38,744`) |
+| `figures/fig07_threshold_evidence_history.png` | Figure 7 (`Slide S09f`, triplet `S09a`/`S09f`/`S09b`): Documentary threshold-ledger inventory (`41` components across `21` `§3`/`§4` rows = `17 §3 + 4 §4`, classified orthogonally by `8` evidence states and `7` policy states) paired with registered `§6` `FIT` `ΔR-free` threshold history (`R4` retired `.01220 / .01090 / .00540` on `n = 22/22/19`, `R7` `ISOT` history `.01200 / .01025 / .00560` on `n = 22/22/20`, and `R9` `ANIS` current `.01200 / .01025 / .01150` with `REFMAC n = 21`), distinct from the per-protein distributions in `fig01`–`fig06` |
+
+Companion records in `ref/research/`:
+- `ref/research/slides_content_package_review_2026-11-06.md` — Narrative, figure-population, CI-provenance, and source audit documenting the 32 in-scope issue dispositions (`#965`–`#986` and `#988`–`#997`) and separate open repository follow-ups (`#964`, `#987`).
+- `ref/research/geometry_tool_presence_2026-11-06.json` — Dated metadata-only filesystem presence check on configured default paths (no version probes run) supporting the `Slide S06` (`Q3`) installation-presence note.
+
+## Source Pin & Historical Deck Series Context
+
+- **Pinned scientific source revision**: `f3cfad326f28ddbf652dcdb0c5858443bee6e413` (`main`). All entries listed under `Sources (pinned to f3cfad326f28ddbf652dcdb0c5858443bee6e413)` in `slides.md` refer exclusively to committed repository files existing at that revision; new files introduced by this branch (`questions.md`, `figures.json`, `build_figures.py`, `figures/*.png`, and `ref/research/geometry_tool_presence_2026-11-06.json`) are listed separately under `Package artifacts`.
+- **Local clone & CI history requirement (`#988`)**: `build_figures.py` and `scripts/test_slides_2026_11_06.py` read committed blobs at `f3cfad326f28ddbf652dcdb0c5858443bee6e413` via `git show` with no network fetch inside the figure generator or hermetic gate. A local clone must contain commit `f3cfad326f28ddbf652dcdb0c5858443bee6e413` (not a shallow clone missing that object), and `.github/workflows/validate.yml` configures `fetch-depth: 0` on its `actions/checkout` step so the pinned source revision is present before validation.
+- **Original three-deck source series (`#977`)**:
+  - `data/coscientists/openscientist/slides_2026-05-04/`
+  - `data/coscientists/openscientist/slides_2026-05-05/`
+  - `data/coscientists/openscientist/slides_2026-09-07/`
+  These three committed directories are the original historical slide series and are preserved read-only. This `slides_2026-11-06/` directory is a new derivative content package synthesized from that series together with current repository evidence (`ref/research/refinement_assessment_case_study_2026-10-18.md`, `ref/quality_reporting.md:196-204`, the extreme-resolution control series through Round 11, the 17-model bond-RMSD benchmark, the 41-protein Round-46 classification comparison, and the `#911` `ProSMART` capability correction).
+
+## Figure Generation & Check Commands
+
+Bootstrap the locked Python 3.12 environment (including the `slides` optional extra with `matplotlib==3.11.2` and `pillow==11.3.0`; optional dependency installation is handled by `uv` outside scientific scripts):
+
+```bash
+uv sync --locked --extra benchmark --extra slides
+```
+
+Regenerate all 7 PNG figures and `figures.json` from committed Git blobs at `f3cfad326f28ddbf652dcdb0c5858443bee6e413`:
+
+```bash
+uv run --locked --extra benchmark --extra slides -- python data/coscientists/openscientist/slides_2026-11-06/build_figures.py
+```
+
+Verify byte-for-byte SHA-256 determinism without mutating files on disk:
+
+```bash
+uv run --locked --extra benchmark --extra slides -- python data/coscientists/openscientist/slides_2026-11-06/build_figures.py --check
+```
+
+Run the focused slide-package consistency test (which also runs `build_figures.py --check` when the `slides` extra is installed, as configured in `.github/workflows/validate.yml` after the hermetic gate, `#989`):
+
+```bash
+uv run --locked --extra benchmark --extra slides -- python scripts/test_slides_2026_11_06.py
+```
+
+## Design Specifications
+
+- **39-slide triplet architecture and dual titles**: 39 slides (`S01`–`S09`, adjacent intro–figure–results triplet `S09a`/`S09f`/`S09b`, `S10`–`S12`, adjacent triplets `S13a`/`S13`/`S13b` through `S18a`/`S18`/`S18b`, and `S19`–`S24`) across 5 sections. Every slide in `outline.md` and `slides.md` carries an identical pair of title fields: `title_general` (a concise declarative sentence in plain general-audience language ending in `.`) and `subtitle_technical` (specialist terms, cohorts, and tool names).
+- **Intro, figure, and results triplet roles**:
+  - **Intro slides (`S09a`, `S13a`–`S18a`)**: Define every measure, unit, and acronym in a `Terms` block before the figure appears, paired with `**The experiment**:` and `**Reading the figure**:` sections in `Slide body`.
+  - **Figure slides (`S09f`, `S13`–`S18`)**: Pair the full-width PNG figure (`figures/fig07_threshold_evidence_history.png` and `figures/fig01_*.png`–`figures/fig06_*.png`) with a single-sentence reading note in `Slide body`. Figure 7 (`S09f`) summarizes documentary `§3`/`§4` ledger components (`41` components across `21` rows) and `§6` `FIT` registration history (`R4`, `R7`, `R9`), whereas Figures 1–6 (`S13`–`S18`) plot empirical per-protein distributions.
+  - **Results slides (`S09b`, `S13b`–`S18b`)**: State 3–5 concise bullets summarizing the measured results and their scoped implications.
+- **Speaker notes**: Self-contained presenter notes (`<= 1,500` characters per slide) recording exact provenance and scope qualifiers.
+- **Figure canvas**: `1664 × 680` px logical (`16.64 × 6.80` in at `100` logical px/in), rendered at `2x` (`200` DPI) to `3328 × 1360` px PNGs using bundled `DejaVu Sans` (`>= 18.0 pt` = `25.0 px` logical at `1x`, exceeding the `>= 24 px` logical minimum) and normalized via Pillow RGB re-encoding (`optimize=False`).
+
+## Content-Only Handoff to XMechBay / Claude Slides
+
+This directory is a **content-only package** (`outline.md`, `slides.md`, `questions.md`, `figures/*.png`, `figures.json`); XMechBay builds the HTML/Claude Slides presentation from these files, and this PR ships content and PNGs only. When rendering:
+
+1. **Visual slide canvas**: Place both `title_general` and `subtitle_technical`, `One-line message`, `Slide body`, and `Figure` (for `S09f` and `S13`–`S18`) on the slide canvas.
+2. **Two-column layout on figure intros (`S09a`, `S13a`–`S18a`)**: Render `Terms` in the left column and `**The experiment**` + `**Reading the figure**` in the right column.
+3. **Slide `S06` layout (`Q3` decision)**: Render three larger top panels (`A`, `B`, `C`), each with its own `Benchmarked · 17 models` badge, followed by three smaller category panels below, each with its own `not yet benchmarked` badge scoped to this 17-model comparison.
+4. **Provenance and notes**: Place `Sources` and `Package artifacts` in a slide footer/provenance drawer and `Speaker notes` in the presenter notes track.
+5. **Open placeholders (`Q1`, `Q2`, `Q4`)**: Three bracketed placeholders (`[USER INPUT: Q1]`, `[USER INPUT: Q2]`, `[USER INPUT: Q4]`) appear on `S02` and `S24` and are specified in `questions.md` (`Q3` is marked `DECIDED` as of `2026-11-06`).
+
+## Limitations & Verification Status
+
+- **Retained-evidence boundaries**:
+  - `scripts/assess_refinement.py` currently resolves verdicts to `"informational"` because `ref/structural_criteria.yaml` sets `pass_criterion_bindings: []` (`Slide S10`).
+  - Figure 7 (`Slides S09a–S09b`) summarizes the committed `ref/threshold_evidence_status.yaml` ledger at `f3cfad326f28ddbf652dcdb0c5858443bee6e413` (`21` rows = `17 §3 + 4 §4`, `41` components, where `23/41` `retained_record` and `29/41` `active_conditional` are orthogonal classifications of the same `41` components and `retained_record` does not establish complete provenance or independent calibration) alongside the registered `§6` `FIT` `ΔR-free` threshold history (`R4` retired `.01220 / .01090 / .00540` on `n = 22/22/19`, `R7` `ISOT` history `.01200 / .01025 / .00560` on `n = 22/22/20`, and `R9` `ANIS` current `.01200 / .01025 / .01150` with `REFMAC n = 21`).
+  - `ref/research/data/negative_control_round10_recover.json` retains deltas relative to deposited baselines (`Slides S16a–S16b`); no absolute pre/post `R-work`/`R-free` endpoints are stored in the Round-10 JSON, and Round 10 changed multiple protocol factors simultaneously (`ref/research/negative_control_round10.md:22-49,92-94`).
+  - Figure 5 (`Slides S17a–S17b`) is reconstructed from the committed 17-model published table (`ref/research/tolerance_benchmark_restraint_library.md:38-56`) at published precision without a raw rerun; restraint lists are not diffed on the `11/17` unequal-count models (`ref/research/tolerance_benchmark_bond_rmsd.md:104-105`), no single cross-tool agreement threshold applies across the `A−B`, `B−C`, and count-mismatched groups (`#975`), and separate open follow-ups `#964` and `#987` remain tracked on existing repository sources.
+  - Figure 6 (`Slides S18a–S18b`) plots raw reported rotamer outlier percentages on the 41-protein Round-46 set (`12CI` excluded); both `phenix` and `wwPDB` validation reports share `MolProbity` lineage, and the binary `OUTLIER` agreement (`38,744 / 38,744`) is reconstructed from summarized producer output rather than a fresh XML/log audit (`ref/research/t05_classification_floor_adoption_2026-09-27.md:43-56`).
+  - In the `1SAR` archive (`Slides S19–S20`), `data/1sar_final.pdb` is Round 4 (`146` waters) while logged Round 7 (`159` waters) and historical raw evaluator outputs/denominators are absent (`ref/research/refinement_assessment_case_study_2026-10-18.md:44-51,59-67`).
+  - In `ref/threshold_evidence_status.yaml`, `T15` exact-denominator recalibration (`lines 360-377`, open issue `#765`) and `T14` flip-grading policy (`lines 567-575`) remain documented calibration items (`Slide S23`).
+- **Authoring & verification status**: Slide text (`outline.md`, `slides.md`, `questions.md`, `README.md`), `#976` explanatory prose and refreshed SHA-256 fingerprint pins in `ref/threshold_evidence_status.yaml`, `build_figures.py` (`#974` full `n = 17` and `n = 11` populations, `#975` threshold removal, and `fig07_threshold_evidence_history` with `#994`–`#996` fixes), `scripts/test_slides_2026_11_06.py` (`39`-slide / `7`-figure triplet structure, `#991` Ruff-clean `historical_filtered_fig05` fixture, and `#997`-corrected independent `fig07` ledger/inventory/registration-equality checks), and `.github/workflows/validate.yml` (`#988` `fetch-depth: 0` and `#989` `--extra slides` check step) were authored by read-only inspection against committed sources at `f3cfad326f28ddbf652dcdb0c5858443bee6e413`. Shell commands (`validate.sh`, `build_figures.py --check`, test suites, and CI workflows) were not run by the authoring worker under the worker execution rules; PRIMARY owns rendering, focused checks, the hermetic gate, slide-package tests, CI (`ubuntu-latest`, `macos-latest`), and PR review recording.

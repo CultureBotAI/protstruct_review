@@ -7,6 +7,7 @@ import ast
 import copy
 import hashlib
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -15,8 +16,10 @@ import statistics
 import struct
 import subprocess
 import sys
+import tempfile
 from typing import Any
 import unittest
+import zlib
 
 import yaml
 
@@ -1194,6 +1197,361 @@ def historical_filtered_fig05(out_dir, source_hashes):
         exec(compile(historical_fixture_src, "<historical_filtered_fig05>", "exec"), hist_env)
         with self.assertRaisesRegex(AssertionError, "Panel A group C filtered observations"):
             audit_fig05_function(hist_env["historical_filtered_fig05"])
+
+    def test_diagnostics_destination_safety_when_slides_extra_installed(self) -> None:
+        if (
+            importlib.util.find_spec("matplotlib") is None
+            or importlib.util.find_spec("PIL") is None
+        ):
+            self.skipTest("Optional 'slides' extra (matplotlib/pillow) not installed in current env")
+
+        spec = importlib.util.spec_from_file_location(
+            "slides_2026_11_06_build_figures", PACKAGE_DIR / "build_figures.py"
+        )
+        self.assertIsNotNone(spec)
+        assert spec is not None and spec.loader is not None
+        bf_mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(bf_mod)
+
+        with tempfile.TemporaryDirectory(prefix="test_slides_diag_safety_") as tmp:
+            root = Path(tmp)
+            target_dir = root / "surrogate_target_deck"
+            (target_dir / "figures").mkdir(parents=True)
+            target_manifest = target_dir / "figures.json"
+            target_png = target_dir / "figures" / "fig01_cohort_resolution.png"
+            orig_manifest_bytes = b'{"surrogate": "committed_target_manifest"}\n'
+            orig_png_bytes = b"COMMITTED_TARGET_PNG_BYTES"
+            target_manifest.write_bytes(orig_manifest_bytes)
+            target_png.write_bytes(orig_png_bytes)
+
+            fresh_dir = root / "surrogate_fresh_render"
+            (fresh_dir / "figures").mkdir(parents=True)
+            fresh_manifest = fresh_dir / "figures.json"
+            fresh_png = fresh_dir / "figures" / "fig01_cohort_resolution.png"
+            fresh_manifest_bytes = b'{"surrogate": "fresh_regenerated_manifest"}\n'
+            fresh_png_bytes = b"FRESH_REGENERATED_PNG_BYTES"
+            fresh_manifest.write_bytes(fresh_manifest_bytes)
+            fresh_png.write_bytes(fresh_png_bytes)
+
+            sample_report: dict[str, Any] = {
+                "status": "FAILED",
+                "source_revision": SOURCE_REVISION,
+                "failures": ["simulated mismatch"],
+            }
+
+            # 1. Existing external diagnostic root with child symlinks into target deck (#1001)
+            existing_diag = root / "existing_external_diag"
+            existing_diag.mkdir()
+            (existing_diag / "figures.json").symlink_to(target_manifest)
+            (existing_diag / "figures").symlink_to(target_dir / "figures")
+            existing_note = existing_diag / "existing_note.txt"
+            existing_note.write_bytes(b"KEEP_EXISTING_DIAG_CONTENT")
+
+            with self.assertRaisesRegex(SystemExit, "existing destination"):
+                bf_mod._persist_diagnostics(
+                    existing_diag, target_dir, sample_report, fresh_dir
+                )
+            self.assertEqual(target_manifest.read_bytes(), orig_manifest_bytes)
+            self.assertEqual(target_png.read_bytes(), orig_png_bytes)
+            self.assertTrue((existing_diag / "figures.json").is_symlink())
+            self.assertTrue((existing_diag / "figures").is_symlink())
+            self.assertEqual(existing_note.read_bytes(), b"KEEP_EXISTING_DIAG_CONTENT")
+            self.assertFalse((existing_diag / "diagnostics.json").exists())
+
+            with self.assertRaisesRegex(SystemExit, "existing destination"):
+                bf_mod.check_deterministic(target_dir, diagnostics_dir=existing_diag)
+            self.assertEqual(target_manifest.read_bytes(), orig_manifest_bytes)
+            self.assertEqual(target_png.read_bytes(), orig_png_bytes)
+
+            # 2. Existing symlink or dangling symlink as destination itself
+            other_dir = root / "other_external_dir"
+            other_dir.mkdir()
+            symlink_diag = root / "symlink_diag"
+            symlink_diag.symlink_to(other_dir)
+            with self.assertRaisesRegex(SystemExit, "existing destination"):
+                bf_mod._persist_diagnostics(
+                    symlink_diag, target_dir, sample_report, fresh_dir
+                )
+            with self.assertRaisesRegex(SystemExit, "existing destination"):
+                bf_mod.check_deterministic(target_dir, diagnostics_dir=symlink_diag)
+            self.assertEqual(list(other_dir.iterdir()), [])
+
+            dangling_diag = root / "dangling_diag"
+            dangling_target = root / "nonexistent_dangling_target"
+            dangling_diag.symlink_to(dangling_target)
+            with self.assertRaisesRegex(SystemExit, "existing destination"):
+                bf_mod._persist_diagnostics(
+                    dangling_diag, target_dir, sample_report, fresh_dir
+                )
+            with self.assertRaisesRegex(SystemExit, "existing destination"):
+                bf_mod.check_deterministic(target_dir, diagnostics_dir=dangling_diag)
+            self.assertFalse(dangling_target.exists())
+            self.assertTrue(dangling_diag.is_symlink())
+
+            # 3. Destination inside target deck (directly or as deck root)
+            inside_diag = target_dir / "nested_diag"
+            with self.assertRaisesRegex(SystemExit, "inside target deck directory"):
+                bf_mod._persist_diagnostics(
+                    inside_diag, target_dir, sample_report, fresh_dir
+                )
+            with self.assertRaisesRegex(SystemExit, "inside target deck directory"):
+                bf_mod.check_deterministic(target_dir, diagnostics_dir=inside_diag)
+            self.assertFalse(inside_diag.exists())
+
+            with self.assertRaisesRegex(SystemExit, "inside target deck directory"):
+                bf_mod._persist_diagnostics(
+                    target_dir, target_dir, sample_report, fresh_dir
+                )
+            self.assertEqual(target_manifest.read_bytes(), orig_manifest_bytes)
+            self.assertEqual(target_png.read_bytes(), orig_png_bytes)
+
+            # 4. Brand-new external diagnostic destination persists fresh manifest, PNG, and report
+            new_diag = root / "brand_new_diag"
+            self.assertFalse(new_diag.exists())
+            bf_mod._persist_diagnostics(
+                new_diag, target_dir, sample_report, fresh_dir
+            )
+            self.assertTrue(new_diag.is_dir())
+            self.assertEqual(
+                (new_diag / "figures.json").read_bytes(), fresh_manifest_bytes
+            )
+            self.assertEqual(
+                (new_diag / "figures" / "fig01_cohort_resolution.png").read_bytes(),
+                fresh_png_bytes,
+            )
+            self.assertEqual(
+                json.loads((new_diag / "diagnostics.json").read_text(encoding="utf-8")),
+                sample_report,
+            )
+            self.assertEqual(target_manifest.read_bytes(), orig_manifest_bytes)
+            self.assertEqual(target_png.read_bytes(), orig_png_bytes)
+
+    def test_canonical_rgb8_png_encoder_when_slides_extra_installed(self) -> None:
+        # 1. AST verification that all 9 ax.annotate calls in build_figures.py set "antialiased": False in arrowprops (#999).
+        bf_source = (PACKAGE_DIR / "build_figures.py").read_text(encoding="utf-8")
+        bf_tree = ast.parse(bf_source, filename=str(PACKAGE_DIR / "build_figures.py"))
+        annotate_calls = [
+            node
+            for node in ast.walk(bf_tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "annotate"
+        ]
+        self.assertEqual(
+            len(annotate_calls),
+            9,
+            f"Expected 9 ax.annotate calls in build_figures.py, found {len(annotate_calls)}",
+        )
+        for call in annotate_calls:
+            arrowprops_kw = next(
+                (kw for kw in call.keywords if kw.arg == "arrowprops"), None
+            )
+            self.assertIsNotNone(
+                arrowprops_kw,
+                f"ax.annotate at line {call.lineno} missing arrowprops keyword",
+            )
+            assert arrowprops_kw is not None
+            self.assertIsInstance(
+                arrowprops_kw.value,
+                ast.Dict,
+                f"ax.annotate arrowprops at line {call.lineno} must be a dict literal",
+            )
+            assert isinstance(arrowprops_kw.value, ast.Dict)
+            antialiased_vals = [
+                v
+                for k, v in zip(
+                    arrowprops_kw.value.keys, arrowprops_kw.value.values, strict=True
+                )
+                if isinstance(k, ast.Constant) and k.value == "antialiased"
+            ]
+            self.assertEqual(
+                len(antialiased_vals),
+                1,
+                f"ax.annotate arrowprops at line {call.lineno} must define 'antialiased' exactly once",
+            )
+            aa_node = antialiased_vals[0]
+            self.assertIsInstance(
+                aa_node,
+                ast.Constant,
+                f"ax.annotate arrowprops['antialiased'] at line {call.lineno} must be a literal Constant",
+            )
+            assert isinstance(aa_node, ast.Constant)
+            self.assertIs(
+                aa_node.value,
+                False,
+                f"ax.annotate arrowprops at line {call.lineno} must set 'antialiased': False",
+            )
+
+        if (
+            importlib.util.find_spec("matplotlib") is None
+            or importlib.util.find_spec("PIL") is None
+        ):
+            self.skipTest("Optional 'slides' extra (matplotlib/pillow) not installed in current env")
+
+        from PIL import Image
+
+        spec = importlib.util.spec_from_file_location(
+            "slides_2026_11_06_build_figures_png", PACKAGE_DIR / "build_figures.py"
+        )
+        self.assertIsNotNone(spec)
+        assert spec is not None and spec.loader is not None
+        bf_mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(bf_mod)
+
+        def ref_sub_filter(rgb: bytes, w: int, h: int) -> bytes:
+            row_stride = w * 3
+            self.assertEqual(len(rgb), h * row_stride)
+            out = bytearray()
+            for r in range(h):
+                row = rgb[r * row_stride : (r + 1) * row_stride]
+                out.append(1)
+                for i in range(row_stride):
+                    prev = row[i - 3] if i >= 3 else 0
+                    out.append((row[i] - prev) & 0xFF)
+            return bytes(out)
+
+        def parse_png_chunks(png_raw: bytes) -> list[tuple[bytes, bytes, int]]:
+            self.assertEqual(png_raw[:8], b"\x89PNG\r\n\x1a\n")
+            pos = 8
+            chunks: list[tuple[bytes, bytes, int]] = []
+            while pos < len(png_raw):
+                self.assertLessEqual(pos + 12, len(png_raw))
+                (length,) = struct.unpack(">I", png_raw[pos : pos + 4])
+                ctype = png_raw[pos + 4 : pos + 8]
+                cdata = png_raw[pos + 8 : pos + 8 + length]
+                self.assertEqual(len(cdata), length)
+                (crc_stored,) = struct.unpack(
+                    ">I", png_raw[pos + 8 + length : pos + 12 + length]
+                )
+                crc_calc = zlib.crc32(ctype + cdata) & 0xFFFFFFFF
+                self.assertEqual(
+                    crc_stored,
+                    crc_calc,
+                    f"CRC-32 mismatch in chunk {ctype!r}",
+                )
+                chunks.append((ctype, cdata, crc_stored))
+                pos += 12 + length
+            return chunks
+
+        def verify_png_roundtrip(rgb: bytes, w: int, h: int) -> bytes:
+            png_bytes = bf_mod._encode_canonical_rgb8_png(rgb, w, h)
+            chunks = parse_png_chunks(png_bytes)
+            self.assertEqual([c[0] for c in chunks], [b"IHDR", b"IDAT", b"IEND"])
+            ihdr_data = chunks[0][1]
+            idat_data = chunks[1][1]
+            iend_data = chunks[2][1]
+            self.assertEqual(
+                ihdr_data, struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)
+            )
+            self.assertEqual(iend_data, b"")
+            self.assertEqual(idat_data[:2], b"\x78\x01")
+            decompressed_zlib = zlib.decompress(idat_data)
+            decompressed_raw = zlib.decompress(idat_data[2:-4], -15)
+            self.assertEqual(decompressed_zlib, decompressed_raw)
+            (adler_stored,) = struct.unpack(">I", idat_data[-4:])
+            self.assertEqual(
+                adler_stored, zlib.adler32(decompressed_zlib) & 0xFFFFFFFF
+            )
+            expected_filtered = ref_sub_filter(rgb, w, h)
+            self.assertEqual(bf_mod._png_sub_filter_rgb8(rgb, w, h), expected_filtered)
+            self.assertEqual(decompressed_zlib, expected_filtered)
+            with Image.open(io.BytesIO(png_bytes)) as im:
+                self.assertEqual(im.format, "PNG")
+                self.assertEqual(im.mode, "RGB")
+                self.assertEqual(im.size, (w, h))
+                self.assertEqual(im.tobytes(), rgb)
+            return png_bytes
+
+        # 2. Empty stream and all 256 literal byte values (0..255) on raw DEFLATE + zlib helpers
+        empty_deflate = bf_mod._deflate_fixed_rle_dist1(b"")
+        self.assertEqual(zlib.decompress(empty_deflate, -15), b"")
+        empty_zlib = bf_mod._zlib_wrap_fixed_rle_dist1(b"")
+        self.assertEqual(empty_zlib[:2], b"\x78\x01")
+        self.assertEqual(zlib.decompress(empty_zlib), b"")
+        self.assertEqual(
+            struct.unpack(">I", empty_zlib[-4:])[0], zlib.adler32(b"") & 0xFFFFFFFF
+        )
+
+        all_literals_stream = bytes(range(256)) + bytes(reversed(range(256)))
+        all_literals_zlib = bf_mod._zlib_wrap_fixed_rle_dist1(all_literals_stream)
+        self.assertEqual(zlib.decompress(all_literals_zlib), all_literals_stream)
+
+        # 3. Exhaustive equal-byte run lengths: 1..265 (covers 1, 2, 3, 4 and every match length 3..258
+        # including boundary lengths 257, 258, 259) plus repeated max matches (516..520, 775..778)
+        # across zero and non-zero byte values (<144 8-bit and >=144 9-bit fixed Huffman literals).
+        run_lengths_to_test = [
+            *range(1, 266),
+            516,
+            517,
+            518,
+            519,
+            520,
+            775,
+            776,
+            777,
+            778,
+        ]
+        segments: list[bytes] = []
+        prev_byte = -1
+        for idx, rlen in enumerate(run_lengths_to_test):
+            bval = (idx * 73 + 19) & 0xFF
+            if bval == prev_byte:
+                bval = (bval + 1) & 0xFF
+            segments.append(bytes([bval]) * rlen)
+            prev_byte = bval
+        for special_bval in (0x00, 0x01, 0x8F, 0x90, 0xFE, 0xFF):
+            for boundary_len in (1, 2, 3, 4, 257, 258, 259, 517, 518, 775):
+                sep = 0x55 if special_bval != 0x55 else 0xAA
+                segments.append(bytes([sep]))
+                segments.append(bytes([special_bval]) * boundary_len)
+        rle_payload = b"".join(segments)
+        rle_zlib = bf_mod._zlib_wrap_fixed_rle_dist1(rle_payload)
+        self.assertEqual(zlib.decompress(rle_zlib), rle_payload)
+        self.assertEqual(
+            zlib.decompress(rle_zlib[2:-4], -15),
+            rle_payload,
+        )
+
+        # 4. Full PNG round-trips via Pillow and independent chunk/Sub-filter verification:
+        # 4a. 256x2 image where Sub-filtered deltas exercise all 256 byte values (0..255) and mod-256 wrap-around.
+        row0 = bytearray()
+        row1 = bytearray()
+        acc_r, acc_g, acc_b = 0, 0, 0
+        for k in range(256):
+            acc_r = (acc_r + k) & 0xFF
+            acc_g = (acc_g + (255 - k)) & 0xFF
+            acc_b = (acc_b + ((k * 37 + 11) & 0xFF)) & 0xFF
+            row0.extend((acc_r, acc_g, acc_b))
+            row1.extend(((255 - acc_r) & 0xFF, (acc_g ^ 0xA5) & 0xFF, (acc_b + 129) & 0xFF))
+        rgb_all_256 = bytes(row0 + row1)
+        filtered_256 = bf_mod._png_sub_filter_rgb8(rgb_all_256, 256, 2)
+        self.assertEqual(set(filtered_256), set(range(256)))
+        verify_png_roundtrip(rgb_all_256, 256, 2)
+
+        # 4b. Multi-row image whose Sub-filtered scanlines contain long runs (up to 795 bytes > 3*258)
+        # of zero (constant color) and non-zero (<144 and >=144) repeated Sub-filter bytes.
+        w_long, h_long = 265, 4
+        long_rows = bytearray()
+        for step_c in (0, 23, 144, 211):
+            for k in range(w_long):
+                v = ((k + 1) * step_c) & 0xFF
+                long_rows.extend((v, v, v))
+        valid_png = verify_png_roundtrip(bytes(long_rows), w_long, h_long)
+
+        # 5. Dimension/length validation and corrupted-output rejection
+        with self.assertRaises(ValueError):
+            bf_mod._encode_canonical_rgb8_png(b"\x00\x00", 1, 1)
+        with self.assertRaises(ValueError):
+            bf_mod._encode_canonical_rgb8_png(b"", 0, 1)
+
+        # Corrupt the zlib header byte inside the IDAT payload (offset 41) and verify both CRC check and decoder reject it.
+        corrupted_idat = bytearray(valid_png)
+        corrupted_idat[41] ^= 0xFF
+        with self.assertRaises(AssertionError):
+            parse_png_chunks(bytes(corrupted_idat))
+        with self.assertRaises(Exception):
+            with Image.open(io.BytesIO(bytes(corrupted_idat))) as bad_im:
+                bad_im.load()
 
     def test_build_figures_check_mode_when_slides_extra_installed(self) -> None:
         if (

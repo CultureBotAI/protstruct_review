@@ -95,8 +95,8 @@ finding 1.
 ## Applied
 
 > **Bond-length RMSD keeps |Δ| ≤ 0.008 Å** across implementations, gated on equal bond count. The
-> **matched-library** case is *not* meaningfully tighter — use **|Δ| ≤ 0.006 Å** — because the
-> within-PHENIX CDL→E&H switch contributes only ~21 % of the disagreement on valid (matched-count) comparisons. The within-PHENIX CDL→E&H switch alone did not eliminate the observed cross-tool gap on bond lengths.
+> adopted conditional **matched-library** policy band remains **|Δ| ≤ 0.006 Å**; this study does not
+> directly measure or bound the truly matched cross-engine contrast, so its empirical tightness is not established by the ~21 % within-PHENIX CDL→E&H (A–B) observation on valid (matched-count) comparisons. The within-PHENIX CDL→E&H switch alone did not eliminate the observed cross-tool gap on bond lengths.
 >
 > **Bond-angle RMSD** keeps its library-conditional treatment, now with an in-repo magnitude: the
 > within-PHENIX CDL→E&H switch shifts angle RMSD by a median **0.265°** (max 0.471°).

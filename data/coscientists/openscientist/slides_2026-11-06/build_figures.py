@@ -19,6 +19,7 @@ import platform
 import re
 import shutil
 import statistics
+import struct
 import subprocess
 import sys
 import tempfile
@@ -261,8 +262,262 @@ def verify_figure_geometry(fig: plt.Figure, fig_name: str) -> None:
                 )
 
 
+_PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+
+
+def _reverse_bits(value: int, width: int) -> int:
+    """Reverse the low `width` bits of `value` for LSB-first DEFLATE packing.
+
+    Ref: https://www.rfc-editor.org/rfc/rfc1951.html (§3.1.1).
+    """
+    out = 0
+    for i in range(width):
+        if value & (1 << i):
+            out |= 1 << (width - 1 - i)
+    return out
+
+
+def _build_fixed_deflate_tables() -> tuple[
+    tuple[tuple[int, int], ...], tuple[tuple[int, int], ...]
+]:
+    """Build RFC 1951 fixed-Huffman literal/EOB and distance-1 match lookup tables.
+
+    Ref: https://www.rfc-editor.org/rfc/rfc1951.html (§3.2.5-§3.2.6).
+    """
+    lit_codes: list[tuple[int, int]] = []
+    for sym in range(288):
+        if sym <= 143:
+            lit_codes.append((_reverse_bits(48 + sym, 8), 8))
+        elif sym <= 255:
+            lit_codes.append((_reverse_bits(400 + (sym - 144), 9), 9))
+        elif sym <= 279:
+            lit_codes.append((_reverse_bits(sym - 256, 7), 7))
+        else:
+            lit_codes.append((_reverse_bits(192 + (sym - 280), 8), 8))
+
+    length_bases = (
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        13,
+        15,
+        17,
+        19,
+        23,
+        27,
+        31,
+        35,
+        43,
+        51,
+        59,
+        67,
+        83,
+        99,
+        115,
+        131,
+        163,
+        195,
+        227,
+        258,
+    )
+    length_extras = (
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        2,
+        2,
+        2,
+        2,
+        3,
+        3,
+        3,
+        3,
+        4,
+        4,
+        4,
+        4,
+        5,
+        5,
+        5,
+        5,
+        0,
+    )
+    # Distance 1 uses distance symbol 0: 5-bit fixed Huffman code 00000 (0) with 0 extra bits.
+    match_dist1_codes: list[tuple[int, int]] = [(0, 0)] * 259
+    for idx in range(28):
+        base = length_bases[idx]
+        ebits = length_extras[idx]
+        sym = 257 + idx
+        h_code, h_bits = lit_codes[sym]
+        span = 1 << ebits
+        for extra_val in range(span):
+            length = base + extra_val
+            if length < 258:
+                combined_code = h_code | (extra_val << h_bits)
+                match_dist1_codes[length] = (combined_code, h_bits + ebits + 5)
+    h285_code, h285_bits = lit_codes[285]
+    match_dist1_codes[258] = (h285_code, h285_bits + 5)
+    return tuple(lit_codes), tuple(match_dist1_codes)
+
+
+_FIXED_LIT_CODES, _FIXED_MATCH_DIST1_CODES = _build_fixed_deflate_tables()
+
+
+def _png_sub_filter_rgb8(rgb_bytes: bytes, width: int, height: int) -> bytes:
+    """Apply PNG filter type 1 (Sub, bpp=3) to packed RGB8 scanlines.
+
+    Ref: https://www.w3.org/TR/2025/REC-png-3-20250624/ (§9.2, Table 9.1).
+    """
+    if width <= 0 or height <= 0:
+        raise ValueError(f"Invalid PNG dimensions: {(width, height)}")
+    row_bytes = width * 3
+    if len(rgb_bytes) != height * row_bytes:
+        raise ValueError(
+            f"Expected {height * row_bytes} RGB8 bytes for {width}x{height}, got {len(rgb_bytes)}"
+        )
+    raw = np.frombuffer(rgb_bytes, dtype=np.uint8).reshape(height, row_bytes)
+    filtered = np.empty((height, row_bytes + 1), dtype=np.uint8)
+    filtered[:, 0] = 1
+    filtered[:, 1:4] = raw[:, 0:3]
+    filtered[:, 4:] = raw[:, 3:] - raw[:, :-3]
+    return filtered.tobytes()
+
+
+def _deflate_fixed_rle_dist1(data: bytes) -> bytes:
+    """Compress `data` into one final fixed-Huffman DEFLATE block using greedy distance-1 RLE.
+
+    Emits a single final block (`BFINAL=1, BTYPE=01`), segments `data` into equal-byte runs,
+    emits each run's first byte as a literal, encodes remaining >=3-byte repeats as greedy
+    distance-1 matches of length 3..258, emits any 1..2 trailing bytes as literals, and
+    terminates with end-of-block symbol 256.
+
+    Ref: https://www.rfc-editor.org/rfc/rfc1951.html (§3.1.1, §3.2.5-§3.2.6).
+    """
+    lit_codes = _FIXED_LIT_CODES
+    match_codes = _FIXED_MATCH_DIST1_CODES
+    out = bytearray()
+    # Block header: BFINAL=1 (1 bit), BTYPE=01 (2 bits, LSB-first) -> 0b011 = 3.
+    bit_buf = 0b011
+    bit_count = 3
+
+    if data:
+        arr = np.frombuffer(data, dtype=np.uint8)
+        if arr.size == 1:
+            run_vals = [int(arr[0])]
+            run_lens = [1]
+        else:
+            change_idx = np.flatnonzero(arr[1:] != arr[:-1]) + 1
+            starts = np.empty(change_idx.size + 1, dtype=np.int64)
+            starts[0] = 0
+            starts[1:] = change_idx
+            ends = np.empty(change_idx.size + 1, dtype=np.int64)
+            ends[:-1] = change_idx
+            ends[-1] = arr.size
+            run_vals = arr[starts].tolist()
+            run_lens = (ends - starts).tolist()
+
+        for byte_val, run_len in zip(run_vals, run_lens):
+            l_code, l_bits = lit_codes[byte_val]
+            bit_buf |= l_code << bit_count
+            bit_count += l_bits
+            rem = run_len - 1
+            while rem >= 3:
+                match_len = 258 if rem >= 258 else rem
+                m_code, m_bits = match_codes[match_len]
+                bit_buf |= m_code << bit_count
+                bit_count += m_bits
+                rem -= match_len
+                while bit_count >= 8:
+                    out.append(bit_buf & 0xFF)
+                    bit_buf >>= 8
+                    bit_count -= 8
+            while rem > 0:
+                bit_buf |= l_code << bit_count
+                bit_count += l_bits
+                rem -= 1
+            while bit_count >= 8:
+                out.append(bit_buf & 0xFF)
+                bit_buf >>= 8
+                bit_count -= 8
+
+    eob_code, eob_bits = lit_codes[256]
+    bit_buf |= eob_code << bit_count
+    bit_count += eob_bits
+    while bit_count >= 8:
+        out.append(bit_buf & 0xFF)
+        bit_buf >>= 8
+        bit_count -= 8
+    if bit_count > 0:
+        out.append(bit_buf & 0xFF)
+    return bytes(out)
+
+
+def _zlib_wrap_fixed_rle_dist1(data: bytes) -> bytes:
+    """Wrap fixed-Huffman RLE DEFLATE stream in a canonical RFC 1950 zlib container.
+
+    Uses header `0x78 0x01` (CM=8 deflate, CINFO=7 32K window, FDICT=0, FLEVEL=0)
+    and big-endian Adler-32 trailer.
+    Ref: https://www.rfc-editor.org/rfc/rfc1950.html (§2.2).
+    """
+    deflated = _deflate_fixed_rle_dist1(data)
+    adler = zlib.adler32(data) & 0xFFFFFFFF
+    return b"\x78\x01" + deflated + struct.pack(">I", adler)
+
+
+def _make_png_chunk(chunk_type: bytes, chunk_data: bytes) -> bytes:
+    """Format a PNG chunk with 4-byte big-endian length, 4-byte type, data, and CRC-32.
+
+    Ref: https://www.w3.org/TR/2025/REC-png-3-20250624/ (§5.3, §5.5).
+    """
+    if len(chunk_type) != 4:
+        raise ValueError(f"PNG chunk type must be 4 bytes, got {chunk_type!r}")
+    crc = zlib.crc32(chunk_type + chunk_data) & 0xFFFFFFFF
+    return (
+        struct.pack(">I", len(chunk_data))
+        + chunk_type
+        + chunk_data
+        + struct.pack(">I", crc)
+    )
+
+
+def _encode_canonical_rgb8_png(rgb_bytes: bytes, width: int, height: int) -> bytes:
+    """Encode packed RGB8 pixel bytes into a canonical, platform-independent PNG.
+
+    Writes PNG signature, IHDR (8-bit truecolour RGB, filter=0, interlace=0),
+    a single IDAT containing Sub-filtered scanlines compressed with fixed-Huffman
+    distance-1 RLE inside a canonical `0x78 0x01` zlib stream, and IEND.
+    Ref: https://www.w3.org/TR/2025/REC-png-3-20250624/ (§5.2, §11.2).
+    """
+    filtered = _png_sub_filter_rgb8(rgb_bytes, width, height)
+    ihdr_data = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+    idat_data = _zlib_wrap_fixed_rle_dist1(filtered)
+    return b"".join(
+        (
+            _PNG_SIGNATURE,
+            _make_png_chunk(b"IHDR", ihdr_data),
+            _make_png_chunk(b"IDAT", idat_data),
+            _make_png_chunk(b"IEND", b""),
+        )
+    )
+
+
 def save_deterministic_png(fig: plt.Figure, out_path: Path) -> tuple[str, list[int]]:
-    """Verify geometry, render figure to PNG with stripped metadata, and verify pixel dimensions."""
+    """Verify geometry, render figure to canonical RGB8 PNG with stripped metadata, and verify pixel dimensions."""
     verify_figure_geometry(fig, out_path.name)
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=DPI, facecolor=BG_COLOR)
@@ -275,9 +530,8 @@ def save_deterministic_png(fig: plt.Figure, out_path: Path) -> tuple[str, list[i
             raise ValueError(
                 f"Expected PNG size {EXPECTED_PNG_SIZE}, got {(width, height)} for {out_path}"
             )
-        out_buf = io.BytesIO()
-        im_rgb.save(out_buf, format="PNG", optimize=False)
-    png_bytes = out_buf.getvalue()
+        rgb_bytes = im_rgb.tobytes()
+    png_bytes = _encode_canonical_rgb8_png(rgb_bytes, width, height)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_bytes(png_bytes)
     return hashlib.sha256(png_bytes).hexdigest(), [width, height]
@@ -639,7 +893,12 @@ def build_fig02_r9_null_delta_rfree(out_dir: Path, source_hashes: dict[str, str]
         fontsize=18.0,
         fontweight="bold",
         color=INK_COLOR,
-        arrowprops={"arrowstyle": "->", "color": INK_COLOR, "lw": 1.6},
+        arrowprops={
+            "arrowstyle": "->",
+            "color": INK_COLOR,
+            "lw": 1.6,
+            "antialiased": False,
+        },
     )
     ax.annotate(
         f"6XVM (+{row_by_id['6XVM']['refmac']['anis']['delta']:.4f})",
@@ -648,7 +907,12 @@ def build_fig02_r9_null_delta_rfree(out_dir: Path, source_hashes: dict[str, str]
         fontsize=18.0,
         fontweight="bold",
         color=INK_COLOR,
-        arrowprops={"arrowstyle": "->", "color": INK_COLOR, "lw": 1.6},
+        arrowprops={
+            "arrowstyle": "->",
+            "color": INK_COLOR,
+            "lw": 1.6,
+            "antialiased": False,
+        },
     )
 
     ax.set_xticks([1.0, 2.0, 3.0])
@@ -820,7 +1084,12 @@ def build_fig03_r9_isot_vs_anis_paired(
         fontsize=18.0,
         fontweight="bold",
         color=COLOR_ALERT,
-        arrowprops={"arrowstyle": "->", "color": COLOR_ALERT, "lw": 2.0},
+        arrowprops={
+            "arrowstyle": "->",
+            "color": COLOR_ALERT,
+            "lw": 2.0,
+            "antialiased": False,
+        },
     )
     ax.annotate(
         (
@@ -832,7 +1101,12 @@ def build_fig03_r9_isot_vs_anis_paired(
         fontsize=18.0,
         fontweight="bold",
         color=COLOR_ALERT,
-        arrowprops={"arrowstyle": "->", "color": COLOR_ALERT, "lw": 2.0},
+        arrowprops={
+            "arrowstyle": "->",
+            "color": COLOR_ALERT,
+            "lw": 2.0,
+            "antialiased": False,
+        },
     )
 
     ax.set_xticks([1.0, 2.0, 3.0, 4.0])
@@ -996,7 +1270,12 @@ def build_fig04_r10_recovery_delta_rfree(
         fontsize=18.0,
         fontweight="bold",
         color=COLOR_ALERT,
-        arrowprops={"arrowstyle": "->", "color": COLOR_ALERT, "lw": 1.8},
+        arrowprops={
+            "arrowstyle": "->",
+            "color": COLOR_ALERT,
+            "lw": 1.8,
+            "antialiased": False,
+        },
     )
 
     ax.set_xticks([1.0, 2.0, 3.0])
@@ -1216,7 +1495,12 @@ def build_fig05_bond_rmsd_abc(out_dir: Path, source_hashes: dict[str, str]) -> d
         fontsize=18.0,
         fontweight="bold",
         color=COLOR_ALERT,
-        arrowprops={"arrowstyle": "->", "color": COLOR_ALERT, "lw": 1.8},
+        arrowprops={
+            "arrowstyle": "->",
+            "color": COLOR_ALERT,
+            "lw": 1.8,
+            "antialiased": False,
+        },
     )
 
     ax_left.set_xticks([1.0, 2.0, 3.0])
@@ -1270,7 +1554,12 @@ def build_fig05_bond_rmsd_abc(out_dir: Path, source_hashes: dict[str, str]) -> d
         fontsize=18.0,
         fontweight="bold",
         color=COLOR_ALERT,
-        arrowprops={"arrowstyle": "->", "color": COLOR_ALERT, "lw": 1.8},
+        arrowprops={
+            "arrowstyle": "->",
+            "color": COLOR_ALERT,
+            "lw": 1.8,
+            "antialiased": False,
+        },
     )
 
     ax_right.text(
@@ -1447,7 +1736,12 @@ def build_fig06_round46_rotamer_outlier_pct(
         fontsize=18.0,
         fontweight="bold",
         color=COLOR_ALERT,
-        arrowprops={"arrowstyle": "->", "color": COLOR_ALERT, "lw": 1.8},
+        arrowprops={
+            "arrowstyle": "->",
+            "color": COLOR_ALERT,
+            "lw": 1.8,
+            "antialiased": False,
+        },
     )
     ax_right.annotate(
         f"14ZZ: {row_14zz['rota_outlier_delta_pp']:+.2f} pp (402 vs 459;\n402/402 shared names match)",
@@ -1456,7 +1750,12 @@ def build_fig06_round46_rotamer_outlier_pct(
         fontsize=18.0,
         fontweight="bold",
         color=COLOR_ALERT,
-        arrowprops={"arrowstyle": "->", "color": COLOR_ALERT, "lw": 1.8},
+        arrowprops={
+            "arrowstyle": "->",
+            "color": COLOR_ALERT,
+            "lw": 1.8,
+            "antialiased": False,
+        },
     )
     ax_right.text(
         1.14,
@@ -2754,20 +3053,40 @@ def _compare_png_pair(
     return entry
 
 
+def _validate_diagnostics_destination(
+    diagnostics_dir: Path, target_dir: Path
+) -> Path:
+    """Validate that diagnostics_dir is outside target_dir and return the un-dereferenced destination path."""
+    deck_root = target_dir.resolve()
+    raw_path = diagnostics_dir.expanduser()
+    if not raw_path.is_absolute():
+        raw_path = Path.cwd() / raw_path
+    parent_resolved = raw_path.parent.resolve()
+    diag_entry = parent_resolved / raw_path.name if raw_path.name else parent_resolved
+    diag_resolved = raw_path.resolve()
+
+    for candidate in (diag_entry, diag_resolved):
+        if candidate == deck_root or deck_root in candidate.parents:
+            raise SystemExit(
+                f"Refusing to write diagnostics inside target deck directory {deck_root}: {candidate}"
+            )
+    return diag_entry
+
+
 def _persist_diagnostics(
     diagnostics_dir: Path,
     target_dir: Path,
     report: dict[str, Any],
     fresh_dir: Path | None,
 ) -> None:
-    """Write diagnostics.json and freshly generated artifacts to an external diagnostics directory."""
-    diag_root = diagnostics_dir.resolve()
-    deck_root = target_dir.resolve()
-    if diag_root == deck_root or deck_root in diag_root.parents:
+    """Write diagnostics.json and freshly generated artifacts to a new external diagnostics directory."""
+    diag_root = _validate_diagnostics_destination(diagnostics_dir, target_dir)
+    try:
+        diag_root.mkdir(parents=True, exist_ok=False)
+    except FileExistsError as exc:
         raise SystemExit(
-            f"Refusing to write diagnostics inside target deck directory {deck_root}: {diag_root}"
-        )
-    diag_root.mkdir(parents=True, exist_ok=True)
+            f"Refusing to write diagnostics to existing destination (must be a new directory that does not exist): {diagnostics_dir}"
+        ) from exc
     if fresh_dir is not None and fresh_dir.is_dir():
         fresh_manifest_file = fresh_dir / "figures.json"
         if fresh_manifest_file.is_file():
@@ -2775,7 +3094,7 @@ def _persist_diagnostics(
         fresh_figs_dir = fresh_dir / "figures"
         if fresh_figs_dir.is_dir():
             out_figs_dir = diag_root / "figures"
-            out_figs_dir.mkdir(parents=True, exist_ok=True)
+            out_figs_dir.mkdir(parents=False, exist_ok=False)
             for png_file in sorted(fresh_figs_dir.glob("*.png")):
                 shutil.copy2(png_file, out_figs_dir / png_file.name)
     diag_json_path = diag_root / "diagnostics.json"
@@ -2852,11 +3171,15 @@ def check_deterministic(
 ) -> None:
     """Re-render into a fresh temporary directory and verify byte-for-byte SHA-256 identity."""
     if diagnostics_dir is not None:
-        diag_root = diagnostics_dir.resolve()
-        deck_root = target_dir.resolve()
-        if diag_root == deck_root or deck_root in diag_root.parents:
+        diag_entry = _validate_diagnostics_destination(diagnostics_dir, target_dir)
+        if (
+            diagnostics_dir.exists()
+            or diagnostics_dir.is_symlink()
+            or diag_entry.exists()
+            or diag_entry.is_symlink()
+        ):
             raise SystemExit(
-                f"Refusing to write diagnostics inside target deck directory {deck_root}: {diag_root}"
+                f"Refusing to write diagnostics to existing destination (must be a new directory that does not exist): {diagnostics_dir}"
             )
 
     runtime_info = _collect_runtime_diagnostics()
@@ -3015,15 +3338,13 @@ def main(argv: list[str] | None = None) -> int:
         "--diagnostics-dir",
         type=Path,
         default=None,
-        help="Optional directory outside the deck to write diagnostics.json and fresh check artifacts.",
+        help="Optional new directory outside the deck (must not already exist) to write diagnostics.json and fresh check artifacts.",
     )
     args = parser.parse_args(argv)
     if args.check:
         check_deterministic(
             args.out_dir.resolve(),
-            diagnostics_dir=args.diagnostics_dir.resolve()
-            if args.diagnostics_dir is not None
-            else None,
+            diagnostics_dir=args.diagnostics_dir,
         )
     else:
         manifest = generate_all(args.out_dir.resolve())

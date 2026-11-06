@@ -114,7 +114,7 @@
     {
       "id": "fig01_cohort_resolution",
       "file": "figures/fig01_cohort_resolution.png",
-      "sha256": "d266b6f9847f20984bc163cbb847b920b1fc3915fbed0122051344b188310178",
+      "sha256": "3c59dd434fa8f8de19491ea629c114c1868ee951d5a207d5cd0feee723e6e1eb",
       "dimensions_px": [
         3328,
         1360
@@ -250,7 +250,7 @@
     {
       "id": "fig02_r9_null_delta_rfree",
       "file": "figures/fig02_r9_null_delta_rfree.png",
-      "sha256": "65b4dbf5e2f2ae3da60d65ba77441d0e3777561890175d712d3501269e84fe32",
+      "sha256": "271f86e2937fb042803a5bc91bc72237d59ecc48973765214b8ac6fa3da7c7b8",
       "dimensions_px": [
         3328,
         1360
@@ -403,7 +403,7 @@
     {
       "id": "fig03_r9_isot_vs_anis_paired",
       "file": "figures/fig03_r9_isot_vs_anis_paired.png",
-      "sha256": "8ad51bf637084f97b97fe6796fbdedb3318e3ab4d29ecd5c6a7d2906b844e8de",
+      "sha256": "a9530c947983c7816ab8d89a7be7cc3dc959a900e3e45a0cedd4167d700b9367",
       "dimensions_px": [
         3328,
         1360
@@ -531,7 +531,7 @@
     {
       "id": "fig04_r10_recovery_delta_rfree",
       "file": "figures/fig04_r10_recovery_delta_rfree.png",
-      "sha256": "60cb4e7fa17f7c1c752034d2518a5ba91d2ab701a36bcfa9d3452b3ef115a5e1",
+      "sha256": "2ab9b2bbdc61eb6398cfbf3494c0c70bfb15269324d553f2b0dd5b66721cbd00",
       "dimensions_px": [
         3328,
         1360
@@ -689,7 +689,7 @@
     {
       "id": "fig05_bond_rmsd_abc",
       "file": "figures/fig05_bond_rmsd_abc.png",
-      "sha256": "17f3a330907e26c2c7ef953abd1babea885a6eb6ee5e38261758e9b244a1f49c",
+      "sha256": "8029688a9e1b035488bb333727baa0d3b482cf35dbaf8bba58efd75b03307ac0",
       "dimensions_px": [
         3328,
         1360
@@ -828,7 +828,7 @@
     {
       "id": "fig06_round46_rotamer_outlier_pct",
       "file": "figures/fig06_round46_rotamer_outlier_pct.png",
-      "sha256": "4a9fc57ba0cd49686d53da701c4a8dc57732b4f0041a25d5cce702a96b602cb4",
+      "sha256": "d7c0c9567934d86ec080cb52ea9bcdfbf7068418d00d15e3a112708cd1060e68",
       "dimensions_px": [
         3328,
         1360
@@ -951,7 +951,7 @@
     {
       "id": "fig07_threshold_evidence_history",
       "file": "figures/fig07_threshold_evidence_history.png",
-      "sha256": "a5cf634b4dc417e4c98f3823080083a995071ea327747782c76cbf596edc736f",
+      "sha256": "fe71d6e95647f66d8cb61368c076076211f0456028506a4abc3d4f641ae24dad",
       "dimensions_px": [
         3328,
         1360

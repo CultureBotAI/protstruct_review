@@ -18,6 +18,10 @@ benchmark = [
   "numpy>=1.26.4,<2",
   "scipy>=1.14,<2",
 ]
+slides = [
+  "matplotlib>=3.9,<4",
+  "pillow>=11,<12",
+]
 
 [dependency-groups]
 dev = [

@@ -512,7 +512,7 @@ criteria:
     cross_tool_agreement:
       tolerance: "|Δ| ≤ 0.008 Å"
       tools: "phenix.model_statistics (CDL) vs gemmi rmsz (CCP4 monomer library)"
-      precondition: "both tools must restrain the same number of bonds (only 6/17 benchmark models did — where counts differ, often ~2× from alternate-conformation handling, the comparison is VOID: report both figures with their counts). With MATCHED libraries use |Δ| ≤ 0.006 Å — barely tighter, because the restraint library accounts for only ~21 % of the disagreement for bond LENGTHS on matched-count models (9 % across all models, deflated by count-mismatched ones; unlike bond angles, where it is a stable ~51 %)"
+      precondition: "both tools must restrain the same number of bonds (only 6/17 benchmark models did — where counts differ, often ~2× from alternate-conformation handling, the comparison is VOID: report both figures with their counts). With MATCHED libraries use |Δ| ≤ 0.006 Å — barely tighter, because the within-PHENIX CDL-vs-Engh & Huber switch accounts for only ~21 % of the disagreement for bond LENGTHS on matched-count models (9 % across all models, deflated by count-mismatched ones; unlike bond angles, where it is a stable ~51 %), while the B-vs-C contrast retains cross-engine implementation plus non-identical dictionary and population differences"
       provenance:
         - benchmark
       citation: "ref/research/tolerance_benchmark_bond_rmsd.md — 17 models; matched-count subset median |Δ| 0.0040 Å, max 0.0070 Å (scripts/bench_t05_bond_rmsd.py)"
@@ -524,7 +524,7 @@ criteria:
         tool: phenix.model_statistics
         source: "scripts/bench_t05_bond_rmsd.py (gemmi 0.0080 Å over the same 9513 bonds, Δ +0.0042)"
         verdict: normal
-        interpretation: "Matched bond count, and the disagreement still exceeds the retired ±0.003 Å tolerance — the library difference alone accounts for it."
+        interpretation: "Matched bond count, and the +0.0042 Å disagreement still exceeds the retired ±0.003 Å tolerance — the within-PHENIX CDL-to-Engh & Huber shift is +0.00112 Å while the B-vs-C cross-engine and non-identical dictionary contrast is +0.00309 Å."
       - structure_id: 30tw
         value_numeric: 0.0143
         unit: "Å"
@@ -532,7 +532,7 @@ criteria:
         source: "scripts/bench_t05_bond_rmsd.py (gemmi 0.0810 Å over 9544 bonds vs PHENIX's 4677, Δ +0.0667)"
         verdict: anomalous
         interpretation: "Bond counts differ by ~2×, so the two RMSDs sum over different restraint populations and the Δ is meaningless — the void condition applies."
-    notes: "The direction is fixed, not random — gemmi read high in 17/17. The cause is NOT mainly the restraint library: isolating the library inside one implementation (PHENIX CDL vs Engh & Huber) moves bond RMSD by a median of only 0.00085 Å on matched-count models, 21 % of the cross-library gap (9 % across all 17), so the majority is implementation. This corrects an earlier attribution by analogy with bond angles, where the library IS about half the gap (median 0.265°). See ref/research/tolerance_benchmark_restraint_library.md."
+    notes: "The direction is fixed, not random — gemmi read high in 17/17. The within-PHENIX restraint-library switch (CDL vs Engh & Huber, A vs B) moves bond RMSD by a median of only 0.00085 Å on matched-count models, 21 % of the cross-library gap (9 % across all 17), while the remaining B-vs-C contrast reflects cross-engine implementation together with residual differences between non-identical Engh & Huber-derived dictionaries and restrained bond populations. This corrects an earlier attribution by analogy with bond angles, where the within-PHENIX library switch is about half the gap (median 0.265°). See ref/research/tolerance_benchmark_restraint_library.md."
 
   - id: T01_ca_rmsd
     name: Cα RMSD between superposed models

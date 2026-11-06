@@ -196,18 +196,18 @@ rows:
   section: 3
   row_label: Bond-length RMSD
   observed_line: 109
-  row_sha256: 3a1b51839b857bc1d76252b65522f634b07c0cb2efb5d20559bb79456d18ab95
+  row_sha256: 67d981d8dc3c18958d74de790ee0b8655f4d7c44c4169e0352df5e8797b3be80
   provenance_tags:
   - '[benchmark]'
   historical_inventory_class: reported_backed
   evidence_refs:
   - path: ref/research/tolerance_benchmark_bond_rmsd.md
     anchor: '## Results'
-    sha256: d08bf39912cdd382f0e3eafad1d15154c05b36824b8b9661c6e5793d2e90ba3d
+    sha256: f5c8ad8e053ac178caf6bc2b835f70ca2476e7ba81b55c504857298662ae40cd
     hash_scope: full_file
   - path: ref/research/tolerance_benchmark_restraint_library.md
     anchor: '## Results'
-    sha256: d4309bfb3a2b891cf6cd8ad2948348392982defbb3afbeb111119dbf19c768b2
+    sha256: 86dcd91b42298c64cb003cfd99e1805252f2c75fd3885cbdc6dd33f47726f8ab
     hash_scope: full_file
   components:
   - id: agreement
@@ -234,7 +234,7 @@ rows:
     hash_scope: full_file
   - path: ref/research/tolerance_benchmark_restraint_library.md
     anchor: '## Applied'
-    sha256: d4309bfb3a2b891cf6cd8ad2948348392982defbb3afbeb111119dbf19c768b2
+    sha256: 86dcd91b42298c64cb003cfd99e1805252f2c75fd3885cbdc6dd33f47726f8ab
     hash_scope: full_file
   components:
   - id: agreement

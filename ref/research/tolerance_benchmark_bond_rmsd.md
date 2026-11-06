@@ -70,13 +70,14 @@ tolerance is exceeded by the *typical* case, not the tail. The direction is fixe
 **2. ~~The cause is the restraint library~~ — CORRECTED, see
 `tolerance_benchmark_restraint_library.md`.** This section originally attributed the gap to the
 restraint library, by analogy with the review's bond-angle finding. A follow-up benchmark isolated
-the library inside a single implementation (PHENIX with CDL vs Engh & Huber) and found it accounts
-for **21 %** of the gap on matched-bond-count models (median 0.00085 of 0.00405 Å; 9 % across all
-17, deflated by the count-mismatched models). The rest is implementation:
-how the two tools enumerate and sum bond restraints. The tolerance below is unaffected; its
-*explanation* was wrong, which matters because "match the libraries" is useless advice when the
-library is not the problem. For bond **angles** the library-conditional framing does hold (51 % of
-the angle gap, median 0.265°).
+the library switch inside a single implementation (PHENIX with CDL vs Engh & Huber, A vs B) and found
+it accounts for **21 %** of the gap on matched-bond-count models (median 0.00085 of 0.00405 Å; 9 %
+across all 17, deflated by the count-mismatched models). The remaining B-vs-C contrast reflects
+cross-engine implementation (how the two tools enumerate and sum bond restraints) together with
+residual differences between non-identical Engh & Huber-derived dictionaries and restrained bond
+populations. The tolerance below is unaffected; its *explanation* was wrong, which matters because
+switching PHENIX from CDL to Engh & Huber alone does not bring the two tools into agreement. For bond
+**angles** the library-conditional framing does hold (51 % of the angle gap, median 0.265°).
 
 **3. The two tools frequently do not restrain the same bonds — and the mismatch is often a factor of
 two.** Only 6/17 agree on the bond count. Several disagree ~2× (30TW 4677 vs 9544; 28SX 2330 vs
@@ -87,20 +88,22 @@ mismatch means the two RMSDs are sums over different restraint populations and a
 ## Applied tolerance
 
 > **|Δ| ≤ 0.008 Å, and only when both tools restrain the same number of bonds.** With **matched
-> restraint libraries** the tolerance is **|Δ| ≤ 0.006 Å** — barely tighter, because the library is
-> only ~21 % of the disagreement (`tolerance_benchmark_restraint_library.md`). Expect gemmi/CCP4-library figures to read
+> restraint libraries** the tolerance is **|Δ| ≤ 0.006 Å** — barely tighter, because the within-PHENIX
+> library switch accounts for ~21 % of the disagreement (`tolerance_benchmark_restraint_library.md`). Expect gemmi/CCP4-library figures to read
 > **high** against PHENIX/CDL; a negative Δ is off-distribution. When the bond counts differ (11/17
 > here), the comparison is **void**: report both figures with their counts rather than a Δ.
 
 0.008 Å covers 6/6 of the matched-count subset (max 0.0070) with margin. This loosens the tolerance
-by ~2.7×, which is the honest direction: the old ±0.003 Å was tighter than the library difference
-allows, so it would have flagged correct models as disagreeing.
+by ~2.7×, which is the honest direction: the old ±0.003 Å was tighter than the observed cross-tool
+differences, so it would have flagged correct models as disagreeing.
 
 ## Scope limits
 
-- Cross-library only. The matched-library case was measured separately in
-  `tolerance_benchmark_restraint_library.md` and is **0.006 Å** — not "much tighter", because the
-  library turned out to be a minor term for bond lengths.
+- Cross-library only. The near-matched-library contrast was measured separately in
+  `tolerance_benchmark_restraint_library.md` and informs the adopted conditional **0.006 Å** band, with
+  residual confounding from non-identical Engh & Huber-derived dictionaries and possible bond-population
+  differences — not "much tighter", because the within-PHENIX library switch turned out to be a minor
+  term for bond lengths.
 - The ~2× bond-count mismatches are attributed to alternate-conformation handling by inspection, not
   verified — the scripts record the counts but do not diff the restraint lists.
 - 17 X-ray models, bond RMSD 0.0018–0.0175 Å. Models with unusual ligands or heavy covalent

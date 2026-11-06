@@ -299,9 +299,92 @@ class PhenixVendorSetupTests(unittest.TestCase):
         hop_link.symlink_to(self.real_dispatcher)
         self.configured_dispatcher.unlink()
         self.configured_dispatcher.symlink_to(hop_link)
-        hop_escape = toolchain.phenix_build_evidence()
+        with (
+            mock.patch.object(toolchain, "_run_phenix_setup") as setup_spy,
+            mock.patch.object(toolchain, "run_capture") as capture_spy,
+        ):
+            hop_escape = toolchain.phenix_build_evidence()
         self.assertIsNone(hop_escape["reported_version_source"])
         self.assertFalse(_build_is_measured(hop_escape))
+        setup_spy.assert_not_called()
+        capture_spy.assert_not_called()
+
+        # #958: Intermediate directory symlink escaping prefix and returning via an
+        # outside directory symlink (prefix/escape -> outside, outside/return -> prefix/bin,
+        # phenix_bin/phenix.version -> ../escape/return/phenix.version) rejects without
+        # executing setup or dispatcher.
+        escape_dir_link = self.prefix / "escape"
+        return_dir_link = outside / "return"
+        escape_dir_link.symlink_to(outside)
+        return_dir_link.symlink_to(self.internal_bin)
+        self.configured_dispatcher.unlink()
+        self.configured_dispatcher.symlink_to("../escape/return/phenix.version")
+        with (
+            mock.patch.object(toolchain, "_run_phenix_setup") as setup_spy,
+            mock.patch.object(toolchain, "run_capture") as capture_spy,
+        ):
+            dir_hop_escape = toolchain.phenix_build_evidence()
+            dir_hop_bare = toolchain.phenix_bare_build_evidence()
+        self.assertIsNone(dir_hop_escape["reported_version_source"])
+        self.assertFalse(_build_is_measured(dir_hop_escape))
+        self.assertIsNone(dir_hop_bare["reported_version_source"])
+        self.assertFalse(_build_is_measured(dir_hop_bare))
+        setup_spy.assert_not_called()
+        capture_spy.assert_not_called()
+
+        # Relative directory symlink escape (prefix/escape -> ../outside) also rejects.
+        escape_dir_link.unlink()
+        escape_dir_link.symlink_to("../outside")
+        with (
+            mock.patch.object(toolchain, "_run_phenix_setup") as setup_spy,
+            mock.patch.object(toolchain, "run_capture") as capture_spy,
+        ):
+            rel_dir_hop_escape = toolchain.phenix_build_evidence()
+        self.assertIsNone(rel_dir_hop_escape["reported_version_source"])
+        self.assertFalse(_build_is_measured(rel_dir_escape := rel_dir_hop_escape))
+        self.assertIn("escapes installation prefix", rel_dir_escape["version_probe"]["error"])
+        setup_spy.assert_not_called()
+        capture_spy.assert_not_called()
+        escape_dir_link.unlink()
+        return_dir_link.unlink()
+
+        # #960: Terminal and parent-directory symlink loops return diagnostic unknown
+        # evidence on both vendor and bare routes without raising RuntimeError or
+        # executing setup/dispatcher.
+        self.configured_dispatcher.unlink()
+        self.configured_dispatcher.symlink_to("phenix.version")
+        with (
+            mock.patch.object(toolchain, "_run_phenix_setup") as setup_spy,
+            mock.patch.object(toolchain, "run_capture") as capture_spy,
+        ):
+            term_loop_vendor = toolchain.phenix_build_evidence()
+            term_loop_bare = toolchain.phenix_bare_build_evidence()
+        for loop_ev in (term_loop_vendor, term_loop_bare):
+            self.assertIsNone(loop_ev["reported_version_source"])
+            self.assertFalse(_build_is_measured(loop_ev))
+            self.assertIn("loop", loop_ev["version_probe"]["error"].lower())
+        setup_spy.assert_not_called()
+        capture_spy.assert_not_called()
+
+        parent_loop = self.prefix / "loop"
+        parent_loop.symlink_to(parent_loop)
+        with (
+            mock.patch.object(toolchain, "_run_phenix_setup") as setup_spy,
+            mock.patch.object(toolchain, "run_capture") as capture_spy,
+        ):
+            parent_loop_vendor = toolchain.phenix_build_evidence(
+                configured_bin=parent_loop / "phenix_bin"
+            )
+            parent_loop_bare = toolchain.phenix_bare_build_evidence(
+                configured_bin=parent_loop / "phenix_bin"
+            )
+        for loop_ev in (parent_loop_vendor, parent_loop_bare):
+            self.assertIsNone(loop_ev["reported_version_source"])
+            self.assertFalse(_build_is_measured(loop_ev))
+            self.assertIn("loop", loop_ev["version_probe"]["error"].lower())
+        setup_spy.assert_not_called()
+        capture_spy.assert_not_called()
+        parent_loop.unlink()
 
         # 7. PATH impostor when configured dispatcher is missing rejects without running impostor.
         self.configured_dispatcher.unlink()
@@ -419,6 +502,64 @@ class PhenixVendorSetupTests(unittest.TestCase):
         self.assertEqual(legacy_first["manifest"].name, "success.json")
         self.assertEqual(len(self.calls), 1)
 
+        # #956 residual: Function-shaped PHENIX_VERSION or PHENIX_RELEASE_TAG values
+        # beginning with '() {' are removed and recorded in
+        # ignored_inherited_version_variables without overlapping
+        # ignored_inherited_shell_hooks, preserving measured admission and single-run
+        # cache reuse for each variable individually and both together.
+        for label, func_version_vars, expected_ignored_vars in (
+            (
+                "version-only",
+                {"PHENIX_VERSION": f"() {{ touch {tripwire_marker}; }}"},
+                ["PHENIX_VERSION"],
+            ),
+            (
+                "release-only",
+                {"PHENIX_RELEASE_TAG": f"() {{ touch {tripwire_marker}; }}"},
+                ["PHENIX_RELEASE_TAG"],
+            ),
+            (
+                "both",
+                {
+                    "PHENIX_VERSION": f"() {{ touch {tripwire_marker}; }}",
+                    "PHENIX_RELEASE_TAG": f"() {{ touch {tripwire_marker}; }}",
+                },
+                ["PHENIX_RELEASE_TAG", "PHENIX_VERSION"],
+            ),
+        ):
+            with self.subTest(case=label):
+                case_env = {
+                    "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+                    **func_version_vars,
+                }
+                case_snapshot = dict(case_env)
+                self.calls.clear()
+                self.work_dir = self.root / f"work-func-{label}"
+                self.work_dir.mkdir()
+                with mock.patch.dict(os.environ, case_env, clear=True):
+                    clean_case = toolchain.phenix_version_environment()
+                    for key in func_version_vars:
+                        self.assertNotIn(key, clean_case)
+                    case_evidence = toolchain.phenix_build_evidence()
+                    case_first = self._run_cached()
+                    case_second = self._run_cached()
+                    self.assertEqual(dict(os.environ), case_snapshot)
+                self.assertFalse(tripwire_marker.exists())
+                self.assertEqual(
+                    case_evidence["version_probe"][
+                        "ignored_inherited_version_variables"
+                    ],
+                    expected_ignored_vars,
+                )
+                self.assertEqual(
+                    case_evidence["version_probe"]["ignored_inherited_shell_hooks"],
+                    [],
+                )
+                self.assertTrue(_build_is_measured(case_evidence))
+                self.assertEqual(case_first["model"], case_second["model"])
+                self.assertEqual(case_first["manifest"].name, "success.json")
+                self.assertEqual(len(self.calls), 1)
+
     def test_metacharacter_and_quote_paths_remain_literal(self) -> None:
         marker = self.root / "shell-injection-ran"
         weird_prefix = (
@@ -471,17 +612,39 @@ class PhenixVendorSetupTests(unittest.TestCase):
         self.assertEqual(stderr_chatter["version_probe"]["setup_stderr"], "setup warning\n")
         self.assertFalse(_build_is_measured(stderr_chatter))
 
-        # 5. Duplicate setup assignments.
-        for duplicate_script in (
-            "export PHENIX_VERSION=2.0-5936\nexport PHENIX_VERSION=2.0-5936\n",
-            "export PHENIX_VERSION=2.0-5936\nexport PHENIX_VERSION=2.0-9999\n",
-            "export PHENIX_VERSION=2.0\nexport PHENIX_RELEASE_TAG=5936\nexport PHENIX_RELEASE_TAG=9999\n",
+        # 5. #959: Inline comments and quoted/sequential setup assignments whose final
+        # captured fields are consistent and match the single banner are accepted;
+        # inconsistent final setup fields reject.
+        for valid_script, expected_build in (
+            ("export PHENIX_VERSION=2.0-5936 # PHENIX_VERSION=9.9-9999\n", "2.0-5936"),
+            (
+                "export 'PHENIX_VERSION=2.0-9999'\nexport 'PHENIX_VERSION=2.0-5936'\n",
+                "2.0-5936",
+            ),
+            (
+                "export PHENIX_VERSION=2.0\nexport PHENIX_RELEASE_TAG=9999\nexport PHENIX_RELEASE_TAG=5936\n",
+                "2.0-5936",
+            ),
         ):
-            with self.subTest(duplicate_script=duplicate_script):
-                self.setup_file.write_text(duplicate_script)
-                dup = toolchain.phenix_build_evidence()
-                self.assertIsNone(dup["reported_version_source"])
-                self.assertFalse(_build_is_measured(dup))
+            with self.subTest(valid_script=valid_script):
+                self.setup_file.write_text(valid_script)
+                accepted = toolchain.phenix_build_evidence()
+                self.assertEqual(
+                    accepted["reported_version_source"], "vendor_setup_environment"
+                )
+                self.assertEqual(accepted["parsed_build"], expected_build)
+                self.assertTrue(_build_is_measured(accepted))
+
+        for inconsistent_script in (
+            "export 'PHENIX_VERSION=2.0-5936'\nexport 'PHENIX_RELEASE_TAG=9999'\n",
+            "export 'PHENIX_VERSION=2.0-5936'\nexport 'PHENIX_VERSION=2.0'\n",
+            "export PHENIX_VERSION=2.0-5936\nexport PHENIX_RELEASE_TAG=5936\nexport PHENIX_RELEASE_TAG=9999\n",
+        ):
+            with self.subTest(inconsistent_script=inconsistent_script):
+                self.setup_file.write_text(inconsistent_script)
+                rejected = toolchain.phenix_build_evidence()
+                self.assertIsNone(rejected["reported_version_source"])
+                self.assertFalse(_build_is_measured(rejected))
 
         # 6. Malformed or contradictory setup version fields.
         for bad_setup in (
@@ -501,26 +664,101 @@ class PhenixVendorSetupTests(unittest.TestCase):
 
         self.setup_file.write_text("export PHENIX_VERSION=2.0-5936\n")
 
-        # 7. Setup timeout and dispatcher timeout.
-        with mock.patch.object(
-            toolchain,
-            "_run_phenix_setup",
-            side_effect=subprocess.TimeoutExpired(["/bin/bash"], 10),
+        # 7. #961: Setup timeout and dispatcher timeout (including bare probe) preserve
+        # partial stdout/stderr (both str and bytes) in the proper fields with None
+        # returncode and unknown status.
+        with (
+            mock.patch.object(
+                toolchain,
+                "_run_phenix_setup",
+                side_effect=subprocess.TimeoutExpired(
+                    ["/bin/bash"],
+                    10,
+                    output="partial setup stdout\n",
+                    stderr="partial setup stderr\n",
+                ),
+            ),
+            mock.patch.object(toolchain, "run_capture") as capture_spy,
         ):
             setup_timeout = toolchain.phenix_build_evidence()
         self.assertIsNone(setup_timeout["reported_version_source"])
+        self.assertIsNone(setup_timeout["version_probe"]["setup_returncode"])
+        self.assertEqual(
+            setup_timeout["version_probe"]["setup_stdout"], "partial setup stdout\n"
+        )
+        self.assertEqual(
+            setup_timeout["version_probe"]["setup_stderr"], "partial setup stderr\n"
+        )
         self.assertIn("TimeoutExpired", setup_timeout["version_probe"]["error"])
         self.assertFalse(_build_is_measured(setup_timeout))
+        capture_spy.assert_not_called()
+
+        with mock.patch.object(
+            toolchain,
+            "_run_phenix_setup",
+            side_effect=subprocess.TimeoutExpired(
+                ["/bin/bash"],
+                10,
+                output=b"bytes setup stdout\n",
+                stderr=b"bytes setup stderr\n",
+            ),
+        ):
+            setup_bytes_timeout = toolchain.phenix_build_evidence()
+        self.assertEqual(
+            setup_bytes_timeout["version_probe"]["setup_stdout"],
+            "bytes setup stdout\n",
+        )
+        self.assertEqual(
+            setup_bytes_timeout["version_probe"]["setup_stderr"],
+            "bytes setup stderr\n",
+        )
+        self.assertFalse(_build_is_measured(setup_bytes_timeout))
 
         with mock.patch.object(
             toolchain,
             "run_capture",
-            side_effect=subprocess.TimeoutExpired([str(self.real_dispatcher)], 10),
+            side_effect=subprocess.TimeoutExpired(
+                [str(self.real_dispatcher)],
+                10,
+                output="partial dispatcher stdout\n",
+                stderr="partial dispatcher stderr\n",
+            ),
         ):
             dispatcher_timeout = toolchain.phenix_build_evidence()
         self.assertIsNone(dispatcher_timeout["reported_version_source"])
+        self.assertIsNone(dispatcher_timeout["version_probe"]["returncode"])
+        self.assertEqual(
+            dispatcher_timeout["version_probe"]["stdout"],
+            "partial dispatcher stdout\n",
+        )
+        self.assertEqual(
+            dispatcher_timeout["version_probe"]["stderr"],
+            "partial dispatcher stderr\n",
+        )
         self.assertIn("TimeoutExpired", dispatcher_timeout["version_probe"]["error"])
         self.assertFalse(_build_is_measured(dispatcher_timeout))
+
+        with mock.patch.object(
+            toolchain,
+            "run_capture",
+            side_effect=subprocess.TimeoutExpired(
+                [str(self.real_dispatcher)],
+                10,
+                output=b"partial bare stdout\n",
+                stderr=b"partial bare stderr\n",
+            ),
+        ):
+            bare_timeout = toolchain.phenix_bare_build_evidence()
+        self.assertIsNone(bare_timeout["reported_version_source"])
+        self.assertIsNone(bare_timeout["version_probe"]["returncode"])
+        self.assertEqual(
+            bare_timeout["version_probe"]["stdout"], "partial bare stdout\n"
+        )
+        self.assertEqual(
+            bare_timeout["version_probe"]["stderr"], "partial bare stderr\n"
+        )
+        self.assertIn("TimeoutExpired", bare_timeout["version_probe"]["error"])
+        self.assertFalse(_build_is_measured(bare_timeout))
 
         # 8. Dispatcher failure, empty output, unparseable output, stderr-only output,
         # conflicting setup/banner identity, duplicate fields/headers, cross-banner and
@@ -768,20 +1006,64 @@ class PhenixVendorSetupTests(unittest.TestCase):
         with mock.patch.object(toolchain, "EXTERNAL_TOOL_SPECS", {"PHENIX": spec}):
             verified = toolchain.external_tool_report()["PHENIX"]
         self.assertTrue(verified["available"])
+        self.assertEqual(
+            verified["discovered_executable"], str(self.real_dispatcher.resolve())
+        )
         self.assertEqual(verified["reported_version_source"], "vendor_setup_environment")
         self.assertIn("Release tag: 5936", verified["reported_version"])
         self.assertFalse(verified["version_divergence"])
 
         # Removing phenix_env.sh causes the probe to fail closed: reported_version is None
-        # (never a truncated bare banner) and version_divergence is True despite the path hint.
+        # (never a truncated bare banner) and version_divergence is True despite the path hint,
+        # while the executable dispatcher itself remains available.
         self.setup_file.unlink()
         with mock.patch.object(toolchain, "EXTERNAL_TOOL_SPECS", {"PHENIX": spec}):
             unverified = toolchain.external_tool_report()["PHENIX"]
         self.assertTrue(unverified["available"])
+        self.assertEqual(
+            unverified["discovered_executable"], str(self.real_dispatcher.resolve())
+        )
         self.assertIsNone(unverified["reported_version"])
         self.assertIsNone(unverified["reported_version_source"])
         self.assertEqual(unverified["configured_path_version_hint"], "2.0-5936")
         self.assertTrue(unverified["version_divergence"])
+        self.setup_file.write_text("export PHENIX_VERSION=2.0-5936\n")
+
+        # #409: A mode-0644 (non-executable) phenix.version file is not reported as an
+        # available executable, and does not fall back to PATH.
+        self.real_dispatcher.chmod(0o644)
+        outside_path_dir = self.root / "path-impostor-dir"
+        outside_path_dir.mkdir()
+        path_impostor = outside_path_dir / "phenix.version"
+        _write_fake_dispatcher(path_impostor)
+        with (
+            mock.patch.object(toolchain, "EXTERNAL_TOOL_SPECS", {"PHENIX": spec}),
+            mock.patch.dict(
+                os.environ, {"PATH": f"{outside_path_dir}:{os.environ.get('PATH', '')}"}
+            ),
+        ):
+            nonexec_report = toolchain.external_tool_report()["PHENIX"]
+        self.assertFalse(nonexec_report["available"])
+        self.assertIsNone(nonexec_report["discovered_executable"])
+        self.assertIsNone(nonexec_report["reported_version"])
+        self.assertIsNone(nonexec_report["reported_version_source"])
+        self.assertIsNone(nonexec_report["version_divergence"])
+
+        # Absent phenix.version also reports available=False with no PATH fallback.
+        self.configured_dispatcher.unlink()
+        self.real_dispatcher.unlink()
+        with (
+            mock.patch.object(toolchain, "EXTERNAL_TOOL_SPECS", {"PHENIX": spec}),
+            mock.patch.dict(
+                os.environ, {"PATH": f"{outside_path_dir}:{os.environ.get('PATH', '')}"}
+            ),
+        ):
+            absent_report = toolchain.external_tool_report()["PHENIX"]
+        self.assertFalse(absent_report["available"])
+        self.assertIsNone(absent_report["discovered_executable"])
+        self.assertIsNone(absent_report["reported_version"])
+        self.assertIsNone(absent_report["reported_version_source"])
+        self.assertIsNone(absent_report["version_divergence"])
 
 
 if __name__ == "__main__":

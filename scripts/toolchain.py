@@ -13,8 +13,8 @@ not the full sourced setup environment or scientific runner environments.
 
 from __future__ import annotations
 
-import os
 import hashlib
+import os
 import re
 import shlex
 import shutil
@@ -255,6 +255,8 @@ def parse_phenix_build(output: str) -> str | None:
 
 
 def _is_shell_hook_variable(name: str, value: object) -> bool:
+    if name in _PHENIX_VERSION_VARIABLES:
+        return False
     return (
         name in _SHELL_HOOK_VARIABLES
         or name.startswith("BASH_FUNC_")
@@ -276,16 +278,19 @@ def _has_phenix_banner_fragment(text: str) -> bool:
     return False
 
 
-def _setup_script_has_duplicate_version_fields(raw_bytes: bytes) -> bool:
-    text = raw_bytes.decode("utf-8", errors="replace")
-    active_lines = [
-        line for line in text.splitlines() if not line.lstrip().startswith("#")
-    ]
-    joined = "\n".join(active_lines)
-    for variable in _PHENIX_VERSION_VARIABLES:
-        if len(re.findall(rf"(?:^|[;\s])(?:export\s+)?{variable}=", joined, re.M)) > 1:
-            return True
-    return False
+def _coerce_timeout_stream(stream: str | bytes | None) -> str:
+    if stream is None:
+        return ""
+    if isinstance(stream, bytes):
+        return stream.decode("utf-8", errors="replace")
+    return str(stream)
+
+
+def _strict_resolve(path: Path) -> Path:
+    try:
+        return path.resolve(strict=True)
+    except RuntimeError as error:
+        raise ValueError(str(error)) from error
 
 
 def _phenix_configured_prefix(configured_bin: Path) -> Path:
@@ -304,6 +309,72 @@ def _regular_file_sha256(path: Path) -> str:
         return hashlib.file_digest(source, "sha256").hexdigest()
 
 
+def _resolve_within_prefix(
+    base_dir: Path,
+    target: Path,
+    configured_prefix: Path,
+    resolved_prefix: Path,
+    active_links: frozenset[Path] = frozenset(),
+    hops: int = 0,
+) -> Path:
+    if hops > 40:
+        raise ValueError(f"Symlink loop in PHENIX dispatcher: {target}")
+    if target.is_absolute():
+        if target.is_relative_to(resolved_prefix):
+            parts = target.relative_to(resolved_prefix).parts
+        elif target.is_relative_to(configured_prefix):
+            parts = target.relative_to(configured_prefix).parts
+        else:
+            raise ValueError(
+                f"PHENIX dispatcher symlink escapes installation prefix: {target}"
+            )
+        current = resolved_prefix
+    else:
+        if not base_dir.is_relative_to(resolved_prefix):
+            raise ValueError(
+                f"PHENIX dispatcher base directory escapes installation prefix: {base_dir}"
+            )
+        current = base_dir
+        parts = target.parts
+    for part in parts:
+        if part in ("", "."):
+            continue
+        if part == "..":
+            current = current.parent
+            if not current.is_relative_to(resolved_prefix):
+                raise ValueError(
+                    f"PHENIX dispatcher path escapes installation prefix: {target}"
+                )
+            continue
+        candidate = current / part
+        if not candidate.is_relative_to(resolved_prefix):
+            raise ValueError(
+                f"PHENIX dispatcher path escapes installation prefix: {candidate}"
+            )
+        info = os.lstat(candidate)
+        if stat.S_ISLNK(info.st_mode):
+            if candidate in active_links:
+                raise ValueError(
+                    f"Symlink loop in PHENIX dispatcher: {candidate}"
+                )
+            link_target = Path(os.readlink(candidate))
+            current = _resolve_within_prefix(
+                current,
+                link_target,
+                configured_prefix,
+                resolved_prefix,
+                active_links | {candidate},
+                hops + 1,
+            )
+        else:
+            current = candidate
+    if not current.is_relative_to(resolved_prefix):
+        raise ValueError(
+            f"PHENIX dispatcher path escapes installation prefix: {current}"
+        )
+    return current
+
+
 def _resolve_phenix_dispatcher(configured_bin: Path) -> tuple[Path, Path, Path]:
     if not configured_bin.is_absolute():
         raise ValueError(f"PHENIX binary directory must be absolute: {configured_bin}")
@@ -312,8 +383,8 @@ def _resolve_phenix_dispatcher(configured_bin: Path) -> tuple[Path, Path, Path]:
         raise ValueError(
             f"PHENIX binary directory or prefix must not be a symlink: {configured_bin}"
         )
-    resolved_prefix = configured_prefix.resolve(strict=True)
-    resolved_bin = configured_bin.resolve(strict=True)
+    resolved_prefix = _strict_resolve(configured_prefix)
+    resolved_bin = _strict_resolve(configured_bin)
     if not resolved_prefix.is_dir() or not resolved_bin.is_dir():
         raise FileNotFoundError(f"PHENIX directory not found: {configured_bin}")
     if configured_bin == configured_prefix:
@@ -324,24 +395,16 @@ def _resolve_phenix_dispatcher(configured_bin: Path) -> tuple[Path, Path, Path]:
             f"PHENIX binary directory escapes installation prefix: {configured_bin}"
         )
     configured_dispatcher = configured_bin / "phenix.version"
-    current = configured_dispatcher
-    seen: set[Path] = set()
-    while current.is_symlink():
-        if current in seen:
-            raise ValueError(
-                f"Symlink loop in PHENIX dispatcher: {configured_dispatcher}"
-            )
-        seen.add(current)
-        target = Path(os.readlink(current))
-        next_path = target if target.is_absolute() else (current.parent / target)
-        resolved_parent = next_path.parent.resolve(strict=True)
-        if not resolved_parent.is_relative_to(resolved_prefix):
-            raise ValueError(
-                f"PHENIX dispatcher symlink escapes installation prefix: {configured_dispatcher}"
-            )
-        current = resolved_parent / next_path.name
-    resolved_dispatcher = configured_dispatcher.resolve(strict=True)
-    if not stat.S_ISREG(os.stat(resolved_dispatcher).st_mode):
+    walked_dispatcher = _resolve_within_prefix(
+        resolved_bin,
+        Path("phenix.version"),
+        configured_prefix,
+        resolved_prefix,
+    )
+    resolved_dispatcher = _strict_resolve(walked_dispatcher)
+    if resolved_dispatcher != walked_dispatcher or not stat.S_ISREG(
+        os.lstat(resolved_dispatcher).st_mode
+    ):
         raise ValueError(
             f"PHENIX dispatcher must be a regular file: {configured_dispatcher}"
         )
@@ -365,9 +428,9 @@ def _resolve_phenix_setup(
         raise ValueError(
             f"PHENIX setup script must not be a symlink: {configured_setup}"
         )
-    resolved_setup = configured_setup.resolve(strict=True)
+    resolved_setup = _strict_resolve(configured_setup)
     if not stat.S_ISREG(os.lstat(configured_setup).st_mode) or not stat.S_ISREG(
-        os.stat(resolved_setup).st_mode
+        os.lstat(resolved_setup).st_mode
     ):
         raise ValueError(
             f"PHENIX setup script must be a regular file: {configured_setup}"
@@ -518,9 +581,18 @@ def phenix_build_evidence(
         probe["sha256"] = _regular_file_sha256(resolved_dispatcher)
         if not use_vendor_setup:
             probe["argv"] = [str(resolved_dispatcher)]
-            process = run_capture(
-                [resolved_dispatcher], timeout=10, env=phenix_version_environment()
-            )
+            try:
+                process = run_capture(
+                    [resolved_dispatcher], timeout=10, env=phenix_version_environment()
+                )
+            except subprocess.TimeoutExpired as error:
+                probe.update(
+                    returncode=None,
+                    stdout=_coerce_timeout_stream(error.stdout),
+                    stderr=_coerce_timeout_stream(error.stderr),
+                    error=f"{type(error).__name__}: {error}",
+                )
+                return result
             probe.update(
                 returncode=process.returncode,
                 stdout=process.stdout,
@@ -558,15 +630,21 @@ def phenix_build_evidence(
         _, resolved_setup = _resolve_phenix_setup(configured_prefix, resolved_prefix)
         probe["setup_resolved_path"] = str(resolved_setup)
         probe["setup_sha256"] = _regular_file_sha256(resolved_setup)
-        setup_bytes = resolved_setup.read_bytes()
-        if hashlib.sha256(setup_bytes).hexdigest() != probe["setup_sha256"]:
-            probe["error"] = "setup or version executable changed during measurement"
-            return result
-        duplicate_setup_fields = _setup_script_has_duplicate_version_fields(setup_bytes)
         setup_argv = phenix_setup_argv(resolved_setup)
         probe["setup_argv"] = setup_argv
         base_env = phenix_version_environment()
-        setup_process = _run_phenix_setup(setup_argv, env=base_env, timeout=10)
+        try:
+            setup_process = _run_phenix_setup(setup_argv, env=base_env, timeout=10)
+        except subprocess.TimeoutExpired as error:
+            probe.update(
+                setup_returncode=None,
+                setup_stdout=_coerce_timeout_stream(error.stdout),
+                setup_stderr=_coerce_timeout_stream(error.stderr),
+                setup_version_fields=None,
+                setup_parsed_build=None,
+                error=f"{type(error).__name__}: {error}",
+            )
+            return result
         probe["setup_returncode"] = setup_process.returncode
         probe["setup_stderr"] = setup_process.stderr
         if type(setup_process.returncode) is int and setup_process.returncode == 0:
@@ -580,7 +658,7 @@ def phenix_build_evidence(
             setup_fields = None
         setup_build = (
             parse_phenix_setup_build(setup_fields)
-            if (setup_fields is not None and not duplicate_setup_fields)
+            if setup_fields is not None
             else None
         )
         probe["setup_parsed_build"] = setup_build
@@ -588,7 +666,6 @@ def phenix_build_evidence(
             type(setup_process.returncode) is int
             and setup_process.returncode == 0
             and setup_fields is not None
-            and not duplicate_setup_fields
             and probe["setup_stdout"] == ""
             and probe["setup_stderr"] == ""
             and setup_build is not None
@@ -599,9 +676,18 @@ def phenix_build_evidence(
                 if value is not None:
                     dispatcher_env[key] = value
             probe["argv"] = [str(resolved_dispatcher)]
-            process = run_capture(
-                [resolved_dispatcher], timeout=10, env=dispatcher_env
-            )
+            try:
+                process = run_capture(
+                    [resolved_dispatcher], timeout=10, env=dispatcher_env
+                )
+            except subprocess.TimeoutExpired as error:
+                probe.update(
+                    returncode=None,
+                    stdout=_coerce_timeout_stream(error.stdout),
+                    stderr=_coerce_timeout_stream(error.stderr),
+                    error=f"{type(error).__name__}: {error}",
+                )
+                return result
             probe.update(
                 returncode=process.returncode,
                 stdout=process.stdout,
@@ -626,10 +712,6 @@ def phenix_build_evidence(
             probe["error"] = (
                 "vendor setup exited before reporting version variables"
             )
-        elif duplicate_setup_fields:
-            probe["error"] = (
-                "vendor setup defines duplicate version or release fields"
-            )
         elif probe["setup_stdout"] != "" or probe["setup_stderr"] != "":
             probe["error"] = "vendor setup produced unexpected output"
         elif setup_build is None:
@@ -638,7 +720,7 @@ def phenix_build_evidence(
             probe["error"] = (
                 f"version executable exited with status {probe['returncode']}"
             )
-        elif _has_phenix_banner_fragment( str(probe["stderr"]) ):
+        elif _has_phenix_banner_fragment(str(probe["stderr"])):
             probe["error"] = "version banner fields split across stdout and stderr"
         else:
             banner_build = parse_phenix_build(str(probe["stdout"]))
@@ -754,7 +836,12 @@ def external_tool_report() -> dict[str, dict[str, str | bool | None]]:
             evidence = phenix_build_evidence(configured_bin=configured)
             probe = evidence["version_probe"]
             discovered = probe.get("resolved_path")
-            available = isinstance(discovered, str) and bool(discovered)
+            available = (
+                isinstance(discovered, str)
+                and bool(discovered)
+                and Path(discovered).is_file()
+                and os.access(discovered, os.X_OK)
+            )
             reported_version = evidence.get("reported_version")
             reported_version_source = evidence.get("reported_version_source")
             parsed_build = evidence.get("parsed_build")

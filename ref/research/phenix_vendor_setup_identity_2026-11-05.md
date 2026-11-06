@@ -1,4 +1,4 @@
-# PHENIX Configured-Install Vendor Setup Build Identity (#954, #955, #956) — 2026-11-05
+# PHENIX Configured-Install Vendor Setup Build Identity (#954, #955, #956, #958, #959, #960, #961, #409) — 2026-11-05
 
 ## Problem statement and root cause (#954)
 
@@ -24,22 +24,25 @@ Without `Version:` or `Release tag:` lines, `parse_phenix_build()` returns `None
 
 `scripts/toolchain.py` and `scripts/refinement_cache.py` implement an audited, version-only vendor setup adapter for PHENIX build discovery while preserving #816 inherited-variable isolation and fail-closed cache admission:
 
-1. **Strict prefix, setup, and dispatcher containment:**
+1. **Strict prefix, setup, and dispatcher containment (#954, #958, #960, #409):**
    - The installation prefix is derived strictly from the configured binary directory (`PHENIX_BIN` or explicit `configured_bin`): if its lexical name is `phenix_bin` or `bin`, the prefix is its parent directory; otherwise the prefix is the directory itself.
-   - Neither `configured_bin` nor `configured_prefix` may be a symlink. Every intermediate symlink hop on `<configured_bin>/phenix.version` is checked step-by-step, and `<prefix>/phenix_env.sh` must be a regular non-symlink file directly under `<prefix>`. Any symlink hop or final resolved target that escapes the resolved installation prefix, any missing or non-regular `phenix_env.sh`, or any `PATH`-only fallback when `configured_bin` is absent is rejected.
+   - Neither `configured_bin` nor `configured_prefix` may be a symlink, and path resolution converts Python 3.12 `Path.resolve()` `RuntimeError` symlink-loop exceptions into `ValueError` at the path boundary (#960) so symlink loops return diagnostic unknown evidence without raising uncaught exceptions.
+   - Every directory component and terminal symlink hop of `<configured_bin>/phenix.version` is walked step-by-step via `_resolve_within_prefix` using `os.lstat` and `os.readlink` (#958), rejecting any intermediate directory symlink or terminal symlink hop that escapes the installation prefix even if a subsequent symlink returns inside the prefix.
+   - `<prefix>/phenix_env.sh` must be a regular non-symlink file directly under `<prefix>`, and `<prefix>/bin/phenix.version` must be a regular file inside `<prefix>`. In `external_tool_report()`, PHENIX executable availability additionally requires `os.access(discovered, os.X_OK)` (with no `PATH` fallback), kept separate from version-identity verification (#409).
    - No new environment variable or per-runner setup path constant is introduced.
 
 2. **Sanitized child environment and shell-hook neutralization (#816, #956):**
    - `phenix_version_environment()` copies `os.environ` without mutating the parent environment, removes `PHENIX_VERSION` and `PHENIX_RELEASE_TAG` (recorded in `ignored_inherited_version_variables`), and removes shell startup/execution hooks (`BASH_ENV`, `ENV`, `SHELLOPTS`, `BASHOPTS`, `POSIXLY_CORRECT`, `CDPATH`, `GLOBIGNORE`, `PROMPT_COMMAND`, `PS4`), all `BASH_FUNC_*` variables, and any legacy exported shell function whose value starts with `"() {"` (recorded in `ignored_inherited_shell_hooks`).
+   - Version-variable classification (`PHENIX_VERSION`, `PHENIX_RELEASE_TAG`) takes precedence over `_is_shell_hook_variable`, so function-shaped `PHENIX_VERSION='() { ... }'` or `PHENIX_RELEASE_TAG='() { ... }'` values are removed and recorded only in `ignored_inherited_version_variables` without overlapping `ignored_inherited_shell_hooks` (#956).
    - The setup probe invokes `/bin/bash --noprofile --norc -c <_PHENIX_SETUP_SCRIPT> protstruct-phenix-setup <resolved_setup_path>` with positional argument `$1` (`builtin . "$1"`), never interpolating file paths into shell text, and first unsets shell builtins/functions (`export`, `unset`, `printf`, `.`, `exit`) and `PHENIX_VERSION`, `PHENIX_RELEASE_TAG`, `BASH_ENV`, and `ENV`.
 
-3. **Deliberate version-only field transfer, independent normalization, and single-banner rule:**
-   - The setup probe counts active assignments to `PHENIX_VERSION` and `PHENIX_RELEASE_TAG` in `<prefix>/phenix_env.sh` to reject duplicate definitions, sources `<prefix>/phenix_env.sh` in the isolated child shell, separates any setup stdout/stderr chatter from the NUL-delimited version record, and requires zero exit status and empty `setup_stdout` / `setup_stderr`.
-   - `parse_phenix_setup_build()` normalizes the setup-exported `PHENIX_VERSION` / `PHENIX_RELEASE_TAG` fields independently of the banner parser, rejecting missing, malformed, or contradictory fields.
+3. **Deliberate version-only field transfer, independent normalization, and single-banner rule (#954, #959, #961):**
+   - The setup probe sources `<prefix>/phenix_env.sh` in the isolated child shell, separates any setup stdout/stderr chatter from the NUL-delimited final `PHENIX_VERSION` / `PHENIX_RELEASE_TAG` record, and requires zero exit status and empty `setup_stdout` / `setup_stderr`.
+   - `parse_phenix_setup_build()` normalizes the final setup-exported `PHENIX_VERSION` / `PHENIX_RELEASE_TAG` fields independently of the banner parser, rejecting missing, malformed, or contradictory final fields (#959).
    - **Version-only transfer:** Only the two setup-derived version variables (`PHENIX_VERSION` and `PHENIX_RELEASE_TAG`) are overlaid onto the sanitized `base_env` when invoking `<prefix>/bin/phenix.version` (`shell=False`). The adapter deliberately does **not** transfer the complete sourced setup environment (such as `PATH`, `PHENIX`, or library variables) to `phenix.version` or to scientific runners.
    - `parse_phenix_build()` accepts **one** consistent `Version:` / `Release tag:` pair within a single PHENIX banner header (as explicitly confirmed by the user) and rejects multiple PHENIX banner headers, duplicate `Version:` or `Release tag:` lines, contradictory single-line and split-line values, or fragments split across banners or stdout/stderr.
-   - Setup and dispatcher files and symlink targets are verified before and after execution; any mid-probe file or symlink change invalidates the probe.
-   - Admission to `reported_version_source="vendor_setup_environment"` requires `setup_build == banner_build` and no banner fragments on `stderr`. Any failure, timeout, chatter, escape, or disagreement leaves `reported_version=None` and `reported_version_source=None` while retaining full diagnostic fields.
+   - If either the setup child or the dispatcher child (in vendor or bare mode) raises `subprocess.TimeoutExpired`, partial `stdout` and `stderr` (`str` or `bytes`) are preserved in `setup_stdout`/`setup_stderr` or `stdout`/`stderr` with `None` return code and unknown admission (#961).
+   - Setup and dispatcher files, symlink targets, executable permissions, and SHA-256 digests are verified before and after execution; any mid-probe change invalidates the probe.
 
 4. **Explicit bare probe retained:**
    - `phenix_bare_build_evidence()` (or `phenix_build_evidence(..., use_vendor_setup=False)`) preserves direct `phenix.version` probing with `reported_version_source="command_output"`.
@@ -49,15 +52,28 @@ Without `Version:` or `Release tag:` lines, `parse_phenix_build()` returns `None
    - `_build_is_measured()` validates all required `vendor_setup_environment` bindings: non-empty `parsed_build`, exact `reported_version` banner match, `configured_prefix` / `resolved_prefix` / `setup_configured_path` / `setup_resolved_path` / `configured_path` / `resolved_path` containment within the installation prefix, 64-hex `sha256` and `setup_sha256`, exact `argv == [resolved_path]` and `setup_argv == phenix_setup_argv(setup_resolved_path)`, `int` zero `returncode` and `setup_returncode`, empty `setup_stdout` and `setup_stderr`, no banner fragments in `stderr`, valid `setup_version_fields`, equality of `parse_phenix_setup_build(setup_version_fields) == parse_phenix_build(stdout) == setup_parsed_build == parsed_build`, and well-formed `ignored_inherited_version_variables` and `ignored_inherited_shell_hooks`.
    - Because `version_probe` (including `setup_configured_path`, `setup_resolved_path`, `setup_sha256`, `setup_argv`, `setup_returncode`, `setup_stdout`, `setup_stderr`, and `setup_version_fields`) is embedded in `measured_build` inside `refinement_cache_v1` `key_material`, changing either `phenix_env.sh` or `phenix.version` bytes produces a distinct cache key and invalidates stale reuse.
 
-## PRIMARY acceptance triage and fixes (#955, #956)
+## PRIMARY acceptance and fresh-review triage (#955, #956, #958, #959, #960, #961, #409)
 
 1. **#955 (`scripts/test_benchmark_environment.py` hermetic isolation):**
-   - **Finding:** `scripts/test_benchmark_environment.py` previously called `benchmark_environment()` and `announce_benchmark_environment()` with `external_tools=None` without mocking `external_tool_report()`, causing `scripts/validate.sh` to invoke live external version probes (including two `phenix.version` calls) when installed on M5.
-   - **Fix & verification:** Isolated default-route metadata/announcement assertions in `scripts/test_benchmark_environment.py` using deterministic synthetic tool reports, preserved an explicit assertion that omitting `external_tools` dispatches through `external_tool_report()` (`call_count == 2`), and added a `toolchain.subprocess.run` tripwire proving the unit suite cannot spawn external tool subprocesses. Production `benchmark_environment()` remains live for opt-in benchmarks.
+   - Isolated default-route metadata/announcement assertions in `scripts/test_benchmark_environment.py` using deterministic synthetic tool reports, preserved an explicit assertion that omitting `external_tools` dispatches through `external_tool_report()` (`call_count == 2`), and added a `toolchain.subprocess.run` tripwire proving the unit suite cannot spawn external tool subprocesses.
 
-2. **#956 (legacy exported shell function names in `ignored_inherited_shell_hooks`):**
-   - **Finding:** `toolchain._is_shell_hook_variable()` detects legacy exported bash functions by value prefix (`() {`) regardless of variable name (e.g. `LEGACY_FUNC='() { :; }'`), strips them in `phenix_version_environment()`, and records the variable name in `version_probe["ignored_inherited_shell_hooks"]`. In the initial 027 draft, `refinement_cache._valid_ignored_hooks()` checked a name-only whitelist (`_SHELL_HOOK_VARIABLES` or `BASH_FUNC_*`), causing `_build_is_measured()` to return `False` and preventing cache reuse whenever a legacy exported function was present in the parent environment.
-   - **Fix & verification:** Updated `refinement_cache._valid_ignored_hooks()` to validate `ignored_inherited_shell_hooks` as a sorted, deduplicated sequence of non-empty, whitespace/NUL/`=`-free environment variable names disjoint from `_PHENIX_VERSION_VARIABLES`, aligning validator and producer semantics while rejecting malformed, unsorted, duplicate, or misplaced version-variable entries. Extended `test_spoofed_inherited_vars_and_shell_hook_tripwires_are_neutralized` in `scripts/test_phenix_vendor_setup.py` to assert `_build_is_measured(evidence) is True` and single-execution cache reuse (`len(self.calls) == 1`, `success.json`) both for the combined hook fixture and for `LEGACY_FUNC='() { :; }'` alone.
+2. **#956 (legacy exported shell function names and function-shaped `PHENIX_VERSION` / `PHENIX_RELEASE_TAG`):**
+   - Aligned `refinement_cache._valid_ignored_hooks()` with `toolchain._is_shell_hook_variable()` so arbitrary legacy exported function names (`LEGACY_FUNC='() { :; }'`) are accepted in `ignored_inherited_shell_hooks`, and gave `_PHENIX_VERSION_VARIABLES` precedence over `_is_shell_hook_variable()` so function-shaped `PHENIX_VERSION` or `PHENIX_RELEASE_TAG` values are recorded only in `ignored_inherited_version_variables` without hook-list overlap.
+
+3. **#958 (intermediate directory symlink escape returning inside prefix):**
+   - Replaced whole-parent `next_path.parent.resolve(strict=True)` in `_resolve_phenix_dispatcher()` with component-by-component `_resolve_within_prefix()` walking every directory and terminal symlink hop via `os.lstat` and `os.readlink`, rejecting `prefix/escape -> outside` + `outside/return -> prefix/bin` before setup or dispatcher execution.
+
+4. **#959 (remove static regex assignment count on `phenix_env.sh` source text):**
+   - Removed `_setup_script_has_duplicate_version_fields()`, which falsely rejected inline comments containing `PHENIX_VERSION=...` and missed quoted exports. The contract is enforced on the final captured `setup_version_fields` and single-banner agreement.
+
+5. **#960 (path-resolution symlink loops on Python 3.12):**
+   - Added `_strict_resolve()` at the path-resolution boundary to convert Python 3.12 `Path.resolve()` `RuntimeError("Symlink loop from ...")` into `ValueError`, returning diagnostic unknown evidence on both vendor and bare routes without executing setup or dispatcher.
+
+6. **#961 (`TimeoutExpired` partial `stdout` / `stderr` retention):**
+   - Preserved partial `stdout` and `stderr` (`str` or `bytes`) from `subprocess.TimeoutExpired` in `setup_stdout`/`setup_stderr` (for setup timeouts) and `stdout`/`stderr` (for vendor and bare dispatcher timeouts) with `None` return code and unknown admission.
+
+7. **#409 regression (`external_tool_report` executable availability for mode-`0644` `phenix.version`):**
+   - Required `os.access(discovered, os.X_OK)` in `external_tool_report()` (separate from version identity verification and with no `PATH` fallback), so a non-executable (`0644`) or absent `phenix.version` reports `available=False`, `discovered_executable=None`, `version_divergence=None`, while preserving `available=True`, `reported_version=None`, `version_divergence=True` when `phenix.version` is executable (`0755`) but `phenix_env.sh` is missing.
 
 ## Explicit scope limits
 

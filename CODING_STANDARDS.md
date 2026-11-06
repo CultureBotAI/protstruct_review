@@ -247,9 +247,9 @@ Where this file and the handbook overlap, they must agree; if they drift, that i
     hardcoded absolute path. No `/Users/...` in any `.py`, `.sh`, schema, or doc.
 19b. **Benchmark tool execution is shell-free.** Pass paths and arguments as a list through
     `scripts/toolchain.py`; use `cwd` and log file handles for redirection. Only the audited CCP4
-    adapter may source a vendor setup script. PHENIX, CCP4, TM-align, DSSP, probe, and reduce paths
-    and pinned versions are defined once in that module and overridden only with `PROTSTRUCT_*`
-    environment variables.
+    adapter and the audited PHENIX version-only setup probe in `scripts/toolchain.py` may source a
+    vendor setup script. PHENIX, CCP4, TM-align, DSSP, probe, and reduce paths and pinned versions
+    are defined once in that module and overridden only with `PROTSTRUCT_*` environment variables.
 
 ## The gate
 

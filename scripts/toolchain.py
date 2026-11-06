@@ -1,19 +1,24 @@
 #!/usr/bin/env python3
 """Shared external-tool configuration and shell-free subprocess adapters.
 
-All scientific inputs are passed as argument-vector elements.  The sole shell
-boundary is :func:`ccp4_environment`, because CCP4 distributes a setup script
-that must be sourced.  Its command is fixed; the setup path is positional data,
-never interpolated shell syntax.
+All scientific inputs are passed as argument-vector elements.  The only shell
+boundaries are :func:`ccp4_environment` and the version-only PHENIX setup probe
+inside :func:`phenix_build_evidence`, because both vendors distribute setup
+scripts that must be sourced.  Their commands are fixed; setup paths are passed
+as positional data, never interpolated into shell syntax.  For PHENIX, only the
+two setup-derived version variables (``PHENIX_VERSION`` and
+``PHENIX_RELEASE_TAG``) are transferred to the ``phenix.version`` child process,
+not the full sourced setup environment or scientific runner environments.
 """
 
 from __future__ import annotations
 
-import os
 import hashlib
+import os
 import re
 import shlex
 import shutil
+import stat
 import subprocess
 from functools import lru_cache
 from pathlib import Path
@@ -110,38 +115,80 @@ EXTERNAL_TOOL_SPECS = {
 }
 
 
+_PHENIX_VERSION_VARIABLES = ("PHENIX_VERSION", "PHENIX_RELEASE_TAG")
+_SHELL_HOOK_VARIABLES = (
+    "BASH_ENV",
+    "ENV",
+    "SHELLOPTS",
+    "BASHOPTS",
+    "POSIXLY_CORRECT",
+    "CDPATH",
+    "GLOBIGNORE",
+    "PROMPT_COMMAND",
+    "PS4",
+)
+_PHENIX_SETUP_SCRIPT = (
+    "builtin unset -f export unset printf . exit 2>/dev/null || true; "
+    "builtin unset PHENIX_VERSION PHENIX_RELEASE_TAG BASH_ENV ENV; "
+    'builtin . "$1"; '
+    "status=$?; "
+    'if [ "$status" -ne 0 ]; then builtin exit "$status"; fi; '
+    'builtin printf "\\0PHENIX_VERSION=%s\\0PHENIX_RELEASE_TAG=%s\\0" '
+    '"${PHENIX_VERSION+set}:${PHENIX_VERSION-}" '
+    '"${PHENIX_RELEASE_TAG+set}:${PHENIX_RELEASE_TAG-}"'
+)
+_SETUP_OUTPUT_RE = re.compile(
+    r"\0PHENIX_VERSION=(set:|:)([^\0]*)\0PHENIX_RELEASE_TAG=(set:|:)([^\0]*)\0\Z",
+    re.S,
+)
+
+
 def phenix(executable: str) -> Path:
     """Return one executable from the configured, version-pinned PHENIX tree."""
     return PHENIX_BIN / executable
 
 
-def parse_phenix_build(output: str) -> str | None:
-    """Parse PHENIX's own version fields, never a warning/cctbx version token.
+def phenix_setup_argv(setup_path: str | os.PathLike[str]) -> list[str]:
+    """Return the fixed argument vector for the isolated PHENIX setup probe."""
+    return [
+        "/bin/bash",
+        "--noprofile",
+        "--norc",
+        "-c",
+        _PHENIX_SETUP_SCRIPT,
+        "protstruct-phenix-setup",
+        os.fspath(setup_path),
+    ]
 
-    The vendor banner prints Version and Release tag separately when its supplied
-    environment is sourced; without that split, Version may contain the full tag.
-    Unknown, duplicate, contradictory and development-tagged fields are not pins.
-    """
-    lines = [line.strip() for line in output.splitlines()]
-    compact = [match.group(1) for line in lines if (match := re.fullmatch(
-        r"PHENIX(?: version:)? (.+)", line, re.IGNORECASE))]
-    versions = [line.partition(":")[2].strip() for line in lines
-                if line.lower().startswith("version:")]
-    releases = [line.partition(":")[2].strip() for line in lines
-                if line.lower().startswith("release tag:")]
-    if compact:
-        if len(compact) != 1 or versions or releases:
-            return None
-        return compact[0] if re.fullmatch(r"\d+\.\d+(?:\.\d+)?-\d+", compact[0]) else None
-    if not any(line.lower().startswith("phenix:") for line in lines):
+
+def parse_phenix_setup_build(fields: Mapping[str, object]) -> str | None:
+    """Normalize setup-supplied PHENIX_VERSION / PHENIX_RELEASE_TAG fields."""
+    if not isinstance(fields, Mapping):
         return None
-    if len(versions) != 1 or len(releases) > 1:
+    if set(fields) != set(_PHENIX_VERSION_VARIABLES):
         return None
-    match = re.fullmatch(r"(\d+\.\d+(?:\.\d+)?)(?:-(\d+))?", versions[0])
+    raw_version = fields.get("PHENIX_VERSION")
+    raw_release = fields.get("PHENIX_RELEASE_TAG")
+    if (
+        not isinstance(raw_version, str)
+        or not raw_version
+        or raw_version != raw_version.strip()
+        or any(char in raw_version for char in ("\n", "\r", "\0"))
+    ):
+        return None
+    if raw_release is not None and (
+        not isinstance(raw_release, str)
+        or not raw_release
+        or raw_release != raw_release.strip()
+        or any(char in raw_release for char in ("\n", "\r", "\0"))
+        or not re.fullmatch(r"\d+", raw_release)
+    ):
+        return None
+    match = re.fullmatch(r"(\d+\.\d+(?:\.\d+)?)(?:-(\d+))?", raw_version)
     if not match:
         return None
     version, embedded_release = match.groups()
-    release = releases[0] if releases else embedded_release
+    release = raw_release if raw_release is not None else embedded_release
     if not release or not re.fullmatch(r"\d+", release):
         return None
     if embedded_release and embedded_release != release:
@@ -149,48 +196,551 @@ def parse_phenix_build(output: str) -> str | None:
     return f"{version}-{release}"
 
 
+def parse_phenix_build(output: str) -> str | None:
+    """Parse PHENIX's own single-banner version fields, never a warning/cctbx token.
+
+    The vendor banner prints Version and Release tag separately when its supplied
+    environment is sourced; without that split, Version may contain the full tag.
+    Unknown, duplicate, contradictory, multi-banner and development-tagged fields
+    are not pins.
+    """
+    if not isinstance(output, str):
+        return None
+    lines = [line.strip() for line in output.splitlines()]
+    compact = [
+        (index, match.group(1).strip())
+        for index, line in enumerate(lines)
+        if (match := re.fullmatch(r"PHENIX(?: version:)? (.+)", line, re.IGNORECASE))
+    ]
+    headers = [
+        index for index, line in enumerate(lines) if line.lower().startswith("phenix:")
+    ]
+    versions = [
+        (index, line.partition(":")[2].strip())
+        for index, line in enumerate(lines)
+        if line.lower().startswith("version:")
+    ]
+    releases = [
+        (index, line.partition(":")[2].strip())
+        for index, line in enumerate(lines)
+        if line.lower().startswith("release tag:")
+    ]
+    if compact:
+        if len(compact) != 1 or headers or versions or releases:
+            return None
+        _, token = compact[0]
+        return token if re.fullmatch(r"\d+\.\d+(?:\.\d+)?-\d+", token) else None
+    if len(headers) != 1 or len(versions) != 1 or len(releases) > 1:
+        return None
+    header_index = headers[0]
+    version_index, raw_version = versions[0]
+    if version_index <= header_index:
+        return None
+    last_field_index = version_index
+    if releases:
+        release_index, raw_release = releases[0]
+        if release_index <= version_index:
+            return None
+        last_field_index = release_index
+    else:
+        raw_release = None
+    if any(
+        re.fullmatch(r"-{3,}", line)
+        for line in lines[header_index + 1 : last_field_index + 1]
+    ):
+        return None
+    return parse_phenix_setup_build(
+        {"PHENIX_VERSION": raw_version, "PHENIX_RELEASE_TAG": raw_release}
+    )
+
+
+def _is_shell_hook_variable(name: str, value: object) -> bool:
+    if name in _PHENIX_VERSION_VARIABLES:
+        return False
+    return (
+        name in _SHELL_HOOK_VARIABLES
+        or name.startswith("BASH_FUNC_")
+        or (isinstance(value, str) and value.lstrip().startswith("() {"))
+    )
+
+
+def _has_phenix_banner_fragment(text: str) -> bool:
+    if not isinstance(text, str):
+        return True
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if (
+            line.lower().startswith(("phenix:", "version:", "release tag:", "cctbx tag:"))
+            or re.fullmatch(r"PHENIX(?: version:)? .+", line, re.IGNORECASE)
+            or re.fullmatch(r"-{3,}", line)
+        ):
+            return True
+    return False
+
+
+def _coerce_timeout_stream(stream: str | bytes | None) -> str:
+    if stream is None:
+        return ""
+    if isinstance(stream, bytes):
+        return stream.decode("utf-8", errors="replace")
+    return str(stream)
+
+
+def _strict_resolve(path: Path) -> Path:
+    try:
+        return path.resolve(strict=True)
+    except RuntimeError as error:
+        raise ValueError(str(error)) from error
+
+
+def _phenix_configured_prefix(configured_bin: Path) -> Path:
+    return (
+        configured_bin.parent
+        if configured_bin.name in {"phenix_bin", "bin"}
+        else configured_bin
+    )
+
+
+def _regular_file_sha256(path: Path) -> str:
+    info = os.stat(path)
+    if not stat.S_ISREG(info.st_mode):
+        raise ValueError(f"Regular file required: {path}")
+    with path.open("rb") as source:
+        return hashlib.file_digest(source, "sha256").hexdigest()
+
+
+def _resolve_within_prefix(
+    base_dir: Path,
+    target: Path,
+    configured_prefix: Path,
+    resolved_prefix: Path,
+    active_links: frozenset[Path] = frozenset(),
+    hops: int = 0,
+) -> Path:
+    if hops > 40:
+        raise ValueError(f"Symlink loop in PHENIX dispatcher: {target}")
+    if target.is_absolute():
+        if target.is_relative_to(resolved_prefix):
+            parts = target.relative_to(resolved_prefix).parts
+        elif target.is_relative_to(configured_prefix):
+            parts = target.relative_to(configured_prefix).parts
+        else:
+            raise ValueError(
+                f"PHENIX dispatcher symlink escapes installation prefix: {target}"
+            )
+        current = resolved_prefix
+    else:
+        if not base_dir.is_relative_to(resolved_prefix):
+            raise ValueError(
+                f"PHENIX dispatcher base directory escapes installation prefix: {base_dir}"
+            )
+        current = base_dir
+        parts = target.parts
+    for part in parts:
+        if part in ("", "."):
+            continue
+        if part == "..":
+            current = current.parent
+            if not current.is_relative_to(resolved_prefix):
+                raise ValueError(
+                    f"PHENIX dispatcher path escapes installation prefix: {target}"
+                )
+            continue
+        candidate = current / part
+        if not candidate.is_relative_to(resolved_prefix):
+            raise ValueError(
+                f"PHENIX dispatcher path escapes installation prefix: {candidate}"
+            )
+        info = os.lstat(candidate)
+        if stat.S_ISLNK(info.st_mode):
+            if candidate in active_links:
+                raise ValueError(
+                    f"Symlink loop in PHENIX dispatcher: {candidate}"
+                )
+            link_target = Path(os.readlink(candidate))
+            current = _resolve_within_prefix(
+                current,
+                link_target,
+                configured_prefix,
+                resolved_prefix,
+                active_links | {candidate},
+                hops + 1,
+            )
+        else:
+            current = candidate
+    if not current.is_relative_to(resolved_prefix):
+        raise ValueError(
+            f"PHENIX dispatcher path escapes installation prefix: {current}"
+        )
+    return current
+
+
+def _resolve_phenix_dispatcher(configured_bin: Path) -> tuple[Path, Path, Path]:
+    if not configured_bin.is_absolute():
+        raise ValueError(f"PHENIX binary directory must be absolute: {configured_bin}")
+    configured_prefix = _phenix_configured_prefix(configured_bin)
+    if configured_bin.is_symlink() or configured_prefix.is_symlink():
+        raise ValueError(
+            f"PHENIX binary directory or prefix must not be a symlink: {configured_bin}"
+        )
+    resolved_prefix = _strict_resolve(configured_prefix)
+    resolved_bin = _strict_resolve(configured_bin)
+    if not resolved_prefix.is_dir() or not resolved_bin.is_dir():
+        raise FileNotFoundError(f"PHENIX directory not found: {configured_bin}")
+    if configured_bin == configured_prefix:
+        if resolved_bin != resolved_prefix:
+            raise ValueError(f"PHENIX prefix resolution mismatch: {configured_bin}")
+    elif resolved_bin.parent != resolved_prefix or resolved_bin.name != configured_bin.name:
+        raise ValueError(
+            f"PHENIX binary directory escapes installation prefix: {configured_bin}"
+        )
+    configured_dispatcher = configured_bin / "phenix.version"
+    walked_dispatcher = _resolve_within_prefix(
+        resolved_bin,
+        Path("phenix.version"),
+        configured_prefix,
+        resolved_prefix,
+    )
+    resolved_dispatcher = _strict_resolve(walked_dispatcher)
+    if resolved_dispatcher != walked_dispatcher or not stat.S_ISREG(
+        os.lstat(resolved_dispatcher).st_mode
+    ):
+        raise ValueError(
+            f"PHENIX dispatcher must be a regular file: {configured_dispatcher}"
+        )
+    if (
+        not resolved_dispatcher.is_relative_to(resolved_prefix)
+        or resolved_dispatcher.name != "phenix.version"
+        or resolved_dispatcher.parent
+        not in {resolved_prefix, resolved_prefix / "bin", resolved_prefix / "phenix_bin"}
+    ):
+        raise ValueError(
+            f"PHENIX dispatcher escapes installation prefix: {configured_dispatcher}"
+        )
+    return resolved_prefix, configured_dispatcher, resolved_dispatcher
+
+
+def _resolve_phenix_setup(
+    configured_prefix: Path, resolved_prefix: Path
+) -> tuple[Path, Path]:
+    configured_setup = configured_prefix / "phenix_env.sh"
+    if configured_setup.is_symlink():
+        raise ValueError(
+            f"PHENIX setup script must not be a symlink: {configured_setup}"
+        )
+    resolved_setup = _strict_resolve(configured_setup)
+    if not stat.S_ISREG(os.lstat(configured_setup).st_mode) or not stat.S_ISREG(
+        os.lstat(resolved_setup).st_mode
+    ):
+        raise ValueError(
+            f"PHENIX setup script must be a regular file: {configured_setup}"
+        )
+    if (
+        resolved_setup.parent != resolved_prefix
+        or resolved_setup.name != "phenix_env.sh"
+        or not resolved_setup.is_relative_to(resolved_prefix)
+    ):
+        raise ValueError(
+            f"PHENIX setup script escapes installation prefix: {configured_setup}"
+        )
+    return configured_setup, resolved_setup
+
+
+def _run_phenix_setup(
+    setup_argv: Sequence[str], *, env: Mapping[str, str], timeout: float = 10
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        _argv(setup_argv),
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        env=dict(env),
+        check=False,
+    )
+
+
+def _split_phenix_setup_output(
+    raw_stdout: str,
+) -> tuple[str, dict[str, str | None] | None]:
+    match = _SETUP_OUTPUT_RE.search(raw_stdout)
+    if not match:
+        return raw_stdout, None
+    chatter = raw_stdout[: match.start()]
+    version_state, version_value, release_state, release_value = match.groups()
+    fields: dict[str, str | None] = {
+        "PHENIX_VERSION": version_value if version_state == "set:" else None,
+        "PHENIX_RELEASE_TAG": release_value if release_state == "set:" else None,
+    }
+    return chatter, fields
+
+
 def phenix_version_environment() -> dict[str, str]:
-    """Ignore inherited banner overrides; let the configured install report its TAG.
+    """Ignore inherited banner overrides and shell startup hooks in version probes.
 
     Preserve the rest of the launch environment and never mutate the caller's.
     """
-    environment = dict(os.environ)
-    for name in ("PHENIX_VERSION", "PHENIX_RELEASE_TAG"):
-        environment.pop(name, None)
+    environment: dict[str, str] = {}
+    for name, value in os.environ.items():
+        if name in _PHENIX_VERSION_VARIABLES or _is_shell_hook_variable(name, value):
+            continue
+        environment[name] = value
     return environment
 
 
-def phenix_build_evidence() -> dict:
+def phenix_bare_build_evidence(*, configured_bin: Path | None = None) -> dict:
+    """Probe the configured PHENIX dispatcher directly without sourcing phenix_env.sh."""
+    return phenix_build_evidence(configured_bin=configured_bin, use_vendor_setup=False)
+
+
+def phenix_build_evidence(
+    *, configured_bin: Path | None = None, use_vendor_setup: bool = True
+) -> dict:
     """Measure only this configured installation's version, without PATH fallback.
 
+    Default build admission sources the configured installation's own
+    ``phenix_env.sh`` in an isolated child process with inherited version
+    overrides and shell startup hooks removed, extracts only ``PHENIX_VERSION``
+    and ``PHENIX_RELEASE_TAG`` (never transferring ``PATH``, ``PHENIX``, or
+    library environment variables from ``phenix_env.sh`` to ``phenix.version``
+    or scientific runners), passes only those two version fields to the
+    installation's resolved ``phenix.version`` dispatcher, and requires
+    independent agreement between the setup-supplied version fields and the
+    dispatcher banner.  While ``phenix_info.py`` includes a ``TAG`` fallback when
+    those environment variables are unset, the checked ``2.0-5936`` installation
+    ships no ``TAG`` file and supplies ``PHENIX_VERSION`` via ``phenix_env.sh``.
+    Explicit bare probing remains available via ``use_vendor_setup=False`` (or
+    :func:`phenix_bare_build_evidence`).
+
     Retain the complete command evidence. A path hint or configured expected version
-    cannot authorize refinement-cache reuse. Hashes identify the version dispatcher,
-    not every imported PHENIX library or the complete installed software tree.
+    cannot authorize refinement-cache reuse. Hashes identify the setup script and
+    version dispatcher, not every imported PHENIX library or the complete installed
+    software tree.
     """
-    configured = phenix("phenix.version")
-    probe: dict = {"configured_path": str(configured), "returncode": None,
-                   "stdout": "", "stderr": "",
-                   "ignored_inherited_version_variables": sorted(
-                       name for name in ("PHENIX_VERSION", "PHENIX_RELEASE_TAG")
-                       if name in os.environ)}
-    result = {"reported_version_source": None, "reported_version": None,
-              "version_probe": probe}
+    bin_dir = PHENIX_BIN if configured_bin is None else Path(configured_bin)
+    configured_dispatcher = bin_dir / "phenix.version"
+    configured_prefix = _phenix_configured_prefix(bin_dir)
+    configured_setup = configured_prefix / "phenix_env.sh"
+    ignored_vars = sorted(
+        name for name in _PHENIX_VERSION_VARIABLES if name in os.environ
+    )
+    ignored_hooks = sorted(
+        name
+        for name, value in os.environ.items()
+        if _is_shell_hook_variable(name, value)
+    )
+    if use_vendor_setup:
+        probe: dict[str, object] = {
+            "probe_mode": "vendor_setup_environment",
+            "configured_prefix": str(configured_prefix),
+            "resolved_prefix": None,
+            "setup_configured_path": str(configured_setup),
+            "setup_resolved_path": None,
+            "setup_sha256": None,
+            "setup_argv": None,
+            "setup_returncode": None,
+            "setup_stdout": "",
+            "setup_stderr": "",
+            "setup_version_fields": None,
+            "setup_parsed_build": None,
+            "configured_path": str(configured_dispatcher),
+            "resolved_path": None,
+            "sha256": None,
+            "argv": None,
+            "returncode": None,
+            "stdout": "",
+            "stderr": "",
+            "parsed_build": None,
+            "ignored_inherited_version_variables": ignored_vars,
+            "ignored_inherited_shell_hooks": ignored_hooks,
+        }
+    else:
+        probe = {
+            "probe_mode": "command_output",
+            "configured_path": str(configured_dispatcher),
+            "resolved_path": None,
+            "sha256": None,
+            "argv": None,
+            "returncode": None,
+            "stdout": "",
+            "stderr": "",
+            "parsed_build": None,
+            "ignored_inherited_version_variables": ignored_vars,
+            "ignored_inherited_shell_hooks": ignored_hooks,
+        }
+    result: dict[str, object] = {
+        "reported_version_source": None,
+        "reported_version": None,
+        "parsed_build": None,
+        "version_probe": probe,
+    }
     try:
-        resolved = configured.resolve(strict=True)
-        probe["resolved_path"] = str(resolved)
-        with resolved.open("rb") as source:
-            probe["sha256"] = hashlib.file_digest(source, "sha256").hexdigest()
-        probe["argv"] = [str(resolved)]
-        process = run_capture([resolved], timeout=10, env=phenix_version_environment())
-        probe.update(returncode=process.returncode, stdout=process.stdout, stderr=process.stderr)
-        with resolved.open("rb") as source:
-            unchanged = probe["sha256"] == hashlib.file_digest(source, "sha256").hexdigest()
+        resolved_prefix, _, resolved_dispatcher = _resolve_phenix_dispatcher(bin_dir)
+        if use_vendor_setup:
+            probe["resolved_prefix"] = str(resolved_prefix)
+        probe["resolved_path"] = str(resolved_dispatcher)
+        probe["sha256"] = _regular_file_sha256(resolved_dispatcher)
+        if not use_vendor_setup:
+            probe["argv"] = [str(resolved_dispatcher)]
+            try:
+                process = run_capture(
+                    [resolved_dispatcher], timeout=10, env=phenix_version_environment()
+                )
+            except subprocess.TimeoutExpired as error:
+                probe.update(
+                    returncode=None,
+                    stdout=_coerce_timeout_stream(error.stdout),
+                    stderr=_coerce_timeout_stream(error.stderr),
+                    error=f"{type(error).__name__}: {error}",
+                )
+                return result
+            probe.update(
+                returncode=process.returncode,
+                stdout=process.stdout,
+                stderr=process.stderr,
+            )
+            after_prefix, _, after_dispatcher = _resolve_phenix_dispatcher(bin_dir)
+            unchanged = (
+                after_prefix == resolved_prefix
+                and after_dispatcher == resolved_dispatcher
+                and probe["sha256"] == _regular_file_sha256(after_dispatcher)
+            )
+            if not unchanged:
+                probe["error"] = "version executable changed during measurement"
+            elif type(process.returncode) is not int or process.returncode != 0:
+                probe["error"] = (
+                    f"version executable exited with status {process.returncode}"
+                )
+            elif _has_phenix_banner_fragment(process.stderr):
+                probe["error"] = "version banner fields split across stdout and stderr"
+            else:
+                parsed = parse_phenix_build(process.stdout)
+                probe["parsed_build"] = parsed
+                if parsed is not None:
+                    result.update(
+                        reported_version_source="command_output",
+                        reported_version=process.stdout.strip(),
+                        parsed_build=parsed,
+                    )
+                else:
+                    probe["error"] = (
+                        "version output did not contain a valid PHENIX build"
+                    )
+            return result
+
+        _, resolved_setup = _resolve_phenix_setup(configured_prefix, resolved_prefix)
+        probe["setup_resolved_path"] = str(resolved_setup)
+        probe["setup_sha256"] = _regular_file_sha256(resolved_setup)
+        setup_argv = phenix_setup_argv(resolved_setup)
+        probe["setup_argv"] = setup_argv
+        base_env = phenix_version_environment()
+        try:
+            setup_process = _run_phenix_setup(setup_argv, env=base_env, timeout=10)
+        except subprocess.TimeoutExpired as error:
+            probe.update(
+                setup_returncode=None,
+                setup_stdout=_coerce_timeout_stream(error.stdout),
+                setup_stderr=_coerce_timeout_stream(error.stderr),
+                setup_version_fields=None,
+                setup_parsed_build=None,
+                error=f"{type(error).__name__}: {error}",
+            )
+            return result
+        probe["setup_returncode"] = setup_process.returncode
+        probe["setup_stderr"] = setup_process.stderr
+        if type(setup_process.returncode) is int and setup_process.returncode == 0:
+            setup_chatter, setup_fields = _split_phenix_setup_output(
+                setup_process.stdout
+            )
+            probe["setup_stdout"] = setup_chatter
+            probe["setup_version_fields"] = setup_fields
+        else:
+            probe["setup_stdout"] = setup_process.stdout
+            setup_fields = None
+        setup_build = (
+            parse_phenix_setup_build(setup_fields)
+            if setup_fields is not None
+            else None
+        )
+        probe["setup_parsed_build"] = setup_build
+        if (
+            type(setup_process.returncode) is int
+            and setup_process.returncode == 0
+            and setup_fields is not None
+            and probe["setup_stdout"] == ""
+            and probe["setup_stderr"] == ""
+            and setup_build is not None
+        ):
+            dispatcher_env = dict(base_env)
+            for key in _PHENIX_VERSION_VARIABLES:
+                value = setup_fields.get(key)
+                if value is not None:
+                    dispatcher_env[key] = value
+            probe["argv"] = [str(resolved_dispatcher)]
+            try:
+                process = run_capture(
+                    [resolved_dispatcher], timeout=10, env=dispatcher_env
+                )
+            except subprocess.TimeoutExpired as error:
+                probe.update(
+                    returncode=None,
+                    stdout=_coerce_timeout_stream(error.stdout),
+                    stderr=_coerce_timeout_stream(error.stderr),
+                    error=f"{type(error).__name__}: {error}",
+                )
+                return result
+            probe.update(
+                returncode=process.returncode,
+                stdout=process.stdout,
+                stderr=process.stderr,
+            )
+        after_prefix, _, after_dispatcher = _resolve_phenix_dispatcher(bin_dir)
+        _, after_setup = _resolve_phenix_setup(configured_prefix, after_prefix)
+        unchanged = (
+            after_prefix == resolved_prefix
+            and after_dispatcher == resolved_dispatcher
+            and after_setup == resolved_setup
+            and probe["sha256"] == _regular_file_sha256(after_dispatcher)
+            and probe["setup_sha256"] == _regular_file_sha256(after_setup)
+        )
         if not unchanged:
-            probe["error"] = "version executable changed during measurement"
-        elif type(process.returncode) is int and process.returncode == 0:
-            result.update(reported_version_source="command_output",
-                          reported_version=process.stdout.strip())
-    except (OSError, subprocess.TimeoutExpired) as error:
+            probe["error"] = "setup or version executable changed during measurement"
+        elif type(setup_process.returncode) is not int or setup_process.returncode != 0:
+            probe["error"] = (
+                f"vendor setup exited with status {setup_process.returncode}"
+            )
+        elif setup_fields is None:
+            probe["error"] = (
+                "vendor setup exited before reporting version variables"
+            )
+        elif probe["setup_stdout"] != "" or probe["setup_stderr"] != "":
+            probe["error"] = "vendor setup produced unexpected output"
+        elif setup_build is None:
+            probe["error"] = "vendor setup did not supply a valid PHENIX version"
+        elif type(probe["returncode"]) is not int or probe["returncode"] != 0:
+            probe["error"] = (
+                f"version executable exited with status {probe['returncode']}"
+            )
+        elif _has_phenix_banner_fragment(str(probe["stderr"])):
+            probe["error"] = "version banner fields split across stdout and stderr"
+        else:
+            banner_build = parse_phenix_build(str(probe["stdout"]))
+            probe["parsed_build"] = banner_build
+            if banner_build is None:
+                probe["error"] = (
+                    "version output did not contain a valid PHENIX build"
+                )
+            elif banner_build != setup_build:
+                probe["error"] = (
+                    f"vendor setup build {setup_build!r} disagrees with "
+                    f"banner build {banner_build!r}"
+                )
+            else:
+                result.update(
+                    reported_version_source="vendor_setup_environment",
+                    reported_version=str(probe["stdout"]).strip(),
+                    parsed_build=banner_build,
+                )
+    except (OSError, ValueError, subprocess.TimeoutExpired) as error:
         probe["error"] = f"{type(error).__name__}: {error}"
     return result
 
@@ -276,22 +826,56 @@ def external_tool_report() -> dict[str, dict[str, str | bool | None]]:
     """
     report: dict[str, dict[str, str | bool | None]] = {}
     for name, specification in EXTERNAL_TOOL_SPECS.items():
-        configured = specification["configured_path"]
-        executable = _discover_executable(configured, specification["executables"])
-        version_args = specification["version_args"]
-        reported_version = (
-            _version_output(
-                executable, version_args,
-                env=phenix_version_environment() if name == "PHENIX" else None,
-            )
-            if executable is not None and version_args is not None
-            else None
-        )
+        configured = Path(specification["configured_path"])
         expected_version = specification["expected_version"]
         path_version_hint = (
             expected_version if expected_version in str(configured) else None
         )
         availability_probe = specification.get("availability_probe", "executable")
+        if name == "PHENIX":
+            evidence = phenix_build_evidence(configured_bin=configured)
+            probe = evidence["version_probe"]
+            discovered = probe.get("resolved_path")
+            available = (
+                isinstance(discovered, str)
+                and bool(discovered)
+                and Path(discovered).is_file()
+                and os.access(discovered, os.X_OK)
+            )
+            reported_version = evidence.get("reported_version")
+            reported_version_source = evidence.get("reported_version_source")
+            parsed_build = evidence.get("parsed_build")
+            if not available:
+                version_divergence = None
+            elif isinstance(parsed_build, str):
+                version_divergence = parsed_build != expected_version
+            else:
+                version_divergence = True
+            report[name] = {
+                "expected_version": expected_version,
+                "configured_path": str(configured),
+                "availability_probe": availability_probe,
+                "discovered_executable": discovered if available else None,
+                "reported_version": (
+                    reported_version if isinstance(reported_version, str) else None
+                ),
+                "reported_version_source": (
+                    reported_version_source
+                    if isinstance(reported_version_source, str)
+                    else None
+                ),
+                "configured_path_version_hint": path_version_hint,
+                "version_divergence": version_divergence,
+                "available": available,
+            }
+            continue
+        executable = _discover_executable(configured, specification["executables"])
+        version_args = specification["version_args"]
+        reported_version = (
+            _version_output(executable, version_args)
+            if executable is not None and version_args is not None
+            else None
+        )
         available = (
             configured.is_file()
             if availability_probe == "configured_file"

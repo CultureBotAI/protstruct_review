@@ -36,7 +36,7 @@ class PhenixVersionEnvironmentTests(unittest.TestCase):
                 patch.object(toolchain.subprocess, "run", return_value=subprocess.CompletedProcess(
                     [], 0, "PHENIX 2.1-7000\n", ""
                 )) as execute:
-            report = toolchain.phenix_build_evidence()
+            report = toolchain.phenix_build_evidence(use_vendor_setup=False)
             self.assertEqual(execute.call_args.kwargs["env"], {})
             self.assertEqual(report["reported_version"], "PHENIX 2.1-7000")
             self.assertEqual(dict(os.environ), given)
@@ -45,6 +45,8 @@ class PhenixVersionEnvironmentTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory(prefix="phenix-env-guard-")
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
+        self.setup = self.root / "phenix_env.sh"
+        self.setup.write_text("export PHENIX_VERSION=2.1-7000\n")
         self.dispatcher = self.root / "phenix.version"
         # Match the relevant vendor behavior: environment overrides installation TAG.
         self.dispatcher.write_text(
@@ -81,9 +83,14 @@ class PhenixVersionEnvironmentTests(unittest.TestCase):
                     patch.object(toolchain, "PHENIX_BIN", self.root):
                 report = toolchain.phenix_build_evidence()
                 self.assertEqual(toolchain.parse_phenix_build(report["reported_version"]), "2.1-7000")
-                self.assertEqual(report["reported_version_source"], "command_output")
+                self.assertEqual(report["reported_version_source"], "vendor_setup_environment")
                 self.assertEqual(report["version_probe"]["returncode"], 0)
                 self.assertEqual(report["version_probe"]["ignored_inherited_version_variables"], sorted(inherited))
+                bare = toolchain.phenix_bare_build_evidence()
+                self.assertEqual(toolchain.parse_phenix_build(bare["reported_version"]), "2.1-7000")
+                self.assertEqual(bare["reported_version_source"], "command_output")
+                self.assertEqual(bare["version_probe"]["returncode"], 0)
+                self.assertEqual(bare["version_probe"]["ignored_inherited_version_variables"], sorted(inherited))
                 self.assertEqual(dict(os.environ), given)
 
     def test_external_report_strips_only_for_phenix(self) -> None:
@@ -98,6 +105,7 @@ class PhenixVersionEnvironmentTests(unittest.TestCase):
         ):
             report = toolchain.external_tool_report()
             self.assertIn("Version: 2.1-7000", report["PHENIX"]["reported_version"])
+            self.assertEqual(report["PHENIX"]["reported_version_source"], "vendor_setup_environment")
             self.assertFalse(report["PHENIX"]["version_divergence"])
             self.assertIn("Version: 2.0", report["unrelated"]["reported_version"])
             self.assertIn("Release tag: 5936", report["unrelated"]["reported_version"])

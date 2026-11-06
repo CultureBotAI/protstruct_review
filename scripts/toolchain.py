@@ -5,7 +5,10 @@ All scientific inputs are passed as argument-vector elements.  The only shell
 boundaries are :func:`ccp4_environment` and the version-only PHENIX setup probe
 inside :func:`phenix_build_evidence`, because both vendors distribute setup
 scripts that must be sourced.  Their commands are fixed; setup paths are passed
-as positional data, never interpolated into shell syntax.
+as positional data, never interpolated into shell syntax.  For PHENIX, only the
+two setup-derived version variables (``PHENIX_VERSION`` and
+``PHENIX_RELEASE_TAG``) are transferred to the ``phenix.version`` child process,
+not the full sourced setup environment or scientific runner environments.
 """
 
 from __future__ import annotations
@@ -431,11 +434,19 @@ def phenix_build_evidence(
 ) -> dict:
     """Measure only this configured installation's version, without PATH fallback.
 
-    Default build admission uses the configured installation's own ``phenix_env.sh``
-    in an isolated child process with inherited version overrides and shell startup
-    hooks removed, then requires independent agreement between the setup-supplied
-    version fields and the dispatcher banner.  Explicit bare probing remains
-    available via ``use_vendor_setup=False`` (or :func:`phenix_bare_build_evidence`).
+    Default build admission sources the configured installation's own
+    ``phenix_env.sh`` in an isolated child process with inherited version
+    overrides and shell startup hooks removed, extracts only ``PHENIX_VERSION``
+    and ``PHENIX_RELEASE_TAG`` (never transferring ``PATH``, ``PHENIX``, or
+    library environment variables from ``phenix_env.sh`` to ``phenix.version``
+    or scientific runners), passes only those two version fields to the
+    installation's resolved ``phenix.version`` dispatcher, and requires
+    independent agreement between the setup-supplied version fields and the
+    dispatcher banner.  While ``phenix_info.py`` includes a ``TAG`` fallback when
+    those environment variables are unset, the checked ``2.0-5936`` installation
+    ships no ``TAG`` file and supplies ``PHENIX_VERSION`` via ``phenix_env.sh``.
+    Explicit bare probing remains available via ``use_vendor_setup=False`` (or
+    :func:`phenix_bare_build_evidence`).
 
     Retain the complete command evidence. A path hint or configured expected version
     cannot authorize refinement-cache reuse. Hashes identify the setup script and

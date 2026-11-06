@@ -93,7 +93,12 @@ def _valid_ignored_hooks(value: object) -> bool:
         _valid_string_sequence(value)
         and list(value) == sorted(set(value))
         and all(
-            item in toolchain._SHELL_HOOK_VARIABLES or item.startswith("BASH_FUNC_")
+            bool(item)
+            and item == item.strip()
+            and not any(ch.isspace() for ch in item)
+            and "=" not in item
+            and "\0" not in item
+            and item not in toolchain._PHENIX_VERSION_VARIABLES
             for item in value
         )
     )

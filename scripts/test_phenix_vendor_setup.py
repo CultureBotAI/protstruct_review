@@ -369,10 +369,17 @@ class PhenixVendorSetupTests(unittest.TestCase):
                 self.assertNotIn(forbidden, clean)
             evidence = toolchain.phenix_build_evidence()
             self.assertEqual(dict(os.environ), snapshot)
+            first = self._run_cached()
+            second = self._run_cached()
+            self.assertEqual(dict(os.environ), snapshot)
 
         self.assertFalse(tripwire_marker.exists())
         self.assertEqual(evidence["reported_version_source"], "vendor_setup_environment")
         self.assertEqual(evidence["parsed_build"], "2.0-5936")
+        self.assertTrue(_build_is_measured(evidence))
+        self.assertEqual(first["model"], second["model"])
+        self.assertEqual(first["manifest"].name, "success.json")
+        self.assertEqual(len(self.calls), 1)
         self.assertEqual(
             evidence["version_probe"]["ignored_inherited_version_variables"],
             ["PHENIX_RELEASE_TAG", "PHENIX_VERSION"],
@@ -383,6 +390,34 @@ class PhenixVendorSetupTests(unittest.TestCase):
             "BASH_FUNC_export%%",
             evidence["version_probe"]["ignored_inherited_shell_hooks"],
         )
+        self.assertIn(
+            "LEGACY_FUNC",
+            evidence["version_probe"]["ignored_inherited_shell_hooks"],
+        )
+
+        # #956: An inherited legacy exported function alone (LEGACY_FUNC='() { :; }')
+        # is removed, recorded in ignored_inherited_shell_hooks, accepted by
+        # _build_is_measured, and reuses cached outputs across identical requests.
+        legacy_only_env = {
+            "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+            "LEGACY_FUNC": f"() {{ touch {tripwire_marker}; }}",
+        }
+        self.calls.clear()
+        self.work_dir = self.root / "work-legacy-only"
+        self.work_dir.mkdir()
+        with mock.patch.dict(os.environ, legacy_only_env, clear=True):
+            legacy_evidence = toolchain.phenix_build_evidence()
+            legacy_first = self._run_cached()
+            legacy_second = self._run_cached()
+        self.assertFalse(tripwire_marker.exists())
+        self.assertEqual(
+            legacy_evidence["version_probe"]["ignored_inherited_shell_hooks"],
+            ["LEGACY_FUNC"],
+        )
+        self.assertTrue(_build_is_measured(legacy_evidence))
+        self.assertEqual(legacy_first["model"], legacy_second["model"])
+        self.assertEqual(legacy_first["manifest"].name, "success.json")
+        self.assertEqual(len(self.calls), 1)
 
     def test_metacharacter_and_quote_paths_remain_literal(self) -> None:
         marker = self.root / "shell-injection-ran"
@@ -646,7 +681,25 @@ class PhenixVendorSetupTests(unittest.TestCase):
                 ignored_inherited_version_variables=["PHENIX_VERSION", "PHENIX_RELEASE_TAG"]
             ),
             lambda d: d["version_probe"].update(
-                ignored_inherited_shell_hooks=["NOT_A_HOOK"]
+                ignored_inherited_shell_hooks="not-a-list"
+            ),
+            lambda d: d["version_probe"].update(
+                ignored_inherited_shell_hooks=[""]
+            ),
+            lambda d: d["version_probe"].update(
+                ignored_inherited_shell_hooks=["BAD=HOOK"]
+            ),
+            lambda d: d["version_probe"].update(
+                ignored_inherited_shell_hooks=["BAD HOOK"]
+            ),
+            lambda d: d["version_probe"].update(
+                ignored_inherited_shell_hooks=["PHENIX_VERSION"]
+            ),
+            lambda d: d["version_probe"].update(
+                ignored_inherited_shell_hooks=["Z_HOOK", "A_HOOK"]
+            ),
+            lambda d: d["version_probe"].update(
+                ignored_inherited_shell_hooks=["BASH_ENV", "BASH_ENV"]
             ),
         ]
         for index, mutate in enumerate(mutations):

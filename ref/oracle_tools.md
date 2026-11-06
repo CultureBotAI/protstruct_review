@@ -71,17 +71,20 @@ resolved paths, measured version output, separately labeled configured-path hint
 `version_divergence` flag before measurements begin. An override that does not match the registered
 version is therefore explicit in the benchmark record.
 
-**Refinement benchmark caches (#777, #954):** the X-ray and cryo-EM refinement runners
+**Refinement benchmark caches (#777, #954, #956):** the X-ray and cryo-EM refinement runners
 use `refinement_cache_v1/` evidence bundles, keyed by model/data bytes, exact
 arguments, configured/resolved dispatcher identity, configured/resolved vendor setup
 identity (`<prefix>/phenix_env.sh`) and the measured build from that configured
-installation's `phenix.version`. Because the packaged `phenix.version` dispatcher
-reads `PHENIX_VERSION` / `PHENIX_RELEASE_TAG` from the installation's own
-`phenix_env.sh` rather than a `TAG` file, default build discovery sources only the
-configured installation's resolved `<prefix>/phenix_env.sh` in a sanitized child shell
-before running that installation's resolved `phenix.version`, recording
+installation's `phenix.version`. Although `phenix_info.py` includes a distribution
+`TAG` fallback when `PHENIX_VERSION` / `PHENIX_RELEASE_TAG` are unset, the checked
+PHENIX `2.0-5936` installation ships no `TAG` file and supplies `PHENIX_VERSION`
+via `<prefix>/phenix_env.sh`. Default build discovery therefore sources only the
+configured installation's resolved `<prefix>/phenix_env.sh` in a sanitized child shell,
+extracts only `PHENIX_VERSION` and `PHENIX_RELEASE_TAG` (transferring only those two
+version fields—not `PATH`, `PHENIX`, or other sourced setup variables—to the resolved
+`phenix.version` child process, and never to scientific runners), records
 `reported_version_source="vendor_setup_environment"`, setup/dispatcher SHA-256 digests,
-exact `setup_argv` and `argv`, raw outputs and `setup_version_fields`, and requiring
+exact `setup_argv` and `argv`, raw outputs and `setup_version_fields`, and requires
 the normalized setup identity and single-header banner identity to agree. Explicit bare
 probing (`phenix_bare_build_evidence`, `reported_version_source="command_output"`)
 remains available for diagnostics, and never silently substitutes for missing or invalid
@@ -100,11 +103,12 @@ benchmark records, nor establish independent-oracle scientific agreement.
 
 PHENIX version probes discard inherited `PHENIX_VERSION` and `PHENIX_RELEASE_TAG`
 and neutralize shell startup/execution hooks (`BASH_ENV`, `ENV`, `PROMPT_COMMAND`,
-`PS4`, `SHELLOPTS`, `BASHOPTS`, `POSIXLY_CORRECT`, `CDPATH`, `GLOBIGNORE` and
-exported shell functions) so an older sourced environment or shell hook cannot
-supply or alter the installation's banner (#816, #954). Other launch variables are
-retained; the parent environment is unchanged. The shared runners honor an explicitly
-empty environment rather than inheriting it (#821).
+`PS4`, `SHELLOPTS`, `BASHOPTS`, `POSIXLY_CORRECT`, `CDPATH`, `GLOBIGNORE`,
+`BASH_FUNC_*` and legacy exported shell functions beginning with `() {`) so an
+older sourced environment or shell hook cannot supply or alter the installation's
+banner (#816, #954, #956). Other launch variables are retained; the parent
+environment is unchanged. The shared runners honor an explicitly empty environment
+rather than inheriting it (#821).
 
 PDB/mmCIF perturbations use `deterministic_cache_v1/` bundles (#812/#822): regenerate
 the inexpensive expected coordinates, then verify source/parameter/generator evidence

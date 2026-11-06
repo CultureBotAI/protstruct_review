@@ -1614,7 +1614,7 @@
             }
           },
           "bench_recover_leg_ast": {
-            "source": "scripts/bench_recover_leg.py:44-55",
+            "source": "scripts/bench_recover_leg.py:44-55,63",
             "REGISTERED_FIT_THRESHOLDS": {
               "d_phenix": 0.012,
               "d_gemmi": 0.01025,

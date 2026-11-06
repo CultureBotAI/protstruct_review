@@ -241,7 +241,7 @@
   - `ref/thresholds_and_standards.md:15-21,28-37,204-211,261-273` (`[benchmark]` provenance tags, `§3`/`§4` descriptive inventory, `§4` null case, and `§6` `FIT` rules, re-registration, and falsified-predictions invariants)
   - `ref/research/negative_control_round1_preregistration.md:50-65,114-117` (`D6` noise scale `S` on non-improving `Δ ≥ 0` with pooled fallback, and no threshold tuning after data)
   - `ref/research/negative_control_round9.md:20-48` (isotropic `BREF ISOT` collapse versus anisotropic `REFI BREF ANIS` ADP evaluation context)
-  - `scripts/bench_recover_leg.py:43-54,82-129` (`REGISTERED_FIT_THRESHOLDS`, `REGISTERED_FIT_THRESHOLDS_ANIS`, `MAD_FLOOR = 0.0005`, and record-equals-registration assertion)
+  - `scripts/bench_recover_leg.py:43-54,63,82-129` (`REGISTERED_FIT_THRESHOLDS`, `REGISTERED_FIT_THRESHOLDS_ANIS`, `MAD_FLOOR = 0.0005`, and record-equals-registration assertion)
   - `CODING_STANDARDS.md:46-56` and `scripts/check_negative_control_records.py:1-24` (Rule 10 record/registry equality and validate 3b negative-control record guard)
   - `ref/quality_reporting.md:49-51,63-66,166-169`, `ref/catalog.yaml:1521`, and `ref/research/tolerance_benchmark_refinement_deltas.md:22-32` (`clashscore` per 1,000 atoms, `R-free`, `ΔR-free`, and unsuperposed `Cα` `ΔRMSD` definitions)
 - **Package artifacts**:

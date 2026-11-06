@@ -2689,7 +2689,7 @@ def build_fig07_threshold_evidence_history(
                     "thresholds": registry_s6["anis_r9"],
                 },
                 "bench_recover_leg_ast": {
-                    "source": "scripts/bench_recover_leg.py:44-55",
+                    "source": "scripts/bench_recover_leg.py:44-55,63",
                     "REGISTERED_FIT_THRESHOLDS": reg_fit_r7,
                     "REGISTERED_FIT_THRESHOLDS_ANIS": reg_fit_r9_anis,
                     "MAD_FLOOR": mad_floor,

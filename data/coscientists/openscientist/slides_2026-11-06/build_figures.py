@@ -1270,11 +1270,13 @@ def build_fig04_r10_recovery_delta_rfree(
         fontsize=18.0,
         fontweight="bold",
         color=COLOR_ALERT,
+        # Explicit straight Arc connector (MOVETO/LINETO) avoids default Arc3(rad=0) quadratic CURVE3 path.
         arrowprops={
             "arrowstyle": "->",
             "color": COLOR_ALERT,
             "lw": 1.8,
             "antialiased": False,
+            "connectionstyle": "arc",
         },
     )
 

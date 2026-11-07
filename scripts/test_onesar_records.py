@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+import builtins
 import copy
+import errno
 import hashlib
+import io
 import json
 import math
 import os
@@ -11,25 +15,38 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
-import unittest
 from typing import Any
+import unittest
 from unittest import mock
 
 _SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
+import onesar_records
 import onesar_refmac
 import onesar_rerun
 from onesar_records import (
+    EXPECTED_FAMILY_ID,
+    ParentExecutionBindingError,
     PhenixRetainedVerificationError,
+    REFMAC_FALSE_ADMISSION_ELIGIBILITY_KEYS,
+    REFMAC_PROOF_TO_REASON_KEYS,
+    REFMAC_UNKNOWN_NATIVE_PREMISE_KEYS,
+    RefmacRetainedVerificationError,
+    RefmacScientificAdmissionRefusedError,
     RetainedReferenceError,
+    build_parent_completed_execution_checkpoint_payload,
     decode_strict_json_mapping,
     load_retained_reference,
     normalize_retained_reference,
+    validate_parent_execution_timing,
+    verify_retained_parent_execution_checkpoint,
     verify_retained_phenix_rfactor_evidence,
+    verify_retained_refmac_rfactor_evidence,
 )
 import refinement_cache
+import test_onesar_refmac
 from test_onesar_rerun import (
     COMMITTED_ARCHIVE,
     REPO_ROOT,
@@ -2111,6 +2128,3178 @@ class TestPhenixRetainedVerifier(unittest.TestCase):
                         )
                 finally:
                     _restore_tree_bytes(admitted_root, admitted_snapshot)
+
+
+def _create_synthetic_retained_refmac_capture(
+    tmp_root: Path,
+    *,
+    subject_id: str = "R4",
+    run_name: str = "refmac_capture_r4",
+) -> dict[str, Any]:
+    """Build a complete synthetic retained REFMAC capture using the accepted _FakeCcp4Fixture."""
+    fake_repo = tmp_root / f"{run_name}_repo"
+    fake_repo.mkdir(parents=True, exist_ok=True)
+    fake_repo = fake_repo.resolve(strict=True)
+    ccp4_fixture = test_onesar_refmac._FakeCcp4Fixture(
+        tmp_root / f"{run_name}_ccp4_prefix"
+    )
+    evidence_root = fake_repo / "runs" / run_name / "evidence"
+
+    def _runner(
+        xyzin: Path,
+        hklin: Path,
+        xyzout: Path,
+        hklout: Path,
+        log_path: Path,
+        keywords: str,
+        *,
+        cwd: Path,
+        timeout: float,
+        xml_output: Path,
+        executable: Path,
+        env: Mapping[str, str],
+        ccp4: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        _ = (keywords, cwd, timeout, env, ccp4)
+        test_onesar_refmac.TestRefmacCollectorFirstSlice._write_capture_success_outputs(
+            xyzin, hklin, xyzout, hklout, log_path
+        )
+        argv = [
+            str(executable),
+            "XYZIN",
+            str(xyzin),
+            "HKLIN",
+            str(hklin),
+            "XYZOUT",
+            str(xyzout),
+            "HKLOUT",
+            str(hklout),
+            "XMLOUT",
+            str(xml_output),
+        ]
+        return subprocess.CompletedProcess(
+            args=argv,
+            returncode=0,
+            stdout=test_onesar_refmac.SYNTHETIC_SINGLE_CYCLE_NCYC0_LOG,
+            stderr="",
+        )
+
+    with (
+        mock.patch.dict(
+            os.environ,
+            {"PROTSTRUCT_CCP4_SETUP": str(ccp4_fixture.setup_script)},
+            clear=False,
+        ),
+        mock.patch.object(toolchain, "CCP4_SETUP", ccp4_fixture.setup_script),
+        mock.patch.object(
+            toolchain,
+            "ccp4_environment",
+            return_value=dict(ccp4_fixture.sourced_env),
+        ),
+    ):
+        capture_result = onesar_refmac.run_refmac_rfactor_operation(
+            evidence_root=evidence_root,
+            subject_id=subject_id,
+            repo_root=fake_repo,
+            archive_path=COMMITTED_ARCHIVE,
+            require_no_protstruct_overrides=False,
+            runner=_runner,
+        )
+
+    resolved_evidence_root = evidence_root.resolve(strict=True)
+    return {
+        "admitted_root": (fake_repo / "runs" / run_name).resolve(strict=True),
+        "evidence_root": resolved_evidence_root,
+        "fake_repo": fake_repo,
+        "capture_result": capture_result,
+        "manifest_ref": copy.deepcopy(capture_result["manifest_json"]),
+        "manifest_path": Path(capture_result["manifest_json"]["path"]),
+        "diagnostics_path": Path(capture_result["diagnostics_json"]["path"]),
+        "hklout_audit_path": Path(capture_result["hklout_audit_json"]["path"]),
+    }
+
+
+def _create_synthetic_f1_fallback_refmac_capture(
+    tmp_root: Path,
+    *,
+    subject_id: str = "R4",
+    run_name: str = "refmac_f1_fallback_r4",
+    evidence_root: Path | None = None,
+    fake_repo: Path | None = None,
+) -> dict[str, Any]:
+    """Build a genuine producer-persisted F1 fallback REFMAC capture via onesar_refmac.run_refmac_rfactor_operation."""
+    if fake_repo is None:
+        fake_repo = tmp_root / f"{run_name}_repo"
+        fake_repo.mkdir(parents=True, exist_ok=True)
+    fake_repo = fake_repo.resolve(strict=True)
+    ccp4_fixture = test_onesar_refmac._FakeCcp4Fixture(
+        tmp_root / f"{run_name}_ccp4_prefix"
+    )
+    if evidence_root is None:
+        evidence_root = fake_repo / "runs" / run_name / "evidence"
+    refmac_dir = evidence_root / "refmac"
+    d0_child_target = refmac_dir / "refmac_diagnostics.json"
+
+    def _runner(
+        xyzin: Path,
+        hklin: Path,
+        xyzout: Path,
+        hklout: Path,
+        log_path: Path,
+        keywords: str,
+        *,
+        cwd: Path,
+        timeout: float,
+        xml_output: Path,
+        executable: Path,
+        env: Mapping[str, str],
+        ccp4: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        _ = (keywords, cwd, timeout, env, ccp4)
+        test_onesar_refmac.TestRefmacCollectorFirstSlice._write_capture_success_outputs(
+            xyzin, hklin, xyzout, hklout, log_path
+        )
+        argv = [
+            str(executable),
+            "XYZIN",
+            str(xyzin),
+            "HKLIN",
+            str(hklin),
+            "XYZOUT",
+            str(xyzout),
+            "HKLOUT",
+            str(hklout),
+            "XMLOUT",
+            str(xml_output),
+        ]
+        return subprocess.CompletedProcess(
+            args=argv,
+            returncode=0,
+            stdout=test_onesar_refmac.SYNTHETIC_SINGLE_CYCLE_NCYC0_LOG,
+            stderr="",
+        )
+
+    orig_atomic = onesar_refmac._atomic_write_new_json_file
+    written_by_path: dict[str, dict[str, Any]] = {}
+
+    def _wrapped_atomic_f1(
+        payload: Any,
+        target_path: Path,
+        *,
+        root: Path,
+    ) -> dict[str, Any]:
+        if target_path == d0_child_target and root == refmac_dir:
+            raise PermissionError(
+                errno.EACCES,
+                "F1 injected late D0 child write failure",
+                str(d0_child_target),
+            )
+        res = orig_atomic(payload, target_path, root=root)
+        written_by_path[str(target_path)] = res
+        if isinstance(res.get("path"), str):
+            written_by_path[res["path"]] = res
+        return res
+
+    caught_err: onesar_refmac.RefmacCollectorError | None = None
+    with (
+        mock.patch.dict(
+            os.environ,
+            {"PROTSTRUCT_CCP4_SETUP": str(ccp4_fixture.setup_script)},
+            clear=False,
+        ),
+        mock.patch.object(toolchain, "CCP4_SETUP", ccp4_fixture.setup_script),
+        mock.patch.object(
+            toolchain,
+            "ccp4_environment",
+            return_value=dict(ccp4_fixture.sourced_env),
+        ),
+        mock.patch.object(
+            onesar_refmac,
+            "_atomic_write_new_json_file",
+            side_effect=_wrapped_atomic_f1,
+        ),
+    ):
+        try:
+            onesar_refmac.run_refmac_rfactor_operation(
+                evidence_root=evidence_root,
+                subject_id=subject_id,
+                repo_root=fake_repo,
+                archive_path=COMMITTED_ARCHIVE,
+                require_no_protstruct_overrides=False,
+                runner=_runner,
+            )
+        except onesar_refmac.RefmacCollectorError as exc:
+            caught_err = exc
+
+    if (
+        caught_err is None
+        or caught_err.manifest_path is None
+        or caught_err.diagnostics_path is None
+        or caught_err.manifest_payload is None
+    ):
+        raise AssertionError(
+            f"Expected F1 RefmacCollectorError with persisted fallback pair, got {caught_err!r}"
+        )
+
+    resolved_evidence_root = evidence_root.resolve(strict=True)
+    manifest_path = Path(caught_err.manifest_path).resolve(strict=True)
+    diagnostics_path = Path(caught_err.diagnostics_path).resolve(strict=True)
+    manifest_ref_f1 = copy.deepcopy(written_by_path[str(manifest_path)])
+    return {
+        "admitted_root": resolved_evidence_root.parent,
+        "evidence_root": resolved_evidence_root,
+        "fake_repo": fake_repo,
+        "collector_error": caught_err,
+        "manifest_ref": manifest_ref_f1,
+        "manifest_path": manifest_path,
+        "diagnostics_path": diagnostics_path,
+        "manifest_payload": copy.deepcopy(caught_err.manifest_payload),
+        "diagnostics_payload": copy.deepcopy(caught_err.diagnostics_payload),
+    }
+
+
+def _create_synthetic_verified_root_fallback_refmac_capture(
+    tmp_root: Path,
+    *,
+    subject_id: str = "R4",
+    run_name: str = "refmac_verified_root_fallback_r4",
+    evidence_root: Path | None = None,
+    fake_repo: Path | None = None,
+) -> dict[str, Any]:
+    """Build a genuine producer-persisted verified-root fallback REFMAC capture via onesar_refmac.run_refmac_rfactor_operation."""
+    if fake_repo is None:
+        fake_repo = tmp_root / f"{run_name}_repo"
+        fake_repo.mkdir(parents=True, exist_ok=True)
+    fake_repo = fake_repo.resolve(strict=True)
+    ccp4_fixture = test_onesar_refmac._FakeCcp4Fixture(
+        tmp_root / f"{run_name}_ccp4_prefix"
+    )
+    if evidence_root is None:
+        evidence_root = fake_repo / "runs" / run_name / "evidence"
+    refmac_dir = evidence_root / "refmac"
+    parent_retention_dir = evidence_root / "refmac_parent_retention"
+
+    def _runner(
+        xyzin: Path,
+        hklin: Path,
+        xyzout: Path,
+        hklout: Path,
+        log_path: Path,
+        keywords: str,
+        *,
+        cwd: Path,
+        timeout: float,
+        xml_output: Path,
+        executable: Path,
+        env: Mapping[str, str],
+        ccp4: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        _ = (keywords, cwd, timeout, env, ccp4)
+        test_onesar_refmac.TestRefmacCollectorFirstSlice._write_capture_success_outputs(
+            xyzin, hklin, xyzout, hklout, log_path
+        )
+        argv = [
+            str(executable),
+            "XYZIN",
+            str(xyzin),
+            "HKLIN",
+            str(hklin),
+            "XYZOUT",
+            str(xyzout),
+            "HKLOUT",
+            str(hklout),
+            "XMLOUT",
+            str(xml_output),
+        ]
+        return subprocess.CompletedProcess(
+            args=argv,
+            returncode=0,
+            stdout=test_onesar_refmac.SYNTHETIC_SINGLE_CYCLE_NCYC0_LOG,
+            stderr="",
+        )
+
+    orig_atomic = onesar_refmac._atomic_write_new_json_file
+    written_by_path: dict[str, dict[str, Any]] = {}
+    denied_writes: list[str] = []
+
+    def _wrapped_atomic_root_fallback(
+        payload: Any,
+        target_path: Path,
+        *,
+        root: Path,
+    ) -> dict[str, Any]:
+        if target_path.name == "refmac_diagnostics.json" and root in (
+            refmac_dir,
+            parent_retention_dir,
+            refmac_dir.resolve(strict=False),
+            parent_retention_dir.resolve(strict=False),
+        ):
+            denied_writes.append(str(target_path))
+            raise PermissionError(
+                errno.EACCES,
+                "Owned synthetic late diagnostics write denial",
+                str(target_path),
+            )
+        res = orig_atomic(payload, target_path, root=root)
+        written_by_path[str(target_path)] = res
+        if isinstance(res.get("path"), str):
+            written_by_path[res["path"]] = res
+        return res
+
+    caught_err: onesar_refmac.RefmacCollectorError | None = None
+    with (
+        mock.patch.dict(
+            os.environ,
+            {"PROTSTRUCT_CCP4_SETUP": str(ccp4_fixture.setup_script)},
+            clear=False,
+        ),
+        mock.patch.object(toolchain, "CCP4_SETUP", ccp4_fixture.setup_script),
+        mock.patch.object(
+            toolchain,
+            "ccp4_environment",
+            return_value=dict(ccp4_fixture.sourced_env),
+        ),
+        mock.patch.object(
+            onesar_refmac,
+            "_atomic_write_new_json_file",
+            side_effect=_wrapped_atomic_root_fallback,
+        ),
+    ):
+        try:
+            onesar_refmac.run_refmac_rfactor_operation(
+                evidence_root=evidence_root,
+                subject_id=subject_id,
+                repo_root=fake_repo,
+                archive_path=COMMITTED_ARCHIVE,
+                require_no_protstruct_overrides=False,
+                runner=_runner,
+            )
+        except onesar_refmac.RefmacCollectorError as exc:
+            caught_err = exc
+
+    if (
+        caught_err is None
+        or caught_err.manifest_path is None
+        or caught_err.diagnostics_path is None
+        or caught_err.manifest_payload is None
+        or caught_err.diagnostics_payload is None
+    ):
+        raise AssertionError(
+            f"Expected verified-root fallback RefmacCollectorError with persisted fallback pair, got {caught_err!r}"
+        )
+
+    resolved_evidence_root = evidence_root.resolve(strict=True)
+    manifest_path = Path(caught_err.manifest_path).resolve(strict=True)
+    diagnostics_path = Path(caught_err.diagnostics_path).resolve(strict=True)
+    manifest_ref_rf = copy.deepcopy(written_by_path[str(manifest_path)])
+    return {
+        "admitted_root": resolved_evidence_root.parent,
+        "evidence_root": resolved_evidence_root,
+        "fake_repo": fake_repo,
+        "collector_error": caught_err,
+        "denied_writes": list(denied_writes),
+        "manifest_ref": manifest_ref_rf,
+        "manifest_path": manifest_path,
+        "diagnostics_path": diagnostics_path,
+        "actual_anchor_dir": manifest_path.parent,
+        "manifest_payload": copy.deepcopy(caught_err.manifest_payload),
+        "diagnostics_payload": copy.deepcopy(caught_err.diagnostics_payload),
+    }
+
+
+def _rehash_refmac_manifest_and_diagnostics(
+    manifest_path: Path,
+    diagnostics_path: Path,
+    *,
+    manifest_doc: dict[str, Any],
+    diagnostics_doc: dict[str, Any],
+    hklout_audit_path: Path | None = None,
+    hklout_audit_doc: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Re-write and re-hash REFMAC audit, diagnostics, and manifest JSON files in dependency order."""
+    if hklout_audit_path is not None and hklout_audit_doc is not None:
+        hkl_sha, hkl_size, _ = _write_json_with_digest(
+            hklout_audit_path, hklout_audit_doc
+        )
+        for doc in (diagnostics_doc, manifest_doc):
+            if isinstance(doc.get("hklout_audit_json"), dict):
+                doc["hklout_audit_json"]["path"] = str(hklout_audit_path)
+                doc["hklout_audit_json"]["sha256"] = hkl_sha
+                doc["hklout_audit_json"]["size_bytes"] = hkl_size
+            if isinstance(doc.get("audits"), dict):
+                doc["audits"]["hklout_mtz_audit"] = copy.deepcopy(hklout_audit_doc)
+
+    diag_sha, diag_size, _ = _write_json_with_digest(
+        diagnostics_path, diagnostics_doc
+    )
+    if isinstance(manifest_doc.get("diagnostics_json"), dict):
+        manifest_doc["diagnostics_json"]["path"] = str(diagnostics_path)
+        manifest_doc["diagnostics_json"]["sha256"] = diag_sha
+        manifest_doc["diagnostics_json"]["size_bytes"] = diag_size
+    if isinstance(manifest_doc.get("paths"), dict):
+        manifest_doc["paths"]["diagnostics_json_path"] = str(diagnostics_path)
+        manifest_doc["paths"]["manifest_json_path"] = str(manifest_path)
+
+    man_sha, man_size, _ = _write_json_with_digest(manifest_path, manifest_doc)
+    return {
+        "path": str(manifest_path),
+        "persisted": True,
+        "sha256": man_sha,
+        "size_bytes": man_size,
+    }
+
+
+class TestRefmacRetainedRefusalBoundary(unittest.TestCase):
+    """Focused tests for Task 369 Part 1 retained REFMAC admission/refusal boundary."""
+
+    def test_complete_synthetic_capture_refuses_three_unproven_native_premises_and_preserves_bytes(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_root = Path(tmp).resolve(strict=True)
+            env = _create_synthetic_retained_refmac_capture(
+                tmp_root,
+                subject_id="R4",
+                run_name="r4_complete_capture",
+            )
+            admitted_root: Path = env["admitted_root"]
+            manifest_ref: dict[str, Any] = env["manifest_ref"]
+            admitted_snapshot = _snapshot_tree_bytes(admitted_root)
+
+            with (
+                mock.patch.object(
+                    onesar_refmac,
+                    "run_refmac_rfactor_operation",
+                    side_effect=AssertionError(
+                        "verify_retained_refmac_rfactor_evidence must not invoke run_refmac_rfactor_operation"
+                    ),
+                ),
+                mock.patch.object(
+                    toolchain,
+                    "run_refmac",
+                    side_effect=AssertionError(
+                        "verify_retained_refmac_rfactor_evidence must not invoke toolchain.run_refmac"
+                    ),
+                ),
+                mock.patch.object(
+                    toolchain,
+                    "ccp4_environment",
+                    side_effect=AssertionError(
+                        "verify_retained_refmac_rfactor_evidence must not invoke toolchain.ccp4_environment"
+                    ),
+                ),
+                mock.patch.object(
+                    subprocess,
+                    "run",
+                    side_effect=AssertionError(
+                        "verify_retained_refmac_rfactor_evidence must not spawn subprocesses"
+                    ),
+                ),
+            ):
+                with self.assertRaises(RefmacScientificAdmissionRefusedError) as ctx:
+                    verify_retained_refmac_rfactor_evidence(
+                        admitted_root,
+                        subject_id="R4",
+                        manifest_reference=manifest_ref,
+                        repo_root=REPO_ROOT,
+                    )
+
+            err = ctx.exception
+            self.assertIsInstance(err, RefmacRetainedVerificationError)
+            self.assertIsInstance(err, RetainedReferenceError)
+            self.assertTrue(err.integrity_verified)
+            self.assertFalse(err.scientific_proof_established)
+            self.assertEqual(err.unsupported_proof_claims, ())
+            self.assertEqual(
+                set(err.unknown_native_premises.keys()),
+                set(REFMAC_UNKNOWN_NATIVE_PREMISE_KEYS),
+            )
+            for premise_key in REFMAC_UNKNOWN_NATIVE_PREMISE_KEYS:
+                prem_info = err.unknown_native_premises[premise_key]
+                self.assertIs(prem_info["proven"], False)
+                self.assertIsInstance(prem_info["unproven_reason"], str)
+                self.assertTrue(prem_info["unproven_reason"].strip())
+                self.assertIs(prem_info["manifest_claimed_value"], False)
+                self.assertIs(prem_info["diagnostics_claimed_value"], False)
+                self.assertIs(prem_info["hklout_audit_claimed_value"], False)
+
+            refusal_rec = err.refusal_record
+            self.assertEqual(refusal_rec["producer"], "refmac")
+            self.assertEqual(
+                refusal_rec["verification_status"],
+                "diagnostic_captured_scientific_admission_refused",
+            )
+            self.assertEqual(refusal_rec["subject_id"], "R4")
+            self.assertEqual(refusal_rec["manifest_path"], manifest_ref["path"])
+            self.assertEqual(refusal_rec["manifest_sha256"], manifest_ref["sha256"])
+            self.assertIs(
+                refusal_rec["verification_boundaries"][
+                    "refmac_retained_evidence_integrity_verified"
+                ],
+                True,
+            )
+            self.assertIs(
+                refusal_rec["verification_boundaries"]["scientific_admission_proven"],
+                False,
+            )
+            self.assertIs(
+                refusal_rec["verification_boundaries"][
+                    "canary_scientific_admission_established"
+                ],
+                False,
+            )
+            self.assertIs(
+                refusal_rec["verification_boundaries"]["eval_or_qds_published"],
+                False,
+            )
+
+            # Passing the full collector return mapping extracts manifest_json and reaches the same refusal.
+            with self.assertRaises(RefmacScientificAdmissionRefusedError) as ctx_full:
+                verify_retained_refmac_rfactor_evidence(
+                    admitted_root,
+                    subject_id="R4",
+                    manifest_reference=env["capture_result"],
+                    repo_root=REPO_ROOT,
+                )
+            self.assertTrue(ctx_full.exception.integrity_verified)
+            self.assertFalse(ctx_full.exception.scientific_proof_established)
+
+            # Verify no file under admitted_root was added, deleted, or modified.
+            self.assertEqual(_snapshot_tree_bytes(admitted_root), admitted_snapshot)
+
+    def test_flipping_summary_booleans_status_or_adding_proof_carrier_cannot_bypass_refusal(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_root = Path(tmp).resolve(strict=True)
+            env = _create_synthetic_retained_refmac_capture(
+                tmp_root,
+                subject_id="R4",
+                run_name="r4_forged_claims",
+            )
+            admitted_root: Path = env["admitted_root"]
+            manifest_path: Path = env["manifest_path"]
+            diagnostics_path: Path = env["diagnostics_path"]
+            hklout_audit_path: Path = env["hklout_audit_path"]
+            admitted_snapshot = _snapshot_tree_bytes(admitted_root)
+
+            # 1. Flip all 3 native proof booleans, all 6 admission eligibility booleans,
+            # gates 3/4/5, and status across hklout_audit, diagnostics, and manifest,
+            # and re-sign all JSON files on disk.
+            with self.subTest(case="all_booleans_and_status_flipped_to_proven"):
+                try:
+                    man_doc = json.loads(manifest_path.read_text(encoding="utf-8"))
+                    diag_doc = json.loads(
+                        diagnostics_path.read_text(encoding="utf-8")
+                    )
+                    hkl_doc = json.loads(
+                        hklout_audit_path.read_text(encoding="utf-8")
+                    )
+                    for proof_key, reason_key in REFMAC_PROOF_TO_REASON_KEYS:
+                        hkl_doc[proof_key] = True
+                        hkl_doc[reason_key] = None
+                        for doc in (man_doc, diag_doc):
+                            doc[proof_key] = True
+                            doc[reason_key] = None
+                    for doc in (man_doc, diag_doc):
+                        doc["status"] = "diagnostic_captured_all_gates_proven"
+                        for elig_key in REFMAC_FALSE_ADMISSION_ELIGIBILITY_KEYS:
+                            doc[elig_key] = True
+                        for gate_key in (
+                            "gate_3_effective_hkls_proven",
+                            "gate_4_native_bin_membership_proven",
+                            "gate_5_native_residual_reconstruction_proven",
+                        ):
+                            doc["preregistered_gates"][gate_key] = {
+                                "proven": True,
+                                "status": "proven",
+                                "reason": None,
+                            }
+
+                    forged_ref = _rehash_refmac_manifest_and_diagnostics(
+                        manifest_path,
+                        diagnostics_path,
+                        manifest_doc=man_doc,
+                        diagnostics_doc=diag_doc,
+                        hklout_audit_path=hklout_audit_path,
+                        hklout_audit_doc=hkl_doc,
+                    )
+                    with self.assertRaises(
+                        RefmacScientificAdmissionRefusedError
+                    ) as ctx:
+                        verify_retained_refmac_rfactor_evidence(
+                            admitted_root,
+                            subject_id="R4",
+                            manifest_reference=forged_ref,
+                            repo_root=REPO_ROOT,
+                        )
+                    err = ctx.exception
+                    self.assertFalse(err.integrity_verified)
+                    self.assertFalse(err.scientific_proof_established)
+                    self.assertGreater(len(err.unsupported_proof_claims), 0)
+                    self.assertEqual(
+                        err.refusal_record["verification_status"],
+                        "refused_unsupported_proof_claim",
+                    )
+                    self.assertEqual(
+                        set(err.unknown_native_premises.keys()),
+                        set(REFMAC_UNKNOWN_NATIVE_PREMISE_KEYS),
+                    )
+                    for premise_key in REFMAC_UNKNOWN_NATIVE_PREMISE_KEYS:
+                        self.assertIs(
+                            err.unknown_native_premises[premise_key]["proven"],
+                            False,
+                        )
+                finally:
+                    _restore_tree_bytes(admitted_root, admitted_snapshot)
+
+            # 2. Inject an unsupported proof carrier key (e.g. "reconciliation" /
+            # "native_proof_contract") into manifest_json and diagnostics_json.
+            with self.subTest(case="unsupported_proof_carrier_key"):
+                try:
+                    man_doc = json.loads(manifest_path.read_text(encoding="utf-8"))
+                    diag_doc = json.loads(
+                        diagnostics_path.read_text(encoding="utf-8")
+                    )
+                    man_doc["reconciliation"] = {
+                        "reconciliation_status": "verified",
+                        "scientific_admission_proven": True,
+                    }
+                    diag_doc["native_proof_contract"] = {
+                        "contract_version": 1,
+                        "all_gates_proven": True,
+                    }
+                    forged_ref = _rehash_refmac_manifest_and_diagnostics(
+                        manifest_path,
+                        diagnostics_path,
+                        manifest_doc=man_doc,
+                        diagnostics_doc=diag_doc,
+                    )
+                    with self.assertRaises(
+                        RefmacScientificAdmissionRefusedError
+                    ) as ctx:
+                        verify_retained_refmac_rfactor_evidence(
+                            admitted_root,
+                            subject_id="R4",
+                            manifest_reference=forged_ref,
+                            repo_root=REPO_ROOT,
+                        )
+                    err = ctx.exception
+                    self.assertFalse(err.integrity_verified)
+                    self.assertFalse(err.scientific_proof_established)
+                    self.assertTrue(
+                        any(
+                            "reconciliation" in claim
+                            for claim in err.unsupported_proof_claims
+                        )
+                    )
+                    self.assertTrue(
+                        any(
+                            "native_proof_contract" in claim
+                            for claim in err.unsupported_proof_claims
+                        )
+                    )
+                finally:
+                    _restore_tree_bytes(admitted_root, admitted_snapshot)
+
+            self.assertEqual(_snapshot_tree_bytes(admitted_root), admitted_snapshot)
+
+    def test_missing_or_tampered_required_evidence_and_identity_mismatches_refuse(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_root = Path(tmp).resolve(strict=True)
+            env = _create_synthetic_retained_refmac_capture(
+                tmp_root,
+                subject_id="R4",
+                run_name="r4_tamper_suite",
+            )
+            admitted_root: Path = env["admitted_root"]
+            evidence_root: Path = env["evidence_root"]
+            manifest_ref: dict[str, Any] = env["manifest_ref"]
+            manifest_path: Path = env["manifest_path"]
+            diagnostics_path: Path = env["diagnostics_path"]
+            hklout_audit_path: Path = env["hklout_audit_path"]
+            admitted_snapshot = _snapshot_tree_bytes(admitted_root)
+
+            # 1. Wrong/mismatched subject_id ("start"), forbidden subject_id ("R7"), and unknown subject_id ("R99").
+            with self.subTest(case="subject_mismatch_and_r7"):
+                with self.assertRaisesRegex(
+                    RefmacRetainedVerificationError,
+                    "refmac_operation_manifest\\.subject_id: expected 'start', got 'R4'",
+                ) as ctx_start:
+                    verify_retained_refmac_rfactor_evidence(
+                        admitted_root,
+                        subject_id="start",
+                        manifest_reference=manifest_ref,
+                        repo_root=REPO_ROOT,
+                    )
+                self.assertNotIsInstance(
+                    ctx_start.exception, RefmacScientificAdmissionRefusedError
+                )
+                with self.assertRaisesRegex(
+                    RefmacRetainedVerificationError,
+                    "subject_id: Subject 'R7' is excluded from the 1SAR trajectory rerun contract",
+                ) as ctx_r7:
+                    verify_retained_refmac_rfactor_evidence(
+                        admitted_root,
+                        subject_id="R7",
+                        manifest_reference=manifest_ref,
+                        repo_root=REPO_ROOT,
+                    )
+                self.assertNotIsInstance(
+                    ctx_r7.exception, RefmacScientificAdmissionRefusedError
+                )
+                with self.assertRaisesRegex(
+                    RefmacRetainedVerificationError,
+                    "subject_id: Unknown 1SAR subject 'R99'",
+                ) as ctx_r99:
+                    verify_retained_refmac_rfactor_evidence(
+                        admitted_root,
+                        subject_id="R99",
+                        manifest_reference=manifest_ref,
+                        repo_root=REPO_ROOT,
+                    )
+                self.assertNotIsInstance(
+                    ctx_r99.exception, RefmacScientificAdmissionRefusedError
+                )
+
+            # 2. Tampered linked required JSON artifact (hklout_audit_json modified on disk).
+            with self.subTest(case="tampered_hklout_audit_json"):
+                try:
+                    hklout_audit_path.write_bytes(
+                        hklout_audit_path.read_bytes() + b"\n"
+                    )
+                    with self.assertRaisesRegex(
+                        RefmacRetainedVerificationError,
+                        "refmac_operation_manifest\\.hklout_audit_json: (size_bytes|sha256) mismatch",
+                    ) as ctx_hkl:
+                        verify_retained_refmac_rfactor_evidence(
+                            admitted_root,
+                            subject_id="R4",
+                            manifest_reference=manifest_ref,
+                            repo_root=REPO_ROOT,
+                        )
+                    self.assertNotIsInstance(
+                        ctx_hkl.exception, RefmacScientificAdmissionRefusedError
+                    )
+                finally:
+                    _restore_tree_bytes(admitted_root, admitted_snapshot)
+
+            # 3. Missing required raw output file (refmac_hklout.mtz removed from disk).
+            with self.subTest(case="missing_raw_hklout_mtz"):
+                try:
+                    (evidence_root / "refmac" / "refmac_hklout.mtz").unlink()
+                    with self.assertRaisesRegex(
+                        RefmacRetainedVerificationError,
+                        "raw_outputs\\.hklout: retained file does not exist on disk",
+                    ) as ctx_rm:
+                        verify_retained_refmac_rfactor_evidence(
+                            admitted_root,
+                            subject_id="R4",
+                            manifest_reference=manifest_ref,
+                            repo_root=REPO_ROOT,
+                        )
+                    self.assertNotIsInstance(
+                        ctx_rm.exception, RefmacScientificAdmissionRefusedError
+                    )
+                finally:
+                    _restore_tree_bytes(admitted_root, admitted_snapshot)
+
+            # 4. Output-for-input substitution: invocation.xyzin_path pointed at refmac_xyzout.pdb.
+            with self.subTest(case="output_substituted_for_input"):
+                try:
+                    man_doc = json.loads(manifest_path.read_text(encoding="utf-8"))
+                    diag_doc = json.loads(
+                        diagnostics_path.read_text(encoding="utf-8")
+                    )
+                    xyzout_str = str(
+                        evidence_root / "refmac" / "refmac_xyzout.pdb"
+                    )
+                    man_doc["invocation"]["xyzin_path"] = xyzout_str
+                    diag_doc["invocation"]["xyzin_path"] = xyzout_str
+                    bad_ref = _rehash_refmac_manifest_and_diagnostics(
+                        manifest_path,
+                        diagnostics_path,
+                        manifest_doc=man_doc,
+                        diagnostics_doc=diag_doc,
+                    )
+                    with self.assertRaisesRegex(
+                        RefmacRetainedVerificationError,
+                        "outputs must never replace inputs",
+                    ) as ctx_sub:
+                        verify_retained_refmac_rfactor_evidence(
+                            admitted_root,
+                            subject_id="R4",
+                            manifest_reference=bad_ref,
+                            repo_root=REPO_ROOT,
+                        )
+                    self.assertNotIsInstance(
+                        ctx_sub.exception, RefmacScientificAdmissionRefusedError
+                    )
+                finally:
+                    _restore_tree_bytes(admitted_root, admitted_snapshot)
+
+            self.assertEqual(_snapshot_tree_bytes(admitted_root), admitted_snapshot)
+
+    def test_legitimate_fallback_reference_is_followed_without_canonical_path_guessing(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_root = Path(tmp).resolve(strict=True)
+
+            # 1. Genuine producer-persisted F1 fallback capture where D0 child write fails
+            # and both diagnostics_json and manifest_json are persisted in refmac_parent_retention/.
+            f1_env = _create_synthetic_f1_fallback_refmac_capture(
+                tmp_root,
+                subject_id="R4",
+                run_name="r4_f1_real_fallback",
+            )
+            f1_admitted_root: Path = f1_env["admitted_root"]
+            f1_evidence_root: Path = f1_env["evidence_root"]
+            f1_manifest_ref: dict[str, Any] = f1_env["manifest_ref"]
+            f1_manifest_path: Path = f1_env["manifest_path"]
+            f1_diag_path: Path = f1_env["diagnostics_path"]
+            f1_snapshot = _snapshot_tree_bytes(f1_admitted_root)
+
+            with self.subTest(case="genuine_f1_producer_fallback_capture"):
+                with self.assertRaises(
+                    RefmacScientificAdmissionRefusedError
+                ) as ctx:
+                    verify_retained_refmac_rfactor_evidence(
+                        f1_admitted_root,
+                        subject_id="R4",
+                        manifest_reference=f1_manifest_ref,
+                        repo_root=REPO_ROOT,
+                    )
+                err = ctx.exception
+                self.assertTrue(err.integrity_verified)
+                self.assertFalse(err.scientific_proof_established)
+                self.assertEqual(err.unsupported_proof_claims, ())
+                self.assertEqual(
+                    set(err.unknown_native_premises.keys()),
+                    set(REFMAC_UNKNOWN_NATIVE_PREMISE_KEYS),
+                )
+                self.assertEqual(
+                    err.refusal_record["manifest_status"],
+                    "failed",
+                )
+                self.assertEqual(
+                    err.refusal_record["manifest_failed_stage"],
+                    "persist_collector_artifacts_in_refmac_dir",
+                )
+                self.assertIs(
+                    err.refusal_record["fallback_persistence_used"],
+                    True,
+                )
+                self.assertIs(
+                    err.refusal_record["verification_boundaries"][
+                        "model_preservation_proven"
+                    ],
+                    False,
+                )
+                self.assertIs(
+                    err.refusal_record["verification_boundaries"][
+                        "xyzout_audit_model_preservation_proven"
+                    ],
+                    True,
+                )
+                self.assertEqual(
+                    err.verified_references["refmac_operation_manifest"]["path"],
+                    str(f1_manifest_path),
+                )
+                self.assertEqual(
+                    err.verified_references["diagnostics_json"]["path"],
+                    str(f1_diag_path),
+                )
+                self.assertTrue(
+                    err.verified_references["diagnostics_json"]["is_fallback"]
+                )
+                for staged_key in (
+                    "original_model_pdb",
+                    "original_data_mtz",
+                    "projected_observations_mtz",
+                    "input_hkl_ledger_json",
+                ):
+                    self.assertIn(
+                        staged_key,
+                        err.verified_references["staged_files"],
+                    )
+                for raw_key in ("log", "xyzout", "hklout"):
+                    self.assertIsNotNone(
+                        err.verified_references["raw_outputs"][raw_key]
+                    )
+                self.assertIsNone(
+                    err.verified_references["raw_outputs"]["xmlout"]
+                )
+                self.assertIsNotNone(
+                    err.verified_references["xmlout_audit_json"]
+                )
+                self.assertIs(
+                    f1_env["manifest_payload"]["raw_outputs"]["xmlout"][
+                        "exists"
+                    ],
+                    False,
+                )
+                self.assertIsNone(
+                    f1_env["manifest_payload"]["raw_outputs"]["xmlout"][
+                        "sha256"
+                    ]
+                )
+                self.assertIsNone(
+                    f1_env["manifest_payload"]["raw_outputs"]["xmlout"][
+                        "size_bytes"
+                    ]
+                )
+                self.assertIs(
+                    f1_env["manifest_payload"]["audits"]["xmlout_audit"][
+                        "valid"
+                    ],
+                    True,
+                )
+                self.assertIs(
+                    f1_env["manifest_payload"]["audits"]["xmlout_audit"][
+                        "present"
+                    ],
+                    False,
+                )
+                self.assertEqual(
+                    f1_env["manifest_payload"]["audits"]["xmlout_audit"][
+                        "status"
+                    ],
+                    "absent",
+                )
+                self.assertEqual(
+                    _snapshot_tree_bytes(f1_admitted_root), f1_snapshot
+                )
+
+            # 2. Tampering with a raw output on the genuine F1 fallback capture raises
+            # RefmacRetainedVerificationError (not RefmacScientificAdmissionRefusedError).
+            with self.subTest(case="tampered_raw_output_on_f1_fallback_capture"):
+                try:
+                    raw_hklout = (
+                        f1_evidence_root / "refmac" / "refmac_hklout.mtz"
+                    )
+                    raw_hklout.write_bytes(raw_hklout.read_bytes() + b"\x00")
+                    with self.assertRaisesRegex(
+                        RefmacRetainedVerificationError,
+                        "raw_outputs\\.hklout: (size_bytes|sha256) mismatch",
+                    ) as ctx_tamp:
+                        verify_retained_refmac_rfactor_evidence(
+                            f1_admitted_root,
+                            subject_id="R4",
+                            manifest_reference=f1_manifest_ref,
+                            repo_root=REPO_ROOT,
+                        )
+                    self.assertNotIsInstance(
+                        ctx_tamp.exception, RefmacScientificAdmissionRefusedError
+                    )
+                finally:
+                    _restore_tree_bytes(f1_admitted_root, f1_snapshot)
+
+            # 3. Relocating a clean status="diagnostic_captured_gates_unproven" (failures=[])
+            # manifest into refmac_parent_retention/ with fallback metadata is rejected as an
+            # incoherent fallback payload (RefmacRetainedVerificationError).
+            env = _create_synthetic_retained_refmac_capture(
+                tmp_root,
+                subject_id="R4",
+                run_name="r4_relocated_clean_fallback",
+            )
+            admitted_root: Path = env["admitted_root"]
+            evidence_root: Path = env["evidence_root"]
+            canonical_manifest_path: Path = env["manifest_path"]
+            canonical_diag_path: Path = env["diagnostics_path"]
+            admitted_snapshot = _snapshot_tree_bytes(admitted_root)
+
+            with self.subTest(case="relocated_clean_manifest_at_fallback_path_rejected"):
+                try:
+                    man_doc = json.loads(
+                        canonical_manifest_path.read_text(encoding="utf-8")
+                    )
+                    diag_doc = json.loads(
+                        canonical_diag_path.read_text(encoding="utf-8")
+                    )
+                    parent_retention_dir = (
+                        evidence_root / "refmac_parent_retention"
+                    )
+                    fallback_diag_path = (
+                        parent_retention_dir
+                        / "refmac_diagnostics__child_fallback.json"
+                    )
+                    fallback_manifest_path = (
+                        parent_retention_dir
+                        / "refmac_operation_manifest__child_fallback.json"
+                    )
+
+                    _write_file_with_digest(
+                        canonical_manifest_path, b"{corrupt canonical manifest\n"
+                    )
+                    _write_file_with_digest(
+                        canonical_diag_path, b"{corrupt canonical diagnostics\n"
+                    )
+
+                    diag_sha, diag_size, _ = _write_json_with_digest(
+                        fallback_diag_path, diag_doc
+                    )
+                    man_doc["diagnostics_json"] = {
+                        "path": str(fallback_diag_path),
+                        "persisted": True,
+                        "sha256": diag_sha,
+                        "size_bytes": diag_size,
+                        "fallback_for_unwritable_or_damaged_child_dir": True,
+                        "intended_child_dir_path": str(canonical_diag_path),
+                        "parent_retention_dir": str(parent_retention_dir),
+                        "actual_retention_anchor_dir": str(parent_retention_dir),
+                        "actual_retention_anchor_kind": "parent_retention_dir",
+                    }
+                    man_doc["paths"]["diagnostics_json_path"] = str(
+                        fallback_diag_path
+                    )
+                    man_doc["paths"]["manifest_json_path"] = str(
+                        fallback_manifest_path
+                    )
+                    man_sha, man_size, _ = _write_json_with_digest(
+                        fallback_manifest_path, man_doc
+                    )
+                    relocated_clean_ref = {
+                        "path": str(fallback_manifest_path),
+                        "persisted": True,
+                        "sha256": man_sha,
+                        "size_bytes": man_size,
+                        "fallback_for_unwritable_or_damaged_child_dir": True,
+                        "intended_child_dir_path": str(canonical_manifest_path),
+                        "parent_retention_dir": str(parent_retention_dir),
+                        "actual_retention_anchor_dir": str(parent_retention_dir),
+                        "actual_retention_anchor_kind": "parent_retention_dir",
+                    }
+
+                    with self.assertRaisesRegex(
+                        RefmacRetainedVerificationError,
+                        "relocated clean payload at fallback path or with fallback metadata is not permitted without producer fallback failure state",
+                    ) as ctx_reloc:
+                        verify_retained_refmac_rfactor_evidence(
+                            admitted_root,
+                            subject_id="R4",
+                            manifest_reference=relocated_clean_ref,
+                            repo_root=REPO_ROOT,
+                        )
+                    self.assertNotIsInstance(
+                        ctx_reloc.exception,
+                        RefmacScientificAdmissionRefusedError,
+                    )
+                finally:
+                    _restore_tree_bytes(admitted_root, admitted_snapshot)
+
+            # 4. Genuine verified-root fallback capture (#1063): late D0 write fails in both
+            # refmac_dir and refmac_parent_retention, and the real producer persists the complete
+            # final pair in refmac_parent_retention.verified_root_fallback.<pid>/.
+            rf_env = _create_synthetic_verified_root_fallback_refmac_capture(
+                tmp_root,
+                subject_id="R4",
+                run_name="r4_verified_root_fallback",
+            )
+            rf_admitted_root: Path = rf_env["admitted_root"]
+            rf_evidence_root: Path = rf_env["evidence_root"]
+            rf_manifest_ref: dict[str, Any] = rf_env["manifest_ref"]
+            rf_manifest_path: Path = rf_env["manifest_path"]
+            rf_diag_path: Path = rf_env["diagnostics_path"]
+            rf_anchor_dir: Path = rf_env["actual_anchor_dir"]
+            rf_snapshot = _snapshot_tree_bytes(rf_admitted_root)
+
+            self.assertEqual(
+                rf_env["denied_writes"],
+                [
+                    str(rf_evidence_root / "refmac" / "refmac_diagnostics.json"),
+                    str(
+                        rf_evidence_root
+                        / "refmac_parent_retention"
+                        / "refmac_diagnostics.json"
+                    ),
+                ],
+            )
+            self.assertIs(
+                rf_env["collector_error"].publication_pair_complete, True
+            )
+            self.assertIsNone(
+                rf_env["collector_error"].publication_terminal_failure
+            )
+            self.assertTrue(
+                rf_anchor_dir.name.startswith(
+                    "refmac_parent_retention.verified_root_fallback."
+                )
+            )
+
+            real_resolve_anchor = (
+                onesar_records._resolve_and_validate_refmac_actual_anchor
+            )
+            real_classify_fb = onesar_records._classify_refmac_fallback_failures
+            anchor_invocations: list[str | None] = []
+            anchor_calls: list[Path | None] = []
+            classify_calls: list[tuple[bool, bool, bool]] = []
+
+            def _spy_resolve_anchor(*args: Any, **kwargs: Any) -> Path | None:
+                doc_arg = args[0] if args else kwargs.get("manifest_doc", {})
+                anchor_invocations.append(
+                    doc_arg.get("actual_parent_retention_anchor_kind")
+                    if isinstance(doc_arg, Mapping)
+                    else None
+                )
+                res = real_resolve_anchor(*args, **kwargs)
+                anchor_calls.append(res)
+                return res
+
+            def _spy_classify_fb(
+                *args: Any, **kwargs: Any
+            ) -> tuple[bool, bool, bool]:
+                res = real_classify_fb(*args, **kwargs)
+                classify_calls.append(res)
+                return res
+
+            with self.subTest(case="genuine_verified_root_fallback_producer_capture"):
+                anchor_calls.clear()
+                classify_calls.clear()
+                with (
+                    mock.patch.object(
+                        onesar_records,
+                        "_resolve_and_validate_refmac_actual_anchor",
+                        side_effect=_spy_resolve_anchor,
+                    ),
+                    mock.patch.object(
+                        onesar_records,
+                        "_classify_refmac_fallback_failures",
+                        side_effect=_spy_classify_fb,
+                    ),
+                    self.assertRaises(
+                        RefmacScientificAdmissionRefusedError
+                    ) as ctx_rf,
+                ):
+                    verify_retained_refmac_rfactor_evidence(
+                        rf_admitted_root,
+                        subject_id="R4",
+                        manifest_reference=rf_manifest_ref,
+                        repo_root=REPO_ROOT,
+                    )
+                self.assertEqual(anchor_calls, [rf_anchor_dir])
+                self.assertEqual(classify_calls, [(True, True, False)])
+                rf_err = ctx_rf.exception
+                self.assertTrue(rf_err.integrity_verified)
+                self.assertFalse(rf_err.scientific_proof_established)
+                self.assertEqual(rf_err.unsupported_proof_claims, ())
+                self.assertEqual(
+                    set(rf_err.unknown_native_premises.keys()),
+                    set(REFMAC_UNKNOWN_NATIVE_PREMISE_KEYS),
+                )
+                for premise_key in REFMAC_UNKNOWN_NATIVE_PREMISE_KEYS:
+                    prem_info = rf_err.unknown_native_premises[premise_key]
+                    self.assertIs(prem_info["proven"], False)
+                    self.assertTrue(prem_info["unproven_reason"].strip())
+                self.assertEqual(
+                    rf_err.refusal_record["manifest_status"],
+                    "failed",
+                )
+                self.assertEqual(
+                    rf_err.refusal_record["manifest_failed_stage"],
+                    "verify_parent_retention_directory",
+                )
+                self.assertEqual(
+                    [
+                        item["failed_stage"]
+                        for item in rf_err.refusal_record["manifest_failures"]
+                    ],
+                    [
+                        "verify_parent_retention_directory",
+                        "persist_collector_artifacts_in_refmac_dir",
+                    ],
+                )
+                self.assertIs(
+                    rf_err.refusal_record["fallback_persistence_used"],
+                    True,
+                )
+                self.assertEqual(
+                    rf_err.refusal_record[
+                        "actual_parent_retention_anchor_kind"
+                    ],
+                    "verified_evidence_root_exclusive_dir",
+                )
+                self.assertEqual(
+                    rf_err.refusal_record["actual_parent_retention_anchor_dir"],
+                    str(rf_anchor_dir),
+                )
+                self.assertIs(
+                    rf_err.refusal_record["verification_boundaries"][
+                        "model_preservation_proven"
+                    ],
+                    False,
+                )
+                self.assertIs(
+                    rf_err.refusal_record["verification_boundaries"][
+                        "xyzout_audit_model_preservation_proven"
+                    ],
+                    True,
+                )
+                self.assertEqual(
+                    rf_err.verified_references["refmac_operation_manifest"][
+                        "path"
+                    ],
+                    str(rf_manifest_path),
+                )
+                self.assertTrue(
+                    rf_err.verified_references["refmac_operation_manifest"][
+                        "is_fallback"
+                    ]
+                )
+                self.assertEqual(
+                    rf_err.verified_references["diagnostics_json"]["path"],
+                    str(rf_diag_path),
+                )
+                self.assertTrue(
+                    rf_err.verified_references["diagnostics_json"][
+                        "is_fallback"
+                    ]
+                )
+                for raw_key in ("log", "xyzout", "hklout"):
+                    self.assertIsNotNone(
+                        rf_err.verified_references["raw_outputs"][raw_key]
+                    )
+                self.assertIsNone(
+                    rf_err.verified_references["raw_outputs"]["xmlout"]
+                )
+                self.assertEqual(
+                    _snapshot_tree_bytes(rf_admitted_root), rf_snapshot
+                )
+
+            # 5. Contradictory or missing actual anchor on verified-root fallback capture is refused.
+            with self.subTest(
+                case="verified_root_fallback_contradictory_or_missing_anchor_rejected"
+            ):
+                try:
+                    man_doc = json.loads(
+                        rf_manifest_path.read_text(encoding="utf-8")
+                    )
+                    diag_doc = json.loads(
+                        rf_diag_path.read_text(encoding="utf-8")
+                    )
+                    man_doc["actual_parent_retention_anchor_kind"] = (
+                        "parent_retention_dir"
+                    )
+                    diag_doc["actual_parent_retention_anchor_kind"] = (
+                        "parent_retention_dir"
+                    )
+                    bad_anchor_ref = _rehash_refmac_manifest_and_diagnostics(
+                        rf_manifest_path,
+                        rf_diag_path,
+                        manifest_doc=man_doc,
+                        diagnostics_doc=diag_doc,
+                    )
+                    anchor_invocations.clear()
+                    anchor_calls.clear()
+                    with (
+                        mock.patch.object(
+                            onesar_records,
+                            "_resolve_and_validate_refmac_actual_anchor",
+                            side_effect=_spy_resolve_anchor,
+                        ),
+                        self.assertRaisesRegex(
+                            RefmacRetainedVerificationError,
+                            "actual_parent_retention_anchor_dir: expected .*refmac_parent_retention",
+                        ) as ctx_bad_kind,
+                    ):
+                        verify_retained_refmac_rfactor_evidence(
+                            rf_admitted_root,
+                            subject_id="R4",
+                            manifest_reference=bad_anchor_ref,
+                            repo_root=REPO_ROOT,
+                        )
+                    self.assertNotIsInstance(
+                        ctx_bad_kind.exception,
+                        RefmacScientificAdmissionRefusedError,
+                    )
+                    self.assertEqual(
+                        anchor_invocations, ["parent_retention_dir"]
+                    )
+                    self.assertEqual(anchor_calls, [])
+                finally:
+                    _restore_tree_bytes(rf_admitted_root, rf_snapshot)
+
+                try:
+                    man_doc = json.loads(
+                        rf_manifest_path.read_text(encoding="utf-8")
+                    )
+                    diag_doc = json.loads(
+                        rf_diag_path.read_text(encoding="utf-8")
+                    )
+                    man_doc["parent_retention_fallback_anchor"][
+                        "evidence_root_verified"
+                    ] = False
+                    diag_doc["parent_retention_fallback_anchor"][
+                        "evidence_root_verified"
+                    ] = False
+                    unverified_anchor_ref = (
+                        _rehash_refmac_manifest_and_diagnostics(
+                            rf_manifest_path,
+                            rf_diag_path,
+                            manifest_doc=man_doc,
+                            diagnostics_doc=diag_doc,
+                        )
+                    )
+                    classify_calls.clear()
+                    with (
+                        mock.patch.object(
+                            onesar_records,
+                            "_classify_refmac_fallback_failures",
+                            side_effect=_spy_classify_fb,
+                        ),
+                        self.assertRaisesRegex(
+                            RefmacRetainedVerificationError,
+                            "collector reported failure\\(s\\) at failed_stage='verify_parent_retention_directory'",
+                        ) as ctx_unver,
+                    ):
+                        verify_retained_refmac_rfactor_evidence(
+                            rf_admitted_root,
+                            subject_id="R4",
+                            manifest_reference=unverified_anchor_ref,
+                            repo_root=REPO_ROOT,
+                        )
+                    self.assertNotIsInstance(
+                        ctx_unver.exception,
+                        RefmacScientificAdmissionRefusedError,
+                    )
+                    self.assertEqual(classify_calls, [(False, False, False)])
+                finally:
+                    _restore_tree_bytes(rf_admitted_root, rf_snapshot)
+
+                try:
+                    man_doc = json.loads(
+                        rf_manifest_path.read_text(encoding="utf-8")
+                    )
+                    diag_doc = json.loads(
+                        rf_diag_path.read_text(encoding="utf-8")
+                    )
+                    self.assertEqual(
+                        man_doc["actual_parent_retention_anchor_kind"],
+                        "verified_evidence_root_exclusive_dir",
+                    )
+                    self.assertEqual(
+                        diag_doc["actual_parent_retention_anchor_kind"],
+                        "verified_evidence_root_exclusive_dir",
+                    )
+                    man_doc["actual_parent_retention_anchor_dir"] = None
+                    diag_doc["actual_parent_retention_anchor_dir"] = None
+                    missing_anchor_ref = (
+                        _rehash_refmac_manifest_and_diagnostics(
+                            rf_manifest_path,
+                            rf_diag_path,
+                            manifest_doc=man_doc,
+                            diagnostics_doc=diag_doc,
+                        )
+                    )
+                    anchor_invocations.clear()
+                    anchor_calls.clear()
+                    with (
+                        mock.patch.object(
+                            onesar_records,
+                            "_resolve_and_validate_refmac_actual_anchor",
+                            side_effect=_spy_resolve_anchor,
+                        ),
+                        self.assertRaisesRegex(
+                            RefmacRetainedVerificationError,
+                            "refmac_operation_manifest\\.actual_parent_retention_anchor_kind: expected None when actual_parent_retention_anchor_dir is None, got 'verified_evidence_root_exclusive_dir'",
+                        ) as ctx_missing_anchor,
+                    ):
+                        verify_retained_refmac_rfactor_evidence(
+                            rf_admitted_root,
+                            subject_id="R4",
+                            manifest_reference=missing_anchor_ref,
+                            repo_root=REPO_ROOT,
+                        )
+                    self.assertNotIsInstance(
+                        ctx_missing_anchor.exception,
+                        RefmacScientificAdmissionRefusedError,
+                    )
+                    self.assertEqual(
+                        anchor_invocations,
+                        ["verified_evidence_root_exclusive_dir"],
+                    )
+                    self.assertEqual(anchor_calls, [])
+                finally:
+                    _restore_tree_bytes(rf_admitted_root, rf_snapshot)
+
+                with self.assertRaises(RefmacScientificAdmissionRefusedError):
+                    verify_retained_refmac_rfactor_evidence(
+                        rf_admitted_root,
+                        subject_id="R4",
+                        manifest_reference=rf_manifest_ref,
+                        repo_root=REPO_ROOT,
+                    )
+                self.assertEqual(
+                    _snapshot_tree_bytes(rf_admitted_root), rf_snapshot
+                )
+
+            # 6. Incomplete or unpersisted publication pair on verified-root fallback capture is refused.
+            with self.subTest(
+                case="verified_root_fallback_incomplete_publication_pair_rejected"
+            ):
+                with self.assertRaisesRegex(
+                    RefmacRetainedVerificationError,
+                    "publication_pair_complete",
+                ) as ctx_inc_env:
+                    verify_retained_refmac_rfactor_evidence(
+                        rf_admitted_root,
+                        subject_id="R4",
+                        manifest_reference={
+                            "schema_version": 1,
+                            "collector_stage": onesar_refmac.COLLECTOR_STAGE,
+                            "publication_pair_complete": False,
+                            "publication_terminal_failure": {
+                                "stage": "persist_manifest_m0",
+                                "reason": "M0 failed after D0 was saved in verified-root fallback",
+                            },
+                            "manifest_json": copy.deepcopy(rf_manifest_ref),
+                        },
+                        repo_root=REPO_ROOT,
+                    )
+                self.assertNotIsInstance(
+                    ctx_inc_env.exception,
+                    RefmacScientificAdmissionRefusedError,
+                )
+
+                try:
+                    man_doc = json.loads(
+                        rf_manifest_path.read_text(encoding="utf-8")
+                    )
+                    man_doc["diagnostics_json"]["persisted"] = False
+                    man_sha, man_size, _ = _write_json_with_digest(
+                        rf_manifest_path, man_doc
+                    )
+                    unpersisted_diag_ref = dict(rf_manifest_ref)
+                    unpersisted_diag_ref["sha256"] = man_sha
+                    unpersisted_diag_ref["size_bytes"] = man_size
+                    with self.assertRaisesRegex(
+                        RefmacRetainedVerificationError,
+                        "refmac_operation_manifest\\.diagnostics_json: refusing payload-only or unpersisted artifact reference",
+                    ) as ctx_inc_diag:
+                        verify_retained_refmac_rfactor_evidence(
+                            rf_admitted_root,
+                            subject_id="R4",
+                            manifest_reference=unpersisted_diag_ref,
+                            repo_root=REPO_ROOT,
+                        )
+                    self.assertNotIsInstance(
+                        ctx_inc_diag.exception,
+                        RefmacScientificAdmissionRefusedError,
+                    )
+                finally:
+                    _restore_tree_bytes(rf_admitted_root, rf_snapshot)
+
+                for (
+                    pub_case_label,
+                    target_member,
+                    field_name,
+                    field_value,
+                    expected_err_re,
+                ) in (
+                    (
+                        "manifest_pair_incomplete",
+                        "manifest",
+                        "publication_pair_complete",
+                        False,
+                        "refmac_operation_manifest: refusing incomplete publication pair \\(publication_pair_complete=False\\)",
+                    ),
+                    (
+                        "manifest_terminal_failure",
+                        "manifest",
+                        "publication_terminal_failure",
+                        {
+                            "stage": "persist_manifest_m0",
+                            "reason": "M0 failed after D0 was saved in verified-root fallback",
+                        },
+                        "refmac_operation_manifest: refusing manifest with publication_terminal_failure=",
+                    ),
+                    (
+                        "diagnostics_pair_incomplete",
+                        "diagnostics",
+                        "publication_pair_complete",
+                        False,
+                        "refmac_diagnostics: refusing incomplete publication pair \\(publication_pair_complete=False\\)",
+                    ),
+                    (
+                        "diagnostics_terminal_failure",
+                        "diagnostics",
+                        "publication_terminal_failure",
+                        {
+                            "stage": "persist_diagnostics_d0",
+                            "reason": "D0 failed before M0 in verified-root fallback",
+                        },
+                        "refmac_diagnostics: refusing diagnostics with publication_terminal_failure=",
+                    ),
+                    (
+                        "manifest_terminal_failure_omitted",
+                        "manifest",
+                        "publication_terminal_failure",
+                        "__delete_field__",
+                        "refmac_operation_manifest: missing required top-level key\\(s\\): \\['publication_terminal_failure'\\]",
+                    ),
+                    (
+                        "diagnostics_terminal_failure_omitted",
+                        "diagnostics",
+                        "publication_terminal_failure",
+                        "__delete_field__",
+                        "refmac_diagnostics: missing required top-level key\\(s\\): \\['publication_terminal_failure'\\]",
+                    ),
+                ):
+                    with self.subTest(
+                        publication_member_case=pub_case_label
+                    ):
+                        try:
+                            man_doc = json.loads(
+                                rf_manifest_path.read_text(encoding="utf-8")
+                            )
+                            diag_doc = json.loads(
+                                rf_diag_path.read_text(encoding="utf-8")
+                            )
+                            target_doc = (
+                                man_doc
+                                if target_member == "manifest"
+                                else diag_doc
+                            )
+                            if field_value == "__delete_field__":
+                                del target_doc[field_name]
+                            else:
+                                target_doc[field_name] = field_value
+                            mut_ref = _rehash_refmac_manifest_and_diagnostics(
+                                rf_manifest_path,
+                                rf_diag_path,
+                                manifest_doc=man_doc,
+                                diagnostics_doc=diag_doc,
+                            )
+                            with self.assertRaisesRegex(
+                                RefmacRetainedVerificationError,
+                                expected_err_re,
+                            ) as ctx_pub_member:
+                                verify_retained_refmac_rfactor_evidence(
+                                    rf_admitted_root,
+                                    subject_id="R4",
+                                    manifest_reference=mut_ref,
+                                    repo_root=REPO_ROOT,
+                                )
+                            self.assertNotIsInstance(
+                                ctx_pub_member.exception,
+                                RefmacScientificAdmissionRefusedError,
+                            )
+                        finally:
+                            _restore_tree_bytes(rf_admitted_root, rf_snapshot)
+
+                with self.assertRaises(RefmacScientificAdmissionRefusedError):
+                    verify_retained_refmac_rfactor_evidence(
+                        rf_admitted_root,
+                        subject_id="R4",
+                        manifest_reference=rf_manifest_ref,
+                        repo_root=REPO_ROOT,
+                    )
+                self.assertEqual(
+                    _snapshot_tree_bytes(rf_admitted_root), rf_snapshot
+                )
+
+    def test_payload_only_and_unpersisted_records_refuse_as_diagnostic_only(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            admitted_root = Path(tmp).resolve(strict=True) / "attempt_unpersisted"
+            admitted_root.mkdir(parents=True, exist_ok=True)
+            admitted_snapshot = _snapshot_tree_bytes(admitted_root)
+
+            # 1. Explicit persisted=False reference dict.
+            with self.subTest(case="persisted_false_reference"):
+                with self.assertRaisesRegex(
+                    RefmacRetainedVerificationError,
+                    "refusing payload-only or unpersisted REFMAC artifact reference",
+                ) as ctx1:
+                    verify_retained_refmac_rfactor_evidence(
+                        admitted_root,
+                        subject_id="R4",
+                        manifest_reference={
+                            "path": None,
+                            "persisted": False,
+                            "sha256": None,
+                            "size_bytes": None,
+                            "unpersisted_reason": "No verified retention anchor available",
+                        },
+                        repo_root=REPO_ROOT,
+                    )
+                self.assertNotIsInstance(
+                    ctx1.exception, RefmacScientificAdmissionRefusedError
+                )
+
+            # 2. Collector payload with manifest_json=None or nested persisted=False.
+            with self.subTest(case="collector_payload_manifest_json_unpersisted"):
+                with self.assertRaisesRegex(
+                    RefmacRetainedVerificationError,
+                    "refusing payload-only or unpersisted REFMAC",
+                ) as ctx2:
+                    verify_retained_refmac_rfactor_evidence(
+                        admitted_root,
+                        subject_id="R4",
+                        manifest_reference={
+                            "schema_version": 1,
+                            "collector_stage": onesar_refmac.COLLECTOR_STAGE,
+                            "publication_pair_complete": True,
+                            "publication_terminal_failure": None,
+                            "manifest_json": {
+                                "path": None,
+                                "persisted": False,
+                                "sha256": None,
+                                "unpersisted_reason": "child and parent dirs unavailable",
+                            },
+                        },
+                        repo_root=REPO_ROOT,
+                    )
+                self.assertNotIsInstance(
+                    ctx2.exception, RefmacScientificAdmissionRefusedError
+                )
+
+            # 3. In-memory manifest_payload dict without manifest_json or persisted path/sha256.
+            with self.subTest(case="raw_in_memory_manifest_payload"):
+                with self.assertRaisesRegex(
+                    RefmacRetainedVerificationError,
+                    "refusing payload-only in-memory REFMAC manifest dictionary without persisted file reference",
+                ) as ctx3:
+                    verify_retained_refmac_rfactor_evidence(
+                        admitted_root,
+                        subject_id="R4",
+                        manifest_reference={
+                            "schema_version": 1,
+                            "collector_stage": onesar_refmac.COLLECTOR_STAGE,
+                            "status": "diagnostic_captured_gates_unproven",
+                            "raw_outputs": {},
+                            "operation_checks": {"collector_succeeded": True},
+                        },
+                        repo_root=REPO_ROOT,
+                    )
+                self.assertNotIsInstance(
+                    ctx3.exception, RefmacScientificAdmissionRefusedError
+                )
+
+            # 4. RefmacCollectorError exception object passed directly.
+            with self.subTest(case="collector_exception_object"):
+                collector_err = onesar_refmac.RefmacCollectorError(
+                    "synthetic collector failure",
+                    failed_stage="refmac_returncode",
+                    diagnostics_payload={"status": "failed"},
+                    manifest_payload={"status": "failed", "manifest_json": None},
+                )
+                with self.assertRaisesRegex(
+                    RefmacRetainedVerificationError,
+                    "refusing collector exception RefmacCollectorError at retained reference boundary",
+                ) as ctx4:
+                    verify_retained_refmac_rfactor_evidence(
+                        admitted_root,
+                        subject_id="R4",
+                        manifest_reference=collector_err,
+                        repo_root=REPO_ROOT,
+                    )
+                self.assertNotIsInstance(
+                    ctx4.exception, RefmacScientificAdmissionRefusedError
+                )
+
+            self.assertEqual(_snapshot_tree_bytes(admitted_root), admitted_snapshot)
+
+
+def _create_synthetic_common_parent_fixture(
+    tmp_root: Path,
+    *,
+    subject_id: str = "R4",
+    started_at_utc: str = "2026-11-06T23:58:10+00:00",
+    finished_at_utc: str = "2026-11-07T00:03:25+00:00",
+    run_date: str = "2026-11-06",
+) -> dict[str, Any]:
+    """Build a small, clearly synthetic common-parent fixture for Task 369 Part 2 tests."""
+    fake_repo = tmp_root / f"parent_{subject_id}_repo"
+    fake_repo.mkdir(parents=True, exist_ok=True)
+    fake_repo = fake_repo.resolve(strict=True)
+    parent_root = fake_repo / "runs" / f"parent_{subject_id}"
+    phenix_root = parent_root / "phenix_child"
+    refmac_root = parent_root / "refmac_child"
+
+    phx_staged = onesar_rerun.stage_subject_inputs(
+        phenix_root,
+        subject_id=subject_id,
+        repo_root=fake_repo,
+        archive_path=COMMITTED_ARCHIVE,
+    )
+    rm_staged = onesar_rerun.stage_subject_inputs(
+        refmac_root,
+        subject_id=subject_id,
+        repo_root=fake_repo,
+        archive_path=COMMITTED_ARCHIVE,
+    )
+    parent_root = parent_root.resolve(strict=True)
+    phenix_root = phenix_root.resolve(strict=True)
+    refmac_root = refmac_root.resolve(strict=True)
+
+    phx_dir = phenix_root / "phenix"
+    phx_bundle_dir = phx_dir / "cache" / "bundle"
+    phx_cache_manifest_path = phx_bundle_dir / "success.json"
+    phx_cache_sha, _, _ = _write_json_with_digest(
+        phx_cache_manifest_path,
+        {
+            "synthetic_fixture": True,
+            "returncode": 0,
+            "reusable": True,
+            "invocation": {"executable": "phenix.python"},
+            "artifacts": {},
+        },
+    )
+    phx_reconciled_path = phx_dir / "phenix_reconciled_manifest.json"
+    phx_rec_payload = {
+        "schema_version": 1,
+        "synthetic_fixture": True,
+        "subject": copy.deepcopy(phx_staged["admission_record"]["subject"]),
+        "mtz": copy.deepcopy(phx_staged["admission_record"]["mtz"]),
+        "staged_files": copy.deepcopy(
+            phx_staged["admission_record"]["staged_files"]
+        ),
+        "input_hkl_ledger_json_path": str(phx_staged["input_ledger_path"]),
+        "input_hkl_ledger_json_sha256": phx_staged["admission_record"][
+            "staged_files"
+        ]["input_hkl_ledger_json_sha256"],
+        "manifest_path": str(phx_cache_manifest_path),
+        "manifest_sha256": phx_cache_sha,
+        "operation_manifest": {"returncode": 0, "reusable": True},
+        "reconciliation": {"reconciliation_status": "verified"},
+    }
+    phx_rec_sha, phx_rec_size, _ = _write_json_with_digest(
+        phx_reconciled_path, phx_rec_payload
+    )
+
+    rm_dir = refmac_root / "refmac"
+    rm_log_path = rm_dir / "refmac.log"
+    rm_xyzout_path = rm_dir / "refmac_xyzout.pdb"
+    rm_hklout_path = rm_dir / "refmac_hklout.mtz"
+    rm_log_sha, rm_log_size = _write_file_with_digest(
+        rm_log_path, b"SYNTHETIC REFMAC LOG\n"
+    )
+    rm_xyz_sha, rm_xyz_size = _write_file_with_digest(
+        rm_xyzout_path, b"REMARK SYNTHETIC XYZOUT\nEND\n"
+    )
+    rm_hkl_sha, rm_hkl_size = _write_file_with_digest(
+        rm_hklout_path, b"MTZ SYNTHETIC HKLOUT\n"
+    )
+    rm_adm_sha = hashlib.sha256(
+        rm_staged["admission_json_path"].read_bytes()
+    ).hexdigest()
+
+    rm_manifest_path = rm_dir / "refmac_operation_manifest.json"
+    rm_manifest_payload = {
+        "schema_version": 1,
+        "synthetic_fixture": True,
+        "collector_stage": onesar_refmac.COLLECTOR_STAGE,
+        "status": "diagnostic_captured_gates_unproven",
+        "publication_pair_complete": True,
+        "publication_terminal_failure": None,
+        "subject_id": subject_id,
+        "subject": copy.deepcopy(rm_staged["admission_record"]["subject"]),
+        "mtz": copy.deepcopy(rm_staged["admission_record"]["mtz"]),
+        "staged_files": copy.deepcopy(
+            rm_staged["admission_record"]["staged_files"]
+        ),
+        "input_admission_json_path": str(rm_staged["admission_json_path"]),
+        "input_admission_json_sha256": rm_adm_sha,
+        "input_hkl_ledger_json_path": str(rm_staged["input_ledger_path"]),
+        "input_hkl_ledger_json_sha256": rm_staged["admission_record"][
+            "staged_files"
+        ]["input_hkl_ledger_json_sha256"],
+        "invocation": {
+            "xyzin_path": str(rm_staged["original_pdb_path"]),
+            "hklin_path": str(rm_staged["projected_mtz_path"]),
+            "xyzout_path": str(rm_xyzout_path),
+            "hklout_path": str(rm_hklout_path),
+        },
+        "paths": {
+            "original_pdb_path": str(rm_staged["original_pdb_path"]),
+            "original_mtz_path": str(rm_staged["original_mtz_path"]),
+            "projected_mtz_path": str(rm_staged["projected_mtz_path"]),
+            "input_ledger_path": str(rm_staged["input_ledger_path"]),
+            "admission_json_path": str(rm_staged["admission_json_path"]),
+            "log_path": str(rm_log_path),
+            "xyzout_path": str(rm_xyzout_path),
+            "hklout_path": str(rm_hklout_path),
+            "manifest_json_path": str(rm_manifest_path),
+        },
+        "raw_outputs": {
+            "log": {
+                "path": str(rm_log_path),
+                "sha256": rm_log_sha,
+                "size_bytes": rm_log_size,
+                "exists": True,
+                "is_symlink": False,
+                "is_regular_file": True,
+            },
+            "xyzout": {
+                "path": str(rm_xyzout_path),
+                "sha256": rm_xyz_sha,
+                "size_bytes": rm_xyz_size,
+                "exists": True,
+                "is_symlink": False,
+                "is_regular_file": True,
+            },
+            "hklout": {
+                "path": str(rm_hklout_path),
+                "sha256": rm_hkl_sha,
+                "size_bytes": rm_hkl_size,
+                "exists": True,
+                "is_symlink": False,
+                "is_regular_file": True,
+            },
+        },
+        "effective_hkls_proven": False,
+        "effective_hkls_unproven_reason": "synthetic unproven active HKL mask",
+        "native_bin_membership_proven": False,
+        "native_bin_membership_unproven_reason": "synthetic unproven native bins",
+        "native_residual_reconstruction_proven": False,
+        "native_residual_reconstruction_unproven_reason": (
+            "synthetic unproven native residual reconstruction"
+        ),
+        "all_preregistered_gates_passed": False,
+        "canonical_eval_qds_eligible": False,
+        "eval_admission_eligible": False,
+        "qds_admission_eligible": False,
+        "canary_admission_eligible": False,
+        "scientific_admission_proven": False,
+    }
+    rm_man_sha, rm_man_size, _ = _write_json_with_digest(
+        rm_manifest_path, rm_manifest_payload
+    )
+
+    phx_ref = {
+        "path": str(phx_reconciled_path),
+        "sha256": phx_rec_sha,
+        "size_bytes": phx_rec_size,
+        "persisted": True,
+    }
+    rm_ref = {
+        "path": str(rm_manifest_path),
+        "sha256": rm_man_sha,
+        "size_bytes": rm_man_size,
+        "persisted": True,
+    }
+    checkpoint_payload = build_parent_completed_execution_checkpoint_payload(
+        subject_id=subject_id,
+        family=EXPECTED_FAMILY_ID,
+        parent_evidence_root=parent_root,
+        phenix_evidence_root=phenix_root,
+        refmac_evidence_root=refmac_root,
+        phenix_reconciled_manifest=phx_ref,
+        refmac_operation_manifest=rm_ref,
+        started_at_utc=started_at_utc,
+        finished_at_utc=finished_at_utc,
+        run_date=run_date,
+    )
+    checkpoint_path = parent_root / "parent_completed_execution_checkpoint.json"
+    cp_sha, cp_size, _ = _write_json_with_digest(
+        checkpoint_path, checkpoint_payload
+    )
+    checkpoint_ref = {
+        "path": str(checkpoint_path),
+        "sha256": cp_sha,
+        "size_bytes": cp_size,
+        "persisted": True,
+    }
+    return {
+        "fake_repo": fake_repo,
+        "parent_root": parent_root,
+        "phenix_root": phenix_root,
+        "refmac_root": refmac_root,
+        "phenix_staged": phx_staged,
+        "refmac_staged": rm_staged,
+        "phenix_reconciled_path": phx_reconciled_path,
+        "refmac_manifest_path": rm_manifest_path,
+        "checkpoint_path": checkpoint_path,
+        "checkpoint_payload": checkpoint_payload,
+        "checkpoint_ref": checkpoint_ref,
+    }
+
+
+class TestParentExecutionCheckpointBinding(unittest.TestCase):
+    """Focused tests for Task 369 Part 2 common-parent identity and time validation."""
+
+    def test_midnight_spanning_utc_interval_and_common_parent_binding_succeed_and_preserve_bytes(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_root = Path(tmp).resolve(strict=True)
+            fix = _create_synthetic_common_parent_fixture(
+                tmp_root,
+                subject_id="R4",
+                started_at_utc="2026-11-06T23:58:10+00:00",
+                finished_at_utc="2026-11-07T00:03:25+00:00",
+                run_date="2026-11-06",
+            )
+            parent_root: Path = fix["parent_root"]
+            parent_snapshot = _snapshot_tree_bytes(parent_root)
+
+            verified = verify_retained_parent_execution_checkpoint(
+                parent_root,
+                subject_id="R4",
+                checkpoint_reference=fix["checkpoint_ref"],
+                expected_family="rfactors",
+                expected_run_date="2026-11-06",
+                repo_root=REPO_ROOT,
+            )
+            self.assertEqual(verified["verification_status"], "verified")
+            self.assertEqual(verified["family"], "rfactors")
+            self.assertEqual(verified["subject_id"], "R4")
+            self.assertEqual(verified["subject"]["stage"], "final")
+            self.assertEqual(verified["timing"]["run_date"], "2026-11-06")
+            self.assertEqual(
+                verified["timing"]["started_utc_date"], "2026-11-06"
+            )
+            self.assertEqual(
+                verified["timing"]["finished_utc_date"], "2026-11-07"
+            )
+            self.assertTrue(verified["timing"]["spans_utc_midnight"])
+            self.assertEqual(verified["timing"]["elapsed_seconds"], 315.0)
+            self.assertIs(
+                verified["verification_boundaries"][
+                    "parent_execution_checkpoint_verified"
+                ],
+                True,
+            )
+            self.assertIs(
+                verified["verification_boundaries"][
+                    "common_subject_and_projected_inputs_bound"
+                ],
+                True,
+            )
+            self.assertIs(
+                verified["verification_boundaries"][
+                    "authoring_outcome_separated_from_execution_checkpoint"
+                ],
+                True,
+            )
+            self.assertIs(
+                verified["verification_boundaries"][
+                    "scientific_proof_established"
+                ],
+                False,
+            )
+
+            # Also verify non-UTC offset timestamp whose UTC conversion spans midnight:
+            # 2026-11-06T16:58:10-07:00 == 2026-11-06T23:58:10+00:00 -> UTC date 2026-11-06.
+            non_utc_timing = validate_parent_execution_timing(
+                "2026-11-06T16:58:10-07:00",
+                "2026-11-06T17:03:25-07:00",
+                "2026-11-06",
+                expected_run_date="2026-11-06",
+            )
+            self.assertEqual(non_utc_timing["started_utc_date"], "2026-11-06")
+            self.assertEqual(non_utc_timing["finished_utc_date"], "2026-11-07")
+            self.assertTrue(non_utc_timing["spans_utc_midnight"])
+
+            self.assertEqual(_snapshot_tree_bytes(parent_root), parent_snapshot)
+
+    def test_malformed_naive_reversed_timestamps_and_run_date_mismatches_rejected(
+        self,
+    ) -> None:
+        # 1. Naive timestamps (missing timezone offset).
+        with self.subTest(case="naive_started_at_utc"):
+            with self.assertRaisesRegex(
+                ParentExecutionBindingError,
+                "started_at_utc: expected full timezone-qualified ISO-8601 timestamp",
+            ):
+                validate_parent_execution_timing(
+                    "2026-11-06T23:58:10",
+                    "2026-11-07T00:03:25+00:00",
+                    "2026-11-06",
+                )
+
+        # 2. Malformed timestamp or date-only string.
+        with self.subTest(case="malformed_finished_at_utc"):
+            with self.assertRaisesRegex(
+                ParentExecutionBindingError,
+                "finished_at_utc: expected full timezone-qualified ISO-8601 timestamp",
+            ):
+                validate_parent_execution_timing(
+                    "2026-11-06T23:58:10+00:00",
+                    "2026-11-07",
+                    "2026-11-06",
+                )
+
+        # 3. Reversed interval (finished_at_utc < started_at_utc).
+        with self.subTest(case="reversed_interval"):
+            with self.assertRaisesRegex(
+                ParentExecutionBindingError,
+                "reversed execution interval",
+            ):
+                validate_parent_execution_timing(
+                    "2026-11-07T00:03:25+00:00",
+                    "2026-11-06T23:58:10+00:00",
+                    "2026-11-07",
+                )
+
+        # 4. Midnight-spanning run where run_date was set to finish date ("2026-11-07")
+        # instead of UTC start date ("2026-11-06").
+        with self.subTest(case="finish_date_instead_of_utc_start_date"):
+            with self.assertRaisesRegex(
+                ParentExecutionBindingError,
+                "run_date '2026-11-07' disagrees with started_at_utc converted to UTC date '2026-11-06'",
+            ):
+                validate_parent_execution_timing(
+                    "2026-11-06T23:58:10+00:00",
+                    "2026-11-07T00:03:25+00:00",
+                    "2026-11-07",
+                )
+
+        # 5. Non-UTC offset timestamp where local date ("2026-11-06") differs from
+        # UTC start date ("2026-11-07" for 2026-11-06T18:30:00-07:00).
+        with self.subTest(case="local_date_disagrees_with_utc_converted_start_date"):
+            with self.assertRaisesRegex(
+                ParentExecutionBindingError,
+                "run_date '2026-11-06' disagrees with started_at_utc converted to UTC date '2026-11-07'",
+            ):
+                validate_parent_execution_timing(
+                    "2026-11-06T18:30:00-07:00",
+                    "2026-11-06T18:45:00-07:00",
+                    "2026-11-06",
+                )
+
+    def test_registered_identity_cross_producer_and_authoring_outcome_separation_enforced(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_root = Path(tmp).resolve(strict=True)
+            fix = _create_synthetic_common_parent_fixture(
+                tmp_root,
+                subject_id="R4",
+            )
+            parent_root: Path = fix["parent_root"]
+            checkpoint_path: Path = fix["checkpoint_path"]
+            rm_manifest_path: Path = fix["refmac_manifest_path"]
+            parent_snapshot = _snapshot_tree_bytes(parent_root)
+
+            # 0. Family mismatch ("1sar" vs canonical "rfactors") rejected in builder and verifier.
+            with self.subTest(case="family_mismatch_rejected"):
+                with self.assertRaisesRegex(
+                    ParentExecutionBindingError,
+                    "parent_execution_checkpoint\\.family: expected 'rfactors', got '1sar'",
+                ):
+                    build_parent_completed_execution_checkpoint_payload(
+                        subject_id="R4",
+                        family="1sar",
+                        parent_evidence_root=parent_root,
+                        phenix_evidence_root=fix["phenix_root"],
+                        refmac_evidence_root=fix["refmac_root"],
+                        phenix_reconciled_manifest=fix["checkpoint_payload"][
+                            "phenix_reconciled_manifest"
+                        ],
+                        refmac_operation_manifest=fix["checkpoint_payload"][
+                            "refmac_operation_manifest"
+                        ],
+                        started_at_utc="2026-11-06T23:58:10+00:00",
+                        finished_at_utc="2026-11-07T00:03:25+00:00",
+                        run_date="2026-11-06",
+                    )
+                try:
+                    cp_doc = json.loads(
+                        checkpoint_path.read_text(encoding="utf-8")
+                    )
+                    cp_doc["family"] = "1sar"
+                    cp_sha, cp_size, _ = _write_json_with_digest(
+                        checkpoint_path, cp_doc
+                    )
+                    with self.assertRaisesRegex(
+                        ParentExecutionBindingError,
+                        "parent_execution_checkpoint\\.family: expected 'rfactors', got '1sar'",
+                    ):
+                        verify_retained_parent_execution_checkpoint(
+                            parent_root,
+                            subject_id="R4",
+                            checkpoint_path=checkpoint_path,
+                            checkpoint_sha256=cp_sha,
+                            checkpoint_size_bytes=cp_size,
+                            repo_root=REPO_ROOT,
+                        )
+                finally:
+                    _restore_tree_bytes(parent_root, parent_snapshot)
+
+            # 1. Authoring-outcome field mixed into the completed execution checkpoint.
+            with self.subTest(case="authoring_outcome_mixed_into_checkpoint"):
+                try:
+                    cp_doc = json.loads(
+                        checkpoint_path.read_text(encoding="utf-8")
+                    )
+                    cp_doc["authoring_outcome"] = {"status": "refused"}
+                    cp_sha, cp_size, _ = _write_json_with_digest(
+                        checkpoint_path, cp_doc
+                    )
+                    with self.assertRaisesRegex(
+                        ParentExecutionBindingError,
+                        "final authoring-outcome field\\(s\\) must remain separate from the hashed execution checkpoint",
+                    ):
+                        verify_retained_parent_execution_checkpoint(
+                            parent_root,
+                            subject_id="R4",
+                            checkpoint_path=checkpoint_path,
+                            checkpoint_sha256=cp_sha,
+                            checkpoint_size_bytes=cp_size,
+                            repo_root=REPO_ROOT,
+                        )
+                finally:
+                    _restore_tree_bytes(parent_root, parent_snapshot)
+
+            # 2. Cross-producer subject/model mismatch (REFMAC child staged with "start" while PHENIX child is "R4").
+            with self.subTest(case="cross_producer_subject_mismatch"):
+                try:
+                    start_spec = onesar_rerun.resolve_subject_spec("start")
+                    rm_doc = json.loads(
+                        rm_manifest_path.read_text(encoding="utf-8")
+                    )
+                    rm_doc["subject_id"] = "start"
+                    rm_doc["subject"] = start_spec
+                    rm_sha, rm_size, _ = _write_json_with_digest(
+                        rm_manifest_path, rm_doc
+                    )
+                    cp_doc = json.loads(
+                        checkpoint_path.read_text(encoding="utf-8")
+                    )
+                    cp_doc["refmac_operation_manifest"]["sha256"] = rm_sha
+                    cp_doc["refmac_operation_manifest"]["size_bytes"] = rm_size
+                    cp_sha, cp_size, _ = _write_json_with_digest(
+                        checkpoint_path, cp_doc
+                    )
+                    with self.assertRaisesRegex(
+                        ParentExecutionBindingError,
+                        "refmac_operation_manifest\\.subject: disagrees with parent/preregistered subject specification for 'R4'",
+                    ):
+                        verify_retained_parent_execution_checkpoint(
+                            parent_root,
+                            subject_id="R4",
+                            checkpoint_path=checkpoint_path,
+                            checkpoint_sha256=cp_sha,
+                            checkpoint_size_bytes=cp_size,
+                            repo_root=REPO_ROOT,
+                        )
+                finally:
+                    _restore_tree_bytes(parent_root, parent_snapshot)
+
+            # 3. REFMAC output substituted for input in invocation/paths.
+            with self.subTest(case="refmac_output_substituted_for_input"):
+                try:
+                    rm_doc = json.loads(
+                        rm_manifest_path.read_text(encoding="utf-8")
+                    )
+                    rm_doc["invocation"]["hklin_path"] = rm_doc["paths"][
+                        "hklout_path"
+                    ]
+                    rm_sha, rm_size, _ = _write_json_with_digest(
+                        rm_manifest_path, rm_doc
+                    )
+                    cp_doc = json.loads(
+                        checkpoint_path.read_text(encoding="utf-8")
+                    )
+                    cp_doc["refmac_operation_manifest"]["sha256"] = rm_sha
+                    cp_doc["refmac_operation_manifest"]["size_bytes"] = rm_size
+                    cp_sha, cp_size, _ = _write_json_with_digest(
+                        checkpoint_path, cp_doc
+                    )
+                    with self.assertRaisesRegex(
+                        ParentExecutionBindingError,
+                        "REFMAC outputs must reside in refmac_dir and never replace staged inputs",
+                    ):
+                        verify_retained_parent_execution_checkpoint(
+                            parent_root,
+                            subject_id="R4",
+                            checkpoint_path=checkpoint_path,
+                            checkpoint_sha256=cp_sha,
+                            checkpoint_size_bytes=cp_size,
+                            repo_root=REPO_ROOT,
+                        )
+                finally:
+                    _restore_tree_bytes(parent_root, parent_snapshot)
+
+            # 4. Overlapping/identical producer child roots rejected.
+            with self.subTest(case="identical_child_roots_rejected"):
+                with self.assertRaisesRegex(
+                    ParentExecutionBindingError,
+                    "phenix_evidence_root and refmac_evidence_root must be distinct non-overlapping child directories",
+                ):
+                    build_parent_completed_execution_checkpoint_payload(
+                        subject_id="R4",
+                        parent_evidence_root=parent_root,
+                        phenix_evidence_root=fix["phenix_root"],
+                        refmac_evidence_root=fix["phenix_root"],
+                        phenix_reconciled_manifest=fix["checkpoint_payload"][
+                            "phenix_reconciled_manifest"
+                        ],
+                        refmac_operation_manifest=fix["checkpoint_payload"][
+                            "refmac_operation_manifest"
+                        ],
+                        started_at_utc="2026-11-06T23:58:10+00:00",
+                        finished_at_utc="2026-11-07T00:03:25+00:00",
+                        run_date="2026-11-06",
+                    )
+
+            # 5. Relocated clean REFMAC manifest at fallback path in parent checkpoint rejected.
+            with self.subTest(case="relocated_clean_refmac_fallback_rejected_in_parent"):
+                try:
+                    rm_doc = json.loads(
+                        rm_manifest_path.read_text(encoding="utf-8")
+                    )
+                    parent_ret_dir = (
+                        fix["refmac_root"] / "refmac_parent_retention"
+                    )
+                    reloc_rm_path = (
+                        parent_ret_dir / "refmac_operation_manifest.json"
+                    )
+                    rm_doc["paths"]["manifest_json_path"] = str(reloc_rm_path)
+                    reloc_sha, reloc_size, _ = _write_json_with_digest(
+                        reloc_rm_path, rm_doc
+                    )
+                    cp_doc = json.loads(
+                        checkpoint_path.read_text(encoding="utf-8")
+                    )
+                    cp_doc["refmac_operation_manifest"] = {
+                        "path": str(reloc_rm_path),
+                        "sha256": reloc_sha,
+                        "size_bytes": reloc_size,
+                        "persisted": True,
+                    }
+                    cp_sha, cp_size, _ = _write_json_with_digest(
+                        checkpoint_path, cp_doc
+                    )
+                    with self.assertRaisesRegex(
+                        ParentExecutionBindingError,
+                        "fallback manifest location or metadata requires supported fallback failure stage in failures",
+                    ):
+                        verify_retained_parent_execution_checkpoint(
+                            parent_root,
+                            subject_id="R4",
+                            checkpoint_path=checkpoint_path,
+                            checkpoint_sha256=cp_sha,
+                            checkpoint_size_bytes=cp_size,
+                            repo_root=REPO_ROOT,
+                        )
+                finally:
+                    _restore_tree_bytes(parent_root, parent_snapshot)
+
+            self.assertEqual(_snapshot_tree_bytes(parent_root), parent_snapshot)
+
+            # 6. Genuine F1 producer-persisted fallback REFMAC manifest bound alongside PHENIX child
+            # in parent completed execution checkpoint succeeds with scientific_proof_established=False.
+            with self.subTest(case="genuine_f1_fallback_refmac_bound_in_parent_checkpoint"):
+                f1_parent_root = (
+                    fix["fake_repo"] / "runs" / "parent_with_f1_refmac"
+                )
+                f1_phenix_root = f1_parent_root / "phenix_child"
+                f1_refmac_root = f1_parent_root / "refmac_child"
+                f1_phx_staged = onesar_rerun.stage_subject_inputs(
+                    f1_phenix_root,
+                    subject_id="R4",
+                    repo_root=fix["fake_repo"],
+                    archive_path=COMMITTED_ARCHIVE,
+                )
+                f1_rm_env = _create_synthetic_f1_fallback_refmac_capture(
+                    tmp_root,
+                    subject_id="R4",
+                    run_name="parent_f1_rm_child",
+                    evidence_root=f1_refmac_root,
+                    fake_repo=fix["fake_repo"],
+                )
+                f1_parent_root = f1_parent_root.resolve(strict=True)
+                f1_phenix_root = f1_phenix_root.resolve(strict=True)
+                f1_refmac_root = f1_refmac_root.resolve(strict=True)
+
+                f1_phx_dir = f1_phenix_root / "phenix"
+                f1_phx_cache_path = (
+                    f1_phx_dir / "cache" / "bundle" / "success.json"
+                )
+                f1_phx_cache_sha, _, _ = _write_json_with_digest(
+                    f1_phx_cache_path,
+                    {
+                        "synthetic_fixture": True,
+                        "returncode": 0,
+                        "reusable": True,
+                        "invocation": {"executable": "phenix.python"},
+                        "artifacts": {},
+                    },
+                )
+                f1_phx_rec_path = (
+                    f1_phx_dir / "phenix_reconciled_manifest.json"
+                )
+                f1_phx_rec_sha, f1_phx_rec_size, _ = _write_json_with_digest(
+                    f1_phx_rec_path,
+                    {
+                        "schema_version": 1,
+                        "synthetic_fixture": True,
+                        "subject": copy.deepcopy(
+                            f1_phx_staged["admission_record"]["subject"]
+                        ),
+                        "mtz": copy.deepcopy(
+                            f1_phx_staged["admission_record"]["mtz"]
+                        ),
+                        "staged_files": copy.deepcopy(
+                            f1_phx_staged["admission_record"]["staged_files"]
+                        ),
+                        "input_hkl_ledger_json_path": str(
+                            f1_phx_staged["input_ledger_path"]
+                        ),
+                        "input_hkl_ledger_json_sha256": f1_phx_staged[
+                            "admission_record"
+                        ]["staged_files"]["input_hkl_ledger_json_sha256"],
+                        "manifest_path": str(f1_phx_cache_path),
+                        "manifest_sha256": f1_phx_cache_sha,
+                        "operation_manifest": {
+                            "returncode": 0,
+                            "reusable": True,
+                        },
+                        "reconciliation": {
+                            "reconciliation_status": "verified"
+                        },
+                    },
+                )
+                f1_cp_payload = (
+                    build_parent_completed_execution_checkpoint_payload(
+                        subject_id="R4",
+                        family=EXPECTED_FAMILY_ID,
+                        parent_evidence_root=f1_parent_root,
+                        phenix_evidence_root=f1_phenix_root,
+                        refmac_evidence_root=f1_refmac_root,
+                        phenix_reconciled_manifest={
+                            "path": str(f1_phx_rec_path),
+                            "sha256": f1_phx_rec_sha,
+                            "size_bytes": f1_phx_rec_size,
+                            "persisted": True,
+                        },
+                        refmac_operation_manifest=f1_rm_env["manifest_ref"],
+                        started_at_utc="2026-11-06T23:58:10+00:00",
+                        finished_at_utc="2026-11-07T00:03:25+00:00",
+                        run_date="2026-11-06",
+                    )
+                )
+                f1_cp_path = (
+                    f1_parent_root
+                    / "parent_completed_execution_checkpoint.json"
+                )
+                f1_cp_sha, f1_cp_size, _ = _write_json_with_digest(
+                    f1_cp_path, f1_cp_payload
+                )
+                f1_parent_snapshot = _snapshot_tree_bytes(f1_parent_root)
+                f1_verified = verify_retained_parent_execution_checkpoint(
+                    f1_parent_root,
+                    subject_id="R4",
+                    checkpoint_reference={
+                        "path": str(f1_cp_path),
+                        "sha256": f1_cp_sha,
+                        "size_bytes": f1_cp_size,
+                        "persisted": True,
+                    },
+                    repo_root=REPO_ROOT,
+                )
+                self.assertEqual(
+                    f1_verified["verification_status"], "verified"
+                )
+                self.assertEqual(f1_verified["family"], "rfactors")
+                self.assertEqual(
+                    f1_verified["verified_references"][
+                        "refmac_operation_manifest"
+                    ]["path"],
+                    str(f1_rm_env["manifest_path"]),
+                )
+                self.assertIs(
+                    f1_verified["verification_boundaries"][
+                        "scientific_proof_established"
+                    ],
+                    False,
+                )
+                self.assertEqual(
+                    _snapshot_tree_bytes(f1_parent_root), f1_parent_snapshot
+                )
+
+            # 7. Genuine verified-root fallback REFMAC manifest (#1063) bound alongside PHENIX child
+            # in parent completed execution checkpoint succeeds with scientific_proof_established=False,
+            # while contradictory/missing anchor metadata or an incomplete publication pair is rejected.
+            with self.subTest(
+                case="genuine_verified_root_fallback_refmac_bound_in_parent_checkpoint"
+            ):
+                rf_parent_root = (
+                    fix["fake_repo"]
+                    / "runs"
+                    / "parent_with_verified_root_fallback_refmac"
+                )
+                rf_phenix_root = rf_parent_root / "phenix_child"
+                rf_refmac_root = rf_parent_root / "refmac_child"
+                rf_phx_staged = onesar_rerun.stage_subject_inputs(
+                    rf_phenix_root,
+                    subject_id="R4",
+                    repo_root=fix["fake_repo"],
+                    archive_path=COMMITTED_ARCHIVE,
+                )
+                rf_rm_env = (
+                    _create_synthetic_verified_root_fallback_refmac_capture(
+                        tmp_root,
+                        subject_id="R4",
+                        run_name="parent_verified_root_fb_rm_child",
+                        evidence_root=rf_refmac_root,
+                        fake_repo=fix["fake_repo"],
+                    )
+                )
+                rf_parent_root = rf_parent_root.resolve(strict=True)
+                rf_phenix_root = rf_phenix_root.resolve(strict=True)
+                rf_refmac_root = rf_refmac_root.resolve(strict=True)
+
+                rf_phx_dir = rf_phenix_root / "phenix"
+                rf_phx_cache_path = (
+                    rf_phx_dir / "cache" / "bundle" / "success.json"
+                )
+                rf_phx_cache_sha, _, _ = _write_json_with_digest(
+                    rf_phx_cache_path,
+                    {
+                        "synthetic_fixture": True,
+                        "returncode": 0,
+                        "reusable": True,
+                        "invocation": {"executable": "phenix.python"},
+                        "artifacts": {},
+                    },
+                )
+                rf_phx_rec_path = (
+                    rf_phx_dir / "phenix_reconciled_manifest.json"
+                )
+                rf_phx_rec_sha, rf_phx_rec_size, _ = _write_json_with_digest(
+                    rf_phx_rec_path,
+                    {
+                        "schema_version": 1,
+                        "synthetic_fixture": True,
+                        "subject": copy.deepcopy(
+                            rf_phx_staged["admission_record"]["subject"]
+                        ),
+                        "mtz": copy.deepcopy(
+                            rf_phx_staged["admission_record"]["mtz"]
+                        ),
+                        "staged_files": copy.deepcopy(
+                            rf_phx_staged["admission_record"]["staged_files"]
+                        ),
+                        "input_hkl_ledger_json_path": str(
+                            rf_phx_staged["input_ledger_path"]
+                        ),
+                        "input_hkl_ledger_json_sha256": rf_phx_staged[
+                            "admission_record"
+                        ]["staged_files"]["input_hkl_ledger_json_sha256"],
+                        "manifest_path": str(rf_phx_cache_path),
+                        "manifest_sha256": rf_phx_cache_sha,
+                        "operation_manifest": {
+                            "returncode": 0,
+                            "reusable": True,
+                        },
+                        "reconciliation": {
+                            "reconciliation_status": "verified"
+                        },
+                    },
+                )
+                rf_cp_payload = (
+                    build_parent_completed_execution_checkpoint_payload(
+                        subject_id="R4",
+                        family=EXPECTED_FAMILY_ID,
+                        parent_evidence_root=rf_parent_root,
+                        phenix_evidence_root=rf_phenix_root,
+                        refmac_evidence_root=rf_refmac_root,
+                        phenix_reconciled_manifest={
+                            "path": str(rf_phx_rec_path),
+                            "sha256": rf_phx_rec_sha,
+                            "size_bytes": rf_phx_rec_size,
+                            "persisted": True,
+                        },
+                        refmac_operation_manifest=rf_rm_env["manifest_ref"],
+                        started_at_utc="2026-11-06T23:58:10+00:00",
+                        finished_at_utc="2026-11-07T00:03:25+00:00",
+                        run_date="2026-11-06",
+                    )
+                )
+                rf_cp_path = (
+                    rf_parent_root
+                    / "parent_completed_execution_checkpoint.json"
+                )
+                rf_cp_sha, rf_cp_size, _ = _write_json_with_digest(
+                    rf_cp_path, rf_cp_payload
+                )
+                rf_parent_snapshot = _snapshot_tree_bytes(rf_parent_root)
+
+                real_resolve_anchor = (
+                    onesar_records._resolve_and_validate_refmac_actual_anchor
+                )
+                real_classify_fb = (
+                    onesar_records._classify_refmac_fallback_failures
+                )
+                parent_anchor_invocations: list[str | None] = []
+                parent_anchor_calls: list[Path | None] = []
+                parent_classify_calls: list[tuple[bool, bool, bool]] = []
+
+                def _spy_parent_resolve_anchor(
+                    *args: Any, **kwargs: Any
+                ) -> Path | None:
+                    doc_arg = (
+                        args[0] if args else kwargs.get("manifest_doc", {})
+                    )
+                    parent_anchor_invocations.append(
+                        doc_arg.get("actual_parent_retention_anchor_kind")
+                        if isinstance(doc_arg, Mapping)
+                        else None
+                    )
+                    res = real_resolve_anchor(*args, **kwargs)
+                    parent_anchor_calls.append(res)
+                    return res
+
+                def _spy_parent_classify_fb(
+                    *args: Any, **kwargs: Any
+                ) -> tuple[bool, bool, bool]:
+                    res = real_classify_fb(*args, **kwargs)
+                    parent_classify_calls.append(res)
+                    return res
+
+                with (
+                    mock.patch.object(
+                        onesar_records,
+                        "_resolve_and_validate_refmac_actual_anchor",
+                        side_effect=_spy_parent_resolve_anchor,
+                    ),
+                    mock.patch.object(
+                        onesar_records,
+                        "_classify_refmac_fallback_failures",
+                        side_effect=_spy_parent_classify_fb,
+                    ),
+                ):
+                    rf_verified = verify_retained_parent_execution_checkpoint(
+                        rf_parent_root,
+                        subject_id="R4",
+                        checkpoint_reference={
+                            "path": str(rf_cp_path),
+                            "sha256": rf_cp_sha,
+                            "size_bytes": rf_cp_size,
+                            "persisted": True,
+                        },
+                        repo_root=REPO_ROOT,
+                    )
+                self.assertEqual(
+                    parent_anchor_calls, [rf_rm_env["actual_anchor_dir"]]
+                )
+                self.assertEqual(
+                    parent_classify_calls, [(True, True, False)]
+                )
+                self.assertEqual(
+                    rf_verified["verification_status"], "verified"
+                )
+                self.assertEqual(rf_verified["family"], "rfactors")
+                self.assertEqual(
+                    rf_verified["verified_references"][
+                        "refmac_operation_manifest"
+                    ]["path"],
+                    str(rf_rm_env["manifest_path"]),
+                )
+                self.assertEqual(
+                    Path(
+                        rf_verified["verified_references"][
+                            "refmac_operation_manifest"
+                        ]["path"]
+                    ).parent,
+                    rf_rm_env["actual_anchor_dir"],
+                )
+                self.assertTrue(
+                    rf_verified["verified_references"][
+                        "refmac_operation_manifest"
+                    ]["is_fallback"]
+                )
+                self.assertEqual(
+                    rf_rm_env["manifest_payload"][
+                        "actual_parent_retention_anchor_kind"
+                    ],
+                    "verified_evidence_root_exclusive_dir",
+                )
+                self.assertEqual(
+                    rf_rm_env["manifest_payload"][
+                        "actual_parent_retention_anchor_dir"
+                    ],
+                    str(rf_rm_env["actual_anchor_dir"]),
+                )
+                self.assertEqual(
+                    rf_rm_env["manifest_payload"]["status"],
+                    "failed",
+                )
+                self.assertIs(
+                    rf_verified["verification_boundaries"][
+                        "scientific_proof_established"
+                    ],
+                    False,
+                )
+                self.assertEqual(
+                    _snapshot_tree_bytes(rf_parent_root), rf_parent_snapshot
+                )
+
+                # Contradictory anchor metadata or incomplete publication pair in parent checkpoint is rejected.
+                try:
+                    rm_man_doc = json.loads(
+                        rf_rm_env["manifest_path"].read_text(encoding="utf-8")
+                    )
+                    rm_diag_doc = json.loads(
+                        rf_rm_env["diagnostics_path"].read_text(
+                            encoding="utf-8"
+                        )
+                    )
+                    rm_man_doc["parent_retention_fallback_anchor"][
+                        "evidence_root_verified"
+                    ] = False
+                    rm_diag_doc["parent_retention_fallback_anchor"][
+                        "evidence_root_verified"
+                    ] = False
+                    bad_rm_ref = _rehash_refmac_manifest_and_diagnostics(
+                        rf_rm_env["manifest_path"],
+                        rf_rm_env["diagnostics_path"],
+                        manifest_doc=rm_man_doc,
+                        diagnostics_doc=rm_diag_doc,
+                    )
+                    cp_doc = json.loads(rf_cp_path.read_text(encoding="utf-8"))
+                    cp_doc["refmac_operation_manifest"]["sha256"] = bad_rm_ref[
+                        "sha256"
+                    ]
+                    cp_doc["refmac_operation_manifest"]["size_bytes"] = (
+                        bad_rm_ref["size_bytes"]
+                    )
+                    bad_cp_sha, bad_cp_size, _ = _write_json_with_digest(
+                        rf_cp_path, cp_doc
+                    )
+                    parent_classify_calls.clear()
+                    with (
+                        mock.patch.object(
+                            onesar_records,
+                            "_classify_refmac_fallback_failures",
+                            side_effect=_spy_parent_classify_fb,
+                        ),
+                        self.assertRaisesRegex(
+                            ParentExecutionBindingError,
+                            "fallback manifest location or metadata requires supported fallback failure stage in failures",
+                        ),
+                    ):
+                        verify_retained_parent_execution_checkpoint(
+                            rf_parent_root,
+                            subject_id="R4",
+                            checkpoint_reference={
+                                "path": str(rf_cp_path),
+                                "sha256": bad_cp_sha,
+                                "size_bytes": bad_cp_size,
+                                "persisted": True,
+                            },
+                            repo_root=REPO_ROOT,
+                        )
+                    self.assertEqual(
+                        parent_classify_calls, [(False, False, False)]
+                    )
+                finally:
+                    _restore_tree_bytes(rf_parent_root, rf_parent_snapshot)
+
+                try:
+                    rm_man_doc = json.loads(
+                        rf_rm_env["manifest_path"].read_text(encoding="utf-8")
+                    )
+                    rm_diag_doc = json.loads(
+                        rf_rm_env["diagnostics_path"].read_text(
+                            encoding="utf-8"
+                        )
+                    )
+                    self.assertEqual(
+                        rm_man_doc["actual_parent_retention_anchor_kind"],
+                        "verified_evidence_root_exclusive_dir",
+                    )
+                    self.assertEqual(
+                        rm_diag_doc["actual_parent_retention_anchor_kind"],
+                        "verified_evidence_root_exclusive_dir",
+                    )
+                    rm_man_doc["actual_parent_retention_anchor_dir"] = None
+                    rm_diag_doc["actual_parent_retention_anchor_dir"] = None
+                    missing_rm_ref = _rehash_refmac_manifest_and_diagnostics(
+                        rf_rm_env["manifest_path"],
+                        rf_rm_env["diagnostics_path"],
+                        manifest_doc=rm_man_doc,
+                        diagnostics_doc=rm_diag_doc,
+                    )
+                    cp_doc = json.loads(rf_cp_path.read_text(encoding="utf-8"))
+                    cp_doc["refmac_operation_manifest"]["sha256"] = (
+                        missing_rm_ref["sha256"]
+                    )
+                    cp_doc["refmac_operation_manifest"]["size_bytes"] = (
+                        missing_rm_ref["size_bytes"]
+                    )
+                    missing_cp_sha, missing_cp_size, _ = (
+                        _write_json_with_digest(rf_cp_path, cp_doc)
+                    )
+                    parent_anchor_invocations.clear()
+                    parent_anchor_calls.clear()
+                    with (
+                        mock.patch.object(
+                            onesar_records,
+                            "_resolve_and_validate_refmac_actual_anchor",
+                            side_effect=_spy_parent_resolve_anchor,
+                        ),
+                        self.assertRaisesRegex(
+                            ParentExecutionBindingError,
+                            "refmac_operation_manifest\\.actual_parent_retention_anchor_kind: expected None when actual_parent_retention_anchor_dir is None, got 'verified_evidence_root_exclusive_dir'",
+                        ),
+                    ):
+                        verify_retained_parent_execution_checkpoint(
+                            rf_parent_root,
+                            subject_id="R4",
+                            checkpoint_reference={
+                                "path": str(rf_cp_path),
+                                "sha256": missing_cp_sha,
+                                "size_bytes": missing_cp_size,
+                                "persisted": True,
+                            },
+                            repo_root=REPO_ROOT,
+                        )
+                    self.assertEqual(
+                        parent_anchor_invocations,
+                        ["verified_evidence_root_exclusive_dir"],
+                    )
+                    self.assertEqual(parent_anchor_calls, [])
+                finally:
+                    _restore_tree_bytes(rf_parent_root, rf_parent_snapshot)
+
+                try:
+                    rm_man_doc = json.loads(
+                        rf_rm_env["manifest_path"].read_text(encoding="utf-8")
+                    )
+                    rm_man_doc["diagnostics_json"] = None
+                    inc_rm_sha, inc_rm_size, _ = _write_json_with_digest(
+                        rf_rm_env["manifest_path"], rm_man_doc
+                    )
+                    cp_doc = json.loads(rf_cp_path.read_text(encoding="utf-8"))
+                    cp_doc["refmac_operation_manifest"]["sha256"] = inc_rm_sha
+                    cp_doc["refmac_operation_manifest"]["size_bytes"] = (
+                        inc_rm_size
+                    )
+                    inc_cp_sha, inc_cp_size, _ = _write_json_with_digest(
+                        rf_cp_path, cp_doc
+                    )
+                    parent_classify_calls.clear()
+                    with (
+                        mock.patch.object(
+                            onesar_records,
+                            "_classify_refmac_fallback_failures",
+                            side_effect=_spy_parent_classify_fb,
+                        ),
+                        self.assertRaisesRegex(
+                            ParentExecutionBindingError,
+                            "fallback manifest location or metadata requires supported fallback failure stage in failures",
+                        ),
+                    ):
+                        verify_retained_parent_execution_checkpoint(
+                            rf_parent_root,
+                            subject_id="R4",
+                            checkpoint_reference={
+                                "path": str(rf_cp_path),
+                                "sha256": inc_cp_sha,
+                                "size_bytes": inc_cp_size,
+                                "persisted": True,
+                            },
+                            repo_root=REPO_ROOT,
+                        )
+                    self.assertEqual(
+                        parent_classify_calls, [(False, False, False)]
+                    )
+                finally:
+                    _restore_tree_bytes(rf_parent_root, rf_parent_snapshot)
+
+                for (
+                    pub_case_label,
+                    target_member,
+                    field_name,
+                    field_value,
+                    expected_err_re,
+                ) in (
+                    (
+                        "manifest_pair_incomplete",
+                        "manifest",
+                        "publication_pair_complete",
+                        False,
+                        "refmac_operation_manifest: refusing incomplete publication pair \\(publication_pair_complete=False\\)",
+                    ),
+                    (
+                        "manifest_terminal_failure",
+                        "manifest",
+                        "publication_terminal_failure",
+                        {
+                            "stage": "persist_manifest_m0",
+                            "reason": "M0 failed after D0 was saved in verified-root fallback",
+                        },
+                        "refmac_operation_manifest: refusing manifest with publication_terminal_failure=",
+                    ),
+                    (
+                        "diagnostics_pair_incomplete",
+                        "diagnostics",
+                        "publication_pair_complete",
+                        False,
+                        "refmac_diagnostics: refusing incomplete publication pair \\(publication_pair_complete=False\\)",
+                    ),
+                    (
+                        "diagnostics_terminal_failure",
+                        "diagnostics",
+                        "publication_terminal_failure",
+                        {
+                            "stage": "persist_diagnostics_d0",
+                            "reason": "D0 failed before M0 in verified-root fallback",
+                        },
+                        "refmac_diagnostics: refusing diagnostics with publication_terminal_failure=",
+                    ),
+                    (
+                        "manifest_terminal_failure_omitted",
+                        "manifest",
+                        "publication_terminal_failure",
+                        "__delete_field__",
+                        "refmac_operation_manifest: missing required publication_terminal_failure key",
+                    ),
+                    (
+                        "diagnostics_terminal_failure_omitted",
+                        "diagnostics",
+                        "publication_terminal_failure",
+                        "__delete_field__",
+                        "refmac_diagnostics: missing required publication_terminal_failure key",
+                    ),
+                ):
+                    with self.subTest(
+                        parent_publication_member_case=pub_case_label
+                    ):
+                        try:
+                            rm_man_doc = json.loads(
+                                rf_rm_env["manifest_path"].read_text(
+                                    encoding="utf-8"
+                                )
+                            )
+                            rm_diag_doc = json.loads(
+                                rf_rm_env["diagnostics_path"].read_text(
+                                    encoding="utf-8"
+                                )
+                            )
+                            target_rm_doc = (
+                                rm_man_doc
+                                if target_member == "manifest"
+                                else rm_diag_doc
+                            )
+                            if field_value == "__delete_field__":
+                                del target_rm_doc[field_name]
+                            else:
+                                target_rm_doc[field_name] = field_value
+                            mut_rm_ref = (
+                                _rehash_refmac_manifest_and_diagnostics(
+                                    rf_rm_env["manifest_path"],
+                                    rf_rm_env["diagnostics_path"],
+                                    manifest_doc=rm_man_doc,
+                                    diagnostics_doc=rm_diag_doc,
+                                )
+                            )
+                            cp_doc = json.loads(
+                                rf_cp_path.read_text(encoding="utf-8")
+                            )
+                            cp_doc["refmac_operation_manifest"]["sha256"] = (
+                                mut_rm_ref["sha256"]
+                            )
+                            cp_doc["refmac_operation_manifest"][
+                                "size_bytes"
+                            ] = mut_rm_ref["size_bytes"]
+                            mut_cp_sha, mut_cp_size, _ = (
+                                _write_json_with_digest(rf_cp_path, cp_doc)
+                            )
+                            with self.assertRaisesRegex(
+                                ParentExecutionBindingError,
+                                expected_err_re,
+                            ):
+                                verify_retained_parent_execution_checkpoint(
+                                    rf_parent_root,
+                                    subject_id="R4",
+                                    checkpoint_reference={
+                                        "path": str(rf_cp_path),
+                                        "sha256": mut_cp_sha,
+                                        "size_bytes": mut_cp_size,
+                                        "persisted": True,
+                                    },
+                                    repo_root=REPO_ROOT,
+                                )
+                        finally:
+                            _restore_tree_bytes(
+                                rf_parent_root, rf_parent_snapshot
+                            )
+
+                rf_verified_post = verify_retained_parent_execution_checkpoint(
+                    rf_parent_root,
+                    subject_id="R4",
+                    checkpoint_reference={
+                        "path": str(rf_cp_path),
+                        "sha256": rf_cp_sha,
+                        "size_bytes": rf_cp_size,
+                        "persisted": True,
+                    },
+                    repo_root=REPO_ROOT,
+                )
+                self.assertEqual(
+                    rf_verified_post["verification_status"], "verified"
+                )
+                self.assertEqual(
+                    _snapshot_tree_bytes(rf_parent_root), rf_parent_snapshot
+                )
+
+    def test_phenix_child_input_admission_symlink_refused_before_any_target_open_or_read(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_root = Path(tmp).resolve(strict=True)
+            fix = _create_synthetic_common_parent_fixture(
+                tmp_root,
+                subject_id="R4",
+            )
+            parent_root: Path = fix["parent_root"]
+            phenix_root: Path = fix["phenix_root"]
+            parent_snapshot = _snapshot_tree_bytes(parent_root)
+
+            outside_dir = (tmp_root / "outside_sentinel_dir").resolve()
+            outside_dir.mkdir(parents=True, exist_ok=True)
+            outside_sentinel = outside_dir / "input_admission.json"
+            outside_sentinel.write_bytes(
+                b'{"outside_sentinel": true, "must_never_be_opened": true}\n'
+            )
+
+            real_os_open = os.open
+            real_builtins_open = builtins.open
+            real_io_open = io.open
+            real_path_open = Path.open
+            real_path_read_bytes = Path.read_bytes
+            real_path_read_text = Path.read_text
+            real_admit_and_hash = (
+                onesar_records._admit_and_hash_regular_file_under_root
+            )
+            opened_outside_targets: list[str] = []
+
+            def _record_if_outside_target(path_obj: Any) -> None:
+                if isinstance(path_obj, int):
+                    return
+                try:
+                    raw_path = os.fspath(path_obj)
+                except TypeError:
+                    return
+                if isinstance(raw_path, bytes):
+                    raw_path = os.fsdecode(raw_path)
+                try:
+                    resolved = Path(raw_path).resolve(strict=False)
+                    if resolved == outside_sentinel or resolved.is_relative_to(
+                        outside_dir
+                    ):
+                        opened_outside_targets.append(str(raw_path))
+                except OSError:
+                    pass
+
+            def _spy_os_open(
+                path: str | os.PathLike[str],
+                flags: int,
+                mode: int = 0o777,
+                *,
+                dir_fd: int | None = None,
+            ) -> int:
+                _record_if_outside_target(path)
+                if dir_fd is not None:
+                    return real_os_open(path, flags, mode, dir_fd=dir_fd)
+                return real_os_open(path, flags, mode)
+
+            def _spy_builtins_open(
+                file: Any, *args: Any, **kwargs: Any
+            ) -> Any:
+                _record_if_outside_target(file)
+                return real_builtins_open(file, *args, **kwargs)
+
+            def _spy_io_open(file: Any, *args: Any, **kwargs: Any) -> Any:
+                _record_if_outside_target(file)
+                return real_io_open(file, *args, **kwargs)
+
+            def _spy_path_open(
+                self_path: Path, *args: Any, **kwargs: Any
+            ) -> Any:
+                _record_if_outside_target(self_path)
+                return real_path_open(self_path, *args, **kwargs)
+
+            def _spy_path_read_bytes(
+                self_path: Path, *args: Any, **kwargs: Any
+            ) -> bytes:
+                _record_if_outside_target(self_path)
+                return real_path_read_bytes(self_path, *args, **kwargs)
+
+            def _spy_path_read_text(
+                self_path: Path, *args: Any, **kwargs: Any
+            ) -> str:
+                _record_if_outside_target(self_path)
+                return real_path_read_text(self_path, *args, **kwargs)
+
+            def _deliberate_preread_admit_and_hash(
+                admitted_root: Path,
+                candidate_path: Path,
+                *,
+                label: str,
+            ) -> tuple[Path, str, int]:
+                _ = Path(candidate_path).read_bytes()
+                return real_admit_and_hash(
+                    admitted_root,
+                    candidate_path,
+                    label=label,
+                )
+
+            # 1. Leaf symlink: phenix_root / "inputs" / "input_admission.json" -> outside_sentinel.
+            with self.subTest(case="leaf_symlink_input_admission_json"):
+                opened_outside_targets.clear()
+                phx_admission_path = (
+                    phenix_root / "inputs" / "input_admission.json"
+                )
+                try:
+                    phx_admission_path.unlink()
+                    os.symlink(outside_sentinel, phx_admission_path)
+                    with (
+                        mock.patch.object(
+                            os, "open", side_effect=_spy_os_open
+                        ),
+                        mock.patch.object(
+                            builtins, "open", side_effect=_spy_builtins_open
+                        ),
+                        mock.patch.object(io, "open", side_effect=_spy_io_open),
+                        mock.patch.object(Path, "open", _spy_path_open),
+                        mock.patch.object(
+                            Path, "read_bytes", _spy_path_read_bytes
+                        ),
+                        mock.patch.object(
+                            Path, "read_text", _spy_path_read_text
+                        ),
+                        self.assertRaisesRegex(
+                            ParentExecutionBindingError,
+                            "phenix_child\\.input_admission_json: retained file path is a symlink",
+                        ),
+                    ):
+                        verify_retained_parent_execution_checkpoint(
+                            parent_root,
+                            subject_id="R4",
+                            checkpoint_reference=fix["checkpoint_ref"],
+                            repo_root=REPO_ROOT,
+                        )
+                    self.assertEqual(opened_outside_targets, [])
+
+                    # Controlled negative-control check: a deliberate Path.read_bytes pre-read before
+                    # the real path admission guard IS detected by the spy on the leaf symlink.
+                    opened_outside_targets.clear()
+                    with (
+                        mock.patch.object(
+                            os, "open", side_effect=_spy_os_open
+                        ),
+                        mock.patch.object(
+                            builtins, "open", side_effect=_spy_builtins_open
+                        ),
+                        mock.patch.object(io, "open", side_effect=_spy_io_open),
+                        mock.patch.object(Path, "open", _spy_path_open),
+                        mock.patch.object(
+                            Path, "read_bytes", _spy_path_read_bytes
+                        ),
+                        mock.patch.object(
+                            Path, "read_text", _spy_path_read_text
+                        ),
+                        mock.patch.object(
+                            onesar_records,
+                            "_admit_and_hash_regular_file_under_root",
+                            side_effect=_deliberate_preread_admit_and_hash,
+                        ),
+                        self.assertRaisesRegex(
+                            ParentExecutionBindingError,
+                            "phenix_child\\.input_admission_json: retained file path is a symlink",
+                        ),
+                    ):
+                        verify_retained_parent_execution_checkpoint(
+                            parent_root,
+                            subject_id="R4",
+                            checkpoint_reference=fix["checkpoint_ref"],
+                            repo_root=REPO_ROOT,
+                        )
+                    self.assertGreaterEqual(len(opened_outside_targets), 1)
+                finally:
+                    if os.path.lexists(phx_admission_path):
+                        phx_admission_path.unlink()
+                    _restore_tree_bytes(parent_root, parent_snapshot)
+
+            # 2. Ancestor directory symlink: phenix_root / "inputs" -> outside_dir.
+            with self.subTest(case="ancestor_symlink_inputs_dir"):
+                opened_outside_targets.clear()
+                phx_inputs_dir = phenix_root / "inputs"
+                backup_inputs_dir = tmp_root / "backup_phenix_inputs"
+                try:
+                    phx_inputs_dir.rename(backup_inputs_dir)
+                    os.symlink(outside_dir, phx_inputs_dir)
+                    with (
+                        mock.patch.object(
+                            os, "open", side_effect=_spy_os_open
+                        ),
+                        mock.patch.object(
+                            builtins, "open", side_effect=_spy_builtins_open
+                        ),
+                        mock.patch.object(io, "open", side_effect=_spy_io_open),
+                        mock.patch.object(Path, "open", _spy_path_open),
+                        mock.patch.object(
+                            Path, "read_bytes", _spy_path_read_bytes
+                        ),
+                        mock.patch.object(
+                            Path, "read_text", _spy_path_read_text
+                        ),
+                        self.assertRaisesRegex(
+                            ParentExecutionBindingError,
+                            "phenix_child\\.input_admission_json: ancestor component is a symlink",
+                        ),
+                    ):
+                        verify_retained_parent_execution_checkpoint(
+                            parent_root,
+                            subject_id="R4",
+                            checkpoint_reference=fix["checkpoint_ref"],
+                            repo_root=REPO_ROOT,
+                        )
+                    self.assertEqual(opened_outside_targets, [])
+
+                    # Controlled negative-control check: a deliberate Path.read_bytes pre-read before
+                    # the real path admission guard IS detected by the spy on the ancestor symlink.
+                    opened_outside_targets.clear()
+                    with (
+                        mock.patch.object(
+                            os, "open", side_effect=_spy_os_open
+                        ),
+                        mock.patch.object(
+                            builtins, "open", side_effect=_spy_builtins_open
+                        ),
+                        mock.patch.object(io, "open", side_effect=_spy_io_open),
+                        mock.patch.object(Path, "open", _spy_path_open),
+                        mock.patch.object(
+                            Path, "read_bytes", _spy_path_read_bytes
+                        ),
+                        mock.patch.object(
+                            Path, "read_text", _spy_path_read_text
+                        ),
+                        mock.patch.object(
+                            onesar_records,
+                            "_admit_and_hash_regular_file_under_root",
+                            side_effect=_deliberate_preread_admit_and_hash,
+                        ),
+                        self.assertRaisesRegex(
+                            ParentExecutionBindingError,
+                            "phenix_child\\.input_admission_json: ancestor component is a symlink",
+                        ),
+                    ):
+                        verify_retained_parent_execution_checkpoint(
+                            parent_root,
+                            subject_id="R4",
+                            checkpoint_reference=fix["checkpoint_ref"],
+                            repo_root=REPO_ROOT,
+                        )
+                    self.assertGreaterEqual(len(opened_outside_targets), 1)
+                finally:
+                    if os.path.islink(phx_inputs_dir):
+                        phx_inputs_dir.unlink()
+                    if backup_inputs_dir.exists():
+                        backup_inputs_dir.rename(phx_inputs_dir)
+                    _restore_tree_bytes(parent_root, parent_snapshot)
+
+            self.assertEqual(_snapshot_tree_bytes(parent_root), parent_snapshot)
 
 
 if __name__ == "__main__":

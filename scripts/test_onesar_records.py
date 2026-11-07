@@ -2,25 +2,41 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import unittest
+from typing import Any
+from unittest import mock
 
 _SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
 import onesar_refmac
+import onesar_rerun
 from onesar_records import (
+    PhenixRetainedVerificationError,
     RetainedReferenceError,
     decode_strict_json_mapping,
     load_retained_reference,
     normalize_retained_reference,
+    verify_retained_phenix_rfactor_evidence,
 )
+import refinement_cache
+from test_onesar_rerun import (
+    COMMITTED_ARCHIVE,
+    REPO_ROOT,
+    _build_synthetic_map_mtz_pair,
+    _make_reconciliation_fixture,
+)
+import toolchain
 
 
 def _write_file_with_digest(path: Path, data: bytes) -> tuple[str, int]:
@@ -804,5 +820,1299 @@ class TestRetainedReferenceFirstSlice(unittest.TestCase):
             )
 
 
+def _snapshot_tree_bytes(root: Path) -> dict[Path, bytes]:
+    """Snapshot all regular non-symlink files under ``root`` for immutability checks."""
+    snap: dict[Path, bytes] = {}
+    for path in sorted(root.rglob("*")):
+        if not path.is_symlink() and path.is_file():
+            snap[path] = path.read_bytes()
+    return snap
+
+
+def _restore_tree_bytes(root: Path, snapshot: dict[Path, bytes]) -> None:
+    """Restore ``root`` to the exact file set and byte contents in ``snapshot``."""
+    for path in sorted(root.rglob("*"), reverse=True):
+        if path.is_symlink() or (path.is_file() and path not in snapshot):
+            path.unlink()
+    for path, raw_bytes in snapshot.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.is_symlink():
+            path.unlink()
+        if not path.exists() or path.read_bytes() != raw_bytes:
+            path.write_bytes(raw_bytes)
+
+
+def _create_synthetic_retained_phenix_envelope(
+    tmp_root: Path,
+    *,
+    subject_id: str = "R4",
+    run_name: str = "r4_synthetic_envelope",
+    write_completed_partial_checkpoint: bool = False,
+) -> dict[str, Any]:
+    """Create a clearly labelled synthetic retained PHENIX envelope via real staging/cache.
+
+    Adapts the bounded pattern from
+    ``TestPhenixReconciliationAndPureHelpers.test_orchestration_with_real_cache_success_and_failure_retention``
+    without invoking any installed PHENIX/CCP4 executable or vendor Python module.
+    """
+    fake_repo = tmp_root / "synthetic_workspace"
+    fake_repo.mkdir(parents=True, exist_ok=True)
+
+    fake_prefix = tmp_root / "phenix-2.0-5936-synthetic"
+    fake_bin = fake_prefix / "phenix_bin"
+    fake_site = fake_prefix / "lib" / "python3.9" / "site-packages"
+    fake_bin.mkdir(parents=True, exist_ok=True)
+    (fake_prefix / "phenix_env.sh").write_text(
+        "#!/bin/sh\nexport PHENIX_VERSION=2.0\nexport PHENIX_RELEASE_TAG=5936\n",
+        encoding="utf-8",
+    )
+    (fake_bin / "phenix.version").write_text("#!/bin/sh\n", encoding="utf-8")
+    (fake_bin / "phenix.python").write_text("#!/bin/sh\n", encoding="utf-8")
+
+    vendor_modules_payload: dict[str, dict[str, str]] = {}
+    for key, rel in onesar_rerun.PHENIX_VENDOR_SOURCE_RELPATHS.items():
+        mod_file = fake_site / rel
+        mod_file.parent.mkdir(parents=True, exist_ok=True)
+        content = f"# synthetic test module {key}\n".encode("utf-8")
+        mod_file.write_bytes(content)
+        resolved_mod = mod_file.resolve(strict=True)
+        vendor_modules_payload[key] = {
+            "module_name": key,
+            "configured_path": str(resolved_mod),
+            "resolved_path": str(resolved_mod),
+            "sha256": hashlib.sha256(content).hexdigest(),
+        }
+
+    banner = "PHENIX: 2.0-5936\n  Version: 2.0\n  Release tag: 5936"
+    setup_resolved = (fake_prefix / "phenix_env.sh").resolve(strict=True)
+    disp_resolved = (fake_bin / "phenix.version").resolve(strict=True)
+    resolved_prefix_str = str(fake_prefix.resolve(strict=True))
+    fake_measured_build: dict[str, Any] = {
+        "reported_version_source": "vendor_setup_environment",
+        "reported_version": banner,
+        "parsed_build": "2.0-5936",
+        "version_probe": {
+            "error": None,
+            "probe_mode": "vendor_setup_environment",
+            "configured_prefix": str(fake_prefix),
+            "resolved_prefix": resolved_prefix_str,
+            "setup_configured_path": str(fake_prefix / "phenix_env.sh"),
+            "setup_resolved_path": str(setup_resolved),
+            "setup_sha256": hashlib.sha256(setup_resolved.read_bytes()).hexdigest(),
+            "setup_argv": toolchain.phenix_setup_argv(setup_resolved),
+            "setup_returncode": 0,
+            "setup_stdout": "",
+            "setup_stderr": "",
+            "setup_version_fields": {
+                "PHENIX_VERSION": "2.0",
+                "PHENIX_RELEASE_TAG": "5936",
+            },
+            "setup_parsed_build": "2.0-5936",
+            "configured_path": str(fake_bin / "phenix.version"),
+            "resolved_path": str(disp_resolved),
+            "sha256": hashlib.sha256(disp_resolved.read_bytes()).hexdigest(),
+            "argv": [str(disp_resolved)],
+            "returncode": 0,
+            "stdout": banner + "\n",
+            "stderr": "",
+            "parsed_build": "2.0-5936",
+            "ignored_inherited_version_variables": [],
+            "ignored_inherited_shell_hooks": [],
+        },
+    }
+
+    selected_summary: dict[str, Any] = {}
+
+    def fake_success_runner(
+        argv: list[str], log: Path, *, cwd: Path, timeout: float
+    ) -> subprocess.CompletedProcess[str]:
+        mtz_arg = Path(argv[argv.index("--mtz") + 1])
+        out_json = Path(argv[argv.index("--out-json") + 1])
+        out_maps = Path(argv[argv.index("--out-maps-mtz") + 1])
+        out_obs_pair = Path(argv[argv.index("--out-obs-pair-mtz") + 1])
+        out_diag = Path(argv[argv.index("--out-diagnostics-json") + 1])
+        out_partial = Path(argv[argv.index("--out-partial-json") + 1])
+
+        ledger = onesar_rerun.build_input_hkl_ledger(mtz_arg.read_bytes())
+        work_candidates = [
+            v
+            for v in ledger["eligible_by_hkl"].values()
+            if not v["is_free"] and v["f_obs"] > 0.0
+        ][:3]
+        free_candidates = [
+            v
+            for v in ledger["eligible_by_hkl"].values()
+            if v["is_free"] and v["f_obs"] > 0.0
+        ][:2]
+        w0, w1, w_outlier = work_candidates[0], work_candidates[1], work_candidates[2]
+        f0, f1 = free_candidates[0], free_candidates[1]
+
+        scale_k1_w = 0.5
+        scale_k1_t = 0.5
+        scale_k1 = 0.5
+        # Use exact dyadic fractions (7/8 = 0.875 for work, 3/4 = 0.75 for free) so
+        # synthetic R_work = 0.125, R_free = 0.25, gap = 0.125 with zero float64 rounding.
+        work_ratio = 0.875
+        free_ratio = 0.75
+
+        _, base_payload, _, _, _ = _make_reconciliation_fixture()
+        synth = copy.deepcopy(base_payload)
+        synth["expected_resolved_prefix"] = resolved_prefix_str
+        synth["expected_phenix_version"] = toolchain.PHENIX_VERSION
+        synth["runtime_environment"]["sys_prefix"] = str(fake_prefix)
+        synth["runtime_environment"]["resolved_sys_prefix"] = resolved_prefix_str
+        synth["runtime_environment"]["sys_executable"] = str(
+            (fake_bin / "phenix.python").resolve(strict=True)
+        )
+        synth["runtime_environment"]["resolved_sys_executable"] = str(
+            (fake_bin / "phenix.python").resolve(strict=True)
+        )
+        synth["runtime_environment"]["vendor_modules"] = vendor_modules_payload
+
+        extracted_items = [w0, w1, w_outlier, f0, f1]
+        final_items = [w0, w1, f0, f1]
+        synth["extracted_pre_fmodel"] = [
+            {
+                "hkl": list(item["hkl"]),
+                "f_obs": float(item["f_obs"]),
+                "sigf_obs": float(item["sigf_obs"]),
+                "is_free": bool(item["is_free"]),
+            }
+            for item in extracted_items
+        ]
+        synth["final_effective"] = [
+            {
+                "hkl": list(item["hkl"]),
+                "f_obs": float(item["f_obs"]),
+                "sigf_obs": float(item["sigf_obs"]),
+                "is_free": bool(item["is_free"]),
+            }
+            for item in final_items
+        ]
+        synth["actual_work"] = [
+            {
+                "hkl": list(item["hkl"]),
+                "f_obs": float(item["f_obs"]),
+                "sigf_obs": float(item["sigf_obs"]),
+                "f_model_real": (work_ratio * float(item["f_obs"])) / scale_k1_w,
+                "f_model_imag": 0.0,
+                "f_model_amplitude": (work_ratio * float(item["f_obs"])) / scale_k1_w,
+                "f_model_scaled_with_k1_w_real": work_ratio * float(item["f_obs"]),
+                "f_model_scaled_with_k1_w_imag": 0.0,
+                "f_model_scaled_with_k1_w_amplitude": work_ratio * float(item["f_obs"]),
+            }
+            for item in (w0, w1)
+        ]
+        synth["actual_free"] = [
+            {
+                "hkl": list(item["hkl"]),
+                "f_obs": float(item["f_obs"]),
+                "sigf_obs": float(item["sigf_obs"]),
+                "f_model_real": (free_ratio * float(item["f_obs"])) / scale_k1_t,
+                "f_model_imag": 0.0,
+                "f_model_amplitude": (free_ratio * float(item["f_obs"])) / scale_k1_t,
+                "f_model_scaled_with_k1_t_real": free_ratio * float(item["f_obs"]),
+                "f_model_scaled_with_k1_t_imag": 0.0,
+                "f_model_scaled_with_k1_t_amplitude": free_ratio * float(item["f_obs"]),
+            }
+            for item in (f0, f1)
+        ]
+
+        w_den = float(w0["f_obs"]) + float(w1["f_obs"])
+        w_num = abs(float(w0["f_obs"]) - work_ratio * float(w0["f_obs"])) + abs(
+            float(w1["f_obs"]) - work_ratio * float(w1["f_obs"])
+        )
+        f_den = float(f0["f_obs"]) + float(f1["f_obs"])
+        f_num = abs(float(f0["f_obs"]) - free_ratio * float(f0["f_obs"])) + abs(
+            float(f1["f_obs"]) - free_ratio * float(f1["f_obs"])
+        )
+        all_num = w_num + f_num
+        all_den = w_den + f_den
+        r_work = w_num / w_den
+        r_free = f_num / f_den
+        r_all = all_num / all_den
+        r_gap = r_free - r_work
+
+        synth["scales_and_rfactors"].update(
+            {
+                "r_work": r_work,
+                "r_free": r_free,
+                "r_all": r_all,
+                "r_free_r_work_gap": r_gap,
+                "scale_k1_w": scale_k1_w,
+                "scale_k1_t": scale_k1_t,
+                "scale_k1": scale_k1,
+                "work_numerator": w_num,
+                "work_denominator": w_den,
+                "free_numerator": f_num,
+                "free_denominator": f_den,
+                "all_numerator": all_num,
+                "all_denominator": all_den,
+                "work_count": 2,
+                "free_count": 2,
+                "final_effective_count": 4,
+                "extracted_pre_fmodel_count": 5,
+            }
+        )
+
+        map_recs = [
+            {
+                "hkl": list(item["hkl"]),
+                "real": 1.0,
+                "imag": 0.0,
+                "amplitude": 1.0,
+                "phase_deg": 0.0,
+                "is_centric": True,
+            }
+            for item in final_items
+        ]
+        synth["map_coefficients"]["2mFo-DFc"]["records"] = copy.deepcopy(map_recs)
+        synth["map_coefficients"]["2mFo-DFc"]["centric_count"] = 4
+        synth["map_coefficients"]["2mFo-DFc"]["acentric_count"] = 0
+        synth["map_coefficients"]["mFo-DFc"]["records"] = copy.deepcopy(map_recs)
+        synth["map_coefficients"]["mFo-DFc"]["centric_count"] = 4
+        synth["map_coefficients"]["mFo-DFc"]["acentric_count"] = 0
+
+        cell_floats = tuple(
+            float(x)
+            for x in ledger["crystallographic_context"]["cell_a_b_c_alpha_beta_gamma"]
+        )
+        runtime_cell_floats = onesar_rerun.ccp4_mtz_float32_unit_cell(
+            ledger["crystallographic_context"]["cell_a_b_c_alpha_beta_gamma"]
+        )
+        synth["crystal_symmetry"] = {
+            "unit_cell": list(runtime_cell_floats),
+            "space_group_symbol": "P 21 21 21 (No. 19)",
+            "space_group_number": 19,
+            "space_group_operators_xyz": [
+                "x,y,z",
+                "-x+1/2,-y,z+1/2",
+                "-x,y+1/2,-z+1/2",
+                "x+1/2,-y+1/2,-z",
+            ],
+        }
+        ca, cb, cc = (
+            runtime_cell_floats[0],
+            runtime_cell_floats[1],
+            runtime_cell_floats[2],
+        )
+
+        def _orth_range(items: list[dict[str, Any]]) -> dict[str, float]:
+            ds = [
+                1.0
+                / math.sqrt(
+                    (it["hkl"][0] / ca) ** 2
+                    + (it["hkl"][1] / cb) ** 2
+                    + (it["hkl"][2] / cc) ** 2
+                )
+                for it in items
+            ]
+            return {"d_max": max(ds), "d_min": min(ds)}
+
+        synth["resolution_ranges"] = {
+            "extracted_pre_fmodel": _orth_range(extracted_items),
+            "final_effective": _orth_range(final_items),
+            "actual_work": _orth_range([w0, w1]),
+            "actual_free": _orth_range([f0, f1]),
+        }
+
+        m_bytes, p_bytes = _build_synthetic_map_mtz_pair(
+            map_recs, map_recs, cell=cell_floats  # type: ignore[arg-type]
+        )
+        synth["map_coefficients"]["mtz_supplements"]["phx_maps_sha256"] = (
+            hashlib.sha256(m_bytes).hexdigest()
+        )
+        synth["map_coefficients"]["mtz_supplements"]["obs_pair_only_sha256"] = (
+            hashlib.sha256(p_bytes).hexdigest()
+        )
+
+        diag_doc = {
+            "schema_version": 1,
+            "status": "succeeded",
+            "extract_xtal_data_log": synth["diagnostics"]["extract_xtal_data_log"],
+            "model_manager_log": synth["diagnostics"]["model_manager_log"],
+            "fmodel_update_all_scales_log": synth["diagnostics"][
+                "fmodel_update_all_scales_log"
+            ],
+            "failure": None,
+        }
+        log.write_text("synthetic phenix.python stdout\n", encoding="utf-8")
+        out_maps.write_bytes(m_bytes)
+        out_obs_pair.write_bytes(p_bytes)
+        out_diag.write_text(
+            json.dumps(diag_doc, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        if write_completed_partial_checkpoint:
+            partial_doc = {
+                "schema_version": 1,
+                "status": "completed_superseded_by_verified_payload",
+                "current_phase": "completed",
+                "failure": None,
+                "nonfinite_raw_values": [],
+            }
+            out_partial.write_text(
+                json.dumps(partial_doc, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+        out_json.write_text(
+            json.dumps(synth, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        selected_summary.update(
+            {
+                "expected_work_hkls": sorted(
+                    [list(w0["hkl"]), list(w1["hkl"])],
+                    key=lambda h: (h[0], h[1], h[2]),
+                ),
+                "expected_free_hkls": sorted(
+                    [list(f0["hkl"]), list(f1["hkl"])],
+                    key=lambda h: (h[0], h[1], h[2]),
+                ),
+                "expected_outlier_hkl": list(w_outlier["hkl"]),
+                "expected_r_work": r_work,
+                "expected_r_free": r_free,
+                "expected_r_all": r_all,
+                "expected_r_gap": r_gap,
+                "expected_work_numerator": w_num,
+                "expected_work_denominator": w_den,
+                "expected_free_numerator": f_num,
+                "expected_free_denominator": f_den,
+            }
+        )
+        return subprocess.CompletedProcess(argv, 0)
+
+    admitted_root = fake_repo / "runs"
+    evidence_root = admitted_root / run_name
+    with (
+        mock.patch.object(
+            toolchain,
+            "phenix",
+            side_effect=lambda exe: fake_bin / exe,
+        ),
+        mock.patch.object(
+            toolchain,
+            "phenix_build_evidence",
+            return_value=fake_measured_build,
+        ),
+    ):
+        reconciled_record = onesar_rerun.run_phenix_rfactor_operation(
+            evidence_root,
+            subject_id=subject_id,
+            repo_root=fake_repo,
+            archive_path=COMMITTED_ARCHIVE,
+            require_no_protstruct_overrides=False,
+            runner=fake_success_runner,
+        )
+
+    reconciled_manifest_path = (
+        evidence_root / "phenix" / "phenix_reconciled_manifest.json"
+    )
+    reconciled_manifest_bytes = reconciled_manifest_path.read_bytes()
+    reconciled_manifest_sha256 = hashlib.sha256(reconciled_manifest_bytes).hexdigest()
+    return {
+        "admitted_root": admitted_root,
+        "evidence_root": evidence_root,
+        "fake_prefix": fake_prefix,
+        "fake_measured_build": fake_measured_build,
+        "reconciled_record": reconciled_record,
+        "reconciled_manifest_path": reconciled_manifest_path,
+        "reconciled_manifest_sha256": reconciled_manifest_sha256,
+        "reconciled_manifest_size_bytes": len(reconciled_manifest_bytes),
+        **selected_summary,
+    }
+
+
+def _rehash_cache_and_reconciled_manifest(
+    evidence_root: Path,
+    *,
+    reconciled_doc: dict[str, Any] | None = None,
+    cache_manifest_doc: dict[str, Any] | None = None,
+) -> tuple[Path, str, int]:
+    """Rewrite cache ``success.json`` and ``phenix_reconciled_manifest.json`` after a test mutation."""
+    reconciled_path = evidence_root / "phenix" / "phenix_reconciled_manifest.json"
+    if reconciled_doc is None:
+        reconciled_doc = json.loads(reconciled_path.read_text(encoding="utf-8"))
+    cache_manifest_path = Path(reconciled_doc["manifest_path"])
+    if cache_manifest_doc is None:
+        cache_manifest_doc = json.loads(
+            cache_manifest_path.read_text(encoding="utf-8")
+        )
+    bundle_dir = cache_manifest_path.parent
+    for entry in cache_manifest_doc.get("artifacts", {}).values():
+        if isinstance(entry, dict) and isinstance(entry.get("path"), str):
+            art_file = bundle_dir / entry["path"]
+            if art_file.is_file() and not art_file.is_symlink():
+                entry["sha256"] = hashlib.sha256(art_file.read_bytes()).hexdigest()
+    cache_sha, _, _ = _write_json_with_digest(cache_manifest_path, cache_manifest_doc)
+    reconciled_doc["manifest_sha256"] = cache_sha
+    reconciled_doc["operation_manifest"] = cache_manifest_doc
+    rec_sha, rec_size, _ = _write_json_with_digest(reconciled_path, reconciled_doc)
+    return reconciled_path, rec_sha, rec_size
+
+
+class TestPhenixRetainedVerifier(unittest.TestCase):
+    """Hermetic tests for Task 363/366 verify_retained_phenix_rfactor_evidence."""
+
+    def test_synthetic_retained_envelope_reaches_verifier_without_execution_or_mutation(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_root = Path(tmp).resolve(strict=True)
+            env = _create_synthetic_retained_phenix_envelope(
+                tmp_root,
+                subject_id="R4",
+                run_name="r4_baseline",
+                write_completed_partial_checkpoint=False,
+            )
+            admitted_root: Path = env["admitted_root"]
+            evidence_root: Path = env["evidence_root"]
+            fake_prefix: Path = env["fake_prefix"]
+            rec_path: Path = env["reconciled_manifest_path"]
+            rec_sha: str = env["reconciled_manifest_sha256"]
+            rec_size: int = env["reconciled_manifest_size_bytes"]
+
+            admitted_snapshot = _snapshot_tree_bytes(admitted_root)
+            prefix_snapshot = _snapshot_tree_bytes(fake_prefix)
+
+            # Forbid any producer, cache execution, build probe, or subprocess launch
+            # during pure verification.
+            with (
+                mock.patch.object(
+                    onesar_rerun,
+                    "run_phenix_rfactor_operation",
+                    side_effect=AssertionError(
+                        "run_phenix_rfactor_operation must not be called"
+                    ),
+                ),
+                mock.patch.object(
+                    refinement_cache,
+                    "cached_phenix_operation",
+                    side_effect=AssertionError(
+                        "cached_phenix_operation must not be called"
+                    ),
+                ),
+                mock.patch.object(
+                    refinement_cache,
+                    "cached_operation",
+                    side_effect=AssertionError("cached_operation must not be called"),
+                ),
+                mock.patch.object(
+                    toolchain,
+                    "phenix_build_evidence",
+                    side_effect=AssertionError(
+                        "phenix_build_evidence must not be called"
+                    ),
+                ),
+                mock.patch.object(
+                    toolchain,
+                    "phenix",
+                    side_effect=AssertionError("toolchain.phenix must not be called"),
+                ),
+                mock.patch.object(
+                    toolchain,
+                    "run_logged",
+                    side_effect=AssertionError(
+                        "toolchain.run_logged must not be called"
+                    ),
+                ),
+                mock.patch.object(
+                    subprocess,
+                    "run",
+                    side_effect=AssertionError("subprocess.run must not be called"),
+                ),
+            ):
+                verified = verify_retained_phenix_rfactor_evidence(
+                    admitted_root,
+                    subject_id="R4",
+                    reconciled_manifest_path=rec_path,
+                    reconciled_manifest_sha256=rec_sha,
+                    reconciled_manifest_size_bytes=rec_size,
+                    repo_root=REPO_ROOT,
+                )
+                verified_via_ref = verify_retained_phenix_rfactor_evidence(
+                    admitted_root,
+                    subject_id="R4",
+                    reconciled_manifest_reference={
+                        "path": str(rec_path),
+                        "sha256": rec_sha,
+                        "size_bytes": rec_size,
+                    },
+                    repo_root=REPO_ROOT,
+                )
+
+            self.assertEqual(verified, verified_via_ref)
+            self.assertEqual(_snapshot_tree_bytes(admitted_root), admitted_snapshot)
+            self.assertEqual(_snapshot_tree_bytes(fake_prefix), prefix_snapshot)
+
+            self.assertEqual(verified["producer"], "phenix")
+            self.assertEqual(verified["verification_status"], "verified")
+            self.assertEqual(verified["admitted_root"], str(admitted_root))
+            self.assertEqual(verified["evidence_root"], str(evidence_root))
+            self.assertEqual(verified["repo_root"], str(REPO_ROOT))
+            self.assertEqual(verified["subject_id"], "R4")
+            self.assertEqual(
+                verified["subject"], onesar_rerun.resolve_subject_spec("R4")
+            )
+            self.assertEqual(
+                verified["mtz"],
+                {
+                    "member": onesar_rerun.MTZ_MEMBER,
+                    "sha256": onesar_rerun.MTZ_SHA256,
+                    "subject_ref": onesar_rerun.MTZ_SUBJECT_REF,
+                },
+            )
+            self.assertEqual(verified["reconciled_manifest_path"], str(rec_path))
+            self.assertEqual(verified["reconciled_manifest_sha256"], rec_sha)
+            self.assertNotEqual(
+                verified["manifest_path"], verified["reconciled_manifest_path"]
+            )
+            self.assertEqual(Path(verified["manifest_path"]).name, "success.json")
+            self.assertEqual(
+                Path(verified["manifest_path"]).parent.name, "bundle"
+            )
+
+            # Counts and HKL sets (#1058).
+            self.assertEqual(verified["work_count"], 2)
+            self.assertEqual(verified["free_count"], 2)
+            self.assertEqual(verified["counts"]["raw_mtz_total"], 7248)
+            self.assertEqual(verified["counts"]["input_eligible_total"], 7228)
+            self.assertEqual(verified["counts"]["extracted_pre_fmodel_total"], 5)
+            self.assertEqual(verified["counts"]["final_effective_total"], 4)
+            self.assertEqual(verified["counts"]["actual_work_total"], 2)
+            self.assertEqual(verified["counts"]["actual_free_total"], 2)
+            self.assertEqual(verified["counts"]["excluded_raw_to_input_eligible"], 20)
+            self.assertEqual(
+                verified["counts"]["excluded_extracted_to_final_effective"], 1
+            )
+            self.assertEqual(
+                verified["actual_work_hkls"], env["expected_work_hkls"]
+            )
+            self.assertEqual(
+                verified["actual_free_hkls"], env["expected_free_hkls"]
+            )
+
+            # R-factors and replay agreement (#1059, #1060).
+            rf = verified["rfactors"]
+            self.assertAlmostEqual(rf["r_work"], 0.125, places=15)
+            self.assertAlmostEqual(rf["r_free"], 0.25, places=15)
+            self.assertAlmostEqual(rf["r_free_r_work_gap"], 0.125, places=15)
+            self.assertAlmostEqual(rf["replayed_r_work"], 0.125, places=15)
+            self.assertAlmostEqual(rf["replayed_r_free"], 0.25, places=15)
+            self.assertAlmostEqual(rf["replayed_r_free_r_work_gap"], 0.125, places=15)
+            self.assertAlmostEqual(
+                rf["r_all"], env["expected_r_all"], places=15
+            )
+            self.assertAlmostEqual(
+                rf["replayed_r_all"], env["expected_r_all"], places=15
+            )
+            self.assertAlmostEqual(
+                rf["work_numerator"], env["expected_work_numerator"], places=12
+            )
+            self.assertAlmostEqual(
+                rf["work_denominator"], env["expected_work_denominator"], places=12
+            )
+            self.assertAlmostEqual(
+                rf["free_numerator"], env["expected_free_numerator"], places=12
+            )
+            self.assertAlmostEqual(
+                rf["free_denominator"], env["expected_free_denominator"], places=12
+            )
+            self.assertEqual(rf["scale_k1_w"], 0.5)
+            self.assertEqual(rf["scale_k1_t"], 0.5)
+            self.assertEqual(rf["scale_k1"], 0.5)
+
+            # Intra-PHENIX set differences vs cross-tool symmetric differences.
+            intra_diffs = verified["intra_phenix_set_differences"]
+            self.assertEqual(
+                set(intra_diffs.keys()),
+                {
+                    "raw_to_input_eligible_excluded_hkls",
+                    "input_eligible_to_extracted_excluded_hkls",
+                    "extracted_to_final_effective_excluded_hkls",
+                },
+            )
+            self.assertEqual(
+                len(intra_diffs["raw_to_input_eligible_excluded_hkls"]), 20
+            )
+            self.assertEqual(
+                len(intra_diffs["input_eligible_to_extracted_excluded_hkls"]),
+                7223,
+            )
+            self.assertEqual(
+                intra_diffs["extracted_to_final_effective_excluded_hkls"],
+                [env["expected_outlier_hkl"]],
+            )
+            self.assertIsNone(verified["cross_tool_symmetric_differences"])
+
+            # Input ledger preserves zero-F eligibility on 1SAR.mtz (11 zero-F rows).
+            self.assertEqual(
+                verified["input_hkl_ledger_summary"]["counts"]["eligible_zero_f"],
+                11,
+            )
+            self.assertIsNone(
+                verified["verified_references"]["partial_evidence_json"]
+            )
+
+            # One-producer meaning and explicit non-established boundaries.
+            self.assertEqual(
+                verified["verification_boundaries"],
+                {
+                    "phenix_retained_evidence_verified": True,
+                    "independent_oracle_cross_check_established": False,
+                    "refmac_native_proof_established": False,
+                    "canary_scientific_admission_established": False,
+                    "eval_or_qds_published": False,
+                },
+            )
+            self.assertFalse(
+                verified["verified_references"]["reconciled_manifest"][
+                    "scientific_proof_established"
+                ]
+            )
+
+            # Also verify completed partial-evidence checkpoint envelope when present.
+            env_partial = _create_synthetic_retained_phenix_envelope(
+                tmp_root / "with_partial",
+                subject_id="start",
+                run_name="start_with_partial",
+                write_completed_partial_checkpoint=True,
+            )
+            verified_partial = verify_retained_phenix_rfactor_evidence(
+                env_partial["admitted_root"],
+                subject_id="start",
+                reconciled_manifest_path=env_partial["reconciled_manifest_path"],
+                reconciled_manifest_sha256=env_partial["reconciled_manifest_sha256"],
+                repo_root=REPO_ROOT,
+            )
+            self.assertEqual(verified_partial["subject_id"], "start")
+            self.assertEqual(verified_partial["subject"]["stage"], "start")
+            self.assertIsNotNone(
+                verified_partial["verified_references"]["partial_evidence_json"]
+            )
+            self.assertTrue(
+                verified_partial["verified_references"]["partial_evidence_json"][
+                    "integrity_verified"
+                ]
+            )
+
+    def test_rejects_manifest_substitution_tampered_inputs_and_provenance_mismatches(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_root = Path(tmp).resolve(strict=True)
+            env = _create_synthetic_retained_phenix_envelope(
+                tmp_root,
+                subject_id="R4",
+                run_name="r4_tamper_suite",
+                write_completed_partial_checkpoint=True,
+            )
+            admitted_root: Path = env["admitted_root"]
+            evidence_root: Path = env["evidence_root"]
+            fake_prefix: Path = env["fake_prefix"]
+            rec_path: Path = env["reconciled_manifest_path"]
+            rec_sha: str = env["reconciled_manifest_sha256"]
+
+            admitted_snapshot = _snapshot_tree_bytes(admitted_root)
+            prefix_snapshot = _snapshot_tree_bytes(fake_prefix)
+
+            def _reset() -> None:
+                _restore_tree_bytes(admitted_root, admitted_snapshot)
+                _restore_tree_bytes(fake_prefix, prefix_snapshot)
+
+            # 1. Substituting cache bundle/success.json for phenix_reconciled_manifest.json fails.
+            with self.subTest(case="substitute_cache_manifest"):
+                cache_manifest_path = Path(env["reconciled_record"]["manifest_path"])
+                cache_manifest_sha = env["reconciled_record"]["manifest_sha256"]
+                with self.assertRaisesRegex(
+                    PhenixRetainedVerificationError,
+                    "cache success.json must not be substituted for phenix_reconciled_manifest.json",
+                ):
+                    verify_retained_phenix_rfactor_evidence(
+                        admitted_root,
+                        subject_id="R4",
+                        reconciled_manifest_path=cache_manifest_path,
+                        reconciled_manifest_sha256=cache_manifest_sha,
+                        repo_root=REPO_ROOT,
+                    )
+
+            # 2. Wrong subject_id ("start" for an "R4" envelope) or forbidden "R7" fails.
+            with self.subTest(case="wrong_or_forbidden_subject"):
+                with self.assertRaisesRegex(
+                    PhenixRetainedVerificationError,
+                    "phenix_reconciled_manifest\\.subject: disagrees with preregistered subject",
+                ):
+                    verify_retained_phenix_rfactor_evidence(
+                        admitted_root,
+                        subject_id="start",
+                        reconciled_manifest_path=rec_path,
+                        reconciled_manifest_sha256=rec_sha,
+                        repo_root=REPO_ROOT,
+                    )
+                with self.assertRaisesRegex(
+                    PhenixRetainedVerificationError,
+                    "subject_id: .*R7",
+                ):
+                    verify_retained_phenix_rfactor_evidence(
+                        admitted_root,
+                        subject_id="R7",
+                        reconciled_manifest_path=rec_path,
+                        reconciled_manifest_sha256=rec_sha,
+                        repo_root=REPO_ROOT,
+                    )
+
+            # 3. Presence of failure marker in phenix/ fails.
+            with self.subTest(case="failure_marker_present"):
+                try:
+                    failure_marker = (
+                        evidence_root / "phenix" / "phenix_operation_failure.json"
+                    )
+                    failure_marker.write_text(
+                        '{"status": "failed"}\n', encoding="utf-8"
+                    )
+                    with self.assertRaisesRegex(
+                        PhenixRetainedVerificationError,
+                        "refusing retained PHENIX directory with failure record present",
+                    ):
+                        verify_retained_phenix_rfactor_evidence(
+                            admitted_root,
+                            subject_id="R4",
+                            reconciled_manifest_path=rec_path,
+                            reconciled_manifest_sha256=rec_sha,
+                            repo_root=REPO_ROOT,
+                        )
+                finally:
+                    _reset()
+
+            # 4. Tampered projected_observations.mtz (even with re-signed staged_files digest) fails
+            # pure project_observation_mtz reproduction.
+            with self.subTest(case="tampered_projected_mtz_rehashed"):
+                try:
+                    proj_path = (
+                        evidence_root / "inputs" / "projected_observations.mtz"
+                    )
+                    orig_mtz_path = (
+                        evidence_root / "inputs" / "original_data.mtz"
+                    )
+                    proj_path.write_bytes(orig_mtz_path.read_bytes())
+                    new_proj_sha = hashlib.sha256(
+                        proj_path.read_bytes()
+                    ).hexdigest()
+                    rec_doc = json.loads(rec_path.read_text(encoding="utf-8"))
+                    rec_doc["staged_files"][
+                        "projected_observations_mtz_sha256"
+                    ] = new_proj_sha
+                    new_rec_sha, _, _ = _write_json_with_digest(
+                        rec_path, rec_doc
+                    )
+                    with self.assertRaisesRegex(
+                        PhenixRetainedVerificationError,
+                        "staged_files\\.projected_observations_mtz: retained bytes or digest disagree with pure observation-only MTZ projection",
+                    ):
+                        verify_retained_phenix_rfactor_evidence(
+                            admitted_root,
+                            subject_id="R4",
+                            reconciled_manifest_path=rec_path,
+                            reconciled_manifest_sha256=new_rec_sha,
+                            repo_root=REPO_ROOT,
+                        )
+                finally:
+                    _reset()
+
+            # 5. Tampered input_hkl_ledger.json (e.g. zeroing eligible_zero_f and re-signing
+            # both staged_files and top-level sha256) fails pure build_input_hkl_ledger rebuild.
+            with self.subTest(case="tampered_input_ledger_zero_f_rehashed"):
+                try:
+                    ledger_path = (
+                        evidence_root / "inputs" / "input_hkl_ledger.json"
+                    )
+                    ledger_doc = json.loads(
+                        ledger_path.read_text(encoding="utf-8")
+                    )
+                    ledger_doc["counts"]["eligible_zero_f"] = 0
+                    new_ledger_sha, _, _ = _write_json_with_digest(
+                        ledger_path, ledger_doc
+                    )
+                    rec_doc = json.loads(rec_path.read_text(encoding="utf-8"))
+                    rec_doc["staged_files"]["input_hkl_ledger_json_sha256"] = (
+                        new_ledger_sha
+                    )
+                    rec_doc["input_hkl_ledger_json_sha256"] = new_ledger_sha
+                    new_rec_sha, _, _ = _write_json_with_digest(
+                        rec_path, rec_doc
+                    )
+                    with self.assertRaisesRegex(
+                        PhenixRetainedVerificationError,
+                        "staged_files\\.input_hkl_ledger_json: retained ledger disagrees with pure rebuild",
+                    ):
+                        verify_retained_phenix_rfactor_evidence(
+                            admitted_root,
+                            subject_id="R4",
+                            reconciled_manifest_path=rec_path,
+                            reconciled_manifest_sha256=new_rec_sha,
+                            repo_root=REPO_ROOT,
+                        )
+                finally:
+                    _reset()
+
+            # 6. Top-level duplicate path/digest disagreement with staged_files or cache_artifacts fails.
+            with self.subTest(case="duplicate_reference_disagreement"):
+                try:
+                    rec_doc = json.loads(rec_path.read_text(encoding="utf-8"))
+                    rec_doc["input_hkl_ledger_json_sha256"] = "0" * 64
+                    new_rec_sha, _, _ = _write_json_with_digest(
+                        rec_path, rec_doc
+                    )
+                    with self.assertRaisesRegex(
+                        PhenixRetainedVerificationError,
+                        "top-level input_hkl_ledger_json_path/sha256 disagrees with staged_files",
+                    ):
+                        verify_retained_phenix_rfactor_evidence(
+                            admitted_root,
+                            subject_id="R4",
+                            reconciled_manifest_path=rec_path,
+                            reconciled_manifest_sha256=new_rec_sha,
+                            repo_root=REPO_ROOT,
+                        )
+                finally:
+                    _reset()
+
+                try:
+                    rec_doc = json.loads(rec_path.read_text(encoding="utf-8"))
+                    rec_doc["phenix_rfactors_json_path"] = str(
+                        evidence_root / "phenix" / "phenix_rfactors.json"
+                    )
+                    new_rec_sha, _, _ = _write_json_with_digest(
+                        rec_path, rec_doc
+                    )
+                    with self.assertRaisesRegex(
+                        PhenixRetainedVerificationError,
+                        "phenix_reconciled_manifest\\.phenix_rfactors_json_path: disagrees with verified cache bundle artifact",
+                    ):
+                        verify_retained_phenix_rfactor_evidence(
+                            admitted_root,
+                            subject_id="R4",
+                            reconciled_manifest_path=rec_path,
+                            reconciled_manifest_sha256=new_rec_sha,
+                            repo_root=REPO_ROOT,
+                        )
+                finally:
+                    _reset()
+
+            # 7. Unmeasured, wrong-version, or drifted PHENIX build evidence fails.
+            with self.subTest(case="unmeasured_or_drifted_build_evidence"):
+                preflight_path = (
+                    evidence_root
+                    / "phenix"
+                    / "phenix_preflight_build_evidence.json"
+                )
+                try:
+                    preflight_doc = json.loads(
+                        preflight_path.read_text(encoding="utf-8")
+                    )
+                    preflight_doc["reported_version_source"] = "command_output"
+                    new_pf_sha, _, _ = _write_json_with_digest(
+                        preflight_path, preflight_doc
+                    )
+                    rec_doc = json.loads(rec_path.read_text(encoding="utf-8"))
+                    rec_doc["preflight_build_evidence_sha256"] = new_pf_sha
+                    new_rec_sha, _, _ = _write_json_with_digest(
+                        rec_path, rec_doc
+                    )
+                    with self.assertRaisesRegex(
+                        PhenixRetainedVerificationError,
+                        "failed #957 admission gate",
+                    ):
+                        verify_retained_phenix_rfactor_evidence(
+                            admitted_root,
+                            subject_id="R4",
+                            reconciled_manifest_path=rec_path,
+                            reconciled_manifest_sha256=new_rec_sha,
+                            repo_root=REPO_ROOT,
+                        )
+                finally:
+                    _reset()
+
+                # Consistently measured wrong PHENIX release (2.0-5935) passes _build_is_measured
+                # and fails the pinned-version check in validate_measured_phenix_build.
+                try:
+                    preflight_doc = json.loads(
+                        preflight_path.read_text(encoding="utf-8")
+                    )
+                    wrong_banner = (
+                        "PHENIX: 2.0-5935\n  Version: 2.0\n  Release tag: 5935"
+                    )
+                    preflight_doc["reported_version"] = wrong_banner
+                    preflight_doc["parsed_build"] = "2.0-5935"
+                    preflight_doc["version_probe"]["setup_version_fields"] = {
+                        "PHENIX_VERSION": "2.0",
+                        "PHENIX_RELEASE_TAG": "5935",
+                    }
+                    preflight_doc["version_probe"]["setup_parsed_build"] = (
+                        "2.0-5935"
+                    )
+                    preflight_doc["version_probe"]["stdout"] = (
+                        wrong_banner + "\n"
+                    )
+                    preflight_doc["version_probe"]["parsed_build"] = "2.0-5935"
+                    new_pf_sha, _, _ = _write_json_with_digest(
+                        preflight_path, preflight_doc
+                    )
+                    rec_doc = json.loads(rec_path.read_text(encoding="utf-8"))
+                    rec_doc["preflight_build_evidence_sha256"] = new_pf_sha
+                    new_rec_sha, _, _ = _write_json_with_digest(
+                        rec_path, rec_doc
+                    )
+                    with self.assertRaisesRegex(
+                        PhenixRetainedVerificationError,
+                        "PHENIX build version mismatch: expected '2\\.0-5936'",
+                    ):
+                        verify_retained_phenix_rfactor_evidence(
+                            admitted_root,
+                            subject_id="R4",
+                            reconciled_manifest_path=rec_path,
+                            reconciled_manifest_sha256=new_rec_sha,
+                            repo_root=REPO_ROOT,
+                        )
+                finally:
+                    _reset()
+
+                # Cache invocation measured_build passes validate_measured_phenix_build at 2.0-5936
+                # under a different installation prefix, failing preflight vs cache identity check.
+                try:
+                    other_prefix = tmp_root / "phenix-2.0-5936-other-prefix"
+                    other_setup = other_prefix / "phenix_env.sh"
+                    other_disp = other_prefix / "phenix_bin" / "phenix.version"
+                    rec_doc = json.loads(rec_path.read_text(encoding="utf-8"))
+                    cache_doc = copy.deepcopy(rec_doc["operation_manifest"])
+                    other_prefix_build = copy.deepcopy(
+                        cache_doc["invocation"]["measured_build"]
+                    )
+                    probe = other_prefix_build["version_probe"]
+                    probe["configured_prefix"] = str(other_prefix)
+                    probe["resolved_prefix"] = str(other_prefix)
+                    probe["setup_configured_path"] = str(other_setup)
+                    probe["setup_resolved_path"] = str(other_setup)
+                    probe["setup_argv"] = toolchain.phenix_setup_argv(
+                        other_setup
+                    )
+                    probe["configured_path"] = str(other_disp)
+                    probe["resolved_path"] = str(other_disp)
+                    probe["argv"] = [str(other_disp)]
+                    cache_doc["invocation"]["measured_build"] = (
+                        other_prefix_build
+                    )
+                    _, new_rec_sha, _ = _rehash_cache_and_reconciled_manifest(
+                        evidence_root,
+                        reconciled_doc=rec_doc,
+                        cache_manifest_doc=cache_doc,
+                    )
+                    with self.assertRaisesRegex(
+                        PhenixRetainedVerificationError,
+                        "cache_operation_manifest\\.invocation\\.measured_build: drifted from preflight PHENIX build evidence",
+                    ):
+                        verify_retained_phenix_rfactor_evidence(
+                            admitted_root,
+                            subject_id="R4",
+                            reconciled_manifest_path=rec_path,
+                            reconciled_manifest_sha256=new_rec_sha,
+                            repo_root=REPO_ROOT,
+                        )
+                finally:
+                    _reset()
+
+            # 8. Operation parameters contract or metadata mismatch fails.
+            with self.subTest(case="parameters_contract_or_metadata_mismatch"):
+                try:
+                    params_path = (
+                        evidence_root
+                        / "phenix"
+                        / "phenix_operation_parameters.json"
+                    )
+                    params_doc = json.loads(
+                        params_path.read_text(encoding="utf-8")
+                    )
+                    params_doc["apply_pdb_header_resolution_cut"] = True
+                    new_params_sha, _, _ = _write_json_with_digest(
+                        params_path, params_doc
+                    )
+                    rec_doc = json.loads(rec_path.read_text(encoding="utf-8"))
+                    cache_doc = copy.deepcopy(rec_doc["operation_manifest"])
+                    cache_doc["invocation"]["inputs"]["parameters_json"][
+                        "sha256"
+                    ] = new_params_sha
+                    _, new_rec_sha, _ = _rehash_cache_and_reconciled_manifest(
+                        evidence_root,
+                        reconciled_doc=rec_doc,
+                        cache_manifest_doc=cache_doc,
+                    )
+                    with self.assertRaisesRegex(
+                        PhenixRetainedVerificationError,
+                        "validate_parameters_contract",
+                    ):
+                        verify_retained_phenix_rfactor_evidence(
+                            admitted_root,
+                            subject_id="R4",
+                            reconciled_manifest_path=rec_path,
+                            reconciled_manifest_sha256=new_rec_sha,
+                            repo_root=REPO_ROOT,
+                        )
+                finally:
+                    _reset()
+
+            # 9. External provenance mismatch (wrong repo_root or tampered vendor module) fails.
+            with self.subTest(case="external_helper_or_vendor_module_mismatch"):
+                other_repo = tmp_root / "other_repo"
+                (other_repo / "scripts").mkdir(parents=True, exist_ok=True)
+                (other_repo / "scripts" / "onesar_phenix_measure.py").write_text(
+                    "# wrong helper\n", encoding="utf-8"
+                )
+                with self.assertRaisesRegex(
+                    PhenixRetainedVerificationError,
+                    "invocation\\.inputs\\.helper_script: path .* is outside admitted root",
+                ):
+                    verify_retained_phenix_rfactor_evidence(
+                        admitted_root,
+                        subject_id="R4",
+                        reconciled_manifest_path=rec_path,
+                        reconciled_manifest_sha256=rec_sha,
+                        repo_root=other_repo,
+                    )
+
+                try:
+                    vendor_mod_path = (
+                        fake_prefix
+                        / "lib"
+                        / "python3.9"
+                        / "site-packages"
+                        / onesar_rerun.PHENIX_VENDOR_SOURCE_RELPATHS[
+                            "vendor_mmtbx_model_vs_data"
+                        ]
+                    )
+                    vendor_mod_path.write_bytes(b"# tampered vendor source\n")
+                    with self.assertRaisesRegex(
+                        PhenixRetainedVerificationError,
+                        "invocation\\.inputs\\.vendor_mmtbx_model_vs_data: sha256 mismatch",
+                    ):
+                        verify_retained_phenix_rfactor_evidence(
+                            admitted_root,
+                            subject_id="R4",
+                            reconciled_manifest_path=rec_path,
+                            reconciled_manifest_sha256=rec_sha,
+                            repo_root=REPO_ROOT,
+                        )
+                finally:
+                    _reset()
+
+            # 10. Cache bundle contract: non-bundle-relative artifact path or failed partial
+            # checkpoint status fails.
+            with self.subTest(case="cache_bundle_and_partial_checkpoint_contracts"):
+                try:
+                    rec_doc = json.loads(rec_path.read_text(encoding="utf-8"))
+                    cache_doc = copy.deepcopy(rec_doc["operation_manifest"])
+                    cache_doc["artifacts"]["phenix_rfactors_json"]["path"] = (
+                        "../phenix_rfactors.json"
+                    )
+                    cache_sha, _, _ = _write_json_with_digest(
+                        Path(rec_doc["manifest_path"]), cache_doc
+                    )
+                    rec_doc["manifest_sha256"] = cache_sha
+                    rec_doc["operation_manifest"] = cache_doc
+                    new_rec_sha, _, _ = _write_json_with_digest(
+                        rec_path, rec_doc
+                    )
+                    with self.assertRaisesRegex(
+                        PhenixRetainedVerificationError,
+                        "(refinement_cache\\._read_success|expected bundle-relative path 'phenix_rfactors\\.json')",
+                    ):
+                        verify_retained_phenix_rfactor_evidence(
+                            admitted_root,
+                            subject_id="R4",
+                            reconciled_manifest_path=rec_path,
+                            reconciled_manifest_sha256=new_rec_sha,
+                            repo_root=REPO_ROOT,
+                        )
+                finally:
+                    _reset()
+
+                try:
+                    partial_path = Path(
+                        env["reconciled_record"][
+                            "phenix_partial_evidence_json_path"
+                        ]
+                    )
+                    bad_partial = json.loads(
+                        partial_path.read_text(encoding="utf-8")
+                    )
+                    bad_partial["status"] = "failed_partial_unverified"
+                    new_part_sha, _, _ = _write_json_with_digest(
+                        partial_path, bad_partial
+                    )
+                    rec_doc = json.loads(rec_path.read_text(encoding="utf-8"))
+                    rec_doc["phenix_partial_evidence_sha256"] = new_part_sha
+                    new_rec_sha, _, _ = _write_json_with_digest(
+                        rec_path, rec_doc
+                    )
+                    with self.assertRaisesRegex(
+                        PhenixRetainedVerificationError,
+                        "phenix_partial_evidence_json: partial checkpoint is not a clean completed_superseded_by_verified_payload",
+                    ):
+                        verify_retained_phenix_rfactor_evidence(
+                            admitted_root,
+                            subject_id="R4",
+                            reconciled_manifest_path=rec_path,
+                            reconciled_manifest_sha256=new_rec_sha,
+                            repo_root=REPO_ROOT,
+                        )
+                finally:
+                    _reset()
+
+            # Confirm baseline envelope still verifies cleanly after all tamper subtests reset.
+            final_check = verify_retained_phenix_rfactor_evidence(
+                admitted_root,
+                subject_id="R4",
+                reconciled_manifest_path=rec_path,
+                reconciled_manifest_sha256=rec_sha,
+                repo_root=REPO_ROOT,
+            )
+            self.assertEqual(final_check["verification_status"], "verified")
+
+    def test_verifier_invokes_real_pure_reconciliation_and_rejects_status_spoofing(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_root = Path(tmp).resolve(strict=True)
+            env = _create_synthetic_retained_phenix_envelope(
+                tmp_root,
+                subject_id="R4",
+                run_name="r4_reconciliation_suite",
+                write_completed_partial_checkpoint=False,
+            )
+            admitted_root: Path = env["admitted_root"]
+            evidence_root: Path = env["evidence_root"]
+            rec_path: Path = env["reconciled_manifest_path"]
+            admitted_snapshot = _snapshot_tree_bytes(admitted_root)
+
+            # 1. Nontrivial numerical/selection inconsistency in phenix_rfactors.json:
+            # Perturb reported r_free (and gap) in phenix_rfactors.json while keeping the
+            # actual_free reflection table unchanged, rehash phenix_rfactors.json in
+            # bundle/success.json and phenix_reconciled_manifest.json, and keep
+            # reconciled_manifest["reconciliation"]["reconciliation_status"] = "verified".
+            rfactors_path = Path(
+                env["reconciled_record"]["phenix_rfactors_json_path"]
+            )
+            with self.subTest(case="r_free_perturbation"):
+                try:
+                    rf_payload = json.loads(
+                        rfactors_path.read_text(encoding="utf-8")
+                    )
+                    rf_payload["scales_and_rfactors"]["r_free"] = 0.21
+                    rf_payload["scales_and_rfactors"]["r_free_r_work_gap"] = (
+                        0.21 - rf_payload["scales_and_rfactors"]["r_work"]
+                    )
+                    _write_json_with_digest(rfactors_path, rf_payload)
+                    _, new_rec_sha, _ = _rehash_cache_and_reconciled_manifest(
+                        evidence_root
+                    )
+                    with self.assertRaisesRegex(
+                        PhenixRetainedVerificationError,
+                        "reconcile_phenix_rfactor_output: Replayed r_free .* disagrees with native fmodel\\.r_free\\(\\)",
+                    ):
+                        verify_retained_phenix_rfactor_evidence(
+                            admitted_root,
+                            subject_id="R4",
+                            reconciled_manifest_path=rec_path,
+                            reconciled_manifest_sha256=new_rec_sha,
+                            repo_root=REPO_ROOT,
+                        )
+                finally:
+                    _restore_tree_bytes(admitted_root, admitted_snapshot)
+
+            # 2. Selection/HKL mismatch in phenix_rfactors.json:
+            # Drop one HKL from final_effective while keeping actual_work + actual_free
+            # unchanged and re-signing all artifact/manifest digests.
+            with self.subTest(case="final_effective_hkl_drop"):
+                try:
+                    rf_payload = json.loads(
+                        rfactors_path.read_text(encoding="utf-8")
+                    )
+                    rf_payload["final_effective"] = rf_payload[
+                        "final_effective"
+                    ][:3]
+                    rf_payload["scales_and_rfactors"][
+                        "final_effective_count"
+                    ] = 3
+                    _write_json_with_digest(rfactors_path, rf_payload)
+                    _, new_rec_sha, _ = _rehash_cache_and_reconciled_manifest(
+                        evidence_root
+                    )
+                    with self.assertRaisesRegex(
+                        PhenixRetainedVerificationError,
+                        "reconcile_phenix_rfactor_output: .*final_effective",
+                    ):
+                        verify_retained_phenix_rfactor_evidence(
+                            admitted_root,
+                            subject_id="R4",
+                            reconciled_manifest_path=rec_path,
+                            reconciled_manifest_sha256=new_rec_sha,
+                            repo_root=REPO_ROOT,
+                        )
+                finally:
+                    _restore_tree_bytes(admitted_root, admitted_snapshot)
+
+            # 3. Runtime vendor-module provenance mismatch inside phenix_rfactors.json:
+            # Change a vendor module sha256 inside runtime_environment.vendor_modules
+            # while re-signing phenix_rfactors.json and manifests.
+            with self.subTest(case="runtime_vendor_module_sha256_mismatch"):
+                try:
+                    rf_payload = json.loads(
+                        rfactors_path.read_text(encoding="utf-8")
+                    )
+                    rf_payload["runtime_environment"]["vendor_modules"][
+                        "vendor_mmtbx_f_model"
+                    ]["sha256"] = "f" * 64
+                    _write_json_with_digest(rfactors_path, rf_payload)
+                    _, new_rec_sha, _ = _rehash_cache_and_reconciled_manifest(
+                        evidence_root
+                    )
+                    with self.assertRaisesRegex(
+                        PhenixRetainedVerificationError,
+                        "reconcile_phenix_rfactor_output: .*vendor_mmtbx_f_model",
+                    ):
+                        verify_retained_phenix_rfactor_evidence(
+                            admitted_root,
+                            subject_id="R4",
+                            reconciled_manifest_path=rec_path,
+                            reconciled_manifest_sha256=new_rec_sha,
+                            repo_root=REPO_ROOT,
+                        )
+                finally:
+                    _restore_tree_bytes(admitted_root, admitted_snapshot)
+
+            # 4. Stored reconciliation summary tampered in phenix_reconciled_manifest.json
+            # while keeping reconciliation_status == "verified" and raw payload valid.
+            with self.subTest(case="stored_reconciliation_summary_spoofing"):
+                try:
+                    rec_doc = json.loads(rec_path.read_text(encoding="utf-8"))
+                    rec_doc["reconciliation"]["rfactors"]["r_free"] = 0.199
+                    new_rec_sha, _, _ = _write_json_with_digest(
+                        rec_path, rec_doc
+                    )
+                    with self.assertRaisesRegex(
+                        PhenixRetainedVerificationError,
+                        "phenix_reconciled_manifest\\.reconciliation: retained reconciliation summary disagrees with fresh full-precision reconciliation",
+                    ):
+                        verify_retained_phenix_rfactor_evidence(
+                            admitted_root,
+                            subject_id="R4",
+                            reconciled_manifest_path=rec_path,
+                            reconciled_manifest_sha256=new_rec_sha,
+                            repo_root=REPO_ROOT,
+                        )
+                finally:
+                    _restore_tree_bytes(admitted_root, admitted_snapshot)
+
+
 if __name__ == "__main__":
     unittest.main()
+

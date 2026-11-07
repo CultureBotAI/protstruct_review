@@ -269,4 +269,209 @@ check("gemmi is in the external tool report",
       and toolchain.EXTERNAL_TOOL_SPECS["gemmi"]["expected_version"] == toolchain.GEMMI_VERSION)
 check("tool paths are defined only in toolchain.py", not duplicate_constants)
 
+with tempfile.TemporaryDirectory(prefix="refmac wrapper ; $() ") as tmp:
+    root = Path(tmp)
+    spaced_py_dir = root / "spaced python interpreter ; dir"
+    spaced_py_dir.mkdir()
+    spaced_python = spaced_py_dir / "python3"
+    spaced_python.symlink_to(Path(sys.executable))
+    fake_refmac = root / "refmac5 ; $(never-run)"
+    fake_refmac.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, os, sys\n"
+        "print(json.dumps({\n"
+        "    'argv': sys.argv,\n"
+        "    'stdin': sys.stdin.read(),\n"
+        "    'marker': os.environ.get('PROTSTRUCT_REFMAC_ENV_MARKER'),\n"
+        "    'executable': sys.executable,\n"
+        "    'path_head': os.environ.get('PATH', '').split(os.pathsep)[0],\n"
+        "}))\n"
+    )
+    fake_refmac.chmod(0o755)
+    xyzin = root / "in ; model.pdb"
+    hklin = root / "in $(obs).mtz"
+    xyzout = root / "out ; model.pdb"
+    hklout = root / "out $(obs).mtz"
+    xmlout = root / "out ; xml $(literal).xml"
+    log_path = root / "refmac ; run.log"
+    custom_env = dict(os.environ)
+    custom_env["PATH"] = f"{spaced_py_dir}{os.pathsep}{os.environ.get('PATH', '')}"
+    custom_env["PROTSTRUCT_REFMAC_ENV_MARKER"] = "explicit-ccp4-env ; $()"
+
+    ccp4_env_calls = 0
+    orig_ccp4_environment = toolchain.ccp4_environment
+    try:
+        def _stub_ccp4_environment(setup_path=toolchain.CCP4_SETUP):
+            global ccp4_env_calls
+            ccp4_env_calls += 1
+            env_copy = dict(os.environ)
+            env_copy["PATH"] = f"{spaced_py_dir}{os.pathsep}{os.environ.get('PATH', '')}"
+            env_copy["PROTSTRUCT_REFMAC_ENV_MARKER"] = "stubbed-ccp4-default-env"
+            return env_copy
+
+        toolchain.ccp4_environment = _stub_ccp4_environment
+
+        proc = toolchain.run_refmac(
+            xyzin,
+            hklin,
+            xyzout,
+            hklout,
+            log_path,
+            "NCYC 0\nEND\n",
+            cwd=root,
+            timeout=10,
+            xml_output=xmlout,
+            executable=fake_refmac,
+            env=custom_env,
+        )
+        payload = json.loads(log_path.read_text())
+        check("run_refmac with explicit executable and xml_output succeeds", proc.returncode == 0)
+        check(
+            "fake executable runs under whitespace-safe shebang via spaced interpreter PATH",
+             payload["path_head"] == str(spaced_py_dir)
+            and Path(payload["executable"]).resolve() == Path(sys.executable).resolve(),
+        )
+        check(
+            "run_refmac passes XMLOUT and metacharacter paths literally",
+            payload["argv"]
+            == [
+                str(fake_refmac),
+                "XYZIN",
+                str(xyzin),
+                "HKLIN",
+                str(hklin),
+                "XYZOUT",
+                str(xyzout),
+                "HKLOUT",
+                str(hklout),
+                "XMLOUT",
+                str(xmlout),
+            ],
+        )
+        check(
+            "run_refmac forwards stdin keywords and explicit env without calling ccp4_environment",
+            payload["stdin"] == "NCYC 0\nEND\n"
+            and payload["marker"] == "explicit-ccp4-env ; $()"
+            and ccp4_env_calls == 0,
+        )
+
+        # Explicit env with ccp4=False is also authoritative and never calls ccp4_environment
+        log_path_false = root / "refmac ; ccp4-false.log"
+        proc_false = toolchain.run_refmac(
+            xyzin,
+            hklin,
+            xyzout,
+            hklout,
+            log_path_false,
+            "NCYC 0\nEND\n",
+            cwd=root,
+            timeout=10,
+            executable=fake_refmac,
+            env=custom_env,
+            ccp4=False,
+        )
+        payload_false = json.loads(log_path_false.read_text())
+        check(
+            "run_refmac with explicit env and ccp4=False preserves supplied env",
+            proc_false.returncode == 0
+            and payload_false["marker"] == "explicit-ccp4-env ; $()"
+            and ccp4_env_calls == 0,
+        )
+
+        # Explicit env combined with ccp4=True must raise ValueError without calling ccp4_environment
+        rejected_combo = False
+        try:
+            toolchain.run_refmac(
+                xyzin,
+                hklin,
+                xyzout,
+                hklout,
+                root / "refmac ; should-not-run.log",
+                "NCYC 0\nEND\n",
+                cwd=root,
+                timeout=10,
+                executable=fake_refmac,
+                env=custom_env,
+                ccp4=True,
+            )
+        except ValueError as exc:
+            rejected_combo = "ccp4=True" in str(exc) and "env" in str(exc)
+        check(
+            "run_refmac rejects explicit env combined with ccp4=True",
+            rejected_combo
+            and ccp4_env_calls == 0
+            and not (root / "refmac ; should-not-run.log").exists(),
+        )
+
+        # Legacy neither option (env=None, ccp4=None) loads ccp4_environment()
+        log_path_legacy = root / "refmac ; legacy-ccp4.log"
+        proc_legacy = toolchain.run_refmac(
+            xyzin,
+            hklin,
+            xyzout,
+            hklout,
+            log_path_legacy,
+            "END\n",
+            cwd=root,
+            timeout=10,
+            executable=fake_refmac,
+        )
+        payload_legacy = json.loads(log_path_legacy.read_text())
+        check(
+            "legacy run_refmac without env loads ccp4_environment by default",
+            proc_legacy.returncode == 0
+            and ccp4_env_calls == 1
+            and payload_legacy["marker"] == "stubbed-ccp4-default-env",
+        )
+    finally:
+        toolchain.ccp4_environment = orig_ccp4_environment
+
+    captured_calls: list[dict[str, object]] = []
+    orig_run_logged = toolchain.run_logged
+    try:
+        def _fake_run_logged(arguments, log_p, *, cwd=None, timeout=None, env=None, ccp4=False, input_text=None):
+            captured_calls.append(
+                {
+                    "arguments": list(arguments),
+                    "log_path": log_p,
+                    "cwd": cwd,
+                    "timeout": timeout,
+                    "env": env,
+                    "ccp4": ccp4,
+                    "input_text": input_text,
+                }
+            )
+            return toolchain.subprocess.CompletedProcess(["refmac5"], 0, "", "")
+
+        toolchain.run_logged = _fake_run_logged
+        toolchain.run_refmac(
+            "in.pdb",
+            "in.mtz",
+            "out.pdb",
+            "out.mtz",
+            "refmac.log",
+            "END\n",
+            cwd=root,
+        )
+    finally:
+        toolchain.run_logged = orig_run_logged
+    check(
+        "default run_refmac call preserves legacy argv and ccp4=True",
+        len(captured_calls) == 1
+        and captured_calls[0]["arguments"]
+        == [
+            "refmac5",
+            "XYZIN",
+            "in.pdb",
+            "HKLIN",
+            "in.mtz",
+            "XYZOUT",
+            "out.pdb",
+            "HKLOUT",
+            "out.mtz",
+        ]
+        and captured_calls[0]["ccp4"] is True
+        and captured_calls[0]["env"] is None,
+    )
+
 print("\nall toolchain unit tests passed")

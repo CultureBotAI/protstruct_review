@@ -12,6 +12,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -5300,6 +5301,1736 @@ class TestParentExecutionCheckpointBinding(unittest.TestCase):
                     _restore_tree_bytes(parent_root, parent_snapshot)
 
             self.assertEqual(_snapshot_tree_bytes(parent_root), parent_snapshot)
+
+
+def _create_synthetic_private_rfactor_assembly_inputs(
+    *,
+    subject_id: str = "R4",
+    started_at_utc: str = "2026-11-06T23:58:10+00:00",
+    finished_at_utc: str = "2026-11-07T00:03:25+00:00",
+    run_date: str = "2026-11-06",
+    equal_hkl_sets: bool = False,
+) -> dict[str, Any]:
+    """Build explicitly synthetic parent and two-producer bundles for private Task 374 assembly tests.
+
+    All measurement values, counts, and REFMAC active HKL lists here are
+    explicitly synthetic test fixtures for exercising the private internal
+    record-assembly and replay-pin mechanics; no native REFMAC proof is claimed.
+    """
+    subject_spec = onesar_rerun.resolve_subject_spec(subject_id)
+    mtz_spec = {
+        "member": onesar_rerun.MTZ_MEMBER,
+        "sha256": onesar_rerun.MTZ_SHA256,
+        "subject_ref": onesar_rerun.MTZ_SUBJECT_REF,
+    }
+    timing = validate_parent_execution_timing(
+        started_at_utc,
+        finished_at_utc,
+        run_date,
+    )
+    parent_binding = {
+        "synthetic_fixture": True,
+        "verification_status": "verified",
+        "family": EXPECTED_FAMILY_ID,
+        "subject_id": subject_id,
+        "subject": copy.deepcopy(subject_spec),
+        "mtz": copy.deepcopy(mtz_spec),
+        "timing": timing,
+    }
+    phx_work_hkls = [[1, 0, 1], [1, 0, 2], [1, 1, 1], [2, 0, 1]]
+    phx_free_hkls = [[0, 1, 1], [0, 2, 1]]
+    if equal_hkl_sets:
+        rm_work_hkls = copy.deepcopy(phx_work_hkls)
+        rm_free_hkls = copy.deepcopy(phx_free_hkls)
+    else:
+        rm_work_hkls = [[1, 0, 1], [1, 0, 2], [1, 1, 1], [3, 0, 1], [3, 0, 2]]
+        rm_free_hkls = [[0, 1, 1], [0, 3, 1]]
+
+    subject_offsets = {
+        "R4": 0.0,
+        "start": 0.0120,
+        "R5": 0.0040,
+        "R6": 0.0080,
+    }
+    offset = subject_offsets[subject_id]
+    phx_r_work = round(0.2015 + offset, 12)
+    phx_r_free = round(0.2465 + offset, 12)
+    phx_gap = round(phx_r_free - phx_r_work, 12)
+
+    rm_r_work = round(0.1980 + offset, 12)
+    rm_r_free = round(0.2410 + offset, 12)
+    rm_gap = round(rm_r_free - rm_r_work, 12)
+
+    phenix_bundle = {
+        "synthetic_fixture": True,
+        "producer": "phenix",
+        "verification_status": "verified",
+        "subject_id": subject_id,
+        "subject": copy.deepcopy(subject_spec),
+        "mtz": copy.deepcopy(mtz_spec),
+        "rfactors": {
+            "r_work": phx_r_work,
+            "r_free": phx_r_free,
+            "r_free_r_work_gap": phx_gap,
+        },
+        "work_count": len(phx_work_hkls),
+        "free_count": len(phx_free_hkls),
+        "actual_work_hkls": phx_work_hkls,
+        "actual_free_hkls": phx_free_hkls,
+        "cross_tool_symmetric_differences": None,
+        "bundle_ref": f"BUNDLE_synth_{subject_id.lower()}_phenix_{run_date}",
+        "provenance_ref": f"PROV_synth_{subject_id.lower()}_phenix_{run_date}",
+        "evidence_refs": [
+            f"data/runs/synth_{subject_id.lower()}_{run_date}/parent_completed_execution_checkpoint.json",
+            f"data/runs/synth_{subject_id.lower()}_{run_date}/phenix/phenix_reconciled_manifest.json",
+        ],
+    }
+    refmac_bundle = {
+        "synthetic_fixture": True,
+        "producer": "refmac",
+        "verification_status": "verified",
+        "subject_id": subject_id,
+        "subject": copy.deepcopy(subject_spec),
+        "mtz": copy.deepcopy(mtz_spec),
+        "rfactors": {
+            "r_work": rm_r_work,
+            "r_free": rm_r_free,
+            "r_free_r_work_gap": rm_gap,
+        },
+        "work_count": len(rm_work_hkls),
+        "free_count": len(rm_free_hkls),
+        "actual_work_hkls": rm_work_hkls,
+        "actual_free_hkls": rm_free_hkls,
+        "bundle_ref": f"BUNDLE_synth_{subject_id.lower()}_refmac_{run_date}",
+        "provenance_ref": f"PROV_synth_{subject_id.lower()}_refmac_{run_date}",
+        "evidence_refs": [
+            f"data/runs/synth_{subject_id.lower()}_{run_date}/parent_completed_execution_checkpoint.json",
+            f"data/runs/synth_{subject_id.lower()}_{run_date}/refmac/refmac_operation_manifest.json",
+        ],
+    }
+    return {
+        "parent_binding": parent_binding,
+        "phenix_bundle": phenix_bundle,
+        "refmac_bundle": refmac_bundle,
+        "comparison_evidence_ref": (
+            f"data/runs/synth_{subject_id.lower()}_{run_date}/cross_tool_hkl_comparison.json"
+        ),
+    }
+
+
+class TestPrivateRfactorRecordAssemblyAndLivePins(unittest.TestCase):
+    """Focused tests for Task 374 private 6-row T03 assembly, live QDS emission, and Contract-4 pins."""
+
+    def _assert_six_row_measurements_match_producer_inputs(
+        self,
+        rows: list[dict[str, Any]],
+        *,
+        subject_id: str,
+        eval_run_id: str,
+        parent_binding: Mapping[str, Any],
+        phenix_bundle: Mapping[str, Any],
+        refmac_bundle: Mapping[str, Any],
+        expected_comparison_evidence_ref: str | None = None,
+        expected_notes_substring: str = "non-comparable",
+    ) -> None:
+        expected_subject = onesar_rerun.resolve_subject_spec(subject_id)
+        timing = parent_binding["timing"]
+        self.assertEqual(timing["run_date"], timing["started_utc_date"])
+        self.assertTrue(
+            eval_run_id.endswith(f"_{timing['run_date']}"),
+            (eval_run_id, timing["run_date"]),
+        )
+        self.assertEqual(len(rows), 6)
+
+        phx_rows = [
+            r for r in rows if r["oracle_tool_ref"] == "phenix.model_vs_data"
+        ]
+        rm_rows = [r for r in rows if r["oracle_tool_ref"] == "REFMAC5"]
+        self.assertEqual(len(phx_rows), 3)
+        self.assertEqual(len(rm_rows), 3)
+        self.assertNotEqual(
+            phx_rows[0]["bundle_ref"], rm_rows[0]["bundle_ref"]
+        )
+        self.assertNotEqual(
+            phenix_bundle["rfactors"]["r_work"],
+            refmac_bundle["rfactors"]["r_work"],
+        )
+        self.assertNotEqual(
+            phenix_bundle["rfactors"]["r_free"],
+            refmac_bundle["rfactors"]["r_free"],
+        )
+
+        for (
+            triple_rows,
+            prod_slug,
+            expected_tool,
+            expected_family,
+            src_bundle,
+        ) in (
+            (
+                phx_rows,
+                "phenix_mvd",
+                "phenix.model_vs_data",
+                "cctbx",
+                phenix_bundle,
+            ),
+            (
+                rm_rows,
+                "refmac5",
+                "REFMAC5",
+                "non_cctbx",
+                refmac_bundle,
+            ),
+        ):
+            by_metric = {
+                r["metric_definition_ref"]: r for r in triple_rows
+            }
+            self.assertEqual(
+                set(by_metric.keys()),
+                {"T03_r-work", "T03_r-free", "T03_r-free_r-work_gap"},
+            )
+            r_work_row = by_metric["T03_r-work"]
+            r_free_row = by_metric["T03_r-free"]
+            r_gap_row = by_metric["T03_r-free_r-work_gap"]
+
+            self.assertEqual(
+                r_work_row["id"], f"{eval_run_id}_{prod_slug}_T03_r_work"
+            )
+            self.assertEqual(
+                r_free_row["id"], f"{eval_run_id}_{prod_slug}_T03_r_free"
+            )
+            self.assertEqual(
+                r_gap_row["id"],
+                f"{eval_run_id}_{prod_slug}_T03_r_free_r_work_gap",
+            )
+
+            self.assertEqual(
+                r_work_row["oracle_measure"]["value_numeric"],
+                src_bundle["rfactors"]["r_work"],
+            )
+            self.assertEqual(
+                r_free_row["oracle_measure"]["value_numeric"],
+                src_bundle["rfactors"]["r_free"],
+            )
+            self.assertEqual(
+                r_gap_row["oracle_measure"]["value_numeric"],
+                src_bundle["rfactors"]["r_free_r_work_gap"],
+            )
+            self.assertAlmostEqual(
+                r_gap_row["oracle_measure"]["value_numeric"],
+                r_free_row["oracle_measure"]["value_numeric"]
+                - r_work_row["oracle_measure"]["value_numeric"],
+                places=12,
+            )
+
+            self.assertEqual(
+                r_work_row["oracle_measure"]["count"],
+                src_bundle["work_count"],
+            )
+            self.assertEqual(
+                r_free_row["oracle_measure"]["count"],
+                src_bundle["free_count"],
+            )
+            self.assertNotIn("count", r_gap_row["oracle_measure"])
+            self.assertNotIn("derived_from_measurement_refs", r_work_row)
+            self.assertNotIn("derived_from_measurement_refs", r_free_row)
+            self.assertEqual(
+                r_gap_row["derived_from_measurement_refs"],
+                [r_work_row["id"], r_free_row["id"]],
+            )
+
+            expected_ev_refs = list(src_bundle["evidence_refs"])
+            if (
+                expected_comparison_evidence_ref is not None
+                and expected_comparison_evidence_ref not in expected_ev_refs
+            ):
+                expected_ev_refs.append(expected_comparison_evidence_ref)
+
+            for row in triple_rows:
+                self.assertEqual(row["catalog_task_ref"], "T03")
+                self.assertEqual(row["oracle_tool_ref"], expected_tool)
+                self.assertEqual(row["oracle_family"], expected_family)
+                self.assertEqual(
+                    row["subject_ref"], expected_subject["subject_ref"]
+                )
+                self.assertEqual(row["stage"], expected_subject["stage"])
+                self.assertEqual(row["scope"], "complex")
+                self.assertEqual(row["pass_status"], "informational")
+                self.assertEqual(row["bundle_ref"], src_bundle["bundle_ref"])
+                self.assertEqual(
+                    row["provenance_ref"], src_bundle["provenance_ref"]
+                )
+                self.assertEqual(row["evidence_refs"], expected_ev_refs)
+                self.assertIn(expected_notes_substring, row["notes"])
+                for forbidden_key in (
+                    "agent_claim",
+                    "delta",
+                    "delta_from_measurement_ref",
+                    "pass_criterion",
+                    "pass_criterion_ref",
+                    "criterion_preconditions",
+                ):
+                    self.assertNotIn(forbidden_key, row)
+
+    def test_private_six_row_assembly_identities_counts_and_unequal_hkl_sets(
+        self,
+    ) -> None:
+        # 1. Verify subject/stage/date identity mapping across R4, start, R5, R6.
+        expected_identities = (
+            (
+                "R4",
+                "final",
+                "EVAL_1sar_cdba2c07_2026-11-06",
+                True,
+                "QDS_1sar_cdba2c07_2026-11-06",
+            ),
+            (
+                "start",
+                "start",
+                "EVAL_1sar_cdba2c07-start_2026-11-06",
+                False,
+                None,
+            ),
+            (
+                "R5",
+                "intermediate",
+                "EVAL_1sar_cdba2c07-r5_2026-11-06",
+                False,
+                None,
+            ),
+            (
+                "R6",
+                "intermediate",
+                "EVAL_1sar_cdba2c07-r6_2026-11-06",
+                False,
+                None,
+            ),
+        )
+        for (
+            subj_id,
+            exp_stage,
+            exp_eval_stem,
+            exp_emits_qds,
+            exp_qds_id,
+        ) in expected_identities:
+            with self.subTest(subject_id=subj_id):
+                ident = onesar_records._resolve_rfactor_record_identities(
+                    subj_id,
+                    run_date="2026-11-06",
+                )
+                self.assertEqual(ident["stage"], exp_stage)
+                self.assertEqual(ident["eval_filename_stem"], exp_eval_stem)
+                self.assertEqual(ident["eval_run_id"], exp_eval_stem)
+                self.assertEqual(
+                    ident["eval_rel_path"],
+                    f"data/coscientists/openscientist/{exp_eval_stem}.yaml",
+                )
+                self.assertIs(ident["emits_qds"], exp_emits_qds)
+                self.assertEqual(ident["qds_id"], exp_qds_id)
+
+        # 2. Unequal work/free HKL sets produce exact symmetric differences and literal non-comparable prose.
+        synth_unequal = _create_synthetic_private_rfactor_assembly_inputs(
+            subject_id="R4",
+            equal_hkl_sets=False,
+        )
+        assembled = onesar_records._assemble_six_row_t03_measurements(
+            parent_binding=synth_unequal["parent_binding"],
+            phenix_bundle=synth_unequal["phenix_bundle"],
+            refmac_bundle=synth_unequal["refmac_bundle"],
+            cross_tool_comparison_evidence_ref=synth_unequal[
+                "comparison_evidence_ref"
+            ],
+        )
+        self.assertEqual(
+            assembled["identities"]["run_date"],
+            synth_unequal["parent_binding"]["timing"]["started_utc_date"],
+        )
+        self.assertEqual(assembled["identities"]["run_date"], "2026-11-06")
+        rows = assembled["measurements"]
+        self.assertEqual(len(rows), 6)
+        comp = assembled["cross_tool_hkl_comparison"]
+        self.assertFalse(comp["work_sets_equal"])
+        self.assertFalse(comp["free_sets_equal"])
+        self.assertFalse(comp["effective_sets_equal"])
+        self.assertEqual(comp["comparability_label"], "non-comparable")
+        self.assertEqual(comp["work_only_in_phenix"], [[2, 0, 1]])
+        self.assertEqual(comp["work_only_in_refmac"], [[3, 0, 1], [3, 0, 2]])
+        self.assertEqual(comp["free_only_in_phenix"], [[0, 2, 1]])
+        self.assertEqual(comp["free_only_in_refmac"], [[0, 3, 1]])
+
+        self._assert_six_row_measurements_match_producer_inputs(
+            rows,
+            subject_id="R4",
+            eval_run_id="EVAL_1sar_cdba2c07_2026-11-06",
+            parent_binding=synth_unequal["parent_binding"],
+            phenix_bundle=synth_unequal["phenix_bundle"],
+            refmac_bundle=synth_unequal["refmac_bundle"],
+            expected_comparison_evidence_ref=synth_unequal[
+                "comparison_evidence_ref"
+            ],
+            expected_notes_substring="non-comparable",
+        )
+        # Explicit literal numeric check on R4 synthetic producer inputs:
+        self.assertEqual(rows[0]["oracle_measure"]["value_numeric"], 0.2015)
+        self.assertEqual(rows[0]["oracle_measure"]["count"], 4)
+        self.assertEqual(rows[1]["oracle_measure"]["value_numeric"], 0.2465)
+        self.assertEqual(rows[1]["oracle_measure"]["count"], 2)
+        self.assertEqual(rows[2]["oracle_measure"]["value_numeric"], 0.045)
+        self.assertEqual(rows[3]["oracle_measure"]["value_numeric"], 0.1980)
+        self.assertEqual(rows[3]["oracle_measure"]["count"], 5)
+        self.assertEqual(rows[4]["oracle_measure"]["value_numeric"], 0.2410)
+        self.assertEqual(rows[4]["oracle_measure"]["count"], 2)
+        self.assertEqual(rows[5]["oracle_measure"]["value_numeric"], 0.043)
+
+        # 3. Equal work/free HKL sets produce comparable_identical_effective_hkl_sets.
+        synth_equal = _create_synthetic_private_rfactor_assembly_inputs(
+            subject_id="R4",
+            equal_hkl_sets=True,
+        )
+        assembled_eq = onesar_records._assemble_six_row_t03_measurements(
+            parent_binding=synth_equal["parent_binding"],
+            phenix_bundle=synth_equal["phenix_bundle"],
+            refmac_bundle=synth_equal["refmac_bundle"],
+        )
+        self.assertTrue(
+            assembled_eq["cross_tool_hkl_comparison"]["effective_sets_equal"]
+        )
+        self.assertEqual(
+            assembled_eq["cross_tool_hkl_comparison"]["comparability_label"],
+            "comparable_identical_effective_hkl_sets",
+        )
+        self._assert_six_row_measurements_match_producer_inputs(
+            assembled_eq["measurements"],
+            subject_id="R4",
+            eval_run_id="EVAL_1sar_cdba2c07_2026-11-06",
+            parent_binding=synth_equal["parent_binding"],
+            phenix_bundle=synth_equal["phenix_bundle"],
+            refmac_bundle=synth_equal["refmac_bundle"],
+            expected_comparison_evidence_ref=None,
+            expected_notes_substring="Effective work and free reflection sets match",
+        )
+
+    def test_pre_coercion_and_original_container_mapping_rejections(
+        self,
+    ) -> None:
+        base = _create_synthetic_private_rfactor_assembly_inputs(subject_id="R4")
+
+        # 1. Boolean as r_work or work_count rejected before Pydantic coercion.
+        with self.subTest(case="bool_r_work_rejected"):
+            bad_phx = copy.deepcopy(base["phenix_bundle"])
+            bad_phx["rfactors"]["r_work"] = True
+            with self.assertRaisesRegex(
+                onesar_records.RfactorRecordAssemblyError,
+                "phenix_bundle\\.rfactors\\.r_work: expected finite non-boolean numeric value",
+            ):
+                onesar_records._assemble_six_row_t03_measurements(
+                    parent_binding=base["parent_binding"],
+                    phenix_bundle=bad_phx,
+                    refmac_bundle=base["refmac_bundle"],
+                )
+
+        with self.subTest(case="bool_work_count_rejected"):
+            bad_phx = copy.deepcopy(base["phenix_bundle"])
+            bad_phx["work_count"] = True
+            with self.assertRaisesRegex(
+                onesar_records.RfactorRecordAssemblyError,
+                "phenix_bundle\\.work_count: expected positive integer count \\(bool/float rejected\\)",
+            ):
+                onesar_records._assemble_six_row_t03_measurements(
+                    parent_binding=base["parent_binding"],
+                    phenix_bundle=bad_phx,
+                    refmac_bundle=base["refmac_bundle"],
+                )
+
+        # 2. Non-finite (NaN / +inf / -inf) and incoherent gap rejected in upstream bundles.
+        with self.subTest(case="nan_r_free_rejected"):
+            bad_rm = copy.deepcopy(base["refmac_bundle"])
+            bad_rm["rfactors"]["r_free"] = math.nan
+            with self.assertRaisesRegex(
+                onesar_records.RfactorRecordAssemblyError,
+                "refmac_bundle\\.rfactors\\.r_free: expected finite non-boolean numeric value",
+            ):
+                onesar_records._assemble_six_row_t03_measurements(
+                    parent_binding=base["parent_binding"],
+                    phenix_bundle=base["phenix_bundle"],
+                    refmac_bundle=bad_rm,
+                )
+
+        with self.subTest(case="pos_inf_r_work_rejected"):
+            bad_phx = copy.deepcopy(base["phenix_bundle"])
+            bad_phx["rfactors"]["r_work"] = math.inf
+            with self.assertRaisesRegex(
+                onesar_records.RfactorRecordAssemblyError,
+                "phenix_bundle\\.rfactors\\.r_work: expected finite non-boolean numeric value",
+            ):
+                onesar_records._assemble_six_row_t03_measurements(
+                    parent_binding=base["parent_binding"],
+                    phenix_bundle=bad_phx,
+                    refmac_bundle=base["refmac_bundle"],
+                )
+
+        with self.subTest(case="neg_inf_gap_rejected"):
+            bad_rm = copy.deepcopy(base["refmac_bundle"])
+            bad_rm["rfactors"]["r_free_r_work_gap"] = -math.inf
+            with self.assertRaisesRegex(
+                onesar_records.RfactorRecordAssemblyError,
+                "refmac_bundle\\.rfactors\\.r_free_r_work_gap: expected finite non-boolean numeric value",
+            ):
+                onesar_records._assemble_six_row_t03_measurements(
+                    parent_binding=base["parent_binding"],
+                    phenix_bundle=base["phenix_bundle"],
+                    refmac_bundle=bad_rm,
+                )
+
+        with self.subTest(case="incoherent_gap_rejected"):
+            bad_rm = copy.deepcopy(base["refmac_bundle"])
+            bad_rm["rfactors"]["r_free_r_work_gap"] = 0.1234
+            with self.assertRaisesRegex(
+                onesar_records.RfactorRecordAssemblyError,
+                "refmac_bundle\\.rfactors\\.r_free_r_work_gap: recorded gap .* disagrees with r_free",
+            ):
+                onesar_records._assemble_six_row_t03_measurements(
+                    parent_binding=base["parent_binding"],
+                    phenix_bundle=base["phenix_bundle"],
+                    refmac_bundle=bad_rm,
+                )
+
+        # 3. Non-positive count or fabricated gap count rejected.
+        with self.subTest(case="zero_free_count_rejected"):
+            bad_rm = copy.deepcopy(base["refmac_bundle"])
+            bad_rm["free_count"] = 0
+            with self.assertRaisesRegex(
+                onesar_records.RfactorRecordAssemblyError,
+                "refmac_bundle\\.free_count: expected positive integer count",
+            ):
+                onesar_records._assemble_six_row_t03_measurements(
+                    parent_binding=base["parent_binding"],
+                    phenix_bundle=base["phenix_bundle"],
+                    refmac_bundle=bad_rm,
+                )
+
+        with self.subTest(case="fabricated_gap_count_rejected"):
+            bad_phx = copy.deepcopy(base["phenix_bundle"])
+            bad_phx["gap_count"] = 6
+            with self.assertRaisesRegex(
+                onesar_records.RfactorRecordAssemblyError,
+                "phenix_bundle\\.gap_count: gap measurement must not carry a fabricated count",
+            ):
+                onesar_records._assemble_six_row_t03_measurements(
+                    parent_binding=base["parent_binding"],
+                    phenix_bundle=bad_phx,
+                    refmac_bundle=base["refmac_bundle"],
+                )
+
+        # 4. Non-None phenix cross_tool_symmetric_differences or unverified REFMAC bundle rejected.
+        with self.subTest(case="non_none_phenix_cross_tool_diff_rejected"):
+            bad_phx = copy.deepcopy(base["phenix_bundle"])
+            bad_phx["cross_tool_symmetric_differences"] = {}
+            with self.assertRaisesRegex(
+                onesar_records.RfactorRecordAssemblyError,
+                "phenix_bundle\\.cross_tool_symmetric_differences: must be None",
+            ):
+                onesar_records._assemble_six_row_t03_measurements(
+                    parent_binding=base["parent_binding"],
+                    phenix_bundle=bad_phx,
+                    refmac_bundle=base["refmac_bundle"],
+                )
+
+        with self.subTest(case="refused_refmac_bundle_rejected"):
+            bad_rm = copy.deepcopy(base["refmac_bundle"])
+            bad_rm["verification_status"] = (
+                "diagnostic_captured_scientific_admission_refused"
+            )
+            with self.assertRaisesRegex(
+                onesar_records.RfactorRecordAssemblyError,
+                "refmac_bundle\\.verification_status: expected 'verified'",
+            ):
+                onesar_records._assemble_six_row_t03_measurements(
+                    parent_binding=base["parent_binding"],
+                    phenix_bundle=base["phenix_bundle"],
+                    refmac_bundle=bad_rm,
+                )
+
+        # 5. Object-valued provenance_ref in upstream bundle rejected.
+        with self.subTest(case="object_provenance_ref_rejected"):
+            bad_rm = copy.deepcopy(base["refmac_bundle"])
+            bad_rm["provenance_ref"] = {
+                "id": "PROV_obj",
+                "command": "refmac5",
+            }
+            with self.assertRaisesRegex(
+                onesar_records.RfactorRecordAssemblyError,
+                "provenance_ref must be a non-empty string or None \\(object/non-string rejected\\)",
+            ):
+                onesar_records._assemble_six_row_t03_measurements(
+                    parent_binding=base["parent_binding"],
+                    phenix_bundle=base["phenix_bundle"],
+                    refmac_bundle=bad_rm,
+                )
+
+        # 6. Direct original-Container mapping positive control and raw pre-coercion guards.
+        assembled = onesar_records._assemble_six_row_t03_measurements(
+            parent_binding=base["parent_binding"],
+            phenix_bundle=base["phenix_bundle"],
+            refmac_bundle=base["refmac_bundle"],
+        )
+        valid_doc = {
+            "structures": [
+                onesar_records._build_1sar_structure_snapshot(
+                    "R4", repo_root=REPO_ROOT
+                )
+            ],
+            "evaluation_runs": [
+                {
+                    "id": assembled["identities"]["eval_run_id"],
+                    "eval_filename_stem": assembled["identities"][
+                        "eval_filename_stem"
+                    ],
+                    "structure_ref": "1sar",
+                    "run_date": "2026-11-06",
+                    "catalog_tasks_applied": ["T03"],
+                    "measurements": copy.deepcopy(assembled["measurements"]),
+                }
+            ],
+        }
+        onesar_records._validate_original_container_mapping(
+            valid_doc, label="valid_doc"
+        )
+
+        with self.subTest(case="orig_doc_bool_value_numeric_rejected"):
+            bad_bool_val_doc = copy.deepcopy(valid_doc)
+            bad_bool_val_doc["evaluation_runs"][0]["measurements"][0][
+                "oracle_measure"
+            ]["value_numeric"] = True
+            with self.assertRaisesRegex(
+                onesar_records.RfactorRecordAssemblyError,
+                r"bad_bool_val_doc\.evaluation_runs\[0\]\.measurements\[0\]\.oracle_measure\.value_numeric: expected finite non-boolean numeric value",
+            ):
+                onesar_records._validate_original_container_mapping(
+                    bad_bool_val_doc, label="bad_bool_val_doc"
+                )
+
+        with self.subTest(case="orig_doc_nan_value_numeric_rejected"):
+            bad_nan_val_doc = copy.deepcopy(valid_doc)
+            bad_nan_val_doc["evaluation_runs"][0]["measurements"][1][
+                "oracle_measure"
+            ]["value_numeric"] = math.nan
+            with self.assertRaisesRegex(
+                onesar_records.RfactorRecordAssemblyError,
+                r"bad_nan_val_doc\.evaluation_runs\[0\]\.measurements\[1\]\.oracle_measure\.value_numeric: expected finite non-boolean numeric value",
+            ):
+                onesar_records._validate_original_container_mapping(
+                    bad_nan_val_doc, label="bad_nan_val_doc"
+                )
+
+        with self.subTest(case="orig_doc_pos_inf_value_numeric_rejected"):
+            bad_pos_inf_doc = copy.deepcopy(valid_doc)
+            bad_pos_inf_doc["evaluation_runs"][0]["measurements"][2][
+                "oracle_measure"
+            ]["value_numeric"] = math.inf
+            with self.assertRaisesRegex(
+                onesar_records.RfactorRecordAssemblyError,
+                r"bad_pos_inf_doc\.evaluation_runs\[0\]\.measurements\[2\]\.oracle_measure\.value_numeric: expected finite non-boolean numeric value",
+            ):
+                onesar_records._validate_original_container_mapping(
+                    bad_pos_inf_doc, label="bad_pos_inf_doc"
+                )
+
+        with self.subTest(case="orig_doc_neg_inf_value_numeric_rejected"):
+            bad_neg_inf_doc = copy.deepcopy(valid_doc)
+            bad_neg_inf_doc["evaluation_runs"][0]["measurements"][2][
+                "oracle_measure"
+            ]["value_numeric"] = -math.inf
+            with self.assertRaisesRegex(
+                onesar_records.RfactorRecordAssemblyError,
+                r"bad_neg_inf_doc\.evaluation_runs\[0\]\.measurements\[2\]\.oracle_measure\.value_numeric: expected finite non-boolean numeric value",
+            ):
+                onesar_records._validate_original_container_mapping(
+                    bad_neg_inf_doc, label="bad_neg_inf_doc"
+                )
+
+        with self.subTest(case="orig_doc_bool_component_count_rejected"):
+            bad_bool_cnt_doc = copy.deepcopy(valid_doc)
+            bad_bool_cnt_doc["evaluation_runs"][0]["measurements"][0][
+                "oracle_measure"
+            ]["count"] = True
+            with self.assertRaisesRegex(
+                onesar_records.RfactorRecordAssemblyError,
+                r"bad_bool_cnt_doc\.evaluation_runs\[0\]\.measurements\[0\]\.oracle_measure\.count: expected positive integer count \(bool/float rejected\)",
+            ):
+                onesar_records._validate_original_container_mapping(
+                    bad_bool_cnt_doc, label="bad_bool_cnt_doc"
+                )
+
+        with self.subTest(case="orig_doc_object_provenance_ref_rejected"):
+            bad_prov_doc = copy.deepcopy(valid_doc)
+            bad_prov_doc["evaluation_runs"][0]["measurements"][3][
+                "provenance_ref"
+            ] = {"id": "PROV_obj", "command": "refmac5"}
+            with self.assertRaisesRegex(
+                onesar_records.RfactorRecordAssemblyError,
+                r"bad_prov_doc\.evaluation_runs\[0\]\.measurements\[3\]\.provenance_ref: provenance_ref must be a non-empty string or None \(object/non-string rejected\)",
+            ):
+                onesar_records._validate_original_container_mapping(
+                    bad_prov_doc, label="bad_prov_doc"
+                )
+
+        with self.subTest(case="unknown_top_level_key_rejected"):
+            bad_top_doc = copy.deepcopy(valid_doc)
+            bad_top_doc["provenances"] = [{"id": "PROV_invented"}]
+            with self.assertRaisesRegex(
+                onesar_records.RfactorRecordAssemblyError,
+                "Container schema validation failed",
+            ):
+                onesar_records._validate_original_container_mapping(
+                    bad_top_doc, label="bad_top_doc"
+                )
+
+        with self.subTest(case="unknown_nested_oracle_measure_key_rejected"):
+            bad_nested_doc = copy.deepcopy(valid_doc)
+            bad_nested_doc["evaluation_runs"][0]["measurements"][0][
+                "oracle_measure"
+            ]["n_work"] = 4
+            with self.assertRaisesRegex(
+                onesar_records.RfactorRecordAssemblyError,
+                "Container schema validation failed",
+            ):
+                onesar_records._validate_original_container_mapping(
+                    bad_nested_doc, label="bad_nested_doc"
+                )
+
+        with self.subTest(case="gap_count_in_original_mapping_rejected"):
+            bad_gap_doc = copy.deepcopy(valid_doc)
+            bad_gap_doc["evaluation_runs"][0]["measurements"][2][
+                "oracle_measure"
+            ]["count"] = 6
+            with self.assertRaisesRegex(
+                onesar_records.RfactorRecordAssemblyError,
+                "gap row must not carry a fabricated count",
+            ):
+                onesar_records._validate_original_container_mapping(
+                    bad_gap_doc, label="bad_gap_doc"
+                )
+
+    def test_live_r4_qds_emission_guidance_snapshots_and_supplemental_eval_only_staging(
+        self,
+    ) -> None:
+        import qds_emit
+        import yaml
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_root = Path(tmp).resolve(strict=True)
+            r4_staging = tmp_root / "staging_r4"
+            r4_staging.mkdir(parents=True, exist_ok=True)
+
+            synth_r4 = _create_synthetic_private_rfactor_assembly_inputs(
+                subject_id="R4",
+                equal_hkl_sets=False,
+            )
+            prepared_r4 = (
+                onesar_records._prepare_rfactor_eval_and_live_qds_records(
+                    parent_binding=synth_r4["parent_binding"],
+                    phenix_bundle=synth_r4["phenix_bundle"],
+                    refmac_bundle=synth_r4["refmac_bundle"],
+                    staging_dir=r4_staging,
+                    issued_at="2026-11-07T14:20:00+00:00",
+                    repo_root=REPO_ROOT,
+                    cross_tool_comparison_evidence_ref=synth_r4[
+                        "comparison_evidence_ref"
+                    ],
+                )
+            )
+
+            # Verify staged files are .txt only and no canonical .yaml files were created.
+            staged_files = sorted(p.name for p in r4_staging.iterdir())
+            self.assertEqual(
+                staged_files,
+                [
+                    "EVAL_1sar_cdba2c07_2026-11-06.pre_pin.txt",
+                    "EVAL_1sar_cdba2c07_2026-11-06.staged.txt",
+                    "QDS_1sar_cdba2c07_2026-11-06.staged.txt",
+                ],
+            )
+            self.assertEqual(
+                list(tmp_root.rglob("*.yaml")),
+                [],
+            )
+
+            # Reopen R4 staged EVAL and verify exact producer-to-record values, subject/stage, and UTC start date.
+            reopened_r4_eval = yaml.safe_load(
+                prepared_r4["staged_eval_txt_path"].read_text(encoding="utf-8")
+            )
+            r4_run = reopened_r4_eval["evaluation_runs"][0]
+            self.assertEqual(r4_run["id"], "EVAL_1sar_cdba2c07_2026-11-06")
+            self.assertEqual(
+                r4_run["eval_filename_stem"], "EVAL_1sar_cdba2c07_2026-11-06"
+            )
+            self.assertEqual(r4_run["structure_ref"], "1sar")
+            self.assertEqual(
+                r4_run["run_date"],
+                synth_r4["parent_binding"]["timing"]["started_utc_date"],
+            )
+            self.assertEqual(r4_run["run_date"], "2026-11-06")
+            self.assertEqual(r4_run["catalog_tasks_applied"], ["T03"])
+            self._assert_six_row_measurements_match_producer_inputs(
+                r4_run["measurements"],
+                subject_id="R4",
+                eval_run_id="EVAL_1sar_cdba2c07_2026-11-06",
+                parent_binding=synth_r4["parent_binding"],
+                phenix_bundle=synth_r4["phenix_bundle"],
+                refmac_bundle=synth_r4["refmac_bundle"],
+                expected_comparison_evidence_ref=synth_r4[
+                    "comparison_evidence_ref"
+                ],
+                expected_notes_substring="non-comparable",
+            )
+
+            # Verify dynamic live registry selection at 2026-11-07T14:20:00+00:00:
+            # 7 active recommendations (9 raw including 2 predecessors), 3 assumptions, 4 canonical Tools.
+            reg_snap = prepared_r4["registry_snapshots"]
+            self.assertEqual(len(reg_snap["active_recommendation_ids"]), 7)
+            self.assertEqual(len(reg_snap["tool_recommendations"]), 9)
+            self.assertEqual(len(reg_snap["active_assumption_ids"]), 3)
+            self.assertEqual(len(reg_snap["assumptions"]), 3)
+            self.assertEqual(
+                {t["id"] for t in reg_snap["tools"]},
+                {"REFMAC5", "Servalcat", "phenix.model_vs_data", "gemmi sfcalc"},
+            )
+
+            qds_doc = prepared_r4["qds_document"]
+            self.assertIsNotNone(qds_doc)
+            assert isinstance(qds_doc, dict)
+            self.assertEqual(
+                qds_doc["id"], "QDS_1sar_cdba2c07_2026-11-06"
+            )
+            self.assertEqual(qds_doc["emitter_contract_version"], "4")
+            self.assertEqual(qds_doc["coverage_scope"], "partial")
+            self.assertEqual(
+                len(qds_doc["tool_recommendations_applied"]), 7
+            )
+            self.assertEqual(len(qds_doc["assumptions_report"]), 3)
+            self.assertIn("non-comparable", qds_doc["scope_notes"])
+            self.assertIn("non-comparable", qds_doc["headline_verdict"])
+
+            # Verify no Pydantic-added default null fields entered the serialized YAML.
+            self.assertNotIn("agent_claim:", prepared_r4["eval_yaml_text"])
+            self.assertNotIn("pass_criterion:", prepared_r4["eval_yaml_text"])
+
+            # Positive control: supplying complete canonical Tools in registry_snapshots_override succeeds.
+            with self.subTest(case="complete_canonical_tools_override_succeeds"):
+                complete_override_staging = (
+                    tmp_root / "staging_r4_complete_override"
+                )
+                complete_override_staging.mkdir(parents=True, exist_ok=True)
+                prep_override_ok = (
+                    onesar_records._prepare_rfactor_eval_and_live_qds_records(
+                        parent_binding=synth_r4["parent_binding"],
+                        phenix_bundle=synth_r4["phenix_bundle"],
+                        refmac_bundle=synth_r4["refmac_bundle"],
+                        staging_dir=complete_override_staging,
+                        issued_at="2026-11-07T14:20:00+00:00",
+                        repo_root=REPO_ROOT,
+                        cross_tool_comparison_evidence_ref=synth_r4[
+                            "comparison_evidence_ref"
+                        ],
+                        registry_snapshots_override=copy.deepcopy(reg_snap),
+                    )
+                )
+                self.assertEqual(
+                    prep_override_ok["qds_sha256"], prepared_r4["qds_sha256"]
+                )
+
+            # Pre-output Tool override rejections (#1067): reduced row, changed catalog_tasks_served, missing Tool.
+            with self.subTest(case="reduced_id_family_only_tool_override_rejected_before_staging"):
+                reduced_tool_staging = tmp_root / "staging_r4_reduced_tool"
+                reduced_tool_staging.mkdir(parents=True, exist_ok=True)
+                bad_reduced_snap = copy.deepcopy(reg_snap)
+                bad_reduced_snap["tools"] = [
+                    {"id": "REFMAC5", "family": "non_cctbx"}
+                    if t["id"] == "REFMAC5"
+                    else t
+                    for t in bad_reduced_snap["tools"]
+                ]
+                with self.assertRaisesRegex(
+                    onesar_records.RfactorRecordAssemblyError,
+                    r"registry_snapshots_override\.tools\['REFMAC5'\]: Tool row disagrees with complete canonical catalog Tool row.*missing_keys=\[.*'catalog_tasks_served'",
+                ):
+                    onesar_records._prepare_rfactor_eval_and_live_qds_records(
+                        parent_binding=synth_r4["parent_binding"],
+                        phenix_bundle=synth_r4["phenix_bundle"],
+                        refmac_bundle=synth_r4["refmac_bundle"],
+                        staging_dir=reduced_tool_staging,
+                        issued_at="2026-11-07T14:20:00+00:00",
+                        repo_root=REPO_ROOT,
+                        registry_snapshots_override=bad_reduced_snap,
+                    )
+                self.assertEqual(list(reduced_tool_staging.iterdir()), [])
+
+            with self.subTest(case="changed_catalog_tasks_served_tool_override_rejected_before_staging"):
+                altered_tool_staging = tmp_root / "staging_r4_altered_tool"
+                altered_tool_staging.mkdir(parents=True, exist_ok=True)
+                bad_altered_snap = copy.deepcopy(reg_snap)
+                for tool_row in bad_altered_snap["tools"]:
+                    if tool_row["id"] == "REFMAC5":
+                        tool_row["catalog_tasks_served"] = ["T03"]
+                with self.assertRaisesRegex(
+                    onesar_records.RfactorRecordAssemblyError,
+                    r"registry_snapshots_override\.tools\['REFMAC5'\]: Tool row disagrees with complete canonical catalog Tool row.*altered_keys=\['catalog_tasks_served'\]",
+                ):
+                    onesar_records._prepare_rfactor_eval_and_live_qds_records(
+                        parent_binding=synth_r4["parent_binding"],
+                        phenix_bundle=synth_r4["phenix_bundle"],
+                        refmac_bundle=synth_r4["refmac_bundle"],
+                        staging_dir=altered_tool_staging,
+                        issued_at="2026-11-07T14:20:00+00:00",
+                        repo_root=REPO_ROOT,
+                        registry_snapshots_override=bad_altered_snap,
+                    )
+                self.assertEqual(list(altered_tool_staging.iterdir()), [])
+
+            with self.subTest(case="missing_required_tool_override_rejected_before_staging"):
+                missing_tool_staging = tmp_root / "staging_r4_missing_tool"
+                missing_tool_staging.mkdir(parents=True, exist_ok=True)
+                bad_missing_tool_snap = copy.deepcopy(reg_snap)
+                bad_missing_tool_snap["tools"] = [
+                    t
+                    for t in bad_missing_tool_snap["tools"]
+                    if t["id"] != "REFMAC5"
+                ]
+                with self.assertRaisesRegex(
+                    onesar_records.RfactorRecordAssemblyError,
+                    r"registry_snapshots_override\.tools: missing required canonical Tool row\(s\): \['REFMAC5'\]",
+                ):
+                    onesar_records._prepare_rfactor_eval_and_live_qds_records(
+                        parent_binding=synth_r4["parent_binding"],
+                        phenix_bundle=synth_r4["phenix_bundle"],
+                        refmac_bundle=synth_r4["refmac_bundle"],
+                        staging_dir=missing_tool_staging,
+                        issued_at="2026-11-07T14:20:00+00:00",
+                        repo_root=REPO_ROOT,
+                        registry_snapshots_override=bad_missing_tool_snap,
+                    )
+                self.assertEqual(list(missing_tool_staging.iterdir()), [])
+
+            # Missing applicable live recommendation, missing predecessor, or mutated assumption refuses live emission
+            # in its own fresh staging directory with row-specific QdsCompletenessError diagnostics.
+            with self.subTest(case="missing_applicable_recommendation_refused"):
+                neg_rec_staging = tmp_root / "staging_r4_neg_missing_rec"
+                neg_rec_staging.mkdir(parents=True, exist_ok=True)
+                bad_snap = copy.deepcopy(reg_snap)
+                bad_snap["tool_recommendations"] = [
+                    r
+                    for r in bad_snap["tool_recommendations"]
+                    if r["id"] != "REC_T03_r_work_top_performing_2026_09_22"
+                ]
+                with self.assertRaisesRegex(
+                    qds_emit.QdsCompletenessError,
+                    r"live tool_recommendations snapshot omits applicable registry row or ancestor 'REC_T03_r_work_top_performing_2026_09_22'",
+                ):
+                    onesar_records._prepare_rfactor_eval_and_live_qds_records(
+                        parent_binding=synth_r4["parent_binding"],
+                        phenix_bundle=synth_r4["phenix_bundle"],
+                        refmac_bundle=synth_r4["refmac_bundle"],
+                        staging_dir=neg_rec_staging,
+                        issued_at="2026-11-07T14:20:00+00:00",
+                        repo_root=REPO_ROOT,
+                        registry_snapshots_override=bad_snap,
+                    )
+
+            with self.subTest(case="missing_superseded_predecessor_refused"):
+                neg_pred_staging = tmp_root / "staging_r4_neg_missing_pred"
+                neg_pred_staging.mkdir(parents=True, exist_ok=True)
+                bad_pred_snap = copy.deepcopy(reg_snap)
+                bad_pred_snap["tool_recommendations"] = [
+                    r
+                    for r in bad_pred_snap["tool_recommendations"]
+                    if r["id"] != "REC_T03_r_work_top_performing"
+                ]
+                with self.assertRaisesRegex(
+                    qds_emit.QdsCompletenessError,
+                    r"tool_recommendations row 'REC_T03_r_work_top_performing_2026_09_22' has dangling supersedes_recommendation_ref 'REC_T03_r_work_top_performing'",
+                ):
+                    onesar_records._prepare_rfactor_eval_and_live_qds_records(
+                        parent_binding=synth_r4["parent_binding"],
+                        phenix_bundle=synth_r4["phenix_bundle"],
+                        refmac_bundle=synth_r4["refmac_bundle"],
+                        staging_dir=neg_pred_staging,
+                        issued_at="2026-11-07T14:20:00+00:00",
+                        repo_root=REPO_ROOT,
+                        registry_snapshots_override=bad_pred_snap,
+                    )
+
+            with self.subTest(case="mutated_applicable_assumption_refused"):
+                neg_assum_staging = tmp_root / "staging_r4_neg_mutated_assum"
+                neg_assum_staging.mkdir(parents=True, exist_ok=True)
+                bad_assum_snap = copy.deepcopy(reg_snap)
+                mut_assum_id = bad_assum_snap["assumptions"][0]["id"]
+                bad_assum_snap["assumptions"][0]["description"] = (
+                    "mutated assumption description"
+                )
+                with self.assertRaisesRegex(
+                    qds_emit.QdsCompletenessError,
+                    rf"live assumptions snapshot row '{re.escape(mut_assum_id)}' differs from its exact registry source",
+                ):
+                    onesar_records._prepare_rfactor_eval_and_live_qds_records(
+                        parent_binding=synth_r4["parent_binding"],
+                        phenix_bundle=synth_r4["phenix_bundle"],
+                        refmac_bundle=synth_r4["refmac_bundle"],
+                        staging_dir=neg_assum_staging,
+                        issued_at="2026-11-07T14:20:00+00:00",
+                        repo_root=REPO_ROOT,
+                        registry_snapshots_override=bad_assum_snap,
+                    )
+
+            # Owned-staging collision regressions (#1066) across all 3 leaves and regular/symlink/dangling-symlink/hardlink.
+            sentinel_root = tmp_root / "external_sentinels"
+            sentinel_root.mkdir(parents=True, exist_ok=True)
+            r4_leaf_names = (
+                "EVAL_1sar_cdba2c07_2026-11-06.pre_pin.txt",
+                "QDS_1sar_cdba2c07_2026-11-06.staged.txt",
+                "EVAL_1sar_cdba2c07_2026-11-06.staged.txt",
+            )
+            for leaf_idx, leaf_name in enumerate(r4_leaf_names):
+                for kind in (
+                    "regular",
+                    "symlink",
+                    "dangling_symlink",
+                    "hardlink",
+                ):
+                    with self.subTest(leaf_name=leaf_name, collision_kind=kind):
+                        coll_staging = (
+                            tmp_root / f"staging_coll_{leaf_idx}_{kind}"
+                        )
+                        coll_staging.mkdir(parents=True, exist_ok=True)
+                        leaf_path = coll_staging / leaf_name
+                        sentinel_bytes = (
+                            f"SENTINEL_{kind.upper()}_{leaf_name}\n".encode(
+                                "utf-8"
+                            )
+                        )
+                        ext_target = (
+                            sentinel_root / f"target_{leaf_idx}_{kind}_{leaf_name}"
+                        )
+                        if kind == "regular":
+                            leaf_path.write_bytes(sentinel_bytes)
+                            expected_err = r"refusing to overwrite pre-existing file at staged leaf"
+                        elif kind == "symlink":
+                            ext_target.write_bytes(sentinel_bytes)
+                            os.symlink(ext_target, leaf_path)
+                            expected_err = r"refusing to overwrite pre-existing symlink at staged leaf"
+                        elif kind == "dangling_symlink":
+                            os.symlink(ext_target, leaf_path)
+                            expected_err = r"refusing to overwrite pre-existing symlink at staged leaf"
+                        else:
+                            ext_target.write_bytes(sentinel_bytes)
+                            os.link(ext_target, leaf_path)
+                            expected_err = r"refusing to overwrite pre-existing hardlinked file"
+
+                        with self.assertRaisesRegex(
+                            onesar_records.RfactorRecordAssemblyError,
+                            expected_err,
+                        ):
+                            onesar_records._prepare_rfactor_eval_and_live_qds_records(
+                                parent_binding=synth_r4["parent_binding"],
+                                phenix_bundle=synth_r4["phenix_bundle"],
+                                refmac_bundle=synth_r4["refmac_bundle"],
+                                staging_dir=coll_staging,
+                                issued_at="2026-11-07T14:20:00+00:00",
+                                repo_root=REPO_ROOT,
+                            )
+
+                        # Retained-diagnostics policy: earlier successfully created .txt carriers
+                        # up to leaf_idx remain in coll_staging as diagnostic evidence, while the
+                        # pre-existing colliding leaf and its bytes / target bytes / link identity
+                        # remain untouched.
+                        expected_retained_names = r4_leaf_names[: leaf_idx + 1]
+                        self.assertEqual(
+                            sorted(p.name for p in coll_staging.iterdir()),
+                            sorted(expected_retained_names),
+                        )
+                        for prior_leaf_name in r4_leaf_names[:leaf_idx]:
+                            prior_leaf_path = coll_staging / prior_leaf_name
+                            self.assertTrue(
+                                prior_leaf_path.name.endswith(".txt")
+                            )
+                            self.assertFalse(prior_leaf_path.is_symlink())
+                            self.assertTrue(prior_leaf_path.is_file())
+                            self.assertGreater(
+                                len(prior_leaf_path.read_bytes()), 0
+                            )
+                        if kind == "regular":
+                            self.assertEqual(
+                                leaf_path.read_bytes(), sentinel_bytes
+                            )
+                        elif kind == "symlink":
+                            self.assertTrue(leaf_path.is_symlink())
+                            self.assertEqual(
+                                os.readlink(leaf_path), str(ext_target)
+                            )
+                            self.assertEqual(
+                                ext_target.read_bytes(), sentinel_bytes
+                            )
+                        elif kind == "dangling_symlink":
+                            self.assertTrue(os.path.lexists(leaf_path))
+                            self.assertEqual(
+                                os.readlink(leaf_path), str(ext_target)
+                            )
+                            self.assertFalse(ext_target.exists())
+                        else:
+                            self.assertEqual(
+                                leaf_path.read_bytes(), sentinel_bytes
+                            )
+                            self.assertEqual(
+                                ext_target.read_bytes(), sentinel_bytes
+                            )
+                            self.assertEqual(
+                                os.lstat(leaf_path).st_ino,
+                                os.lstat(ext_target).st_ino,
+                            )
+
+            # Supplemental start, R5, R6 remain EVAL-only, do not reuse R4-only Structure description,
+            # and their reopened staged EVAL documents match their own producer inputs and subject/stage.
+            r4_desc = prepared_r4["eval_document"]["structures"][0][
+                "description"
+            ]
+            for supp_subj, exp_stem in (
+                ("start", "EVAL_1sar_cdba2c07-start_2026-11-06"),
+                ("R5", "EVAL_1sar_cdba2c07-r5_2026-11-06"),
+                ("R6", "EVAL_1sar_cdba2c07-r6_2026-11-06"),
+            ):
+                with self.subTest(supplemental_subject=supp_subj):
+                    supp_staging = tmp_root / f"staging_{supp_subj.lower()}"
+                    supp_staging.mkdir(parents=True, exist_ok=True)
+                    synth_supp = (
+                        _create_synthetic_private_rfactor_assembly_inputs(
+                            subject_id=supp_subj,
+                            equal_hkl_sets=False,
+                        )
+                    )
+                    prep_supp = onesar_records._prepare_rfactor_eval_and_live_qds_records(
+                        parent_binding=synth_supp["parent_binding"],
+                        phenix_bundle=synth_supp["phenix_bundle"],
+                        refmac_bundle=synth_supp["refmac_bundle"],
+                        staging_dir=supp_staging,
+                        issued_at="2026-11-07T14:20:00+00:00",
+                        repo_root=REPO_ROOT,
+                        cross_tool_comparison_evidence_ref=synth_supp[
+                            "comparison_evidence_ref"
+                        ],
+                    )
+                    self.assertFalse(prep_supp["identities"]["emits_qds"])
+                    self.assertIsNone(prep_supp["qds_document"])
+                    self.assertIsNone(prep_supp["qds_yaml_bytes"])
+                    self.assertIsNone(prep_supp["replay_pin"])
+                    self.assertNotIn(
+                        "qds_emission_contexts", prep_supp["eval_document"]
+                    )
+                    self.assertNotIn(
+                        "qds_replay_pins", prep_supp["eval_document"]
+                    )
+                    reopened_supp_eval = yaml.safe_load(
+                        prep_supp["staged_eval_txt_path"].read_text(
+                            encoding="utf-8"
+                        )
+                    )
+                    supp_run = reopened_supp_eval["evaluation_runs"][0]
+                    self.assertEqual(supp_run["id"], exp_stem)
+                    self.assertEqual(
+                        supp_run["eval_filename_stem"], exp_stem
+                    )
+                    self.assertEqual(supp_run["structure_ref"], "1sar")
+                    self.assertEqual(
+                        supp_run["run_date"],
+                        synth_supp["parent_binding"]["timing"][
+                            "started_utc_date"
+                        ],
+                    )
+                    self.assertEqual(supp_run["run_date"], "2026-11-06")
+                    self.assertEqual(
+                        supp_run["catalog_tasks_applied"], ["T03"]
+                    )
+                    self._assert_six_row_measurements_match_producer_inputs(
+                        supp_run["measurements"],
+                        subject_id=supp_subj,
+                        eval_run_id=exp_stem,
+                        parent_binding=synth_supp["parent_binding"],
+                        phenix_bundle=synth_supp["phenix_bundle"],
+                        refmac_bundle=synth_supp["refmac_bundle"],
+                        expected_comparison_evidence_ref=synth_supp[
+                            "comparison_evidence_ref"
+                        ],
+                        expected_notes_substring="non-comparable",
+                    )
+                    supp_desc = reopened_supp_eval["structures"][0][
+                        "description"
+                    ]
+                    self.assertNotEqual(supp_desc, r4_desc)
+                    self.assertNotIn("round-4 model", supp_desc)
+
+    def test_contract4_projection_canonical_byte_pin_and_trust_replay_round_trip(
+        self,
+    ) -> None:
+        import check_qds_trust_invariant as trust
+        import qds_emit_contract_v4 as v4
+        import yaml
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_root = Path(tmp).resolve(strict=True)
+            staging_dir = tmp_root / "staging"
+            staging_dir.mkdir(parents=True, exist_ok=True)
+
+            synth_r4 = _create_synthetic_private_rfactor_assembly_inputs(
+                subject_id="R4",
+                equal_hkl_sets=False,
+            )
+            prepared = onesar_records._prepare_rfactor_eval_and_live_qds_records(
+                parent_binding=synth_r4["parent_binding"],
+                phenix_bundle=synth_r4["phenix_bundle"],
+                refmac_bundle=synth_r4["refmac_bundle"],
+                staging_dir=staging_dir,
+                issued_at="2026-11-07T14:20:00+00:00",
+                repo_root=REPO_ROOT,
+            )
+
+            reopened_eval_doc = yaml.safe_load(
+                prepared["staged_eval_txt_path"].read_text(encoding="utf-8")
+            )
+            self._assert_six_row_measurements_match_producer_inputs(
+                reopened_eval_doc["evaluation_runs"][0]["measurements"],
+                subject_id="R4",
+                eval_run_id="EVAL_1sar_cdba2c07_2026-11-06",
+                parent_binding=synth_r4["parent_binding"],
+                phenix_bundle=synth_r4["phenix_bundle"],
+                refmac_bundle=synth_r4["refmac_bundle"],
+                expected_comparison_evidence_ref=None,
+                expected_notes_substring="non-comparable",
+            )
+            reopened_proj = v4.prepare_projection(
+                [reopened_eval_doc],
+                prepared["identities"]["qds_id"],
+                "1sar",
+                repo_root=REPO_ROOT,
+            )
+            replayed_qds = v4.emit_projection(reopened_proj)
+            self.assertEqual(
+                trust._canonical_qds_text(replayed_qds),
+                prepared["qds_yaml_text"],
+            )
+            self.assertEqual(
+                trust._validate_contract_4_pin(
+                    prepared["staged_qds_txt_path"],
+                    replayed_qds,
+                    reopened_proj,
+                    reopened_eval_doc["qds_replay_pins"],
+                ),
+                [],
+            )
+
+            # Full file-based replay and mutation detection in an isolated external root.
+            ext_root = tmp_root / "isolated_corpus_root"
+            dest_dir = ext_root / "data" / "coscientists" / "openscientist"
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            eval_path = (
+                dest_dir
+                / f"{prepared['identities']['eval_filename_stem']}.yaml"
+            )
+            qds_path = dest_dir / f"{prepared['identities']['qds_id']}.yaml"
+            eval_path.write_bytes(prepared["eval_yaml_bytes"])
+            qds_path.write_bytes(prepared["qds_yaml_bytes"])
+
+            failures: list[str] = []
+            grandfathered: list[str] = []
+            eval_runs = trust._load_eval_runs(ext_root, failures)
+            self.assertEqual(failures, [])
+            trust.check_sheet(
+                qds_path,
+                ext_root,
+                copy.deepcopy(prepared["qds_document"]),
+                eval_runs,
+                failures,
+                grandfathered,
+            )
+            self.assertEqual(failures, [])
+            self.assertEqual(grandfathered, [])
+
+            # Mutating raw source measurement value breaks source_evaluation_runs_sha256 pin.
+            run_id = prepared["identities"]["eval_run_id"]
+            eval_runs[run_id][0].source_document["evaluation_runs"][0][
+                "measurements"
+            ][0]["oracle_measure"]["value_numeric"] = 0.2115
+            _, mut_source_errors = trust._rebuild_coverage_v4(
+                qds_path,
+                copy.deepcopy(prepared["qds_document"]),
+                eval_runs,
+                ext_root,
+            )
+            self.assertTrue(
+                any(
+                    "source_evaluation_runs_sha256" in err
+                    for err in mut_source_errors
+                ),
+                mut_source_errors,
+            )
+
+            # Mutating committed QDS headline breaks canonical byte pin and deterministic replay.
+            tampered_qds = copy.deepcopy(prepared["qds_document"])
+            tampered_qds["headline_verdict"] = "tampered headline verdict"
+            qds_path.write_text(
+                trust._canonical_qds_text(tampered_qds), encoding="utf-8"
+            )
+            clean_eval_runs = trust._load_eval_runs(ext_root, [])
+            _, mut_qds_errors = trust._rebuild_coverage_v4(
+                qds_path,
+                tampered_qds,
+                clean_eval_runs,
+                ext_root,
+            )
+            self.assertTrue(
+                any("canonical byte pin" in err for err in mut_qds_errors),
+                mut_qds_errors,
+            )
+            self.assertTrue(
+                any(
+                    "deterministic frozen contract-4 replay" in err
+                    for err in mut_qds_errors
+                ),
+                mut_qds_errors,
+            )
+
+    def test_leaf_writer_retains_partial_and_replacement_evidence_on_post_create_or_write_failure(
+        self,
+    ) -> None:
+        real_fstat = os.fstat
+        real_os_write = os.write
+
+        # 1. Post-create inode mismatch after replacement preserves both foreign sentinel and moved original.
+        with self.subTest(case="post_create_inode_mismatch_preserves_replacement_and_original"):
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp_root = Path(tmp).resolve(strict=True)
+                staging_dir = tmp_root / "staging"
+                staging_dir.mkdir(parents=True, exist_ok=True)
+                leaf_path = staging_dir / "owned_staging.txt"
+                moved_original_path = tmp_root / "original_created_aside.txt"
+                foreign_sentinel_bytes = (
+                    b"FOREIGN_SENTINEL_POST_CREATE_REPLACEMENT\n"
+                )
+                observed: dict[str, Any] = {}
+
+                def fstat_observer(fd: int) -> os.stat_result:
+                    st = real_fstat(fd)
+                    if "captured_fd" not in observed:
+                        observed["captured_fd"] = fd
+                        observed["original_dev_ino"] = (st.st_dev, st.st_ino)
+                        os.replace(leaf_path, moved_original_path)
+                        leaf_path.write_bytes(foreign_sentinel_bytes)
+                        foreign_st = os.lstat(leaf_path)
+                        observed["foreign_dev_ino"] = (
+                            foreign_st.st_dev,
+                            foreign_st.st_ino,
+                        )
+                    return st
+
+                with mock.patch(
+                    "onesar_records.os.fstat", side_effect=fstat_observer
+                ):
+                    with self.assertRaisesRegex(
+                        onesar_records.RfactorRecordAssemblyError,
+                        r"controlled_staging: staged leaf .* failed post-create regular single-link inode check",
+                    ):
+                        onesar_records._write_exclusive_staged_leaf_bytes(
+                            leaf_path,
+                            b"intended payload\n",
+                            staging_dir=staging_dir,
+                            label="controlled_staging",
+                        )
+
+                with self.assertRaises(OSError) as fd_cm:
+                    real_fstat(observed["captured_fd"])
+                self.assertEqual(fd_cm.exception.errno, errno.EBADF)
+
+                self.assertTrue(leaf_path.exists())
+                self.assertEqual(
+                    leaf_path.read_bytes(), foreign_sentinel_bytes
+                )
+                after_foreign_st = os.lstat(leaf_path)
+                self.assertEqual(
+                    (after_foreign_st.st_dev, after_foreign_st.st_ino),
+                    observed["foreign_dev_ino"],
+                )
+                self.assertTrue(moved_original_path.exists())
+                self.assertEqual(moved_original_path.read_bytes(), b"")
+                after_orig_st = os.lstat(moved_original_path)
+                self.assertEqual(
+                    (after_orig_st.st_dev, after_orig_st.st_ino),
+                    observed["original_dev_ino"],
+                )
+
+        # 2a. Write failure after writing a prefix propagates OSError, closes fd, and retains partial .txt bytes.
+        with self.subTest(case="partial_write_failure_retains_prefix_and_closes_fd"):
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp_root = Path(tmp).resolve(strict=True)
+                staging_dir = tmp_root / "staging"
+                staging_dir.mkdir(parents=True, exist_ok=True)
+                leaf_path = staging_dir / "partial_owned.txt"
+                prefix_bytes = b"PREFIX_DIAGNOSTIC_BYTES\n"
+                full_payload = prefix_bytes + b"REMAINDER_NOT_WRITTEN\n"
+                captured: dict[str, Any] = {}
+
+                def partial_then_fail_write(fd: int, data: Any) -> int:
+                    captured["fd"] = fd
+                    fd_st = real_fstat(fd)
+                    captured["created_dev_ino"] = (fd_st.st_dev, fd_st.st_ino)
+                    real_os_write(fd, memoryview(data)[: len(prefix_bytes)])
+                    raise OSError(
+                        errno.EIO,
+                        "synthetic write failure after partial prefix",
+                    )
+
+                with mock.patch(
+                    "onesar_records.os.write",
+                    side_effect=partial_then_fail_write,
+                ):
+                    with self.assertRaisesRegex(
+                        OSError,
+                        "synthetic write failure after partial prefix",
+                    ) as cm:
+                        onesar_records._write_exclusive_staged_leaf_bytes(
+                            leaf_path,
+                            full_payload,
+                            staging_dir=staging_dir,
+                            label="partial_write_case",
+                        )
+                self.assertEqual(cm.exception.errno, errno.EIO)
+
+                with self.assertRaises(OSError) as fd_cm:
+                    real_fstat(captured["fd"])
+                self.assertEqual(fd_cm.exception.errno, errno.EBADF)
+
+                self.assertTrue(leaf_path.exists())
+                self.assertEqual(leaf_path.read_bytes(), prefix_bytes)
+                after_st = os.lstat(leaf_path)
+                self.assertEqual(
+                    (after_st.st_dev, after_st.st_ino),
+                    captured["created_dev_ino"],
+                )
+
+        # 2b. Write failure after replacement preserves both moved partial original and foreign sentinel bytes/inode.
+        with self.subTest(case="write_failure_after_replacement_preserves_partial_and_foreign"):
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp_root = Path(tmp).resolve(strict=True)
+                staging_dir = tmp_root / "staging"
+                staging_dir.mkdir(parents=True, exist_ok=True)
+                leaf_path = staging_dir / "owned_staging.txt"
+                moved_partial_path = tmp_root / "moved_partial_aside.txt"
+                prefix_bytes = b"PARTIAL_DIAGNOSTIC_PREFIX\n"
+                full_payload = prefix_bytes + b"UNWRITTEN_TAIL\n"
+                foreign_sentinel_bytes = (
+                    b"FOREIGN_SENTINEL_WRITE_FAILURE_REPLACEMENT\n"
+                )
+                captured_rep: dict[str, Any] = {}
+
+                def write_prefix_replace_and_fail(fd: int, data: Any) -> int:
+                    captured_rep["fd"] = fd
+                    fd_st = real_fstat(fd)
+                    captured_rep["original_dev_ino"] = (
+                        fd_st.st_dev,
+                        fd_st.st_ino,
+                    )
+                    real_os_write(fd, memoryview(data)[: len(prefix_bytes)])
+                    os.replace(leaf_path, moved_partial_path)
+                    leaf_path.write_bytes(foreign_sentinel_bytes)
+                    foreign_st = os.lstat(leaf_path)
+                    captured_rep["foreign_dev_ino"] = (
+                        foreign_st.st_dev,
+                        foreign_st.st_ino,
+                    )
+                    raise OSError(
+                        errno.EIO,
+                        "synthetic write failure after owned replacement",
+                    )
+
+                with mock.patch(
+                    "onesar_records.os.write",
+                    side_effect=write_prefix_replace_and_fail,
+                ):
+                    with self.assertRaisesRegex(
+                        OSError,
+                        "synthetic write failure after owned replacement",
+                    ) as cm:
+                        onesar_records._write_exclusive_staged_leaf_bytes(
+                            leaf_path,
+                            full_payload,
+                            staging_dir=staging_dir,
+                            label="write_replacement_case",
+                        )
+                self.assertEqual(cm.exception.errno, errno.EIO)
+
+                with self.assertRaises(OSError) as fd_cm:
+                    real_fstat(captured_rep["fd"])
+                self.assertEqual(fd_cm.exception.errno, errno.EBADF)
+
+                self.assertTrue(leaf_path.exists())
+                self.assertEqual(
+                    leaf_path.read_bytes(), foreign_sentinel_bytes
+                )
+                after_foreign_st = os.lstat(leaf_path)
+                self.assertEqual(
+                    (after_foreign_st.st_dev, after_foreign_st.st_ino),
+                    captured_rep["foreign_dev_ino"],
+                )
+                self.assertTrue(moved_partial_path.exists())
+                self.assertEqual(moved_partial_path.read_bytes(), prefix_bytes)
+                after_orig_st = os.lstat(moved_partial_path)
+                self.assertEqual(
+                    (after_orig_st.st_dev, after_orig_st.st_ino),
+                    captured_rep["original_dev_ino"],
+                )
+
+    def test_preparer_retains_pre_pin_and_replacement_evidence_on_pin_failure_or_interrupt(
+        self,
+    ) -> None:
+        # 3a. Failure at private _build_contract4_replay_pin after live emission preserves
+        # both a replacement foreign sentinel at pre_pin.txt and the moved original pre_pin bytes.
+        with self.subTest(case="pin_failure_after_live_emission_preserves_replacement_and_original_pre_pin"):
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp_root = Path(tmp).resolve(strict=True)
+                staging_dir = tmp_root / "staging_r4_outer_fail"
+                staging_dir.mkdir(parents=True, exist_ok=True)
+                synth_r4 = _create_synthetic_private_rfactor_assembly_inputs(
+                    subject_id="R4",
+                    equal_hkl_sets=False,
+                )
+                pre_pin_leaf = (
+                    staging_dir / "EVAL_1sar_cdba2c07_2026-11-06.pre_pin.txt"
+                )
+                moved_pre_pin_path = (
+                    tmp_root / "retained_original_pre_pin.txt"
+                )
+                foreign_sentinel_bytes = (
+                    b"FOREIGN_SENTINEL_OUTER_PREPARER_PRE_PIN\n"
+                )
+                observed_outer: dict[str, Any] = {}
+
+                def replace_pre_pin_and_fail(
+                    *,
+                    pin_id: str,
+                    qds: Mapping[str, Any],
+                    projection: Mapping[str, Any],
+                ) -> dict[str, Any]:
+                    self.assertEqual(pin_id, "PIN_QDS_1sar_cdba2c07_2026-11-06")
+                    self.assertEqual(qds["id"], "QDS_1sar_cdba2c07_2026-11-06")
+                    self.assertIn("context", projection)
+                    orig_st = os.lstat(pre_pin_leaf)
+                    observed_outer["orig_dev_ino"] = (
+                        orig_st.st_dev,
+                        orig_st.st_ino,
+                    )
+                    observed_outer["orig_bytes"] = pre_pin_leaf.read_bytes()
+                    os.replace(pre_pin_leaf, moved_pre_pin_path)
+                    pre_pin_leaf.write_bytes(foreign_sentinel_bytes)
+                    foreign_st = os.lstat(pre_pin_leaf)
+                    observed_outer["foreign_dev_ino"] = (
+                        foreign_st.st_dev,
+                        foreign_st.st_ino,
+                    )
+                    raise onesar_records.RfactorRecordAssemblyError(
+                        "synthetic pin builder failure after live emission"
+                    )
+
+                with mock.patch(
+                    "onesar_records._build_contract4_replay_pin",
+                    side_effect=replace_pre_pin_and_fail,
+                ):
+                    with self.assertRaisesRegex(
+                        onesar_records.RfactorRecordAssemblyError,
+                        "synthetic pin builder failure after live emission",
+                    ):
+                        onesar_records._prepare_rfactor_eval_and_live_qds_records(
+                            parent_binding=synth_r4["parent_binding"],
+                            phenix_bundle=synth_r4["phenix_bundle"],
+                            refmac_bundle=synth_r4["refmac_bundle"],
+                            staging_dir=staging_dir,
+                            issued_at="2026-11-07T14:20:00+00:00",
+                            repo_root=REPO_ROOT,
+                        )
+
+                self.assertTrue(pre_pin_leaf.exists())
+                self.assertEqual(
+                    pre_pin_leaf.read_bytes(), foreign_sentinel_bytes
+                )
+                after_foreign_st = os.lstat(pre_pin_leaf)
+                self.assertEqual(
+                    (after_foreign_st.st_dev, after_foreign_st.st_ino),
+                    observed_outer["foreign_dev_ino"],
+                )
+                self.assertTrue(moved_pre_pin_path.exists())
+                self.assertGreater(len(observed_outer["orig_bytes"]), 0)
+                self.assertEqual(
+                    moved_pre_pin_path.read_bytes(),
+                    observed_outer["orig_bytes"],
+                )
+                after_orig_st = os.lstat(moved_pre_pin_path)
+                self.assertEqual(
+                    (after_orig_st.st_dev, after_orig_st.st_ino),
+                    observed_outer["orig_dev_ino"],
+                )
+
+        # 3b. KeyboardInterrupt at the same boundary propagates unchanged with pre_pin.txt retained.
+        with self.subTest(case="keyboard_interrupt_at_pin_boundary_escapes_and_retains_pre_pin"):
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp_root = Path(tmp).resolve(strict=True)
+                staging_dir = tmp_root / "staging_r4_kbd"
+                staging_dir.mkdir(parents=True, exist_ok=True)
+                synth_r4 = _create_synthetic_private_rfactor_assembly_inputs(
+                    subject_id="R4",
+                    equal_hkl_sets=False,
+                )
+                pre_pin_leaf = (
+                    staging_dir / "EVAL_1sar_cdba2c07_2026-11-06.pre_pin.txt"
+                )
+                observed_kbd: dict[str, Any] = {}
+
+                def raise_kbd_at_pin_boundary(
+                    *,
+                    pin_id: str,
+                    qds: Mapping[str, Any],
+                    projection: Mapping[str, Any],
+                ) -> dict[str, Any]:
+                    st = os.lstat(pre_pin_leaf)
+                    observed_kbd["dev_ino"] = (st.st_dev, st.st_ino)
+                    observed_kbd["bytes"] = pre_pin_leaf.read_bytes()
+                    raise KeyboardInterrupt(
+                        "synthetic interrupt at pin boundary"
+                    )
+
+                with mock.patch(
+                    "onesar_records._build_contract4_replay_pin",
+                    side_effect=raise_kbd_at_pin_boundary,
+                ):
+                    with self.assertRaisesRegex(
+                        KeyboardInterrupt,
+                        "synthetic interrupt at pin boundary",
+                    ):
+                        onesar_records._prepare_rfactor_eval_and_live_qds_records(
+                            parent_binding=synth_r4["parent_binding"],
+                            phenix_bundle=synth_r4["phenix_bundle"],
+                            refmac_bundle=synth_r4["refmac_bundle"],
+                            staging_dir=staging_dir,
+                            issued_at="2026-11-07T14:20:00+00:00",
+                            repo_root=REPO_ROOT,
+                        )
+
+                self.assertTrue(pre_pin_leaf.exists())
+                self.assertGreater(len(observed_kbd["bytes"]), 0)
+                self.assertEqual(
+                    pre_pin_leaf.read_bytes(), observed_kbd["bytes"]
+                )
+                after_st = os.lstat(pre_pin_leaf)
+                self.assertEqual(
+                    (after_st.st_dev, after_st.st_ino),
+                    observed_kbd["dev_ino"],
+                )
+
+    def test_leaf_writer_preserves_primary_error_when_close_fails_and_propagates_close_only_error(
+        self,
+    ) -> None:
+        real_os_write = os.write
+        real_os_close = os.close
+        real_fstat = os.fstat
+        prefix_bytes = b"PARTIAL_DIAGNOSTIC_PREFIX\n"
+        full_payload = prefix_bytes + b"REMAINING_TAIL_PAYLOAD\n"
+
+        cases: tuple[tuple[str, BaseException | None, bytes], ...] = (
+            (
+                "primary_oserror_plus_close_error",
+                OSError(errno.ENOSPC, "synthetic primary write failure"),
+                prefix_bytes,
+            ),
+            (
+                "primary_keyboard_interrupt_plus_close_error",
+                KeyboardInterrupt("synthetic primary interruption"),
+                prefix_bytes,
+            ),
+            (
+                "close_only_failure",
+                None,
+                full_payload,
+            ),
+        )
+        for case_name, primary_err, expected_retained in cases:
+            with self.subTest(case=case_name):
+                with tempfile.TemporaryDirectory() as tmp:
+                    stage = Path(tmp).resolve(strict=True) / "staging"
+                    stage.mkdir(parents=True, exist_ok=True)
+                    leaf_path = stage / "diagnostic.txt"
+                    close_err = OSError(errno.EIO, "synthetic close failure")
+                    seen_fds: list[int] = []
+
+                    def write_hook(
+                        fd: int,
+                        data: Any,
+                        *,
+                        _primary: BaseException | None = primary_err,
+                    ) -> int:
+                        seen_fds.append(fd)
+                        chunk = memoryview(data)[: len(prefix_bytes)]
+                        written = real_os_write(fd, chunk)
+                        if _primary is not None:
+                            raise _primary
+                        return written
+
+                    def close_hook(
+                        fd: int,
+                        *,
+                        _close_err: OSError = close_err,
+                    ) -> None:
+                        real_os_close(fd)
+                        raise _close_err
+
+                    expected_exc_type = (
+                        type(primary_err) if primary_err is not None else OSError
+                    )
+                    with (
+                        mock.patch(
+                            "onesar_records.os.write",
+                            side_effect=write_hook,
+                        ),
+                        mock.patch(
+                            "onesar_records.os.close",
+                            side_effect=close_hook,
+                        ),
+                    ):
+                        with self.assertRaises(expected_exc_type) as cm:
+                            onesar_records._write_exclusive_staged_leaf_bytes(
+                                leaf_path,
+                                full_payload,
+                                staging_dir=stage,
+                                label="synthetic_close_control",
+                            )
+
+                    if primary_err is not None:
+                        self.assertIs(cm.exception, primary_err)
+                        self.assertIsNot(cm.exception, close_err)
+                        notes = getattr(cm.exception, "__notes__", ())
+                        self.assertTrue(
+                            any(
+                                "os.close(" in note
+                                and "synthetic close failure" in note
+                                for note in notes
+                            ),
+                            msg=f"expected close diagnostic note on {cm.exception!r}, got {notes!r}",
+                        )
+                    else:
+                        self.assertIs(cm.exception, close_err)
+
+                    self.assertTrue(seen_fds)
+                    for fd in set(seen_fds):
+                        with self.assertRaises(OSError) as fd_cm:
+                            real_fstat(fd)
+                        self.assertEqual(fd_cm.exception.errno, errno.EBADF)
+
+                    self.assertTrue(leaf_path.exists())
+                    self.assertEqual(leaf_path.read_bytes(), expected_retained)
 
 
 if __name__ == "__main__":

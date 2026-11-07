@@ -33,7 +33,7 @@ from pathlib import Path
 import re
 import stat
 import sys
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -4212,7 +4212,7 @@ def build_parent_completed_execution_checkpoint_payload(
 
     Binds:
     - ``schema_version = 1`` and ``checkpoint_stage = "parent_completed_execution_checkpoint_v1"``
-    - ``family = "1sar"`` and preregistered ``subject_id``, ``subject``, and ``mtz``
+    - ``family = "rfactors"`` and preregistered ``subject_id``, ``subject``, and ``mtz``
     - ``parent_evidence_root`` and distinct non-overlapping ``phenix_evidence_root``
       and ``refmac_evidence_root`` child directories
     - Explicit persisted ``phenix_reconciled_manifest`` and ``refmac_operation_manifest``
@@ -5187,4 +5187,1463 @@ def verify_retained_parent_execution_checkpoint(
         raise
     except RetainedReferenceError as exc:
         raise ParentExecutionBindingError(str(exc)) from exc
+
+
+DEFAULT_RECORD_DESTINATION_REL: str = "data/coscientists/openscientist"
+
+_SUPPLEMENTAL_SUBJECT_TAGS: dict[str, str] = {
+    "start": "start",
+    "R5": "r5",
+    "R6": "r6",
+}
+
+_T03_METRIC_IDS: tuple[str, ...] = (
+    "T03_r-work",
+    "T03_r-free",
+    "T03_r-free_r-work_gap",
+)
+
+_T03_ORACLE_TOOL_IDS: tuple[str, ...] = (
+    "phenix.model_vs_data",
+    "REFMAC5",
+)
+
+_COMMITTED_R4_EVAL_REL_PATH: str = (
+    "data/coscientists/openscientist/EVAL_1sar_cdba2c07_2026-09-23.yaml"
+)
+
+_FORBIDDEN_T03_INFORMATIONAL_FIELDS: tuple[str, ...] = (
+    "agent_claim",
+    "delta",
+    "delta_from_measurement_ref",
+    "pass_criterion",
+    "pass_criterion_ref",
+    "criterion_preconditions",
+)
+
+
+class RfactorRecordAssemblyError(RetainedReferenceError):
+    """Raised when private 1SAR R-factor EVAL/QDS assembly, live emission, or replay pinning fails."""
+
+
+def _load_record_assembly_deps() -> tuple[Any, Any, Any, Any, Any, Any, Any]:
+    """Import pure record-assembly, live-emitter, pin, and model dependencies lazily."""
+    scripts_dir = Path(__file__).resolve().parent
+    repo_root = scripts_dir.parent
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
+    import check_qds_trust_invariant
+    import onesar_rerun
+    from pydantic import ValidationError
+    from protstruct_review import models
+    import qds_emit
+    import qds_emit_contract_v4
+    import yaml
+
+    return (
+        onesar_rerun,
+        qds_emit,
+        qds_emit_contract_v4,
+        check_qds_trust_invariant,
+        models,
+        ValidationError,
+        yaml,
+    )
+
+
+def _validate_finite_non_bool_number(
+    value: Any,
+    *,
+    label: str,
+    allow_negative: bool = True,
+) -> float:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(float(value))
+    ):
+        raise RfactorRecordAssemblyError(
+            f"{label}: expected finite non-boolean numeric value, got {value!r}"
+        )
+    numeric = float(value)
+    if not allow_negative and numeric < 0.0:
+        raise RfactorRecordAssemblyError(
+            f"{label}: expected non-negative finite number, got {value!r}"
+        )
+    return numeric
+
+
+def _validate_positive_non_bool_int(value: Any, *, label: str) -> int:
+    if type(value) is not int or value <= 0:
+        raise RfactorRecordAssemblyError(
+            f"{label}: expected positive integer count (bool/float rejected), got {value!r}"
+        )
+    return int(value)
+
+
+def _validate_hkl_triple_list(
+    hkls_raw: Any,
+    *,
+    expected_count: int | None,
+    label: str,
+) -> list[list[int]]:
+    if not isinstance(hkls_raw, list) or not hkls_raw:
+        raise RfactorRecordAssemblyError(
+            f"{label}: expected non-empty list of [h, k, l] integer triples"
+        )
+    if expected_count is not None:
+        checked_count = _validate_positive_non_bool_int(
+            expected_count, label=f"{label}.expected_count"
+        )
+        if len(hkls_raw) != checked_count:
+            raise RfactorRecordAssemblyError(
+                f"{label}: HKL list length {len(hkls_raw)} disagrees with count {checked_count}"
+            )
+    seen: set[tuple[int, int, int]] = set()
+    normalized: list[list[int]] = []
+    for idx, item in enumerate(hkls_raw):
+        if (
+            not isinstance(item, (list, tuple))
+            or len(item) != 3
+            or any(type(coord) is not int for coord in item)
+        ):
+            raise RfactorRecordAssemblyError(
+                f"{label}[{idx}]: expected 3-element integer Miller index (bool rejected), got {item!r}"
+            )
+        triple = (int(item[0]), int(item[1]), int(item[2]))
+        if triple == (0, 0, 0):
+            raise RfactorRecordAssemblyError(
+                f"{label}[{idx}]: (0, 0, 0) Miller index is invalid"
+            )
+        if triple in seen:
+            raise RfactorRecordAssemblyError(
+                f"{label}[{idx}]: duplicate Miller index {list(triple)}"
+            )
+        seen.add(triple)
+        normalized.append([triple[0], triple[1], triple[2]])
+    return sorted(normalized, key=lambda row: (row[0], row[1], row[2]))
+
+
+def _compute_cross_tool_hkl_set_comparison(
+    phenix_work_hkls: Any,
+    phenix_free_hkls: Any,
+    refmac_work_hkls: Any,
+    refmac_free_hkls: Any,
+    *,
+    phenix_work_count: int | None = None,
+    phenix_free_count: int | None = None,
+    refmac_work_count: int | None = None,
+    refmac_free_count: int | None = None,
+) -> dict[str, Any]:
+    """Validate both producers' work/free HKL lists and compute exact set differences."""
+    phx_work = _validate_hkl_triple_list(
+        phenix_work_hkls,
+        expected_count=phenix_work_count,
+        label="phenix.actual_work_hkls",
+    )
+    phx_free = _validate_hkl_triple_list(
+        phenix_free_hkls,
+        expected_count=phenix_free_count,
+        label="phenix.actual_free_hkls",
+    )
+    rm_work = _validate_hkl_triple_list(
+        refmac_work_hkls,
+        expected_count=refmac_work_count,
+        label="refmac.actual_work_hkls",
+    )
+    rm_free = _validate_hkl_triple_list(
+        refmac_free_hkls,
+        expected_count=refmac_free_count,
+        label="refmac.actual_free_hkls",
+    )
+    phx_work_set = {(h, k, l) for h, k, l in phx_work}
+    phx_free_set = {(h, k, l) for h, k, l in phx_free}
+    if phx_work_set & phx_free_set:
+        raise RfactorRecordAssemblyError(
+            "phenix: actual_work_hkls and actual_free_hkls are not disjoint"
+        )
+    rm_work_set = {(h, k, l) for h, k, l in rm_work}
+    rm_free_set = {(h, k, l) for h, k, l in rm_free}
+    if rm_work_set & rm_free_set:
+        raise RfactorRecordAssemblyError(
+            "refmac: actual_work_hkls and actual_free_hkls are not disjoint"
+        )
+
+    work_only_in_phenix = [
+        [h, k, l] for h, k, l in sorted(phx_work_set - rm_work_set)
+    ]
+    work_only_in_refmac = [
+        [h, k, l] for h, k, l in sorted(rm_work_set - phx_work_set)
+    ]
+    free_only_in_phenix = [
+        [h, k, l] for h, k, l in sorted(phx_free_set - rm_free_set)
+    ]
+    free_only_in_refmac = [
+        [h, k, l] for h, k, l in sorted(rm_free_set - phx_free_set)
+    ]
+    work_sets_equal = not work_only_in_phenix and not work_only_in_refmac
+    free_sets_equal = not free_only_in_phenix and not free_only_in_refmac
+    effective_sets_equal = work_sets_equal and free_sets_equal
+    return {
+        "phenix_work_count": len(phx_work),
+        "phenix_free_count": len(phx_free),
+        "refmac_work_count": len(rm_work),
+        "refmac_free_count": len(rm_free),
+        "work_intersection_count": len(phx_work_set & rm_work_set),
+        "free_intersection_count": len(phx_free_set & rm_free_set),
+        "work_only_in_phenix": work_only_in_phenix,
+        "work_only_in_refmac": work_only_in_refmac,
+        "free_only_in_phenix": free_only_in_phenix,
+        "free_only_in_refmac": free_only_in_refmac,
+        "work_sets_equal": work_sets_equal,
+        "free_sets_equal": free_sets_equal,
+        "effective_sets_equal": effective_sets_equal,
+        "comparability_label": (
+            "comparable_identical_effective_hkl_sets"
+            if effective_sets_equal
+            else "non-comparable"
+        ),
+    }
+
+
+def _resolve_rfactor_record_identities(
+    subject_id: str,
+    *,
+    run_date: str,
+    destination_rel: str = DEFAULT_RECORD_DESTINATION_REL,
+) -> dict[str, Any]:
+    """Resolve canonical EVAL/QDS stems, relative paths, and IDs from subject and parent UTC start date."""
+    onesar_rerun, *_ = _load_record_assembly_deps()
+    try:
+        subject_spec = onesar_rerun.resolve_subject_spec(subject_id)
+    except ValueError as exc:
+        raise RfactorRecordAssemblyError(f"subject_id: {exc}") from exc
+    if not isinstance(run_date, str) or not _ISO_DATE_RE.fullmatch(run_date):
+        raise RfactorRecordAssemblyError(
+            f"run_date: expected canonical YYYY-MM-DD date string, got {run_date!r}"
+        )
+    try:
+        parsed_date = _parse_strict_iso_date(run_date, label="run_date")
+    except ParentExecutionBindingError as exc:
+        raise RfactorRecordAssemblyError(str(exc)) from exc
+    if parsed_date.isoformat() != run_date:
+        raise RfactorRecordAssemblyError(
+            f"run_date: non-canonical date string {run_date!r}"
+        )
+    if (
+        not isinstance(destination_rel, str)
+        or not destination_rel.strip()
+        or destination_rel.startswith("/")
+        or "\\" in destination_rel
+    ):
+        raise RfactorRecordAssemblyError(
+            f"destination_rel: must be a relative POSIX path under data/, got {destination_rel!r}"
+        )
+    norm_dest = destination_rel.strip("/")
+    dest_parts = [part for part in norm_dest.split("/") if part]
+    if not dest_parts or dest_parts[0] != "data" or ".." in dest_parts or "." in dest_parts:
+        raise RfactorRecordAssemblyError(
+            f"destination_rel: must reside under data/ without '.' or '..' components, got {destination_rel!r}"
+        )
+    norm_dest = "/".join(dest_parts)
+
+    if subject_id == "R4":
+        eval_stem = f"EVAL_1sar_cdba2c07_{run_date}"
+        qds_id: str | None = f"QDS_1sar_cdba2c07_{run_date}"
+        emits_qds = True
+    elif subject_id in _SUPPLEMENTAL_SUBJECT_TAGS:
+        stage_tag = _SUPPLEMENTAL_SUBJECT_TAGS[subject_id]
+        eval_stem = f"EVAL_1sar_cdba2c07-{stage_tag}_{run_date}"
+        qds_id = None
+        emits_qds = False
+    else:
+        raise RfactorRecordAssemblyError(
+            f"subject_id: unsupported 1SAR subject {subject_id!r}"
+        )
+
+    return {
+        "subject_id": subject_id,
+        "subject": copy.deepcopy(subject_spec),
+        "stage": subject_spec["stage"],
+        "run_date": run_date,
+        "destination_rel": norm_dest,
+        "eval_filename_stem": eval_stem,
+        "eval_run_id": eval_stem,
+        "eval_rel_path": f"{norm_dest}/{eval_stem}.yaml",
+        "emits_qds": emits_qds,
+        "qds_id": qds_id,
+        "qds_rel_path": (
+            f"{norm_dest}/{qds_id}.yaml" if qds_id is not None else None
+        ),
+        "emission_context_id": (
+            f"CTX_{qds_id}" if qds_id is not None else None
+        ),
+        "replay_pin_id": (
+            f"PIN_{qds_id}" if qds_id is not None else None
+        ),
+    }
+
+
+def _validate_repo_relative_evidence_refs(
+    evidence_refs_raw: Any,
+    *,
+    label: str,
+) -> list[str]:
+    if not isinstance(evidence_refs_raw, (list, tuple)) or not evidence_refs_raw:
+        raise RfactorRecordAssemblyError(
+            f"{label}: expected non-empty list of repository-relative evidence_refs"
+        )
+    validated: list[str] = []
+    seen: set[str] = set()
+    for idx, ref in enumerate(evidence_refs_raw):
+        if (
+            not isinstance(ref, str)
+            or not ref.strip()
+            or ref.startswith("/")
+            or "\\" in ref
+        ):
+            raise RfactorRecordAssemblyError(
+                f"{label}[{idx}]: expected relative POSIX path string, got {ref!r}"
+            )
+        parts = [part for part in ref.split("/") if part]
+        if not parts or ".." in parts or "." in parts:
+            raise RfactorRecordAssemblyError(
+                f"{label}[{idx}]: invalid relative evidence path {ref!r}"
+            )
+        norm_ref = "/".join(parts)
+        if norm_ref not in seen:
+            seen.add(norm_ref)
+            validated.append(norm_ref)
+    return validated
+
+
+def _validate_optional_provenance_ref(
+    provenance_ref: Any,
+    *,
+    label: str,
+) -> str | None:
+    if provenance_ref is None:
+        return None
+    if not isinstance(provenance_ref, str) or not provenance_ref.strip():
+        raise RfactorRecordAssemblyError(
+            f"{label}: provenance_ref must be a non-empty string or None (object/non-string rejected), "
+            f"got {provenance_ref!r}"
+        )
+    return provenance_ref.strip()
+
+
+def _assemble_six_row_t03_measurements(
+    *,
+    parent_binding: Mapping[str, Any],
+    phenix_bundle: Mapping[str, Any],
+    refmac_bundle: Mapping[str, Any],
+    eval_run_id: str | None = None,
+    cross_tool_comparison_evidence_ref: str | None = None,
+    destination_rel: str = DEFAULT_RECORD_DESTINATION_REL,
+) -> dict[str, Any]:
+    """Assemble the 6 informational T03 MeasurementValue rows from verified parent and producer bundles.
+
+    This is a private internal record-mechanics helper. It requires an already
+    verified parent execution checkpoint binding, a verified PHENIX measurement
+    bundle, and a verified REFMAC measurement bundle with explicit active work
+    and free HKL sets. It never infers REFMAC native effective sets from
+    candidate counts or PHENIX single-producer results.
+    """
+    onesar_rerun, *_ = _load_record_assembly_deps()
+    if not isinstance(parent_binding, Mapping):
+        raise RfactorRecordAssemblyError(
+            "parent_binding: must be a verified parent checkpoint result mapping"
+        )
+    if parent_binding.get("verification_status") != "verified":
+        raise RfactorRecordAssemblyError(
+            "parent_binding.verification_status: expected 'verified', "
+            f"got {parent_binding.get('verification_status')!r}"
+        )
+    if parent_binding.get("family") != EXPECTED_FAMILY_ID:
+        raise RfactorRecordAssemblyError(
+            f"parent_binding.family: expected {EXPECTED_FAMILY_ID!r}, "
+            f"got {parent_binding.get('family')!r}"
+        )
+    subject_id = parent_binding.get("subject_id")
+    if not isinstance(subject_id, str):
+        raise RfactorRecordAssemblyError(
+            f"parent_binding.subject_id: expected registered subject string, got {subject_id!r}"
+        )
+    try:
+        expected_subject = onesar_rerun.resolve_subject_spec(subject_id)
+    except ValueError as exc:
+        raise RfactorRecordAssemblyError(
+            f"parent_binding.subject_id: {exc}"
+        ) from exc
+    expected_mtz = {
+        "member": onesar_rerun.MTZ_MEMBER,
+        "sha256": onesar_rerun.MTZ_SHA256,
+        "subject_ref": onesar_rerun.MTZ_SUBJECT_REF,
+    }
+    if parent_binding.get("subject") != expected_subject:
+        raise RfactorRecordAssemblyError(
+            f"parent_binding.subject: disagrees with registered specification for {subject_id!r}"
+        )
+    if parent_binding.get("mtz") != expected_mtz:
+        raise RfactorRecordAssemblyError(
+            "parent_binding.mtz: disagrees with registered 1SAR MTZ specification"
+        )
+
+    timing_block = parent_binding.get("timing")
+    if not isinstance(timing_block, Mapping):
+        raise RfactorRecordAssemblyError(
+            "parent_binding.timing: missing timing block from verified parent checkpoint"
+        )
+    try:
+        validated_timing = validate_parent_execution_timing(
+            timing_block.get("started_at_utc"),
+            timing_block.get("finished_at_utc"),
+            timing_block.get("run_date"),
+            label="parent_binding.timing",
+        )
+    except ParentExecutionBindingError as exc:
+        raise RfactorRecordAssemblyError(str(exc)) from exc
+    run_date = validated_timing["run_date"]
+    if (
+        "run_date" in parent_binding
+        and parent_binding.get("run_date") != run_date
+    ):
+        raise RfactorRecordAssemblyError(
+            f"parent_binding.run_date: {parent_binding.get('run_date')!r} disagrees with "
+            f"parent_binding.timing.run_date {run_date!r}"
+        )
+
+    identities = _resolve_rfactor_record_identities(
+        subject_id,
+        run_date=run_date,
+        destination_rel=destination_rel,
+    )
+    if eval_run_id is not None and eval_run_id != identities["eval_run_id"]:
+        raise RfactorRecordAssemblyError(
+            f"eval_run_id: expected {identities['eval_run_id']!r} for subject {subject_id!r} "
+            f"and run_date {run_date!r}, got {eval_run_id!r}"
+        )
+
+    if not isinstance(phenix_bundle, Mapping):
+        raise RfactorRecordAssemblyError("phenix_bundle: must be a mapping")
+    if not isinstance(refmac_bundle, Mapping):
+        raise RfactorRecordAssemblyError("refmac_bundle: must be a mapping")
+    if phenix_bundle.get("producer") != "phenix":
+        raise RfactorRecordAssemblyError(
+            f"phenix_bundle.producer: expected 'phenix', got {phenix_bundle.get('producer')!r}"
+        )
+    if refmac_bundle.get("producer") != "refmac":
+        raise RfactorRecordAssemblyError(
+            f"refmac_bundle.producer: expected 'refmac', got {refmac_bundle.get('producer')!r}"
+        )
+    if phenix_bundle.get("verification_status") != "verified":
+        raise RfactorRecordAssemblyError(
+            "phenix_bundle.verification_status: expected 'verified', "
+            f"got {phenix_bundle.get('verification_status')!r}"
+        )
+    if refmac_bundle.get("verification_status") != "verified":
+        raise RfactorRecordAssemblyError(
+            "refmac_bundle.verification_status: expected 'verified' (diagnostic-only or refused "
+            f"REFMAC capture cannot assemble R-factor rows), got {refmac_bundle.get('verification_status')!r}"
+        )
+    if (
+        "cross_tool_symmetric_differences" in phenix_bundle
+        and phenix_bundle.get("cross_tool_symmetric_differences") is not None
+    ):
+        raise RfactorRecordAssemblyError(
+            "phenix_bundle.cross_tool_symmetric_differences: must be None on single-producer PHENIX result"
+        )
+
+    for prod_label, bundle in (
+        ("phenix_bundle", phenix_bundle),
+        ("refmac_bundle", refmac_bundle),
+    ):
+        if (
+            bundle.get("subject_id") != subject_id
+            or bundle.get("subject") != expected_subject
+        ):
+            raise RfactorRecordAssemblyError(
+                f"{prod_label}.subject: disagrees with parent subject {subject_id!r}"
+            )
+        if bundle.get("mtz") != expected_mtz:
+            raise RfactorRecordAssemblyError(
+                f"{prod_label}.mtz: disagrees with parent 1SAR MTZ specification"
+            )
+        for forbidden_gap_count_key in (
+            "gap_count",
+            "r_free_gap_count",
+            "r_free_r_work_gap_count",
+        ):
+            if bundle.get(forbidden_gap_count_key) is not None:
+                raise RfactorRecordAssemblyError(
+                    f"{prod_label}.{forbidden_gap_count_key}: gap measurement must not carry a fabricated count"
+                )
+            rf_map = bundle.get("rfactors")
+            if isinstance(rf_map, Mapping) and rf_map.get(forbidden_gap_count_key) is not None:
+                raise RfactorRecordAssemblyError(
+                    f"{prod_label}.rfactors.{forbidden_gap_count_key}: gap measurement must not carry a fabricated count"
+                )
+
+    phx_work_count = _validate_positive_non_bool_int(
+        phenix_bundle.get("work_count"), label="phenix_bundle.work_count"
+    )
+    phx_free_count = _validate_positive_non_bool_int(
+        phenix_bundle.get("free_count"), label="phenix_bundle.free_count"
+    )
+    rm_work_count = _validate_positive_non_bool_int(
+        refmac_bundle.get("work_count"), label="refmac_bundle.work_count"
+    )
+    rm_free_count = _validate_positive_non_bool_int(
+        refmac_bundle.get("free_count"), label="refmac_bundle.free_count"
+    )
+
+    hkl_comparison = _compute_cross_tool_hkl_set_comparison(
+        phenix_bundle.get("actual_work_hkls"),
+        phenix_bundle.get("actual_free_hkls"),
+        refmac_bundle.get("actual_work_hkls"),
+        refmac_bundle.get("actual_free_hkls"),
+        phenix_work_count=phx_work_count,
+        phenix_free_count=phx_free_count,
+        refmac_work_count=rm_work_count,
+        refmac_free_count=rm_free_count,
+    )
+
+    comp_ev_ref: list[str] = []
+    if cross_tool_comparison_evidence_ref is not None:
+        comp_ev_ref = _validate_repo_relative_evidence_refs(
+            [cross_tool_comparison_evidence_ref],
+            label="cross_tool_comparison_evidence_ref",
+        )
+
+    producer_specs = (
+        (
+            "phenix",
+            "phenix_mvd",
+            "phenix.model_vs_data",
+            "cctbx",
+            phenix_bundle,
+            phx_work_count,
+            phx_free_count,
+        ),
+        (
+            "refmac",
+            "refmac5",
+            "REFMAC5",
+            "non_cctbx",
+            refmac_bundle,
+            rm_work_count,
+            rm_free_count,
+        ),
+    )
+
+    measurements: list[dict[str, Any]] = []
+    bundle_refs_by_producer: dict[str, str] = {}
+    for (
+        prod_key,
+        prod_slug,
+        oracle_tool_ref,
+        oracle_family,
+        bundle,
+        work_count,
+        free_count,
+    ) in producer_specs:
+        rfactors = bundle.get("rfactors")
+        if not isinstance(rfactors, Mapping):
+            raise RfactorRecordAssemblyError(
+                f"{prod_key}_bundle.rfactors: must be a mapping"
+            )
+        r_work = _validate_finite_non_bool_number(
+            rfactors.get("r_work"),
+            label=f"{prod_key}_bundle.rfactors.r_work",
+            allow_negative=False,
+        )
+        r_free = _validate_finite_non_bool_number(
+            rfactors.get("r_free"),
+            label=f"{prod_key}_bundle.rfactors.r_free",
+            allow_negative=False,
+        )
+        r_gap = _validate_finite_non_bool_number(
+            rfactors.get("r_free_r_work_gap"),
+            label=f"{prod_key}_bundle.rfactors.r_free_r_work_gap",
+            allow_negative=True,
+        )
+        expected_gap = r_free - r_work
+        if abs(r_gap - expected_gap) > 1e-9:
+            raise RfactorRecordAssemblyError(
+                f"{prod_key}_bundle.rfactors.r_free_r_work_gap: recorded gap {r_gap!r} "
+                f"disagrees with r_free ({r_free!r}) - r_work ({r_work!r}) = {expected_gap!r}"
+            )
+
+        raw_bundle_ref = bundle.get("bundle_ref")
+        if raw_bundle_ref is None:
+            bundle_ref = f"{identities['eval_run_id']}_{prod_slug}_t03_bundle"
+        elif isinstance(raw_bundle_ref, str) and raw_bundle_ref.strip():
+            bundle_ref = raw_bundle_ref.strip()
+        else:
+            raise RfactorRecordAssemblyError(
+                f"{prod_key}_bundle.bundle_ref: must be a non-empty string"
+            )
+        bundle_refs_by_producer[prod_key] = bundle_ref
+
+        provenance_ref = _validate_optional_provenance_ref(
+            bundle.get("provenance_ref"),
+            label=f"{prod_key}_bundle.provenance_ref",
+        )
+        raw_evidence_refs = bundle.get("evidence_refs")
+        base_evidence_refs = _validate_repo_relative_evidence_refs(
+            raw_evidence_refs,
+            label=f"{prod_key}_bundle.evidence_refs",
+        )
+        shared_evidence_refs = list(base_evidence_refs)
+        for extra_ref in comp_ev_ref:
+            if extra_ref not in shared_evidence_refs:
+                shared_evidence_refs.append(extra_ref)
+
+        if hkl_comparison["effective_sets_equal"]:
+            comparison_clause = (
+                "Effective work and free reflection sets match across "
+                f"phenix.model_vs_data and REFMAC5 (n_work={work_count}, n_free={free_count})."
+            )
+        else:
+            comparison_clause = (
+                "Cross-tool effective reflection sets are non-comparable without set-difference "
+                f"qualification: phenix.model_vs_data (n_work={phx_work_count}, n_free={phx_free_count}) vs "
+                f"REFMAC5 (n_work={rm_work_count}, n_free={rm_free_count}); symmetric differences "
+                f"work_only_in_phenix={len(hkl_comparison['work_only_in_phenix'])}, "
+                f"work_only_in_refmac={len(hkl_comparison['work_only_in_refmac'])}, "
+                f"free_only_in_phenix={len(hkl_comparison['free_only_in_phenix'])}, "
+                f"free_only_in_refmac={len(hkl_comparison['free_only_in_refmac'])}."
+            )
+        base_note = (
+            f"Fixed-coordinate T03 evaluation on archived 1SAR {subject_id} ({expected_subject['member']}, "
+            f"2.50 A archived trajectory dataset; distinct from 1.80 A deposited pdb:1sar_deposited) "
+            f"by {oracle_tool_ref} ({oracle_family}); component reflection counts n_work={work_count}, "
+            f"n_free={free_count}. {comparison_clause}"
+        )
+
+        r_work_id = f"{identities['eval_run_id']}_{prod_slug}_T03_r_work"
+        r_free_id = f"{identities['eval_run_id']}_{prod_slug}_T03_r_free"
+        r_gap_id = f"{identities['eval_run_id']}_{prod_slug}_T03_r_free_r_work_gap"
+
+        row_specs = (
+            (
+                r_work_id,
+                "T03_r-work",
+                {"value_numeric": r_work, "count": work_count},
+                None,
+            ),
+            (
+                r_free_id,
+                "T03_r-free",
+                {"value_numeric": r_free, "count": free_count},
+                None,
+            ),
+            (
+                r_gap_id,
+                "T03_r-free_r-work_gap",
+                {"value_numeric": r_gap},
+                [r_work_id, r_free_id],
+            ),
+        )
+        for row_id, metric_id, oracle_measure, derived_refs in row_specs:
+            row_doc: dict[str, Any] = {
+                "id": row_id,
+                "catalog_task_ref": "T03",
+                "metric_definition_ref": metric_id,
+                "oracle_tool_ref": oracle_tool_ref,
+                "oracle_family": oracle_family,
+                "subject_ref": expected_subject["subject_ref"],
+                "stage": expected_subject["stage"],
+                "scope": "complex",
+                "oracle_measure": oracle_measure,
+                "pass_status": "informational",
+                "bundle_ref": bundle_ref,
+                "evidence_refs": list(shared_evidence_refs),
+                "notes": base_note,
+            }
+            if provenance_ref is not None:
+                row_doc["provenance_ref"] = provenance_ref
+            if derived_refs is not None:
+                row_doc["derived_from_measurement_refs"] = list(derived_refs)
+            measurements.append(row_doc)
+
+    if bundle_refs_by_producer["phenix"] == bundle_refs_by_producer["refmac"]:
+        raise RfactorRecordAssemblyError(
+            "bundle_ref: phenix.model_vs_data and REFMAC5 triples must have distinct bundle_ref identifiers"
+        )
+
+    return {
+        "identities": identities,
+        "measurements": measurements,
+        "cross_tool_hkl_comparison": hkl_comparison,
+        "phenix_bundle_ref": bundle_refs_by_producer["phenix"],
+        "refmac_bundle_ref": bundle_refs_by_producer["refmac"],
+    }
+
+
+def _build_1sar_structure_snapshot(
+    subject_id: str,
+    *,
+    repo_root: str | os.PathLike[str] | None = None,
+) -> dict[str, Any]:
+    """Return the 1SAR Structure snapshot row for ``subject_id``."""
+    onesar_rerun, _, qds_emit_contract_v4, *_ = _load_record_assembly_deps()
+    try:
+        subject_spec = onesar_rerun.resolve_subject_spec(subject_id)
+    except ValueError as exc:
+        raise RfactorRecordAssemblyError(f"subject_id: {exc}") from exc
+    raw_repo_root = onesar_rerun.REPO_ROOT if repo_root is None else repo_root
+    resolved_repo_root = _ensure_no_symlink_chain_to_directory(
+        Path(os.fspath(raw_repo_root)), label="repo_root"
+    )
+    if subject_id == "R4":
+        r4_eval_path = resolved_repo_root / _COMMITTED_R4_EVAL_REL_PATH
+        doc = qds_emit_contract_v4.strict_yaml_load(
+            r4_eval_path.read_text(encoding="utf-8")
+        )
+        structures = doc.get("structures") if isinstance(doc, Mapping) else None
+        if not isinstance(structures, list) or not structures or not isinstance(structures[0], Mapping):
+            raise RfactorRecordAssemblyError(
+                f"committed R4 EVAL {r4_eval_path} has no structures[0] snapshot"
+            )
+        row = copy.deepcopy(dict(structures[0]))
+        if (
+            row.get("id") != "1sar"
+            or row.get("id_kind") != "pdb"
+            or row.get("method") != "xray"
+            or row.get("resolution_a") != 2.5
+            or row.get("space_group") != "P 21 21 21"
+        ):
+            raise RfactorRecordAssemblyError(
+                f"committed R4 Structure snapshot has unexpected identity fields: {row!r}"
+            )
+        return row
+
+    return {
+        "id": "1sar",
+        "id_kind": "pdb",
+        "method": "xray",
+        "description": (
+            f"Ribonuclease Sa packaged {subject_id} ({subject_spec['stage']}) model "
+            f"({subject_spec['member']}). Archived trajectory resolution 2.50 Å and space group "
+            "P 21 21 21 reflect the packaged 1SAR evaluation dataset and retained input admission "
+            "(distinct from the 1.80 Å deposited pdb:1sar_deposited entry)."
+        ),
+        "resolution_a": 2.5,
+        "space_group": "P 21 21 21",
+    }
+
+
+def _select_live_t03_registry_and_tool_snapshots(
+    *,
+    issued_at: str,
+    measured_metric_ids: Sequence[str] = _T03_METRIC_IDS,
+    measured_tool_ids: Sequence[str] = _T03_ORACLE_TOOL_IDS,
+    repo_root: str | os.PathLike[str] | None = None,
+) -> dict[str, Any]:
+    """Select issue-time applicable T03 recommendations, assumptions (with predecessors), and canonical Tools."""
+    try:
+        _parse_strict_tz_datetime(issued_at, label="issued_at")
+    except ParentExecutionBindingError as exc:
+        raise RfactorRecordAssemblyError(str(exc)) from exc
+    onesar_rerun, qds_emit, qds_emit_contract_v4, *_ = _load_record_assembly_deps()
+    raw_repo_root = onesar_rerun.REPO_ROOT if repo_root is None else repo_root
+    resolved_repo_root = _ensure_no_symlink_chain_to_directory(
+        Path(os.fspath(raw_repo_root)), label="repo_root"
+    )
+    metric_set = set(measured_metric_ids)
+    tool_set = set(measured_tool_ids)
+
+    rec_rows = qds_emit_contract_v4._load_live_registry_rows(
+        resolved_repo_root,
+        "tool_recommendations.yaml",
+        "tool_recommendations",
+    )
+    active_recs = qds_emit._active_registry_rows(
+        rec_rows,
+        issued_at=issued_at,
+        registry_name="live tool_recommendations registry",
+        supersedes_field="supersedes_recommendation_ref",
+    )
+    rec_by_id = {row["id"]: row for row in rec_rows}
+    active_applicable_rec_ids = [
+        row["id"]
+        for row in active_recs
+        if row.get("metric_definition_ref") in metric_set
+    ]
+    required_rec_ids: set[str] = set()
+    for row_id in active_applicable_rec_ids:
+        cursor: str | None = row_id
+        while cursor is not None and cursor not in required_rec_ids:
+            required_rec_ids.add(cursor)
+            cursor = rec_by_id[cursor].get("supersedes_recommendation_ref")
+    selected_recommendations = [
+        copy.deepcopy(row) for row in rec_rows if row.get("id") in required_rec_ids
+    ]
+
+    assum_rows = qds_emit_contract_v4._load_live_registry_rows(
+        resolved_repo_root,
+        "tool_assumptions.yaml",
+        "assumptions",
+    )
+    active_assumptions = qds_emit._active_registry_rows(
+        assum_rows,
+        issued_at=issued_at,
+        registry_name="live assumptions registry",
+        supersedes_field="supersedes_assumption_ref",
+    )
+    assum_by_id = {row["id"]: row for row in assum_rows}
+    active_applicable_assum_ids = [
+        row["id"]
+        for row in active_assumptions
+        if row.get("tool_ref") in tool_set
+    ]
+    required_assum_ids: set[str] = set()
+    for row_id in active_applicable_assum_ids:
+        cursor = row_id
+        while cursor is not None and cursor not in required_assum_ids:
+            required_assum_ids.add(cursor)
+            cursor = assum_by_id[cursor].get("supersedes_assumption_ref")
+    selected_assumptions = [
+        copy.deepcopy(row) for row in assum_rows if row.get("id") in required_assum_ids
+    ]
+
+    referenced_tool_ids: set[str] = set(tool_set)
+    for row in selected_recommendations:
+        t_ref = row.get("tool_ref")
+        if isinstance(t_ref, str) and t_ref.strip():
+            referenced_tool_ids.add(t_ref)
+    for row in selected_assumptions:
+        t_ref = row.get("tool_ref")
+        if isinstance(t_ref, str) and t_ref.strip():
+            referenced_tool_ids.add(t_ref)
+
+    catalog_doc = qds_emit_contract_v4.strict_yaml_load(
+        (resolved_repo_root / "ref" / "catalog.yaml").read_text(encoding="utf-8")
+    )
+    catalog_tools = (
+        catalog_doc.get("tools") if isinstance(catalog_doc, Mapping) else None
+    )
+    if not isinstance(catalog_tools, list):
+        raise RfactorRecordAssemblyError(
+            "ref/catalog.yaml: missing tools list"
+        )
+    selected_tools = [
+        copy.deepcopy(row)
+        for row in catalog_tools
+        if isinstance(row, Mapping) and row.get("id") in referenced_tool_ids
+    ]
+    found_tool_ids = {row["id"] for row in selected_tools}
+    missing_tools = sorted(referenced_tool_ids - found_tool_ids)
+    if missing_tools:
+        raise RfactorRecordAssemblyError(
+            f"ref/catalog.yaml: missing referenced Tool row(s): {missing_tools}"
+        )
+
+    return {
+        "issued_at": issued_at,
+        "tools": selected_tools,
+        "tool_recommendations": selected_recommendations,
+        "active_recommendation_ids": active_applicable_rec_ids,
+        "assumptions": selected_assumptions,
+        "active_assumption_ids": active_applicable_assum_ids,
+    }
+
+
+def _validate_override_tools_against_canonical(
+    override_tools: Any,
+    canonical_tools: Sequence[Mapping[str, Any]],
+    *,
+    label: str = "registry_snapshots_override.tools",
+) -> list[dict[str, Any]]:
+    """Validate supplied override Tool rows against the complete canonical selected catalog rows."""
+    if not isinstance(override_tools, list):
+        raise RfactorRecordAssemblyError(
+            f"{label}: expected list of Tool mappings, got {type(override_tools).__name__}"
+        )
+    canonical_by_id: dict[str, dict[str, Any]] = {
+        str(row["id"]): copy.deepcopy(dict(row)) for row in canonical_tools
+    }
+    required_ids = set(canonical_by_id.keys())
+    seen_ids: set[str] = set()
+    override_by_id: dict[str, dict[str, Any]] = {}
+    for idx, item in enumerate(override_tools):
+        if not isinstance(item, Mapping):
+            raise RfactorRecordAssemblyError(
+                f"{label}[{idx}]: expected Tool mapping, got {type(item).__name__}"
+            )
+        raw_id = item.get("id")
+        if not isinstance(raw_id, str) or not raw_id.strip():
+            raise RfactorRecordAssemblyError(
+                f"{label}[{idx}]: Tool row must carry a non-empty string id"
+            )
+        if raw_id in seen_ids:
+            raise RfactorRecordAssemblyError(
+                f"{label}: duplicate Tool row id {raw_id!r}"
+            )
+        seen_ids.add(raw_id)
+        override_by_id[raw_id] = copy.deepcopy(dict(item))
+
+    missing_ids = sorted(required_ids - seen_ids)
+    if missing_ids:
+        raise RfactorRecordAssemblyError(
+            f"{label}: missing required canonical Tool row(s): {missing_ids}"
+        )
+    extra_ids = sorted(seen_ids - required_ids)
+    if extra_ids:
+        raise RfactorRecordAssemblyError(
+            f"{label}: unexpected extra Tool row(s) not in canonical selection: {extra_ids}"
+        )
+    for row in canonical_tools:
+        tool_id = str(row["id"])
+        canonical_row = canonical_by_id[tool_id]
+        supplied_row = override_by_id[tool_id]
+        if supplied_row != canonical_row:
+            missing_keys = sorted(set(canonical_row.keys()) - set(supplied_row.keys()))
+            extra_keys = sorted(set(supplied_row.keys()) - set(canonical_row.keys()))
+            altered_keys = sorted(
+                k
+                for k in canonical_row.keys() & supplied_row.keys()
+                if supplied_row[k] != canonical_row[k]
+            )
+            raise RfactorRecordAssemblyError(
+                f"{label}[{tool_id!r}]: Tool row disagrees with complete canonical catalog Tool row "
+                f"(missing_keys={missing_keys}, extra_keys={extra_keys}, altered_keys={altered_keys})"
+            )
+    return [copy.deepcopy(override_by_id[str(row["id"])]) for row in canonical_tools]
+
+
+def _write_exclusive_staged_leaf_bytes(
+    leaf_path: Path,
+    payload: bytes,
+    *,
+    staging_dir: Path,
+    label: str,
+) -> Path:
+    """Create ``leaf_path`` inside ``staging_dir`` exclusively with ``O_CREAT | O_EXCL`` and write ``payload``.
+
+    Requires an exclusive fresh attempt leaf in ``staging_dir``: refuses any
+    pre-existing regular file, symlink (including dangling), hardlink, or
+    non-regular entry without opening, truncating, unlinking, or modifying it.
+    Private ``.txt`` staging artifacts are diagnostic evidence; on post-create
+    check or write failure, the owned descriptor is closed and any created partial
+    ``.txt`` file or replacement is retained untouched while the original
+    exception propagates. If ``os.close(fd)`` also fails after a primary
+    exception, the primary exception object and traceback are preserved with a
+    close diagnostic note; a close-only ``OSError`` propagates directly.
+    """
+    if not isinstance(payload, (bytes, bytearray)):
+        raise RfactorRecordAssemblyError(
+            f"{label}: expected bytes payload, got {type(payload).__name__}"
+        )
+    resolved_staging_dir = _ensure_no_symlink_chain_to_directory(
+        staging_dir, label=f"{label}.staging_dir"
+    )
+    leaf_name = leaf_path.name
+    if (
+        not leaf_name
+        or leaf_name in (".", "..")
+        or "/" in leaf_name
+        or "\\" in leaf_name
+        or leaf_path.parent != resolved_staging_dir
+    ):
+        raise RfactorRecordAssemblyError(
+            f"{label}: staged leaf {leaf_path} must be a direct child of {resolved_staging_dir}"
+        )
+    target_path = resolved_staging_dir / leaf_name
+    try:
+        existing_st = os.lstat(target_path)
+    except FileNotFoundError:
+        existing_st = None
+    except OSError as exc:
+        raise RfactorRecordAssemblyError(
+            f"{label}: unable to inspect staged leaf {target_path} ({type(exc).__name__}): {exc}"
+        ) from exc
+    if existing_st is not None:
+        if stat.S_ISLNK(existing_st.st_mode):
+            raise RfactorRecordAssemblyError(
+                f"{label}: refusing to overwrite pre-existing symlink at staged leaf {target_path}"
+            )
+        if existing_st.st_nlink > 1:
+            raise RfactorRecordAssemblyError(
+                f"{label}: refusing to overwrite pre-existing hardlinked file "
+                f"(st_nlink={existing_st.st_nlink}) at staged leaf {target_path}"
+            )
+        raise RfactorRecordAssemblyError(
+            f"{label}: refusing to overwrite pre-existing file at staged leaf {target_path}"
+        )
+
+    open_flags = (
+        os.O_WRONLY
+        | os.O_CREAT
+        | os.O_EXCL
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_CLOEXEC", 0)
+    )
+    try:
+        fd = os.open(target_path, open_flags, 0o600)
+    except FileExistsError as exc:
+        raise RfactorRecordAssemblyError(
+            f"{label}: refusing to overwrite pre-existing path at staged leaf {target_path}"
+        ) from exc
+    except OSError as exc:
+        raise RfactorRecordAssemblyError(
+            f"{label}: exclusive creation failed for staged leaf {target_path} "
+            f"({type(exc).__name__}): {exc}"
+        ) from exc
+
+    primary_exc: BaseException | None = None
+    try:
+        fd_st = os.fstat(fd)
+        path_st = os.lstat(target_path)
+        if (
+            not stat.S_ISREG(fd_st.st_mode)
+            or stat.S_ISLNK(path_st.st_mode)
+            or fd_st.st_ino != path_st.st_ino
+            or fd_st.st_dev != path_st.st_dev
+            or fd_st.st_nlink != 1
+        ):
+            raise RfactorRecordAssemblyError(
+                f"{label}: staged leaf {target_path} failed post-create regular single-link inode check"
+            )
+        view = memoryview(bytes(payload))
+        total_written = 0
+        while total_written < len(view):
+            written = os.write(fd, view[total_written:])
+            if written <= 0:
+                raise RfactorRecordAssemblyError(
+                    f"{label}: short write on staged leaf {target_path}"
+                )
+            total_written += written
+    except BaseException as exc:
+        primary_exc = exc
+        raise
+    finally:
+        try:
+            os.close(fd)
+        except OSError as close_exc:
+            if primary_exc is None:
+                raise
+            primary_exc.add_note(
+                f"{label}: os.close({fd}) also failed on staged leaf {target_path} "
+                f"({type(close_exc).__name__}): {close_exc}"
+            )
+    return target_path
+
+
+def _validate_original_container_mapping(
+    document: Mapping[str, Any],
+    *,
+    label: str,
+) -> None:
+    """Validate an original YAML document mapping before coercion and via Container.model_validate."""
+    *_, models, ValidationError, _ = _load_record_assembly_deps()
+    if not isinstance(document, Mapping):
+        raise RfactorRecordAssemblyError(f"{label}: expected mapping document")
+    eval_runs = document.get("evaluation_runs")
+    if isinstance(eval_runs, list):
+        for run_idx, run in enumerate(eval_runs):
+            if not isinstance(run, Mapping):
+                raise RfactorRecordAssemblyError(
+                    f"{label}.evaluation_runs[{run_idx}]: expected mapping"
+                )
+            measurements = run.get("measurements")
+            if isinstance(measurements, list):
+                for m_idx, row in enumerate(measurements):
+                    row_label = f"{label}.evaluation_runs[{run_idx}].measurements[{m_idx}]"
+                    if not isinstance(row, Mapping):
+                        raise RfactorRecordAssemblyError(
+                            f"{row_label}: expected mapping"
+                        )
+                    _validate_optional_provenance_ref(
+                        row.get("provenance_ref"),
+                        label=f"{row_label}.provenance_ref",
+                    )
+                    om = row.get("oracle_measure")
+                    if not isinstance(om, Mapping):
+                        raise RfactorRecordAssemblyError(
+                            f"{row_label}.oracle_measure: expected mapping"
+                        )
+                    if "value_numeric" in om and om["value_numeric"] is not None:
+                        _validate_finite_non_bool_number(
+                            om["value_numeric"],
+                            label=f"{row_label}.oracle_measure.value_numeric",
+                        )
+                    metric_ref = row.get("metric_definition_ref")
+                    if metric_ref in ("T03_r-work", "T03_r-free"):
+                        _validate_positive_non_bool_int(
+                            om.get("count"),
+                            label=f"{row_label}.oracle_measure.count",
+                        )
+                    elif metric_ref == "T03_r-free_r-work_gap":
+                        if om.get("count") is not None:
+                            raise RfactorRecordAssemblyError(
+                                f"{row_label}.oracle_measure.count: gap row must not carry a fabricated count"
+                            )
+                    if row.get("catalog_task_ref") == "T03":
+                        if row.get("pass_status") != "informational":
+                            raise RfactorRecordAssemblyError(
+                                f"{row_label}.pass_status: expected 'informational' for T03 row, "
+                                f"got {row.get('pass_status')!r}"
+                            )
+                        for forbidden_key in _FORBIDDEN_T03_INFORMATIONAL_FIELDS:
+                            if row.get(forbidden_key) is not None:
+                                raise RfactorRecordAssemblyError(
+                                    f"{row_label}.{forbidden_key}: forbidden on informational T03 row"
+                                )
+    try:
+        models.Container.model_validate(dict(document))
+    except ValidationError as exc:
+        raise RfactorRecordAssemblyError(
+            f"{label}: Container schema validation failed: {exc}"
+        ) from exc
+
+
+def _build_contract4_replay_pin(
+    *,
+    pin_id: str,
+    qds: Mapping[str, Any],
+    projection: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Compute the owner-carried Contract-4 QDS replay pin from the emitted QDS and projection."""
+    _, _, qds_emit_contract_v4, check_qds_trust_invariant, *_ = (
+        _load_record_assembly_deps()
+    )
+    if not isinstance(pin_id, str) or not pin_id.strip():
+        raise RfactorRecordAssemblyError("pin_id: must be a non-empty string")
+    context = projection["context"]
+    canonical_qds_bytes = check_qds_trust_invariant._canonical_qds_text(
+        dict(qds)
+    ).encode("utf-8")
+    emitter_bytes = Path(qds_emit_contract_v4.__file__).read_bytes()
+    return {
+        "id": pin_id.strip(),
+        "qds_ref": str(qds["id"]),
+        "source_evaluation_run_refs": [
+            str(run["id"]) for run in projection["raw_runs"]
+        ],
+        "qds_emission_context_ref": str(context["id"]),
+        "emitter_contract_version": "4",
+        "canonical_qds_sha256": hashlib.sha256(canonical_qds_bytes).hexdigest(),
+        "emitter_source_sha256": hashlib.sha256(emitter_bytes).hexdigest(),
+        "source_tools_sha256": check_qds_trust_invariant._snapshot_digest(
+            "tools", projection["tools"]
+        ),
+        "source_structures_sha256": check_qds_trust_invariant._snapshot_digest(
+            "structures", projection["structures"]
+        ),
+        "source_tool_recommendations_sha256": (
+            check_qds_trust_invariant._snapshot_digest(
+                "tool_recommendations", projection["tool_recommendations"]
+            )
+        ),
+        "source_tool_assumptions_sha256": (
+            check_qds_trust_invariant._snapshot_digest(
+                "assumptions", projection["assumptions"]
+            )
+        ),
+        "source_qds_emission_context_sha256": (
+            check_qds_trust_invariant._snapshot_digest(
+                "qds_emission_contexts", [context]
+            )
+        ),
+        "source_evaluation_runs_sha256": (
+            check_qds_trust_invariant._snapshot_digest(
+                "evaluation_runs", projection["raw_runs"]
+            )
+        ),
+    }
+
+
+def _prepare_rfactor_eval_and_live_qds_records(
+    *,
+    parent_binding: Mapping[str, Any],
+    phenix_bundle: Mapping[str, Any],
+    refmac_bundle: Mapping[str, Any],
+    staging_dir: str | os.PathLike[str],
+    issued_at: str | None = None,
+    destination_rel: str = DEFAULT_RECORD_DESTINATION_REL,
+    repo_root: str | os.PathLike[str] | None = None,
+    cross_tool_comparison_evidence_ref: str | None = None,
+    registry_snapshots_override: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Assemble and validate 1SAR T03 EVAL (and for R4, live partial QDS + Contract-4 replay pin).
+
+    Requires an exclusive fresh attempt ``staging_dir`` (no pre-existing staged
+    ``.txt`` leaves). Stages pre-pin and post-pin YAML bytes exclusively under
+    ``staging_dir`` as ``.txt`` files without writing any canonical ``EVAL_*.yaml``
+    or ``QDS_*.yaml`` files, and retains any created ``.txt`` staging artifacts as
+    diagnostic evidence on emitter, replay-pin, or subsequent leaf failure rather
+    than rolling them back or unlinking them. Calls public ``qds_emit.emit_qds``
+    with default live admission (Contract 4, ``require_pinned_tool_snapshot=False``)
+    for R4, and preserves ``QdsCompletenessError`` and ``SystemExit`` without
+    swallowing ``KeyboardInterrupt``.
+    """
+    (
+        onesar_rerun,
+        qds_emit,
+        qds_emit_contract_v4,
+        check_qds_trust_invariant,
+        _,
+        _,
+        yaml,
+    ) = _load_record_assembly_deps()
+
+    raw_repo_root = onesar_rerun.REPO_ROOT if repo_root is None else repo_root
+    resolved_repo_root = _ensure_no_symlink_chain_to_directory(
+        Path(os.fspath(raw_repo_root)), label="repo_root"
+    )
+    resolved_staging_dir = _ensure_no_symlink_chain_to_directory(
+        Path(os.fspath(staging_dir)), label="staging_dir"
+    )
+
+    assembled = _assemble_six_row_t03_measurements(
+        parent_binding=parent_binding,
+        phenix_bundle=phenix_bundle,
+        refmac_bundle=refmac_bundle,
+        cross_tool_comparison_evidence_ref=cross_tool_comparison_evidence_ref,
+        destination_rel=destination_rel,
+    )
+    identities = assembled["identities"]
+    subject_id = identities["subject_id"]
+    run_date = identities["run_date"]
+    hkl_comparison = assembled["cross_tool_hkl_comparison"]
+
+    effective_issued_at = (
+        issued_at
+        if issued_at is not None
+        else str(parent_binding["timing"]["finished_at_utc"])
+    )
+    try:
+        parsed_issued_at = _parse_strict_tz_datetime(
+            effective_issued_at,
+            label="issued_at",
+        )
+    except ParentExecutionBindingError as exc:
+        raise RfactorRecordAssemblyError(str(exc)) from exc
+    issued_utc_date = parsed_issued_at.astimezone(timezone.utc).date().isoformat()
+    if issued_utc_date < run_date:
+        raise RfactorRecordAssemblyError(
+            f"issued_at UTC date {issued_utc_date!r} precedes evaluation run_date {run_date!r}"
+        )
+
+    structure_row = _build_1sar_structure_snapshot(
+        subject_id, repo_root=resolved_repo_root
+    )
+    canonical_registry_snapshots = _select_live_t03_registry_and_tool_snapshots(
+        issued_at=effective_issued_at,
+        repo_root=resolved_repo_root,
+    )
+    if registry_snapshots_override is not None:
+        if not isinstance(registry_snapshots_override, Mapping):
+            raise RfactorRecordAssemblyError(
+                "registry_snapshots_override: must be a mapping when provided"
+            )
+        for req_key in ("tools", "tool_recommendations", "assumptions"):
+            if req_key not in registry_snapshots_override or not isinstance(
+                registry_snapshots_override[req_key], list
+            ):
+                raise RfactorRecordAssemblyError(
+                    f"registry_snapshots_override.{req_key}: must be a list"
+                )
+        validated_override_tools = _validate_override_tools_against_canonical(
+            registry_snapshots_override["tools"],
+            canonical_registry_snapshots["tools"],
+            label="registry_snapshots_override.tools",
+        )
+        registry_snapshots = {
+            "issued_at": effective_issued_at,
+            "tools": validated_override_tools,
+            "tool_recommendations": copy.deepcopy(
+                list(registry_snapshots_override["tool_recommendations"])
+            ),
+            "assumptions": copy.deepcopy(
+                list(registry_snapshots_override["assumptions"])
+            ),
+            "active_recommendation_ids": list(
+                registry_snapshots_override.get(
+                    "active_recommendation_ids",
+                    canonical_registry_snapshots["active_recommendation_ids"],
+                )
+            ),
+            "active_assumption_ids": list(
+                registry_snapshots_override.get(
+                    "active_assumption_ids",
+                    canonical_registry_snapshots["active_assumption_ids"],
+                )
+            ),
+        }
+    else:
+        registry_snapshots = canonical_registry_snapshots
+
+    eval_document: dict[str, Any] = {
+        "structures": [structure_row],
+        "tools": copy.deepcopy(registry_snapshots["tools"]),
+        "tool_recommendations": copy.deepcopy(
+            registry_snapshots["tool_recommendations"]
+        ),
+        "assumptions": copy.deepcopy(registry_snapshots["assumptions"]),
+        "evaluation_runs": [
+            {
+                "id": identities["eval_run_id"],
+                "eval_filename_stem": identities["eval_filename_stem"],
+                "structure_ref": "1sar",
+                "run_date": run_date,
+                "catalog_tasks_applied": ["T03"],
+                "measurements": copy.deepcopy(assembled["measurements"]),
+            }
+        ],
+    }
+
+    if identities["emits_qds"]:
+        assert identities["qds_id"] is not None
+        assert identities["emission_context_id"] is not None
+        assert identities["replay_pin_id"] is not None
+        if hkl_comparison["effective_sets_equal"]:
+            set_note = (
+                "Both producers evaluated identical work and free reflection sets "
+                f"(n_work={hkl_comparison['phenix_work_count']}, n_free={hkl_comparison['phenix_free_count']})."
+            )
+        else:
+            set_note = (
+                "Cross-tool effective reflection sets are non-comparable without set-difference "
+                f"qualification (phenix.model_vs_data n_work={hkl_comparison['phenix_work_count']}, "
+                f"n_free={hkl_comparison['phenix_free_count']} vs REFMAC5 "
+                f"n_work={hkl_comparison['refmac_work_count']}, n_free={hkl_comparison['refmac_free_count']})."
+            )
+        scope_notes = (
+            "Partial R4 T03 R-factor-only sheet on archived data/1sar_final.pdb (2.50 A archived "
+            "trajectory dataset; distinct from 1.80 A deposited pdb:1sar_deposited). Covers T03 "
+            "(R-work, R-free, R-free-R-work gap) across phenix.model_vs_data (cctbx) and REFMAC5 "
+            f"(non_cctbx) only. {set_note}"
+        )
+        headline_verdict = (
+            "Informational T03 R-factor capture on archived 1SAR R4 final model across "
+            "phenix.model_vs_data (cctbx) and REFMAC5 (non_cctbx); no quality pass verdict or "
+            f"cross-producer averaging is claimed. {set_note}"
+        )
+        eval_document["qds_emission_contexts"] = [
+            {
+                "id": identities["emission_context_id"],
+                "qds_ref": identities["qds_id"],
+                "owner_evaluation_run_ref": identities["eval_run_id"],
+                "snapshot_owner_evaluation_run_ref": identities["eval_run_id"],
+                "structure_ref": "1sar",
+                "subject_ref": identities["subject"]["subject_ref"],
+                "source_evaluation_run_refs": [identities["eval_run_id"]],
+                "issued_at": effective_issued_at,
+                "coverage_scope": "partial",
+                "scope_notes": scope_notes,
+                "identity_description": structure_row["description"],
+                "headline_verdict": headline_verdict,
+            }
+        ]
+
+    _validate_original_container_mapping(
+        eval_document, label="pre_pin_eval_document"
+    )
+    pre_pin_yaml_text = yaml.safe_dump(
+        eval_document,
+        sort_keys=False,
+        default_flow_style=False,
+        allow_unicode=True,
+    )
+
+    staged_pre_pin_txt_path = _write_exclusive_staged_leaf_bytes(
+        resolved_staging_dir / f"{identities['eval_filename_stem']}.pre_pin.txt",
+        pre_pin_yaml_text.encode("utf-8"),
+        staging_dir=resolved_staging_dir,
+        label="staged_pre_pin_eval_txt_path",
+    )
+
+    qds_doc: dict[str, Any] | None = None
+    qds_yaml_text: str | None = None
+    qds_yaml_bytes: bytes | None = None
+    qds_sha256: str | None = None
+    staged_qds_txt_path: Path | None = None
+    projection: dict[str, Any] | None = None
+    replay_pin: dict[str, Any] | None = None
+
+    if identities["emits_qds"]:
+        assert identities["qds_id"] is not None
+        assert identities["replay_pin_id"] is not None
+        qds_doc = qds_emit.emit_qds(
+            [staged_pre_pin_txt_path],
+            qds_id=identities["qds_id"],
+            structure_id="1sar",
+        )
+        _validate_original_container_mapping(
+            {"quality_data_sheets": [qds_doc]},
+            label="emitted_qds_document",
+        )
+        projection = qds_emit_contract_v4.prepare_projection(
+            [copy.deepcopy(eval_document)],
+            identities["qds_id"],
+            "1sar",
+            repo_root=resolved_repo_root,
+        )
+        replay_pin = _build_contract4_replay_pin(
+            pin_id=identities["replay_pin_id"],
+            qds=qds_doc,
+            projection=projection,
+        )
+        eval_document["qds_replay_pins"] = [copy.deepcopy(replay_pin)]
+        _validate_original_container_mapping(
+            eval_document, label="pinned_eval_document",
+        )
+        qds_yaml_text = check_qds_trust_invariant._canonical_qds_text(qds_doc)
+        qds_yaml_bytes = qds_yaml_text.encode("utf-8")
+        qds_sha256 = hashlib.sha256(qds_yaml_bytes).hexdigest()
+        staged_qds_txt_path = _write_exclusive_staged_leaf_bytes(
+            resolved_staging_dir / f"{identities['qds_id']}.staged.txt",
+            qds_yaml_bytes,
+            staging_dir=resolved_staging_dir,
+            label="staged_qds_txt_path",
+        )
+        pin_errors = check_qds_trust_invariant._validate_contract_4_pin(
+            staged_qds_txt_path,
+            qds_doc,
+            projection,
+            eval_document["qds_replay_pins"],
+        )
+        if pin_errors:
+            raise RfactorRecordAssemblyError(
+                f"contract-4 replay pin validation failed: {pin_errors}"
+            )
+
+    eval_yaml_text = yaml.safe_dump(
+        eval_document,
+        sort_keys=False,
+        default_flow_style=False,
+        allow_unicode=True,
+    )
+    eval_yaml_bytes = eval_yaml_text.encode("utf-8")
+    eval_sha256 = hashlib.sha256(eval_yaml_bytes).hexdigest()
+    staged_eval_txt_path = _write_exclusive_staged_leaf_bytes(
+        resolved_staging_dir / f"{identities['eval_filename_stem']}.staged.txt",
+        eval_yaml_bytes,
+        staging_dir=resolved_staging_dir,
+        label="staged_eval_txt_path",
+    )
+
+    return {
+        "identities": identities,
+        "eval_document": copy.deepcopy(eval_document),
+        "eval_yaml_text": eval_yaml_text,
+        "eval_yaml_bytes": eval_yaml_bytes,
+        "eval_sha256": eval_sha256,
+        "staged_pre_pin_eval_txt_path": staged_pre_pin_txt_path,
+        "staged_eval_txt_path": staged_eval_txt_path,
+        "qds_document": copy.deepcopy(qds_doc) if qds_doc is not None else None,
+        "qds_yaml_text": qds_yaml_text,
+        "qds_yaml_bytes": qds_yaml_bytes,
+        "qds_sha256": qds_sha256,
+        "staged_qds_txt_path": staged_qds_txt_path,
+        "projection": projection,
+        "replay_pin": copy.deepcopy(replay_pin) if replay_pin is not None else None,
+        "cross_tool_hkl_comparison": hkl_comparison,
+        "registry_snapshots": registry_snapshots,
+    }
 

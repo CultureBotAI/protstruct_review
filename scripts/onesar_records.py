@@ -6647,3 +6647,3310 @@ def _prepare_rfactor_eval_and_live_qds_records(
         "registry_snapshots": registry_snapshots,
     }
 
+
+AUTHORING_OUTCOME_SCHEMA_VERSION: int = 1
+AUTHORING_OUTCOME_STAGE: str = "rfactor_record_authoring_outcome_v1"
+AUTHORING_OUTCOMES_SUBDIR_NAME: str = "authoring_outcomes"
+AUTHORING_OUTCOME_PROVISIONAL_SUFFIX: str = ".provisional.txt"
+AUTHORING_STAGING_SUBDIR_NAME: str = "authoring_staging"
+
+_REQUIRED_PREPARED_RECORD_KEYS: frozenset[str] = frozenset(
+    {
+        "identities",
+        "eval_document",
+        "eval_yaml_text",
+        "eval_yaml_bytes",
+        "eval_sha256",
+        "staged_pre_pin_eval_txt_path",
+        "staged_eval_txt_path",
+        "qds_document",
+        "qds_yaml_text",
+        "qds_yaml_bytes",
+        "qds_sha256",
+        "staged_qds_txt_path",
+        "projection",
+        "replay_pin",
+        "cross_tool_hkl_comparison",
+        "registry_snapshots",
+    }
+)
+
+
+class RfactorRecordPublicationError(RetainedReferenceError):
+    """Raised when 1SAR R-factor canonical record publication, pre/post-write verification, or authoring admission fails."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        authoring_outcome: Mapping[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message)
+        copied_outcome = (
+            copy.deepcopy(dict(authoring_outcome))
+            if authoring_outcome is not None
+            else None
+        )
+        self.authoring_outcome: dict[str, Any] | None = copied_outcome
+        self.authoring_outcome_path: str | None = (
+            str(copied_outcome["outcome_path"])
+            if copied_outcome is not None
+            and copied_outcome.get("outcome_path") is not None
+            else None
+        )
+        self.authoring_policy_issued_at: str | None = (
+            str(copied_outcome["authoring_policy_issued_at"])
+            if copied_outcome is not None
+            and copied_outcome.get("authoring_policy_issued_at") is not None
+            else None
+        )
+        self.failed_stage: str | None = (
+            str(copied_outcome["failed_stage"])
+            if copied_outcome is not None
+            and copied_outcome.get("failed_stage") is not None
+            else None
+        )
+        self.intended_paths: dict[str, str | None] = (
+            copy.deepcopy(dict(copied_outcome.get("intended_paths", {})))
+            if copied_outcome is not None
+            else {"eval_path": None, "qds_path": None}
+        )
+        self.completed_steps: tuple[str, ...] = (
+            tuple(str(step) for step in copied_outcome.get("completed_steps", ()))
+            if copied_outcome is not None
+            else ()
+        )
+        self.cleanup_result: dict[str, Any] | None = (
+            copy.deepcopy(dict(copied_outcome["cleanup_result"]))
+            if copied_outcome is not None
+            and isinstance(copied_outcome.get("cleanup_result"), Mapping)
+            else None
+        )
+        error_block = (
+            copied_outcome.get("error")
+            if copied_outcome is not None
+            and isinstance(copied_outcome.get("error"), Mapping)
+            else None
+        )
+        self.system_exit_code: Any = (
+            error_block.get("system_exit_code")
+            if error_block is not None
+            else None
+        )
+
+
+def _ensure_owned_child_directory(
+    parent_dir: Path,
+    child_name: str,
+    *,
+    forbidden_overlap_roots: Sequence[Path] = (),
+    forbidden_file_paths: Sequence[Path] = (),
+    label: str,
+) -> Path:
+    """Create or verify a direct child directory under ``parent_dir`` without symlinks or overlap."""
+    resolved_parent = _ensure_no_symlink_chain_to_directory(
+        parent_dir, label=f"{label}.parent"
+    )
+    if (
+        not child_name
+        or child_name in (".", "..")
+        or "/" in child_name
+        or "\\" in child_name
+    ):
+        raise RfactorRecordPublicationError(
+            f"{label}: invalid child directory name {child_name!r}"
+        )
+    candidate = resolved_parent / child_name
+    try:
+        st = os.lstat(candidate)
+    except FileNotFoundError:
+        try:
+            os.mkdir(candidate, 0o700)
+        except FileExistsError:
+            pass
+        except OSError as exc:
+            raise RfactorRecordPublicationError(
+                f"{label}: unable to create directory {candidate} ({type(exc).__name__}): {exc}"
+            ) from exc
+        st = os.lstat(candidate)
+    except OSError as exc:
+        raise RfactorRecordPublicationError(
+            f"{label}: unable to inspect directory {candidate} ({type(exc).__name__}): {exc}"
+        ) from exc
+    if stat.S_ISLNK(st.st_mode) or not stat.S_ISDIR(st.st_mode):
+        raise RfactorRecordPublicationError(
+            f"{label}: expected non-symlink directory at {candidate}"
+        )
+    resolved_child = _ensure_no_symlink_chain_to_directory(
+        candidate, label=label
+    )
+    for forbidden_file in forbidden_file_paths:
+        if resolved_child == forbidden_file or forbidden_file.is_relative_to(
+            resolved_child
+        ):
+            raise RfactorRecordPublicationError(
+                f"{label}: directory {resolved_child} overlaps protected file {forbidden_file}"
+            )
+    for forbidden_root in forbidden_overlap_roots:
+        if (
+            resolved_child == forbidden_root
+            or resolved_child.is_relative_to(forbidden_root)
+            or forbidden_root.is_relative_to(resolved_child)
+        ):
+            raise RfactorRecordPublicationError(
+                f"{label}: directory {resolved_child} overlaps producer root {forbidden_root}"
+            )
+    return resolved_child
+
+
+def _allocate_fresh_owned_subdir(
+    parent_dir: Path,
+    *,
+    container_name: str,
+    prefix: str,
+    forbidden_overlap_roots: Sequence[Path] = (),
+    forbidden_file_paths: Sequence[Path] = (),
+    label: str,
+) -> Path:
+    """Allocate a fresh non-existing owned directory ``<parent_dir>/<container_name>/<prefix>_<NNNN>``."""
+    container_dir = _ensure_owned_child_directory(
+        parent_dir,
+        container_name,
+        forbidden_overlap_roots=forbidden_overlap_roots,
+        forbidden_file_paths=forbidden_file_paths,
+        label=f"{label}.{container_name}",
+    )
+    for idx in range(1, 10000):
+        leaf_name = f"{prefix}_{idx:04d}"
+        candidate = container_dir / leaf_name
+        try:
+            os.lstat(candidate)
+            continue
+        except FileNotFoundError:
+            pass
+        except OSError as exc:
+            raise RfactorRecordPublicationError(
+                f"{label}: unable to inspect staging candidate {candidate} ({type(exc).__name__}): {exc}"
+            ) from exc
+        try:
+            os.mkdir(candidate, 0o700)
+        except FileExistsError:
+            continue
+        except OSError as exc:
+            raise RfactorRecordPublicationError(
+                f"{label}: unable to create fresh directory {candidate} ({type(exc).__name__}): {exc}"
+            ) from exc
+        return _ensure_no_symlink_chain_to_directory(candidate, label=label)
+    raise RfactorRecordPublicationError(
+        f"{label}: exhausted fresh directory allocation slots under {container_dir}"
+    )
+
+
+def _default_cleanup_result() -> dict[str, Any]:
+    return {
+        "attempted": False,
+        "cleanup_complete": True,
+        "incomplete_cleanup": False,
+        "owned_outputs_count": 0,
+        "removed_paths": [],
+        "retained_unowned_or_failed_paths": [],
+        "items": [],
+    }
+
+
+def _build_authoring_outcome_payload(
+    *,
+    subject_id: str | None,
+    run_date: str | None,
+    status: str,
+    published: bool,
+    failed_stage: str | None,
+    intended_paths: Mapping[str, str | None],
+    completed_steps: Sequence[str],
+    authoring_policy_issued_at: str | None = None,
+    published_files: Mapping[str, Any] | None = None,
+    staged_txt_paths: Mapping[str, str | None] | None = None,
+    cleanup_result: Mapping[str, Any] | None = None,
+    exc: BaseException | None = None,
+    parent_checkpoint_reference: Mapping[str, Any] | None = None,
+    phenix_reconciled_manifest_reference: Mapping[str, Any] | None = None,
+    refmac_operation_manifest_reference: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Construct the separate authoring outcome envelope without inventing fields on existing exceptions."""
+    error_block: dict[str, Any] | None = None
+    if exc is not None:
+        cause = exc.__cause__
+        effective_sys_exit: SystemExit | None = None
+        if isinstance(exc, SystemExit):
+            effective_sys_exit = exc
+        elif isinstance(cause, SystemExit):
+            effective_sys_exit = cause
+        is_qds_completeness = (
+            type(effective_sys_exit).__name__ == "QdsCompletenessError"
+            if effective_sys_exit is not None
+            else False
+        )
+        refmac_refusal: RefmacScientificAdmissionRefusedError | None = None
+        if isinstance(exc, RefmacScientificAdmissionRefusedError):
+            refmac_refusal = exc
+        elif isinstance(cause, RefmacScientificAdmissionRefusedError):
+            refmac_refusal = cause
+        error_block = {
+            "exception_type": type(exc).__name__,
+            "exception_module": type(exc).__module__,
+            "exception_message": str(exc),
+            "cause_type": type(cause).__name__ if cause is not None else None,
+            "cause_message": str(cause) if cause is not None else None,
+            "system_exit_code": (
+                effective_sys_exit.code
+                if effective_sys_exit is not None
+                else None
+            ),
+            "is_qds_completeness_error": is_qds_completeness,
+            "refmac_refusal_record": (
+                copy.deepcopy(refmac_refusal.refusal_record)
+                if refmac_refusal is not None
+                else None
+            ),
+            "unknown_native_premises": (
+                copy.deepcopy(refmac_refusal.unknown_native_premises)
+                if refmac_refusal is not None
+                else None
+            ),
+            "refusal_reasons": (
+                list(refmac_refusal.refusal_reasons)
+                if refmac_refusal is not None
+                else None
+            ),
+            "unsupported_proof_claims": (
+                list(refmac_refusal.unsupported_proof_claims)
+                if refmac_refusal is not None
+                else None
+            ),
+            "integrity_verified": (
+                bool(refmac_refusal.integrity_verified)
+                if refmac_refusal is not None
+                else None
+            ),
+            "scientific_proof_established": False,
+        }
+    return {
+        "schema_version": AUTHORING_OUTCOME_SCHEMA_VERSION,
+        "outcome_type": AUTHORING_OUTCOME_STAGE,
+        "family": EXPECTED_FAMILY_ID,
+        "subject_id": subject_id,
+        "run_date": run_date,
+        "authoring_policy_issued_at": authoring_policy_issued_at,
+        "status": status,
+        "published": bool(published),
+        "failed_stage": failed_stage,
+        "intended_paths": {
+            "eval_path": intended_paths.get("eval_path"),
+            "qds_path": intended_paths.get("qds_path"),
+        },
+        "completed_steps": [str(step) for step in completed_steps],
+        "published_files": (
+            copy.deepcopy(dict(published_files))
+            if published_files is not None
+            else {"eval": None, "qds": None}
+        ),
+        "staged_txt_paths": (
+            copy.deepcopy(dict(staged_txt_paths))
+            if staged_txt_paths is not None
+            else {
+                "staged_pre_pin_eval_txt_path": None,
+                "staged_eval_txt_path": None,
+                "staged_qds_txt_path": None,
+            }
+        ),
+        "cleanup_result": (
+            copy.deepcopy(dict(cleanup_result))
+            if cleanup_result is not None
+            else _default_cleanup_result()
+        ),
+        "error": error_block,
+        "parent_checkpoint_reference": (
+            copy.deepcopy(dict(parent_checkpoint_reference))
+            if parent_checkpoint_reference is not None
+            else None
+        ),
+        "phenix_reconciled_manifest_reference": (
+            copy.deepcopy(dict(phenix_reconciled_manifest_reference))
+            if phenix_reconciled_manifest_reference is not None
+            else None
+        ),
+        "refmac_operation_manifest_reference": (
+            copy.deepcopy(dict(refmac_operation_manifest_reference))
+            if refmac_operation_manifest_reference is not None
+            else None
+        ),
+        "outcome_persisted": False,
+        "outcome_path": None,
+        "outcome_sha256": None,
+        "outcome_size_bytes": None,
+        "outcome_write_error": None,
+    }
+
+
+def _default_outcome_commit_receipt() -> dict[str, Any]:
+    return {
+        "commit_state": "not_attempted",
+        "committed": False,
+        "outcome_path": None,
+        "provisional_path": None,
+        "provisional_dev": None,
+        "provisional_ino": None,
+        "outcome_sha256": None,
+        "outcome_size_bytes": None,
+        "authoring_policy_issued_at": None,
+        "raw_bytes": None,
+        "persisted_meta": None,
+        "committed_outcome": None,
+        "reconciled_after_exception": False,
+        "inspection_error": None,
+    }
+
+
+def _reconcile_outcome_link_commit_state(
+    commit_receipt: dict[str, Any],
+    *,
+    outcome_dir: Path,
+) -> str:
+    """Reconcile whether ``os.link(provisional_path, target_path)`` committed the owned provisional inode.
+
+    Returns one of ``'committed'``, ``'not_attempted'``, or ``'unknown'`` and updates
+    ``commit_receipt`` in place without raising. Once ``commit_receipt`` is marked
+    ``'committed'``, it is sticky and never downgraded.
+    """
+    if commit_receipt.get("commit_state") == "committed" or bool(
+        commit_receipt.get("committed")
+    ):
+        commit_receipt["commit_state"] = "committed"
+        commit_receipt["committed"] = True
+        return "committed"
+
+    target_path_str = commit_receipt.get("outcome_path")
+    provisional_path_str = commit_receipt.get("provisional_path")
+    expected_dev = commit_receipt.get("provisional_dev")
+    expected_ino = commit_receipt.get("provisional_ino")
+    expected_sha256 = commit_receipt.get("outcome_sha256")
+    expected_size_bytes = commit_receipt.get("outcome_size_bytes")
+    expected_raw_bytes = commit_receipt.get("raw_bytes")
+
+    if (
+        not isinstance(target_path_str, str)
+        or not isinstance(provisional_path_str, str)
+        or expected_dev is None
+        or expected_ino is None
+    ):
+        commit_receipt["commit_state"] = "not_attempted"
+        commit_receipt["committed"] = False
+        return "not_attempted"
+
+    try:
+        resolved_outcome_dir = _ensure_no_symlink_chain_to_directory(
+            outcome_dir, label="outcome_dir"
+        )
+        target_path = Path(target_path_str)
+        provisional_path = Path(provisional_path_str)
+        prov_st = os.lstat(provisional_path)
+        if (
+            not stat.S_ISREG(prov_st.st_mode)
+            or stat.S_ISLNK(prov_st.st_mode)
+            or int(prov_st.st_dev) != int(expected_dev)
+            or int(prov_st.st_ino) != int(expected_ino)
+        ):
+            commit_receipt["commit_state"] = "unknown"
+            commit_receipt["committed"] = False
+            commit_receipt["inspection_error"] = (
+                f"provisional outcome {provisional_path} no longer matches owned inode"
+            )
+            return "unknown"
+
+        try:
+            target_st = os.lstat(target_path)
+        except FileNotFoundError:
+            if int(prov_st.st_nlink) == 1:
+                commit_receipt["commit_state"] = "not_attempted"
+                commit_receipt["committed"] = False
+                return "not_attempted"
+            commit_receipt["commit_state"] = "unknown"
+            commit_receipt["committed"] = False
+            commit_receipt["inspection_error"] = (
+                f"absent target {target_path} with provisional st_nlink={int(prov_st.st_nlink)}"
+            )
+            return "unknown"
+
+        if not stat.S_ISREG(target_st.st_mode) or stat.S_ISLNK(
+            target_st.st_mode
+        ):
+            if int(prov_st.st_nlink) == 1:
+                commit_receipt["commit_state"] = "not_attempted"
+                commit_receipt["committed"] = False
+                return "not_attempted"
+            commit_receipt["commit_state"] = "unknown"
+            commit_receipt["committed"] = False
+            commit_receipt["inspection_error"] = (
+                f"non-regular or symlink target {target_path} with provisional st_nlink={int(prov_st.st_nlink)}"
+            )
+            return "unknown"
+
+        if int(target_st.st_dev) == int(expected_dev) and int(
+            target_st.st_ino
+        ) == int(expected_ino):
+            if (
+                isinstance(expected_sha256, str)
+                and isinstance(expected_size_bytes, int)
+                and isinstance(expected_raw_bytes, (bytes, bytearray))
+            ):
+                reopened_target = load_retained_reference(
+                    resolved_outcome_dir,
+                    path=target_path,
+                    sha256=expected_sha256,
+                    size_bytes=expected_size_bytes,
+                    label="committed_authoring_outcome",
+                )
+                if reopened_target["bytes"] != bytes(expected_raw_bytes):
+                    commit_receipt["commit_state"] = "unknown"
+                    commit_receipt["committed"] = False
+                    commit_receipt["inspection_error"] = (
+                        f"committed outcome {target_path} bytes disagree with provisional payload"
+                    )
+                    return "unknown"
+            commit_receipt["commit_state"] = "committed"
+            commit_receipt["committed"] = True
+            commit_receipt["reconciled_after_exception"] = True
+            return "committed"
+
+        if int(prov_st.st_nlink) == 1:
+            commit_receipt["commit_state"] = "not_attempted"
+            commit_receipt["committed"] = False
+            return "not_attempted"
+
+        commit_receipt["commit_state"] = "unknown"
+        commit_receipt["committed"] = False
+        commit_receipt["inspection_error"] = (
+            f"foreign inode at {target_path} with provisional st_nlink={int(prov_st.st_nlink)}"
+        )
+        return "unknown"
+    except BaseException as inspect_exc:
+        commit_receipt["commit_state"] = "unknown"
+        commit_receipt["committed"] = False
+        commit_receipt["inspection_error"] = (
+            f"{type(inspect_exc).__name__}: {inspect_exc}"
+        )
+        return "unknown"
+
+
+def _persist_authoring_outcome(
+    outcome: Mapping[str, Any],
+    *,
+    outcome_dir: Path,
+    owned_created_outputs: list[dict[str, Any]] | None = None,
+    commit_receipt: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Persist ``outcome`` to a fresh exclusive ``authoring_outcome_<NNNN>.json`` under ``outcome_dir``.
+
+    Validates and serializes both the probe payload and the selected-slot payload
+    (with ``outcome_path`` set to the selected ``authoring_outcome_<NNNN>.json``)
+    before opening any file descriptor. For authoritative success outcomes
+    (``published=True`` or ``status=='published'``), exclusively creates, writes,
+    fsyncs, closes, and reopen-verifies ``authoring_outcome_<NNNN>.provisional.txt``
+    (outside the authoritative ``*.json`` namespace) and then atomically commits
+    ``authoring_outcome_<NNNN>.json`` via same-directory no-clobber
+    ``os.link(..., follow_symlinks=False)`` without opening ``.json`` for a second
+    write/fsync/close cycle or relying on ``os.unlink`` to retract a partially
+    written ``.json``.
+    """
+    _ = owned_created_outputs
+    resolved_outcome_dir = _ensure_no_symlink_chain_to_directory(
+        outcome_dir, label="outcome_dir"
+    )
+    probe_payload = copy.deepcopy(dict(outcome))
+    probe_payload["outcome_persisted"] = True
+    probe_payload["outcome_path"] = ""
+    probe_payload["outcome_write_error"] = None
+    json.dumps(probe_payload, indent=2, sort_keys=True, allow_nan=False)
+
+    is_success_outcome = (
+        bool(probe_payload.get("published"))
+        or probe_payload.get("status") == "published"
+    )
+    open_flags = (
+        os.O_WRONLY
+        | os.O_CREAT
+        | os.O_EXCL
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_CLOEXEC", 0)
+    )
+    for idx in range(1, 10000):
+        leaf_name = f"authoring_outcome_{idx:04d}.json"
+        target_path = resolved_outcome_dir / leaf_name
+        provisional_leaf_name = (
+            f"authoring_outcome_{idx:04d}{AUTHORING_OUTCOME_PROVISIONAL_SUFFIX}"
+        )
+        provisional_path = resolved_outcome_dir / provisional_leaf_name
+
+        slot_busy = False
+        for candidate_path in (target_path, provisional_path):
+            try:
+                os.lstat(candidate_path)
+                slot_busy = True
+                break
+            except FileNotFoundError:
+                pass
+            except OSError as exc:
+                raise RfactorRecordPublicationError(
+                    f"outcome_persistence: unable to inspect {candidate_path} ({type(exc).__name__}): {exc}"
+                ) from exc
+        if slot_busy:
+            continue
+
+        payload_to_write = copy.deepcopy(dict(outcome))
+        payload_to_write["outcome_persisted"] = True
+        payload_to_write["outcome_path"] = str(target_path)
+        payload_to_write["outcome_write_error"] = None
+        payload_to_write["outcome_sha256"] = None
+        payload_to_write["outcome_size_bytes"] = None
+        if is_success_outcome:
+            raw_steps = payload_to_write.get("completed_steps")
+            if isinstance(raw_steps, list):
+                steps_copy = [str(step) for step in raw_steps]
+                if "outcome_persisted" not in steps_copy:
+                    steps_copy.append("outcome_persisted")
+                payload_to_write["completed_steps"] = steps_copy
+
+        raw_bytes = (
+            json.dumps(
+                payload_to_write,
+                indent=2,
+                sort_keys=True,
+                allow_nan=False,
+            )
+            + "\n"
+        ).encode("utf-8")
+        sha256_hex = hashlib.sha256(raw_bytes).hexdigest()
+        persisted_meta: dict[str, Any] = {
+            "outcome_persisted": True,
+            "outcome_path": str(target_path),
+            "outcome_sha256": sha256_hex,
+            "outcome_size_bytes": len(raw_bytes),
+            "outcome_write_error": None,
+        }
+        committed_outcome_snapshot = copy.deepcopy(payload_to_write)
+        committed_outcome_snapshot.update(persisted_meta)
+
+        if is_success_outcome:
+            active_receipt = (
+                commit_receipt
+                if commit_receipt is not None
+                else _default_outcome_commit_receipt()
+            )
+            active_receipt.update(
+                {
+                    "commit_state": "not_attempted",
+                    "committed": False,
+                    "outcome_path": str(target_path),
+                    "provisional_path": str(provisional_path),
+                    "provisional_dev": None,
+                    "provisional_ino": None,
+                    "outcome_sha256": sha256_hex,
+                    "outcome_size_bytes": len(raw_bytes),
+                    "authoring_policy_issued_at": payload_to_write.get(
+                        "authoring_policy_issued_at"
+                    ),
+                    "raw_bytes": raw_bytes,
+                    "persisted_meta": copy.deepcopy(persisted_meta),
+                    "committed_outcome": copy.deepcopy(
+                        committed_outcome_snapshot
+                    ),
+                    "reconciled_after_exception": False,
+                    "inspection_error": None,
+                }
+            )
+            try:
+                prov_fd = os.open(provisional_path, open_flags, 0o600)
+            except FileExistsError:
+                active_receipt["outcome_path"] = None
+                active_receipt["provisional_path"] = None
+                continue
+            except OSError as exc:
+                raise RfactorRecordPublicationError(
+                    f"outcome_persistence: exclusive open failed for {provisional_path} ({type(exc).__name__}): {exc}"
+                ) from exc
+
+            prov_primary_exc: BaseException | None = None
+            try:
+                prov_fd_st = os.fstat(prov_fd)
+                active_receipt["provisional_dev"] = int(prov_fd_st.st_dev)
+                active_receipt["provisional_ino"] = int(prov_fd_st.st_ino)
+                prov_path_st = os.lstat(provisional_path)
+                if (
+                    not stat.S_ISREG(prov_fd_st.st_mode)
+                    or stat.S_ISLNK(prov_path_st.st_mode)
+                    or prov_fd_st.st_ino != prov_path_st.st_ino
+                    or prov_fd_st.st_dev != prov_path_st.st_dev
+                    or prov_fd_st.st_nlink != 1
+                ):
+                    raise RfactorRecordPublicationError(
+                        f"outcome_persistence: {provisional_path} failed post-create regular single-link inode check"
+                    )
+                prov_view = memoryview(raw_bytes)
+                prov_written_total = 0
+                while prov_written_total < len(prov_view):
+                    written = os.write(prov_fd, prov_view[prov_written_total:])
+                    if written <= 0:
+                        raise RfactorRecordPublicationError(
+                            f"outcome_persistence: short write on {provisional_path}"
+                        )
+                    prov_written_total += written
+                os.fsync(prov_fd)
+            except BaseException as exc:
+                prov_primary_exc = exc
+                raise
+            finally:
+                try:
+                    os.close(prov_fd)
+                except OSError as close_exc:
+                    if prov_primary_exc is None:
+                        raise RfactorRecordPublicationError(
+                            f"outcome_persistence: os.close({prov_fd}) failed on {provisional_path} "
+                            f"({type(close_exc).__name__}): {close_exc}"
+                        ) from close_exc
+                    prov_primary_exc.add_note(
+                        f"outcome_persistence: os.close({prov_fd}) also failed on {provisional_path} "
+                        f"({type(close_exc).__name__}): {close_exc}"
+                    )
+
+            try:
+                closed_prov_st = os.lstat(provisional_path)
+            except OSError as exc:
+                raise RfactorRecordPublicationError(
+                    f"outcome_persistence: unable to lstat closed provisional outcome {provisional_path} ({type(exc).__name__}): {exc}"
+                ) from exc
+            if (
+                not stat.S_ISREG(closed_prov_st.st_mode)
+                or stat.S_ISLNK(closed_prov_st.st_mode)
+                or int(closed_prov_st.st_dev)
+                != int(active_receipt["provisional_dev"])
+                or int(closed_prov_st.st_ino)
+                != int(active_receipt["provisional_ino"])
+                or int(closed_prov_st.st_nlink) != 1
+            ):
+                raise RfactorRecordPublicationError(
+                    f"outcome_persistence: closed provisional outcome {provisional_path} failed single-link inode verification"
+                )
+
+            try:
+                reopened_prov = load_retained_reference(
+                    resolved_outcome_dir,
+                    path=provisional_path,
+                    sha256=sha256_hex,
+                    size_bytes=len(raw_bytes),
+                    label="provisional_authoring_outcome",
+                )
+            except RetainedReferenceError as exc:
+                raise RfactorRecordPublicationError(
+                    f"outcome_persistence: {exc}"
+                ) from exc
+            if reopened_prov["bytes"] != raw_bytes:
+                raise RfactorRecordPublicationError(
+                    f"outcome_persistence: reopened provisional outcome bytes at {provisional_path} disagree with serialized payload"
+                )
+
+            _ensure_no_symlink_chain_to_directory(
+                resolved_outcome_dir, label="outcome_dir"
+            )
+
+            active_receipt["commit_state"] = "attempting"
+            try:
+                os.link(provisional_path, target_path, follow_symlinks=False)
+            except FileExistsError as link_exc:
+                active_receipt["commit_state"] = "not_attempted"
+                active_receipt["committed"] = False
+                raise RfactorRecordPublicationError(
+                    f"outcome_persistence: refusing pre-existing or colliding path at final outcome target {target_path}"
+                ) from link_exc
+            except BaseException as link_exc:
+                reconciled_state = _reconcile_outcome_link_commit_state(
+                    active_receipt,
+                    outcome_dir=resolved_outcome_dir,
+                )
+                if isinstance(link_exc, KeyboardInterrupt) or reconciled_state in (
+                    "committed",
+                    "unknown",
+                ):
+                    raise
+                raise RfactorRecordPublicationError(
+                    f"outcome_persistence: atomic link commit failed for {target_path} from {provisional_path} ({type(link_exc).__name__}): {link_exc}"
+                ) from link_exc
+
+            active_receipt["commit_state"] = "committed"
+            active_receipt["committed"] = True
+            return copy.deepcopy(persisted_meta)
+
+        try:
+            fd = os.open(target_path, open_flags, 0o600)
+        except FileExistsError:
+            continue
+        except OSError as exc:
+            raise RfactorRecordPublicationError(
+                f"outcome_persistence: exclusive open failed for {target_path} ({type(exc).__name__}): {exc}"
+            ) from exc
+
+        primary_exc: BaseException | None = None
+        try:
+            fd_st = os.fstat(fd)
+            path_st = os.lstat(target_path)
+            if (
+                not stat.S_ISREG(fd_st.st_mode)
+                or stat.S_ISLNK(path_st.st_mode)
+                or fd_st.st_ino != path_st.st_ino
+                or fd_st.st_dev != path_st.st_dev
+                or fd_st.st_nlink != 1
+            ):
+                raise RfactorRecordPublicationError(
+                    f"outcome_persistence: {target_path} failed post-create regular single-link inode check"
+                )
+            view = memoryview(raw_bytes)
+            total_written = 0
+            while total_written < len(view):
+                written = os.write(fd, view[total_written:])
+                if written <= 0:
+                    raise RfactorRecordPublicationError(
+                        f"outcome_persistence: short write on {target_path}"
+                    )
+                total_written += written
+            os.fsync(fd)
+        except BaseException as exc:
+            primary_exc = exc
+            raise
+        finally:
+            try:
+                os.close(fd)
+            except OSError as close_exc:
+                if primary_exc is None:
+                    raise RfactorRecordPublicationError(
+                        f"outcome_persistence: os.close({fd}) failed on {target_path} "
+                        f"({type(close_exc).__name__}): {close_exc}"
+                    ) from close_exc
+                primary_exc.add_note(
+                    f"outcome_persistence: os.close({fd}) also failed on {target_path} "
+                    f"({type(close_exc).__name__}): {close_exc}"
+                )
+
+        return copy.deepcopy(persisted_meta)
+    raise RfactorRecordPublicationError(
+        f"outcome_persistence: exhausted authoring outcome slots under {resolved_outcome_dir}"
+    )
+
+
+def _try_persist_outcome_without_masking(
+    outcome: dict[str, Any],
+    *,
+    outcome_dir: Path | None,
+    active_exc: BaseException | None = None,
+) -> dict[str, Any]:
+    """Persist ``outcome`` when ``outcome_dir`` is available, never masking ``active_exc``."""
+    if outcome_dir is None:
+        return outcome
+    try:
+        persisted_meta = _persist_authoring_outcome(
+            outcome, outcome_dir=outcome_dir
+        )
+        outcome.update(persisted_meta)
+    except KeyboardInterrupt:
+        raise
+    except Exception as outcome_exc:
+        outcome["outcome_persisted"] = False
+        outcome["outcome_path"] = None
+        outcome["outcome_sha256"] = None
+        outcome["outcome_size_bytes"] = None
+        outcome["outcome_write_error"] = (
+            f"{type(outcome_exc).__name__}: {outcome_exc}"
+        )
+        if active_exc is not None:
+            active_exc.add_note(
+                "authoring outcome persistence also failed "
+                f"({type(outcome_exc).__name__}): {outcome_exc}"
+            )
+        else:
+            raise
+    return outcome
+
+
+def _augment_verified_phenix_bundle_with_repo_evidence_refs(
+    phenix_result: Mapping[str, Any],
+    *,
+    parent_result: Mapping[str, Any] | None = None,
+    repo_root: Path,
+) -> dict[str, Any]:
+    """Copy a verified PHENIX result and attach genuine repo-relative retained ``evidence_refs``."""
+    if not isinstance(phenix_result, Mapping):
+        raise RfactorRecordPublicationError(
+            "phenix_retained_verification: expected verified PHENIX result mapping"
+        )
+    if (
+        phenix_result.get("producer") != "phenix"
+        or phenix_result.get("verification_status") != "verified"
+    ):
+        raise RfactorRecordPublicationError(
+            "phenix_retained_verification: PHENIX result must have producer='phenix' "
+            "and verification_status='verified'"
+        )
+    reconciled_manifest_path = phenix_result.get("reconciled_manifest_path")
+    cache_manifest_path = phenix_result.get("manifest_path")
+    if (
+        not isinstance(reconciled_manifest_path, str)
+        or not reconciled_manifest_path.strip()
+        or not isinstance(cache_manifest_path, str)
+        or not cache_manifest_path.strip()
+        or Path(reconciled_manifest_path) == Path(cache_manifest_path)
+    ):
+        raise RfactorRecordPublicationError(
+            "phenix_retained_verification: reconciled_manifest_path must be distinct "
+            "from cache manifest_path"
+        )
+
+    resolved_repo_root = _ensure_no_symlink_chain_to_directory(
+        repo_root, label="repo_root"
+    )
+    verified_refs = phenix_result.get("verified_references")
+    if not isinstance(verified_refs, Mapping):
+        raise RfactorRecordPublicationError(
+            "phenix_retained_verification: missing verified_references mapping"
+        )
+
+    candidate_ref_mappings: list[Mapping[str, Any]] = []
+    if isinstance(parent_result, Mapping):
+        parent_vrefs = parent_result.get("verified_references")
+        if isinstance(parent_vrefs, Mapping):
+            cp_vref = parent_vrefs.get("parent_execution_checkpoint")
+            if isinstance(cp_vref, Mapping):
+                candidate_ref_mappings.append(cp_vref)
+
+    for top_key in (
+        "reconciled_manifest",
+        "preflight_build_evidence_json",
+        "parameters_json",
+        "cache_operation_manifest",
+        "cache_invocation_json",
+    ):
+        ref_item = verified_refs.get(top_key)
+        if isinstance(ref_item, Mapping):
+            candidate_ref_mappings.append(ref_item)
+
+    ext_prov = verified_refs.get("external_provenance")
+    if isinstance(ext_prov, Mapping):
+        helper_ref = ext_prov.get("helper_script")
+        if isinstance(helper_ref, Mapping):
+            candidate_ref_mappings.append(helper_ref)
+
+    repo_relative_refs: list[str] = []
+    for ref_mapping in candidate_ref_mappings:
+        if (
+            ref_mapping.get("persisted") is not True
+            or ref_mapping.get("integrity_verified") is not True
+        ):
+            continue
+        raw_path_str = ref_mapping.get("path")
+        if not isinstance(raw_path_str, str) or not raw_path_str.strip():
+            continue
+        leaf_path = Path(raw_path_str)
+        if (
+            leaf_path == resolved_repo_root
+            or not leaf_path.is_relative_to(resolved_repo_root)
+        ):
+            continue
+        try:
+            _ensure_no_symlink_chain_to_directory(
+                leaf_path.parent, label="phenix_evidence_ref.parent"
+            )
+            leaf_st = os.lstat(leaf_path)
+        except (OSError, RetainedReferenceError):
+            continue
+        if stat.S_ISLNK(leaf_st.st_mode) or not stat.S_ISREG(leaf_st.st_mode):
+            continue
+        rel_posix = leaf_path.relative_to(resolved_repo_root).as_posix()
+        if rel_posix not in repo_relative_refs:
+            repo_relative_refs.append(rel_posix)
+
+    validated_refs = _validate_repo_relative_evidence_refs(
+        repo_relative_refs, label="phenix_bundle.evidence_refs"
+    )
+    bundle = copy.deepcopy(dict(phenix_result))
+    bundle["evidence_refs"] = validated_refs
+    bundle.pop("provenance_ref", None)
+    bundle.pop("bundle_ref", None)
+    return bundle
+
+
+def _validate_eval_document_tools_against_source_catalog(
+    eval_doc: Mapping[str, Any],
+    *,
+    issued_at: str,
+    repo_root: Path,
+) -> list[dict[str, Any]]:
+    """Validate ``eval_doc['tools']`` against the complete canonical T03 catalog Tool selection at ``issued_at``.
+
+    Verifies that every Tool referenced by ``evaluation_runs[0].measurements[*].oracle_tool_ref``,
+    ``tool_recommendations[*].tool_ref``, and ``assumptions[*].tool_ref`` exists in
+    ``ref/catalog.yaml`` and in the canonical T03 Tool selection, and independently invokes
+    ``_select_live_t03_registry_and_tool_snapshots(issued_at=issued_at, repo_root=repo_root)``
+    so that removing a supplied recommendation (e.g. ``Servalcat``) and its Tool row from
+    ``eval_doc`` cannot shrink the required canonical Tool selection.
+    """
+    _, _, qds_emit_contract_v4, *_ = _load_record_assembly_deps()
+    eval_runs = eval_doc.get("evaluation_runs")
+    if (
+        not isinstance(eval_runs, list)
+        or len(eval_runs) != 1
+        or not isinstance(eval_runs[0], Mapping)
+    ):
+        raise RfactorRecordPublicationError(
+            "prepared_record_validation: eval_document must contain exactly 1 evaluation_run mapping"
+        )
+    measurements = eval_runs[0].get("measurements")
+    if not isinstance(measurements, list) or not measurements:
+        raise RfactorRecordPublicationError(
+            "prepared_record_validation: evaluation_run.measurements must be a non-empty list"
+        )
+    referenced_tool_ids: set[str] = set()
+    for m_idx, m_row in enumerate(measurements):
+        if not isinstance(m_row, Mapping):
+            raise RfactorRecordPublicationError(
+                f"prepared_record_validation: measurement[{m_idx}] must be a mapping"
+            )
+        oracle_tool_ref = m_row.get("oracle_tool_ref")
+        if not isinstance(oracle_tool_ref, str) or not oracle_tool_ref.strip():
+            raise RfactorRecordPublicationError(
+                f"prepared_record_validation: measurement[{m_idx}].oracle_tool_ref must be a non-empty string"
+            )
+        referenced_tool_ids.add(oracle_tool_ref)
+
+    for collection_key in ("tool_recommendations", "assumptions"):
+        rows = eval_doc.get(collection_key)
+        if not isinstance(rows, list):
+            raise RfactorRecordPublicationError(
+                f"prepared_record_validation: eval_document.{collection_key} must be a list"
+            )
+        for row_idx, row in enumerate(rows):
+            if not isinstance(row, Mapping):
+                raise RfactorRecordPublicationError(
+                    f"prepared_record_validation: eval_document.{collection_key}[{row_idx}] must be a mapping"
+                )
+            t_ref = row.get("tool_ref")
+            if isinstance(t_ref, str) and t_ref.strip():
+                referenced_tool_ids.add(t_ref)
+
+    catalog_path = repo_root / "ref" / "catalog.yaml"
+    try:
+        catalog_doc = qds_emit_contract_v4.strict_yaml_load(
+            catalog_path.read_text(encoding="utf-8")
+        )
+    except Exception as exc:
+        raise RfactorRecordPublicationError(
+            f"prepared_record_validation: unable to load source catalog {catalog_path} ({exc})"
+        ) from exc
+    catalog_tools = (
+        catalog_doc.get("tools") if isinstance(catalog_doc, Mapping) else None
+    )
+    if not isinstance(catalog_tools, list):
+        raise RfactorRecordPublicationError(
+            f"prepared_record_validation: {catalog_path}: missing tools list"
+        )
+    catalog_tool_ids = {
+        str(row["id"])
+        for row in catalog_tools
+        if isinstance(row, Mapping) and isinstance(row.get("id"), str)
+    }
+    missing_tools = sorted(referenced_tool_ids - catalog_tool_ids)
+    if missing_tools:
+        raise RfactorRecordPublicationError(
+            f"prepared_record_validation: {catalog_path}: missing referenced Tool row(s): {missing_tools}"
+        )
+
+    try:
+        live_snapshots = _select_live_t03_registry_and_tool_snapshots(
+            issued_at=issued_at,
+            repo_root=repo_root,
+        )
+    except BaseException as exc:
+        if isinstance(exc, KeyboardInterrupt):
+            raise
+        raise RfactorRecordPublicationError(
+            f"prepared_record_validation: {exc}"
+        ) from exc
+
+    canonical_tools = live_snapshots["tools"]
+    canonical_tool_ids = {
+        str(row["id"])
+        for row in canonical_tools
+        if isinstance(row, Mapping) and isinstance(row.get("id"), str)
+    }
+    unselected_refs = sorted(referenced_tool_ids - canonical_tool_ids)
+    if unselected_refs:
+        raise RfactorRecordPublicationError(
+            f"prepared_record_validation: eval_document references Tool id(s) outside canonical T03 Tool selection: {unselected_refs}"
+        )
+
+    try:
+        return _validate_override_tools_against_canonical(
+            eval_doc.get("tools"),
+            canonical_tools,
+            label="eval_document.tools",
+        )
+    except RfactorRecordAssemblyError as exc:
+        raise RfactorRecordPublicationError(
+            f"prepared_record_validation: {exc}"
+        ) from exc
+
+
+def _validate_prepared_rfactor_records_for_publication(
+    prepared_records: Mapping[str, Any],
+    *,
+    subject_id: str | None,
+    run_date: str | None,
+    destination_rel: str | None,
+    staging_dir: Path,
+    issued_at: str | None = None,
+    parent_binding: Mapping[str, Any] | None = None,
+    repo_root: str | os.PathLike[str] | None = None,
+    authoring_policy_issued_at_out: dict[str, str | None] | None = None,
+) -> dict[str, Any]:
+    """Validate prepared record identities, cardinality, original documents, bytes/digests, and staged ``.txt`` files."""
+    (
+        onesar_rerun,
+        qds_emit,
+        qds_emit_contract_v4,
+        check_qds_trust_invariant,
+        _,
+        _,
+        yaml,
+    ) = _load_record_assembly_deps()
+
+    raw_source_repo_root = (
+        onesar_rerun.REPO_ROOT if repo_root is None else repo_root
+    )
+    try:
+        resolved_source_repo_root = _ensure_no_symlink_chain_to_directory(
+            Path(os.fspath(raw_source_repo_root)),
+            label="source_repo_root",
+        )
+    except (TypeError, RetainedReferenceError) as exc:
+        raise RfactorRecordPublicationError(
+            f"prepared_record_validation: {exc}"
+        ) from exc
+
+    if not isinstance(prepared_records, Mapping):
+        raise RfactorRecordPublicationError(
+            f"prepared_record_validation: prepared_records must be a mapping, got {type(prepared_records).__name__}"
+        )
+    missing_keys = sorted(
+        _REQUIRED_PREPARED_RECORD_KEYS - set(prepared_records.keys())
+    )
+    extra_keys = sorted(
+        set(prepared_records.keys()) - _REQUIRED_PREPARED_RECORD_KEYS
+    )
+    if missing_keys or extra_keys:
+        raise RfactorRecordPublicationError(
+            "prepared_record_validation: prepared_records key mismatch "
+            f"(missing={missing_keys}, unexpected={extra_keys})"
+        )
+
+    identities = prepared_records.get("identities")
+    if not isinstance(identities, Mapping):
+        raise RfactorRecordPublicationError(
+            "prepared_record_validation: prepared_records.identities must be a mapping"
+        )
+
+    effective_subject_id = (
+        subject_id
+        if subject_id is not None
+        else (
+            str(parent_binding["subject_id"])
+            if isinstance(parent_binding, Mapping)
+            and "subject_id" in parent_binding
+            else identities.get("subject_id")
+        )
+    )
+    effective_run_date = (
+        run_date
+        if run_date is not None
+        else (
+            str(parent_binding["timing"]["run_date"])
+            if isinstance(parent_binding, Mapping)
+            and isinstance(parent_binding.get("timing"), Mapping)
+            and "run_date" in parent_binding["timing"]
+            else identities.get("run_date")
+        )
+    )
+    effective_destination_rel = (
+        destination_rel
+        if destination_rel is not None
+        else str(identities.get("destination_rel", DEFAULT_RECORD_DESTINATION_REL))
+    )
+    if not isinstance(effective_subject_id, str) or not isinstance(
+        effective_run_date, str
+    ):
+        raise RfactorRecordPublicationError(
+            "prepared_record_validation: subject_id and run_date must be strings"
+        )
+
+    try:
+        expected_identities = _resolve_rfactor_record_identities(
+            effective_subject_id,
+            run_date=effective_run_date,
+            destination_rel=effective_destination_rel,
+        )
+    except RfactorRecordAssemblyError as exc:
+        raise RfactorRecordPublicationError(
+            f"prepared_record_validation: {exc}"
+        ) from exc
+
+    if parent_binding is not None:
+        if (
+            not isinstance(parent_binding, Mapping)
+            or parent_binding.get("verification_status") != "verified"
+            or parent_binding.get("family") != EXPECTED_FAMILY_ID
+            or parent_binding.get("subject_id")
+            != expected_identities["subject_id"]
+            or parent_binding.get("subject") != expected_identities["subject"]
+            or not isinstance(parent_binding.get("timing"), Mapping)
+            or parent_binding["timing"].get("run_date")
+            != expected_identities["run_date"]
+        ):
+            raise RfactorRecordPublicationError(
+                "prepared_record_validation: parent_binding disagrees with expected "
+                "subject, stage, family, or UTC-start run_date"
+            )
+
+    if dict(identities) != expected_identities:
+        raise RfactorRecordPublicationError(
+            "prepared_record_validation: prepared_records.identities disagrees with "
+            f"expected identities for subject={expected_identities['subject_id']!r}, "
+            f"run_date={expected_identities['run_date']!r}, "
+            f"destination_rel={expected_identities['destination_rel']!r}"
+        )
+
+    eval_yaml_bytes = prepared_records.get("eval_yaml_bytes")
+    eval_yaml_text = prepared_records.get("eval_yaml_text")
+    eval_sha256_raw = prepared_records.get("eval_sha256")
+    eval_document = prepared_records.get("eval_document")
+    if type(eval_yaml_bytes) is not bytes or not eval_yaml_bytes:
+        raise RfactorRecordPublicationError(
+            "prepared_record_validation: eval_yaml_bytes must be non-empty bytes"
+        )
+    if (
+        not isinstance(eval_yaml_text, str)
+        or eval_yaml_text.encode("utf-8") != eval_yaml_bytes
+    ):
+        raise RfactorRecordPublicationError(
+            "prepared_record_validation: eval_yaml_text disagrees with eval_yaml_bytes"
+        )
+    try:
+        eval_sha256 = _validate_sha256_hex(
+            eval_sha256_raw, label="prepared_records.eval_sha256"
+        )
+    except RetainedReferenceError as exc:
+        raise RfactorRecordPublicationError(str(exc)) from exc
+    actual_eval_sha256 = hashlib.sha256(eval_yaml_bytes).hexdigest()
+    if actual_eval_sha256 != eval_sha256:
+        raise RfactorRecordPublicationError(
+            f"prepared_record_validation: eval_yaml_bytes sha256 {actual_eval_sha256} "
+            f"disagrees with eval_sha256 {eval_sha256}"
+        )
+    if not isinstance(eval_document, Mapping):
+        raise RfactorRecordPublicationError(
+            "prepared_record_validation: eval_document must be a mapping"
+        )
+    try:
+        _validate_original_container_mapping(
+            eval_document, label="prepared_records.eval_document"
+        )
+    except RfactorRecordAssemblyError as exc:
+        raise RfactorRecordPublicationError(str(exc)) from exc
+
+    try:
+        decoded_eval_doc = yaml.safe_load(eval_yaml_bytes.decode("utf-8"))
+        dumped_eval_bytes = yaml.safe_dump(
+            dict(eval_document),
+            sort_keys=False,
+            default_flow_style=False,
+            allow_unicode=True,
+        ).encode("utf-8")
+    except Exception as exc:
+        raise RfactorRecordPublicationError(
+            f"prepared_record_validation: unable to verify eval_document against eval_yaml_bytes ({exc})"
+        ) from exc
+    if decoded_eval_doc != dict(eval_document) or dumped_eval_bytes != eval_yaml_bytes:
+        raise RfactorRecordPublicationError(
+            "prepared_record_validation: eval_document disagrees with prepared eval_yaml_bytes"
+        )
+
+    eval_runs = eval_document.get("evaluation_runs")
+    if not isinstance(eval_runs, list) or len(eval_runs) != 1:
+        raise RfactorRecordPublicationError(
+            "prepared_record_validation: eval_document must contain exactly 1 evaluation_run"
+        )
+    run_entry = eval_runs[0]
+    if (
+        not isinstance(run_entry, Mapping)
+        or run_entry.get("id") != expected_identities["eval_run_id"]
+        or run_entry.get("eval_filename_stem")
+        != expected_identities["eval_filename_stem"]
+        or run_entry.get("structure_ref") != "1sar"
+        or run_entry.get("run_date") != expected_identities["run_date"]
+        or run_entry.get("catalog_tasks_applied") != ["T03"]
+    ):
+        raise RfactorRecordPublicationError(
+            "prepared_record_validation: evaluation_run header disagrees with expected subject/date/stem"
+        )
+    measurements = run_entry.get("measurements")
+    if not isinstance(measurements, list) or len(measurements) != 6:
+        raise RfactorRecordPublicationError(
+            "prepared_record_validation: evaluation_run must contain exactly 6 T03 measurements"
+        )
+    for idx, row in enumerate(measurements):
+        if (
+            not isinstance(row, Mapping)
+            or row.get("stage") != expected_identities["stage"]
+            or row.get("subject_ref")
+            != expected_identities["subject"]["subject_ref"]
+            or row.get("scope") != "complex"
+            or row.get("pass_status") != "informational"
+        ):
+            raise RfactorRecordPublicationError(
+                f"prepared_record_validation: measurement[{idx}] disagrees with expected stage/subject/scope/pass_status"
+            )
+
+    raw_pre_pin_path = prepared_records.get("staged_pre_pin_eval_txt_path")
+    raw_staged_eval_path = prepared_records.get("staged_eval_txt_path")
+    raw_staged_qds_path = prepared_records.get("staged_qds_txt_path")
+    if not isinstance(raw_pre_pin_path, (str, os.PathLike)) or not isinstance(
+        raw_staged_eval_path, (str, os.PathLike)
+    ):
+        raise RfactorRecordPublicationError(
+            "prepared_record_validation: staged_pre_pin_eval_txt_path and staged_eval_txt_path must be path-like"
+        )
+    pre_pin_path = Path(os.fspath(raw_pre_pin_path))
+    staged_eval_path = Path(os.fspath(raw_staged_eval_path))
+    expected_pre_pin_name = f"{expected_identities['eval_filename_stem']}.pre_pin.txt"
+    expected_staged_eval_name = (
+        f"{expected_identities['eval_filename_stem']}.staged.txt"
+    )
+    if (
+        pre_pin_path.name != expected_pre_pin_name
+        or pre_pin_path.parent != staging_dir
+    ):
+        raise RfactorRecordPublicationError(
+            f"prepared_record_validation: staged_pre_pin_eval_txt_path {pre_pin_path} "
+            f"must be {staging_dir / expected_pre_pin_name}"
+        )
+    if (
+        staged_eval_path.name != expected_staged_eval_name
+        or staged_eval_path.parent != staging_dir
+    ):
+        raise RfactorRecordPublicationError(
+            f"prepared_record_validation: staged_eval_txt_path {staged_eval_path} "
+            f"must be {staging_dir / expected_staged_eval_name}"
+        )
+
+    try:
+        pre_st = os.lstat(pre_pin_path)
+    except OSError as exc:
+        raise RfactorRecordPublicationError(
+            f"prepared_record_validation: unable to inspect {pre_pin_path} ({type(exc).__name__}): {exc}"
+        ) from exc
+    if (
+        stat.S_ISLNK(pre_st.st_mode)
+        or not stat.S_ISREG(pre_st.st_mode)
+        or pre_st.st_nlink != 1
+        or pre_st.st_size <= 0
+    ):
+        raise RfactorRecordPublicationError(
+            f"prepared_record_validation: staged_pre_pin_eval_txt_path {pre_pin_path} must be a non-empty regular single-link file"
+        )
+    try:
+        reopened_eval = load_retained_reference(
+            staging_dir,
+            path=staged_eval_path,
+            sha256=eval_sha256,
+            size_bytes=len(eval_yaml_bytes),
+            label="staged_eval_txt_path",
+        )
+    except RetainedReferenceError as exc:
+        raise RfactorRecordPublicationError(str(exc)) from exc
+    if reopened_eval["bytes"] != eval_yaml_bytes:
+        raise RfactorRecordPublicationError(
+            "prepared_record_validation: reopened staged_eval_txt_path bytes disagree with eval_yaml_bytes"
+        )
+    try:
+        reopened_eval_doc = yaml.safe_load(
+            reopened_eval["bytes"].decode("utf-8")
+        )
+    except Exception as exc:
+        raise RfactorRecordPublicationError(
+            f"prepared_record_validation: unable to decode reopened staged_eval_txt_path YAML ({exc})"
+        ) from exc
+    if not isinstance(reopened_eval_doc, Mapping) or dict(
+        reopened_eval_doc
+    ) != dict(eval_document):
+        raise RfactorRecordPublicationError(
+            "prepared_record_validation: reopened staged_eval_txt_path document disagrees with eval_document"
+        )
+
+    expected_pre_pin_doc = copy.deepcopy(dict(reopened_eval_doc))
+    if expected_identities["emits_qds"]:
+        expected_pre_pin_doc.pop("qds_replay_pins", None)
+    try:
+        expected_pre_pin_bytes = yaml.safe_dump(
+            expected_pre_pin_doc,
+            sort_keys=False,
+            default_flow_style=False,
+            allow_unicode=True,
+        ).encode("utf-8")
+    except Exception as exc:
+        raise RfactorRecordPublicationError(
+            f"prepared_record_validation: unable to serialize expected pre-pin EVAL document ({exc})"
+        ) from exc
+    if (
+        not expected_identities["emits_qds"]
+        and expected_pre_pin_bytes != eval_yaml_bytes
+    ):
+        raise RfactorRecordPublicationError(
+            "prepared_record_validation: supplemental pre-pin EVAL bytes disagree with final eval_yaml_bytes"
+        )
+    expected_pre_pin_sha256 = hashlib.sha256(expected_pre_pin_bytes).hexdigest()
+    try:
+        reopened_pre_pin = load_retained_reference(
+            staging_dir,
+            path=pre_pin_path,
+            sha256=expected_pre_pin_sha256,
+            size_bytes=len(expected_pre_pin_bytes),
+            label="staged_pre_pin_eval_txt_path",
+        )
+    except RetainedReferenceError as exc:
+        raise RfactorRecordPublicationError(str(exc)) from exc
+    if reopened_pre_pin["bytes"] != expected_pre_pin_bytes:
+        raise RfactorRecordPublicationError(
+            "prepared_record_validation: reopened staged_pre_pin_eval_txt_path bytes "
+            "disagree with expected pre-pin EVAL bytes reconstructed from final EVAL"
+        )
+
+    reopened_qds: dict[str, Any] | None = None
+    qds_yaml_bytes: bytes | None = None
+    qds_sha256: str | None = None
+
+    if expected_identities["emits_qds"]:
+        qds_document = prepared_records.get("qds_document")
+        qds_yaml_text = prepared_records.get("qds_yaml_text")
+        qds_yaml_bytes_raw = prepared_records.get("qds_yaml_bytes")
+        qds_sha256_raw = prepared_records.get("qds_sha256")
+        projection = prepared_records.get("projection")
+        replay_pin = prepared_records.get("replay_pin")
+        if (
+            not isinstance(qds_document, Mapping)
+            or not isinstance(qds_yaml_text, str)
+            or type(qds_yaml_bytes_raw) is not bytes
+            or not qds_yaml_bytes_raw
+            or not isinstance(raw_staged_qds_path, (str, os.PathLike))
+            or not isinstance(projection, Mapping)
+            or not isinstance(replay_pin, Mapping)
+        ):
+            raise RfactorRecordPublicationError(
+                "prepared_record_validation: R4 publication requires non-null QDS document, "
+                "text, bytes, sha256, staged_qds_txt_path, projection, and replay_pin"
+            )
+        qds_yaml_bytes = qds_yaml_bytes_raw
+        if qds_yaml_text.encode("utf-8") != qds_yaml_bytes:
+            raise RfactorRecordPublicationError(
+                "prepared_record_validation: qds_yaml_text disagrees with qds_yaml_bytes"
+            )
+        try:
+            qds_sha256 = _validate_sha256_hex(
+                qds_sha256_raw, label="prepared_records.qds_sha256"
+            )
+        except RetainedReferenceError as exc:
+            raise RfactorRecordPublicationError(str(exc)) from exc
+        actual_qds_sha256 = hashlib.sha256(qds_yaml_bytes).hexdigest()
+        if actual_qds_sha256 != qds_sha256:
+            raise RfactorRecordPublicationError(
+                f"prepared_record_validation: qds_yaml_bytes sha256 {actual_qds_sha256} "
+                f"disagrees with qds_sha256 {qds_sha256}"
+            )
+        try:
+            _validate_original_container_mapping(
+                {"quality_data_sheets": [dict(qds_document)]},
+                label="prepared_records.qds_document",
+            )
+        except RfactorRecordAssemblyError as exc:
+            raise RfactorRecordPublicationError(str(exc)) from exc
+        canonical_qds_bytes = (
+            check_qds_trust_invariant._canonical_qds_text(
+                dict(qds_document)
+            ).encode("utf-8")
+        )
+        try:
+            decoded_qds_wrapper = yaml.safe_load(qds_yaml_bytes.decode("utf-8"))
+        except Exception as exc:
+            raise RfactorRecordPublicationError(
+                f"prepared_record_validation: unable to decode qds_yaml_bytes ({exc})"
+            ) from exc
+        if (
+            canonical_qds_bytes != qds_yaml_bytes
+            or decoded_qds_wrapper != {"quality_data_sheets": [dict(qds_document)]}
+        ):
+            raise RfactorRecordPublicationError(
+                "prepared_record_validation: qds_document disagrees with canonical qds_yaml_bytes"
+            )
+        if (
+            qds_document.get("id") != expected_identities["qds_id"]
+            or qds_document.get("structure_ref") != "1sar"
+            or qds_document.get("subject_ref")
+            != expected_identities["subject"]["subject_ref"]
+            or qds_document.get("emission_context_ref")
+            != expected_identities["emission_context_id"]
+            or qds_document.get("derived_from_evaluation_run_refs")
+            != [expected_identities["eval_run_id"]]
+            or qds_document.get("active_evaluation_run_refs")
+            != [expected_identities["eval_run_id"]]
+        ):
+            raise RfactorRecordPublicationError(
+                "prepared_record_validation: qds_document header disagrees with expected R4 identities"
+            )
+        contexts = eval_document.get("qds_emission_contexts")
+        pins = eval_document.get("qds_replay_pins")
+        if (
+            not isinstance(contexts, list)
+            or len(contexts) != 1
+            or not isinstance(pins, list)
+            or len(pins) != 1
+        ):
+            raise RfactorRecordPublicationError(
+                "prepared_record_validation: R4 eval_document must contain exactly 1 qds_emission_context and 1 qds_replay_pin"
+            )
+        ctx_entry = contexts[0]
+        pin_entry = pins[0]
+        if (
+            not isinstance(ctx_entry, Mapping)
+            or ctx_entry.get("id")
+            != expected_identities["emission_context_id"]
+            or ctx_entry.get("qds_ref") != expected_identities["qds_id"]
+            or ctx_entry.get("owner_evaluation_run_ref")
+            != expected_identities["eval_run_id"]
+            or ctx_entry.get("snapshot_owner_evaluation_run_ref")
+            != expected_identities["eval_run_id"]
+            or ctx_entry.get("source_evaluation_run_refs")
+            != [expected_identities["eval_run_id"]]
+            or ctx_entry.get("subject_ref")
+            != expected_identities["subject"]["subject_ref"]
+        ):
+            raise RfactorRecordPublicationError(
+                "prepared_record_validation: qds_emission_context disagrees with expected R4 identities"
+            )
+        if (
+            dict(pin_entry) != dict(replay_pin)
+            or replay_pin.get("id") != expected_identities["replay_pin_id"]
+            or replay_pin.get("qds_ref") != expected_identities["qds_id"]
+            or replay_pin.get("qds_emission_context_ref")
+            != expected_identities["emission_context_id"]
+            or replay_pin.get("source_evaluation_run_refs")
+            != [expected_identities["eval_run_id"]]
+            or replay_pin.get("canonical_qds_sha256") != qds_sha256
+        ):
+            raise RfactorRecordPublicationError(
+                "prepared_record_validation: replay_pin disagrees with expected R4 identities or canonical_qds_sha256"
+            )
+
+        try:
+            parsed_ctx_issued_at = _parse_strict_tz_datetime(
+                ctx_entry.get("issued_at"),
+                label="qds_emission_context.issued_at",
+            )
+        except (ParentExecutionBindingError, RfactorRecordAssemblyError) as exc:
+            raise RfactorRecordPublicationError(
+                f"prepared_record_validation: {exc}"
+            ) from exc
+        ctx_utc_date = parsed_ctx_issued_at.date().isoformat()
+        if ctx_utc_date < expected_identities["run_date"]:
+            raise RfactorRecordPublicationError(
+                f"prepared_record_validation: qds_emission_context.issued_at UTC date {ctx_utc_date!r} "
+                f"precedes evaluation run_date {expected_identities['run_date']!r}"
+            )
+        if issued_at is not None:
+            try:
+                parsed_caller_issued_at = _parse_strict_tz_datetime(
+                    issued_at,
+                    label="issued_at",
+                )
+            except (
+                ParentExecutionBindingError,
+                RfactorRecordAssemblyError,
+            ) as exc:
+                raise RfactorRecordPublicationError(
+                    f"prepared_record_validation: {exc}"
+                ) from exc
+            if parsed_caller_issued_at != parsed_ctx_issued_at:
+                raise RfactorRecordPublicationError(
+                    f"prepared_record_validation: explicit issued_at {parsed_caller_issued_at.isoformat()!r} "
+                    f"disagrees with R4 qds_emission_context.issued_at authority {parsed_ctx_issued_at.isoformat()!r}"
+                )
+        authoring_policy_issued_at = parsed_ctx_issued_at.isoformat()
+        if authoring_policy_issued_at_out is not None:
+            authoring_policy_issued_at_out["authoring_policy_issued_at"] = (
+                authoring_policy_issued_at
+            )
+
+        staged_qds_path = Path(os.fspath(raw_staged_qds_path))
+        expected_staged_qds_name = f"{expected_identities['qds_id']}.staged.txt"
+        if (
+            staged_qds_path.name != expected_staged_qds_name
+            or staged_qds_path.parent != staging_dir
+        ):
+            raise RfactorRecordPublicationError(
+                f"prepared_record_validation: staged_qds_txt_path {staged_qds_path} "
+                f"must be {staging_dir / expected_staged_qds_name}"
+            )
+        try:
+            reopened_qds = load_retained_reference(
+                staging_dir,
+                path=staged_qds_path,
+                sha256=qds_sha256,
+                size_bytes=len(qds_yaml_bytes),
+                label="staged_qds_txt_path",
+            )
+        except RetainedReferenceError as exc:
+            raise RfactorRecordPublicationError(str(exc)) from exc
+        if reopened_qds["bytes"] != qds_yaml_bytes:
+            raise RfactorRecordPublicationError(
+                "prepared_record_validation: reopened staged_qds_txt_path bytes disagree with qds_yaml_bytes"
+            )
+        try:
+            reopened_projection = qds_emit_contract_v4.prepare_projection(
+                [copy.deepcopy(dict(reopened_eval_doc))],
+                expected_identities["qds_id"],
+                "1sar",
+                repo_root=resolved_source_repo_root,
+            )
+            catalog_doc = qds_emit_contract_v4.strict_yaml_load(
+                (resolved_source_repo_root / "ref" / "catalog.yaml").read_text(
+                    encoding="utf-8"
+                )
+            )
+            live_families = qds_emit._tool_families_from_rows(
+                catalog_doc["tools"], source_name="live catalog"
+            )
+            for tool_id, family in reopened_projection["tool_families"].items():
+                if live_families.get(tool_id) != family:
+                    qds_emit_contract_v4._fail(
+                        f"source Tool {tool_id!r} disagrees with live catalog family"
+                    )
+            qds_emit_contract_v4._validate_live_registry_snapshots(
+                reopened_projection, resolved_source_repo_root
+            )
+            replayed_qds = qds_emit_contract_v4.emit_projection(
+                reopened_projection
+            )
+        except BaseException as exc:
+            if isinstance(exc, KeyboardInterrupt):
+                raise
+            raise RfactorRecordPublicationError(
+                "prepared_record_validation: failed to reconstruct or replay Contract-4 projection "
+                f"from reopened final EVAL ({type(exc).__name__}): {exc}"
+            ) from exc
+        _validate_eval_document_tools_against_source_catalog(
+            reopened_eval_doc,
+            issued_at=authoring_policy_issued_at,
+            repo_root=resolved_source_repo_root,
+        )
+        pin_errors = check_qds_trust_invariant._validate_contract_4_pin(
+            Path(reopened_qds["verified_reference"]["path"]),
+            dict(qds_document),
+            reopened_projection,
+            [dict(pin_entry)],
+        )
+        if pin_errors:
+            raise RfactorRecordPublicationError(
+                f"prepared_record_validation: contract-4 replay pin check failed: {pin_errors}"
+            )
+        if dict(projection) != dict(reopened_projection):
+            raise RfactorRecordPublicationError(
+                "prepared_record_validation: prepared_records.projection disagrees with "
+                "projection reconstructed from reopened final EVAL"
+            )
+        if not isinstance(replayed_qds, Mapping) or dict(replayed_qds) != dict(
+            qds_document
+        ):
+            raise RfactorRecordPublicationError(
+                "prepared_record_validation: supplied qds_document differs from "
+                "deterministic frozen contract-4 replay of reopened final EVAL"
+            )
+        replayed_qds_canonical_bytes = (
+            check_qds_trust_invariant._canonical_qds_text(
+                dict(replayed_qds)
+            ).encode("utf-8")
+        )
+        if (
+            replayed_qds_canonical_bytes != reopened_qds["bytes"]
+            or replayed_qds_canonical_bytes != qds_yaml_bytes
+        ):
+            raise RfactorRecordPublicationError(
+                "prepared_record_validation: canonical bytes of deterministic contract-4 "
+                "replay disagree with reopened staged_qds_txt_path / qds_yaml_bytes"
+            )
+    else:
+        for forbidden_qds_key in (
+            "qds_document",
+            "qds_yaml_text",
+            "qds_yaml_bytes",
+            "qds_sha256",
+            "staged_qds_txt_path",
+            "projection",
+            "replay_pin",
+        ):
+            if prepared_records.get(forbidden_qds_key) is not None:
+                raise RfactorRecordPublicationError(
+                    f"prepared_record_validation: supplemental subject {expected_identities['subject_id']!r} "
+                    f"must have {forbidden_qds_key}=None"
+                )
+        if (
+            "qds_emission_contexts" in eval_document
+            or "qds_replay_pins" in eval_document
+        ):
+            raise RfactorRecordPublicationError(
+                f"prepared_record_validation: supplemental subject {expected_identities['subject_id']!r} "
+                "eval_document must not contain qds_emission_contexts or qds_replay_pins"
+            )
+        if issued_at is None:
+            raise RfactorRecordPublicationError(
+                f"prepared_record_validation: supplemental subject {expected_identities['subject_id']!r} "
+                "requires an explicit timezone-aware issued_at authoring-policy instant"
+            )
+        try:
+            parsed_policy_issued_at = _parse_strict_tz_datetime(
+                issued_at,
+                label="issued_at",
+            )
+        except (ParentExecutionBindingError, RfactorRecordAssemblyError) as exc:
+            raise RfactorRecordPublicationError(
+                f"prepared_record_validation: {exc}"
+            ) from exc
+        policy_utc_date = parsed_policy_issued_at.date().isoformat()
+        if policy_utc_date < expected_identities["run_date"]:
+            raise RfactorRecordPublicationError(
+                f"prepared_record_validation: supplemental issued_at UTC date {policy_utc_date!r} "
+                f"precedes evaluation run_date {expected_identities['run_date']!r}"
+            )
+        authoring_policy_issued_at = parsed_policy_issued_at.isoformat()
+        if authoring_policy_issued_at_out is not None:
+            authoring_policy_issued_at_out["authoring_policy_issued_at"] = (
+                authoring_policy_issued_at
+            )
+        _validate_eval_document_tools_against_source_catalog(
+            reopened_eval_doc,
+            issued_at=authoring_policy_issued_at,
+            repo_root=resolved_source_repo_root,
+        )
+
+    return {
+        "expected_identities": expected_identities,
+        "authoring_policy_issued_at": authoring_policy_issued_at,
+        "eval_yaml_bytes": eval_yaml_bytes,
+        "eval_sha256": eval_sha256,
+        "qds_yaml_bytes": qds_yaml_bytes,
+        "qds_sha256": qds_sha256,
+        "reopened_pre_pin": reopened_pre_pin,
+        "reopened_eval": reopened_eval,
+        "reopened_qds": reopened_qds,
+        "staged_txt_paths": {
+            "staged_pre_pin_eval_txt_path": str(
+                reopened_pre_pin["verified_reference"]["path"]
+            ),
+            "staged_eval_txt_path": str(
+                reopened_eval["verified_reference"]["path"]
+            ),
+            "staged_qds_txt_path": (
+                str(reopened_qds["verified_reference"]["path"])
+                if reopened_qds is not None
+                else None
+            ),
+        },
+    }
+
+
+def _precheck_canonical_publication_targets(
+    expected_identities: Mapping[str, Any],
+    *,
+    output_repo_root: str | os.PathLike[str],
+    staging_dir: Path,
+    intended_paths_out: dict[str, str | None] | None = None,
+) -> dict[str, Any]:
+    """Validate canonical ``data/`` destination hierarchy and verify all target leaves are absent."""
+    try:
+        resolved_output_repo_root = _ensure_no_symlink_chain_to_directory(
+            Path(os.fspath(output_repo_root)), label="output_repo_root"
+        )
+    except (TypeError, RetainedReferenceError) as exc:
+        raise RfactorRecordPublicationError(
+            f"destination_precheck: {exc}"
+        ) from exc
+
+    if (
+        resolved_output_repo_root == staging_dir
+        or resolved_output_repo_root.is_relative_to(staging_dir)
+    ):
+        raise RfactorRecordPublicationError(
+            f"destination_precheck: output_repo_root {resolved_output_repo_root} "
+            f"must not be equal to or inside staging_dir {staging_dir}"
+        )
+
+    try:
+        resolved_data_dir = _ensure_no_symlink_chain_to_directory(
+            resolved_output_repo_root / "data",
+            label="output_repo_root.data",
+        )
+        resolved_dest_dir = _ensure_no_symlink_chain_to_directory(
+            resolved_output_repo_root / str(expected_identities["destination_rel"]),
+            label="destination_dir",
+        )
+    except RetainedReferenceError as exc:
+        raise RfactorRecordPublicationError(
+            f"destination_precheck: {exc}"
+        ) from exc
+
+    if not resolved_dest_dir.is_relative_to(resolved_data_dir):
+        raise RfactorRecordPublicationError(
+            f"destination_precheck: destination_dir {resolved_dest_dir} "
+            f"is outside canonical data/ tree {resolved_data_dir}"
+        )
+
+    eval_leaf_name = f"{expected_identities['eval_filename_stem']}.yaml"
+    eval_target_path = resolved_dest_dir / eval_leaf_name
+    qds_target_path: Path | None = None
+    target_paths: list[tuple[str, Path]] = [("eval", eval_target_path)]
+    if expected_identities["emits_qds"]:
+        qds_leaf_name = f"{expected_identities['qds_id']}.yaml"
+        qds_target_path = resolved_dest_dir / qds_leaf_name
+        target_paths.append(("qds", qds_target_path))
+
+    for role, target_path in target_paths:
+        leaf_name = target_path.name
+        if (
+            not leaf_name
+            or leaf_name in (".", "..")
+            or "/" in leaf_name
+            or "\\" in leaf_name
+            or target_path.parent != resolved_dest_dir
+            or not target_path.is_relative_to(resolved_data_dir)
+        ):
+            raise RfactorRecordPublicationError(
+                f"destination_precheck: invalid canonical {role} target {target_path}"
+            )
+
+    resolved_intended_paths: dict[str, str | None] = {
+        "eval_path": str(eval_target_path),
+        "qds_path": (
+            str(qds_target_path) if qds_target_path is not None else None
+        ),
+    }
+    if intended_paths_out is not None:
+        intended_paths_out.update(resolved_intended_paths)
+
+    for role, target_path in target_paths:
+        try:
+            existing_st = os.lstat(target_path)
+        except FileNotFoundError:
+            existing_st = None
+        except OSError as exc:
+            raise RfactorRecordPublicationError(
+                f"destination_precheck: unable to inspect canonical {role} target {target_path} "
+                f"({type(exc).__name__}): {exc}"
+            ) from exc
+        if existing_st is not None:
+            if stat.S_ISLNK(existing_st.st_mode):
+                raise RfactorRecordPublicationError(
+                    f"destination_precheck: refusing pre-existing symlink at canonical {role} target {target_path}"
+                )
+            if stat.S_ISDIR(existing_st.st_mode):
+                raise RfactorRecordPublicationError(
+                    f"destination_precheck: refusing pre-existing directory at canonical {role} target {target_path}"
+                )
+            if existing_st.st_nlink > 1:
+                raise RfactorRecordPublicationError(
+                    f"destination_precheck: refusing pre-existing hardlinked file "
+                    f"(st_nlink={existing_st.st_nlink}) at canonical {role} target {target_path}"
+                )
+            raise RfactorRecordPublicationError(
+                f"destination_precheck: refusing pre-existing file at canonical {role} target {target_path}"
+            )
+
+    return {
+        "resolved_output_repo_root": resolved_output_repo_root,
+        "resolved_data_dir": resolved_data_dir,
+        "resolved_dest_dir": resolved_dest_dir,
+        "eval_target_path": eval_target_path,
+        "qds_target_path": qds_target_path,
+        "intended_paths": resolved_intended_paths,
+    }
+
+
+def _write_exclusive_canonical_leaf_bytes(
+    target_path: Path,
+    payload: bytes,
+    *,
+    destination_dir: Path,
+    role: str,
+    expected_sha256: str,
+    owned_created_outputs: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Exclusively create ``target_path`` with ``O_CREAT | O_EXCL`` and write ``payload``, recording ownership."""
+    resolved_dest_dir = _ensure_no_symlink_chain_to_directory(
+        destination_dir, label=f"{role}_publication.destination_dir"
+    )
+    if target_path.parent != resolved_dest_dir:
+        raise RfactorRecordPublicationError(
+            f"{role}_publication: canonical target {target_path} must be a direct child of {resolved_dest_dir}"
+        )
+    open_flags = (
+        os.O_WRONLY
+        | os.O_CREAT
+        | os.O_EXCL
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_CLOEXEC", 0)
+    )
+    try:
+        fd = os.open(target_path, open_flags, 0o644)
+    except FileExistsError as exc:
+        raise RfactorRecordPublicationError(
+            f"{role}_publication: refusing to overwrite pre-existing or colliding path at canonical target {target_path}"
+        ) from exc
+    except OSError as exc:
+        raise RfactorRecordPublicationError(
+            f"{role}_publication: exclusive creation failed for canonical target {target_path} "
+            f"({type(exc).__name__}): {exc}"
+        ) from exc
+
+    receipt: dict[str, Any] = {
+        "role": role,
+        "path": str(target_path),
+        "target_path": target_path,
+        "destination_dir": resolved_dest_dir,
+        "created_dev": None,
+        "created_ino": None,
+        "ownership_established": False,
+        "expected_sha256": expected_sha256,
+        "expected_size_bytes": len(payload),
+        "write_completed": False,
+        "fsync_completed": False,
+        "close_completed": False,
+        "post_write_verified": False,
+    }
+    owned_created_outputs.append(receipt)
+    primary_exc: BaseException | None = None
+    try:
+        fd_st = os.fstat(fd)
+        receipt["created_dev"] = int(fd_st.st_dev)
+        receipt["created_ino"] = int(fd_st.st_ino)
+        receipt["ownership_established"] = True
+        path_st = os.lstat(target_path)
+        if (
+            not stat.S_ISREG(fd_st.st_mode)
+            or stat.S_ISLNK(path_st.st_mode)
+            or fd_st.st_ino != path_st.st_ino
+            or fd_st.st_dev != path_st.st_dev
+            or fd_st.st_nlink != 1
+        ):
+            raise RfactorRecordPublicationError(
+                f"{role}_publication: canonical target {target_path} failed post-create regular single-link inode check"
+            )
+        view = memoryview(bytes(payload))
+        total_written = 0
+        while total_written < len(view):
+            written = os.write(fd, view[total_written:])
+            if written <= 0:
+                raise RfactorRecordPublicationError(
+                    f"{role}_publication: short write on canonical target {target_path}"
+                )
+            total_written += written
+        receipt["write_completed"] = True
+        os.fsync(fd)
+        receipt["fsync_completed"] = True
+    except BaseException as exc:
+        primary_exc = exc
+        raise
+    finally:
+        try:
+            os.close(fd)
+            receipt["close_completed"] = True
+        except OSError as close_exc:
+            if primary_exc is None:
+                raise RfactorRecordPublicationError(
+                    f"{role}_publication: os.close({fd}) failed on canonical target {target_path} "
+                    f"({type(close_exc).__name__}): {close_exc}"
+                ) from close_exc
+            primary_exc.add_note(
+                f"{role}_publication: os.close({fd}) also failed on canonical target {target_path} "
+                f"({type(close_exc).__name__}): {close_exc}"
+            )
+    return receipt
+
+
+def _verify_published_canonical_leaf(
+    target_path: Path,
+    *,
+    expected_bytes: bytes,
+    expected_sha256: str,
+    expected_dev: int,
+    expected_ino: int,
+    destination_dir: Path,
+    role: str,
+) -> dict[str, Any]:
+    """Verify a newly written canonical leaf still matches its created inode and exact prepared bytes/sha256/size."""
+    try:
+        resolved_dest_dir = _ensure_no_symlink_chain_to_directory(
+            destination_dir, label=f"{role}_post_write_verification.destination_dir"
+        )
+        post_st = os.lstat(target_path)
+    except (OSError, RetainedReferenceError) as exc:
+        raise RfactorRecordPublicationError(
+            f"{role}_post_write_verification: unable to inspect canonical target {target_path} "
+            f"({type(exc).__name__}): {exc}"
+        ) from exc
+
+    if (
+        stat.S_ISLNK(post_st.st_mode)
+        or not stat.S_ISREG(post_st.st_mode)
+        or post_st.st_nlink != 1
+    ):
+        raise RfactorRecordPublicationError(
+            f"{role}_post_write_verification: canonical target {target_path} is no longer a regular single-link file"
+        )
+    if (
+        int(post_st.st_dev) != expected_dev
+        or int(post_st.st_ino) != expected_ino
+    ):
+        raise RfactorRecordPublicationError(
+            f"{role}_post_write_verification: canonical target {target_path} inode "
+            f"{(int(post_st.st_dev), int(post_st.st_ino))} no longer matches created ownership "
+            f"receipt {(expected_dev, expected_ino)}"
+        )
+
+    try:
+        reopened = load_retained_reference(
+            resolved_dest_dir,
+            path=target_path,
+            sha256=expected_sha256,
+            size_bytes=len(expected_bytes),
+            label=f"{role}_published_canonical_record",
+        )
+    except RetainedReferenceError as exc:
+        raise RfactorRecordPublicationError(
+            f"{role}_post_write_verification: {exc}"
+        ) from exc
+    if reopened["bytes"] != expected_bytes:
+        raise RfactorRecordPublicationError(
+            f"{role}_post_write_verification: reopened bytes at {target_path} disagree with prepared {role} payload"
+        )
+    return copy.deepcopy(dict(reopened["verified_reference"]))
+
+
+def _cleanup_owned_canonical_outputs(
+    owned_created_outputs: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Remove only this invocation's still-owned canonical files, preserving any unowned/foreign replacements."""
+    if not owned_created_outputs:
+        return _default_cleanup_result()
+
+    items: list[dict[str, Any]] = []
+    for receipt in reversed(list(owned_created_outputs)):
+        role = str(receipt["role"])
+        target_path = Path(receipt["target_path"])
+        dest_dir = Path(receipt["destination_dir"])
+        raw_created_dev = receipt.get("created_dev")
+        raw_created_ino = receipt.get("created_ino")
+        expected_dev = (
+            int(raw_created_dev) if raw_created_dev is not None else None
+        )
+        expected_ino = (
+            int(raw_created_ino) if raw_created_ino is not None else None
+        )
+        ownership_established = (
+            bool(receipt.get("ownership_established", True))
+            and expected_dev is not None
+            and expected_ino is not None
+        )
+        item_record: dict[str, Any] = {
+            "role": role,
+            "path": str(target_path),
+            "created_dev": expected_dev,
+            "created_ino": expected_ino,
+            "ownership_established": ownership_established,
+            "observed_dev": None,
+            "observed_ino": None,
+            "status": "pending",
+            "removed": False,
+            "cleanup_complete": False,
+            "detail": None,
+        }
+        if not ownership_established:
+            try:
+                _ensure_no_symlink_chain_to_directory(
+                    dest_dir, label=f"cleanup.{role}.destination_dir"
+                )
+                st = os.lstat(target_path)
+                item_record["observed_dev"] = int(st.st_dev)
+                item_record["observed_ino"] = int(st.st_ino)
+            except (OSError, RetainedReferenceError):
+                pass
+            item_record["status"] = "ownership_unknown_retained"
+            item_record["detail"] = (
+                "canonical file was exclusively created by this invocation, but "
+                "descriptor fstat failed before (st_dev, st_ino) inode ownership "
+                "could be established; retaining path without unlinking"
+            )
+            items.append(item_record)
+            continue
+
+        try:
+            _ensure_no_symlink_chain_to_directory(
+                dest_dir, label=f"cleanup.{role}.destination_dir"
+            )
+            st = os.lstat(target_path)
+        except FileNotFoundError:
+            item_record["status"] = "ownership_lost_missing"
+            item_record["detail"] = (
+                "created canonical file was already missing before cleanup"
+            )
+            items.append(item_record)
+            continue
+        except (OSError, RetainedReferenceError) as exc:
+            item_record["status"] = "inspect_failed"
+            item_record["detail"] = f"{type(exc).__name__}: {exc}"
+            items.append(item_record)
+            continue
+
+        item_record["observed_dev"] = int(st.st_dev)
+        item_record["observed_ino"] = int(st.st_ino)
+        if (
+            stat.S_ISLNK(st.st_mode)
+            or not stat.S_ISREG(st.st_mode)
+            or st.st_nlink != 1
+            or int(st.st_dev) != expected_dev
+            or int(st.st_ino) != expected_ino
+        ):
+            item_record["status"] = "skipped_unowned_replacement"
+            item_record["detail"] = (
+                "canonical path no longer matches created regular single-link inode receipt; "
+                "preserving unowned replacement untouched"
+            )
+            items.append(item_record)
+            continue
+
+        try:
+            os.unlink(target_path)
+            item_record["status"] = "removed_owned_output"
+            item_record["removed"] = True
+            item_record["cleanup_complete"] = True
+        except OSError as unlink_exc:
+            item_record["status"] = "unlink_failed"
+            item_record["detail"] = f"{type(unlink_exc).__name__}: {unlink_exc}"
+        items.append(item_record)
+
+    cleanup_complete = all(bool(item["cleanup_complete"]) for item in items)
+    return {
+        "attempted": True,
+        "cleanup_complete": cleanup_complete,
+        "incomplete_cleanup": not cleanup_complete,
+        "owned_outputs_count": len(owned_created_outputs),
+        "removed_paths": [
+            str(item["path"]) for item in items if item["removed"]
+        ],
+        "retained_unowned_or_failed_paths": [
+            str(item["path"])
+            for item in items
+            if not item["cleanup_complete"]
+        ],
+        "items": items,
+    }
+
+
+def _publish_prepared_rfactor_records(
+    prepared_records: Mapping[str, Any] | None = None,
+    *,
+    subject_id: str | None = None,
+    run_date: str | None = None,
+    staging_dir: str | os.PathLike[str] | None = None,
+    admitted_parent_root: str | os.PathLike[str] | None = None,
+    output_repo_root: str | os.PathLike[str] | None = None,
+    destination_rel: str | None = None,
+    parent_binding: Mapping[str, Any] | None = None,
+    phenix_bundle: Mapping[str, Any] | None = None,
+    refmac_bundle: Mapping[str, Any] | None = None,
+    issued_at: str | None = None,
+    repo_root: str | os.PathLike[str] | None = None,
+    cross_tool_comparison_evidence_ref: str | None = None,
+    registry_snapshots_override: Mapping[str, Any] | None = None,
+    outcome_dir: str | os.PathLike[str] | None = None,
+) -> dict[str, Any]:
+    """Narrow private byte publisher for 1SAR R-factor canonical ``EVAL_*.yaml`` (and R4 ``QDS_*.yaml``).
+
+    Validates (or prepares into fresh owned staging under ``admitted_parent_root``)
+    the exact prepared byte payloads, digests, original documents, cardinality, and
+    reopened ``.staged.txt`` / ``.pre_pin.txt`` carriers; prechecks all canonical
+    destination paths under ``<output_repo_root>/data/`` before writing either file;
+    exclusively creates ``EVAL_*.yaml`` then (for R4) ``QDS_*.yaml`` while tracking
+    inode ownership and performing post-write byte/hash/size verification inside
+    the same failure boundary; cleans up only this invocation's still-owned
+    canonical outputs on failure while preserving foreign replacements and all
+    staged ``.txt`` carriers; and explicitly treats ``QdsCompletenessError`` and
+    ``SystemExit`` (including code ``0``) as refusal while allowing
+    ``KeyboardInterrupt`` to escape unchanged after owned cleanup.
+
+    For pre-prepared supplemental records (``start``, ``R5``, ``R6``), ``issued_at``
+    is required explicitly as the declared authoring-policy instant used to select
+    the complete canonical T03 ``Tool`` snapshot via
+    ``_select_live_t03_registry_and_tool_snapshots``. An explicitly declared policy
+    instant is a publication-policy input, never a claim about scientific execution
+    time or the source's prior preparation time; ``prepared_records['registry_snapshots']``
+    is never trusted as an authority. Supplemental publication also requires an
+    outcome destination (``admitted_parent_root`` or ``outcome_dir``) so the
+    normalized UTC ``authoring_policy_issued_at`` is persisted in the authoritative
+    authoring outcome beside ``published_files.eval.sha256``.
+    """
+    onesar_rerun, *_ = _load_record_assembly_deps()
+
+    current_stage = "staging_initialization"
+    intended_paths: dict[str, str | None] = {"eval_path": None, "qds_path": None}
+    completed_steps: list[str] = []
+    published_files: dict[str, Any] = {"eval": None, "qds": None}
+    staged_txt_paths: dict[str, str | None] = {
+        "staged_pre_pin_eval_txt_path": None,
+        "staged_eval_txt_path": None,
+        "staged_qds_txt_path": None,
+    }
+    owned_created_outputs: list[dict[str, Any]] = []
+    cleanup_result: dict[str, Any] = _default_cleanup_result()
+    outcome_commit_receipt: dict[str, Any] = _default_outcome_commit_receipt()
+    resolved_outcome_dir: Path | None = None
+    resolved_parent_root: Path | None = None
+    policy_time_holder: dict[str, str | None] = {
+        "authoring_policy_issued_at": None
+    }
+
+    effective_subject_id: str | None = subject_id
+    effective_run_date: str | None = run_date
+    if isinstance(parent_binding, Mapping):
+        if effective_subject_id is None and isinstance(
+            parent_binding.get("subject_id"), str
+        ):
+            effective_subject_id = str(parent_binding["subject_id"])
+        if (
+            effective_run_date is None
+            and isinstance(parent_binding.get("timing"), Mapping)
+            and isinstance(parent_binding["timing"].get("run_date"), str)
+        ):
+            effective_run_date = str(parent_binding["timing"]["run_date"])
+    if isinstance(prepared_records, Mapping) and isinstance(
+        prepared_records.get("identities"), Mapping
+    ):
+        prep_ids = prepared_records["identities"]
+        if effective_subject_id is None and isinstance(
+            prep_ids.get("subject_id"), str
+        ):
+            effective_subject_id = str(prep_ids["subject_id"])
+        if effective_run_date is None and isinstance(
+            prep_ids.get("run_date"), str
+        ):
+            effective_run_date = str(prep_ids["run_date"])
+
+    try:
+        if admitted_parent_root is not None:
+            try:
+                resolved_parent_root = _ensure_no_symlink_chain_to_directory(
+                    Path(os.fspath(admitted_parent_root)),
+                    label="admitted_parent_root",
+                )
+            except (TypeError, RetainedReferenceError) as exc:
+                raise RfactorRecordPublicationError(
+                    f"staging_initialization: {exc}"
+                ) from exc
+
+        if outcome_dir is not None:
+            try:
+                raw_outcome_path = Path(os.fspath(outcome_dir))
+                if not raw_outcome_path.exists():
+                    parent_of_outcome = _ensure_no_symlink_chain_to_directory(
+                        raw_outcome_path.parent,
+                        label="outcome_dir.parent",
+                    )
+                    resolved_outcome_dir = _ensure_owned_child_directory(
+                        parent_of_outcome,
+                        raw_outcome_path.name,
+                        label="outcome_dir",
+                    )
+                else:
+                    resolved_outcome_dir = _ensure_no_symlink_chain_to_directory(
+                        raw_outcome_path, label="outcome_dir"
+                    )
+            except (TypeError, RetainedReferenceError) as exc:
+                raise RfactorRecordPublicationError(
+                    f"staging_initialization: {exc}"
+                ) from exc
+        elif resolved_parent_root is not None:
+            resolved_outcome_dir = _ensure_owned_child_directory(
+                resolved_parent_root,
+                AUTHORING_OUTCOMES_SUBDIR_NAME,
+                label="outcome_dir",
+            )
+
+        if prepared_records is not None and (
+            phenix_bundle is not None or refmac_bundle is not None
+        ):
+            raise RfactorRecordPublicationError(
+                "staging_initialization: supply either prepared_records or "
+                "(parent_binding, phenix_bundle, refmac_bundle), not both"
+            )
+
+        if prepared_records is None:
+            if (
+                parent_binding is None
+                or phenix_bundle is None
+                or refmac_bundle is None
+            ):
+                raise RfactorRecordPublicationError(
+                    "staging_initialization: parent_binding, phenix_bundle, and "
+                    "refmac_bundle are required when prepared_records is None"
+                )
+            if staging_dir is None:
+                if resolved_parent_root is None:
+                    raise RfactorRecordPublicationError(
+                        "staging_initialization: staging_dir or admitted_parent_root "
+                        "is required when preparing records internally"
+                    )
+                resolved_staging_dir = _allocate_fresh_owned_subdir(
+                    resolved_parent_root,
+                    container_name=AUTHORING_STAGING_SUBDIR_NAME,
+                    prefix="staging",
+                    label="staging_dir",
+                )
+            else:
+                try:
+                    raw_staging_path = Path(os.fspath(staging_dir))
+                    if not raw_staging_path.exists():
+                        staging_parent = _ensure_no_symlink_chain_to_directory(
+                            raw_staging_path.parent,
+                            label="staging_dir.parent",
+                        )
+                        resolved_staging_dir = _ensure_owned_child_directory(
+                            staging_parent,
+                            raw_staging_path.name,
+                            label="staging_dir",
+                        )
+                    else:
+                        resolved_staging_dir = (
+                            _ensure_no_symlink_chain_to_directory(
+                                raw_staging_path, label="staging_dir"
+                            )
+                        )
+                except (TypeError, RetainedReferenceError) as exc:
+                    raise RfactorRecordPublicationError(
+                        f"staging_initialization: {exc}"
+                    ) from exc
+                if resolved_parent_root is not None and (
+                    resolved_staging_dir == resolved_parent_root
+                    or not resolved_staging_dir.is_relative_to(
+                        resolved_parent_root
+                    )
+                ):
+                    raise RfactorRecordPublicationError(
+                        f"staging_initialization: staging_dir {resolved_staging_dir} "
+                        f"must reside strictly under admitted_parent_root {resolved_parent_root}"
+                    )
+
+            completed_steps.append("staging_initialized")
+            current_stage = "record_preparation"
+            if not isinstance(parent_binding, Mapping) or not isinstance(
+                parent_binding.get("timing"), Mapping
+            ):
+                raise RfactorRecordPublicationError(
+                    "record_preparation: parent_binding.timing must be a mapping"
+                )
+            timing_block = parent_binding["timing"]
+            try:
+                validated_timing = validate_parent_execution_timing(
+                    timing_block.get("started_at_utc"),
+                    timing_block.get("finished_at_utc"),
+                    timing_block.get("run_date"),
+                    expected_run_date=run_date,
+                    label="parent_binding.timing",
+                )
+                candidate_policy_issued_at = (
+                    issued_at
+                    if issued_at is not None
+                    else str(validated_timing["finished_at_utc_normalized"])
+                )
+                parsed_policy_issued_at = _parse_strict_tz_datetime(
+                    candidate_policy_issued_at,
+                    label="issued_at",
+                )
+            except ParentExecutionBindingError as exc:
+                raise RfactorRecordPublicationError(
+                    f"record_preparation: {exc}"
+                ) from exc
+            policy_utc_date = parsed_policy_issued_at.date().isoformat()
+            if policy_utc_date < str(validated_timing["run_date"]):
+                raise RfactorRecordPublicationError(
+                    f"record_preparation: issued_at UTC date {policy_utc_date!r} "
+                    f"precedes evaluation run_date {validated_timing['run_date']!r}"
+                )
+            effective_run_date = str(validated_timing["run_date"])
+            effective_policy_issued_at: str | None = (
+                parsed_policy_issued_at.isoformat()
+            )
+            policy_time_holder["authoring_policy_issued_at"] = (
+                effective_policy_issued_at
+            )
+            prep_dest_rel = (
+                destination_rel
+                if destination_rel is not None
+                else DEFAULT_RECORD_DESTINATION_REL
+            )
+            prepared_records = _prepare_rfactor_eval_and_live_qds_records(
+                parent_binding=parent_binding,
+                phenix_bundle=phenix_bundle,
+                refmac_bundle=refmac_bundle,
+                staging_dir=resolved_staging_dir,
+                issued_at=effective_policy_issued_at,
+                destination_rel=prep_dest_rel,
+                repo_root=repo_root,
+                cross_tool_comparison_evidence_ref=cross_tool_comparison_evidence_ref,
+                registry_snapshots_override=registry_snapshots_override,
+            )
+            completed_steps.append("records_prepared")
+        else:
+            effective_policy_issued_at = issued_at
+            if staging_dir is None:
+                raise RfactorRecordPublicationError(
+                    "staging_initialization: staging_dir is required when publishing pre-prepared records"
+                )
+            try:
+                resolved_staging_dir = _ensure_no_symlink_chain_to_directory(
+                    Path(os.fspath(staging_dir)), label="staging_dir"
+                )
+            except (TypeError, RetainedReferenceError) as exc:
+                raise RfactorRecordPublicationError(
+                    f"staging_initialization: {exc}"
+                ) from exc
+            if resolved_parent_root is not None and (
+                resolved_staging_dir == resolved_parent_root
+                or not resolved_staging_dir.is_relative_to(resolved_parent_root)
+            ):
+                raise RfactorRecordPublicationError(
+                    f"staging_initialization: staging_dir {resolved_staging_dir} "
+                    f"must reside strictly under admitted_parent_root {resolved_parent_root}"
+                )
+            completed_steps.append("staging_initialized")
+
+        if isinstance(prepared_records, Mapping):
+            for txt_key in (
+                "staged_pre_pin_eval_txt_path",
+                "staged_eval_txt_path",
+                "staged_qds_txt_path",
+            ):
+                raw_txt = prepared_records.get(txt_key)
+                if isinstance(raw_txt, (str, os.PathLike)):
+                    staged_txt_paths[txt_key] = str(raw_txt)
+
+        current_stage = "prepared_record_validation"
+        validated = _validate_prepared_rfactor_records_for_publication(
+            prepared_records,
+            subject_id=subject_id,
+            run_date=run_date,
+            destination_rel=destination_rel,
+            staging_dir=resolved_staging_dir,
+            issued_at=effective_policy_issued_at,
+            parent_binding=parent_binding,
+            repo_root=repo_root,
+            authoring_policy_issued_at_out=policy_time_holder,
+        )
+        expected_identities = validated["expected_identities"]
+        authoring_policy_issued_at = str(
+            validated["authoring_policy_issued_at"]
+        )
+        policy_time_holder["authoring_policy_issued_at"] = (
+            authoring_policy_issued_at
+        )
+        effective_subject_id = str(expected_identities["subject_id"])
+        effective_run_date = str(expected_identities["run_date"])
+        staged_txt_paths = validated["staged_txt_paths"]
+        completed_steps.append("prepared_records_validated")
+
+        current_stage = "destination_precheck"
+        raw_target_repo_root = (
+            output_repo_root
+            if output_repo_root is not None
+            else (
+                repo_root if repo_root is not None else onesar_rerun.REPO_ROOT
+            )
+        )
+        prechecked = _precheck_canonical_publication_targets(
+            expected_identities,
+            output_repo_root=raw_target_repo_root,
+            staging_dir=resolved_staging_dir,
+            intended_paths_out=intended_paths,
+        )
+        resolved_output_repo_root = prechecked["resolved_output_repo_root"]
+        resolved_dest_dir = prechecked["resolved_dest_dir"]
+        eval_target_path = prechecked["eval_target_path"]
+        qds_target_path = prechecked["qds_target_path"]
+        intended_paths = prechecked["intended_paths"]
+        if not expected_identities["emits_qds"] and resolved_outcome_dir is None:
+            raise RfactorRecordPublicationError(
+                "destination_precheck: supplemental record publication requires "
+                "admitted_parent_root or outcome_dir so the authoritative authoring "
+                "outcome binding authoring_policy_issued_at and published_files.eval.sha256 "
+                "can be persisted"
+            )
+        completed_steps.append("destination_prechecked")
+
+        current_stage = "eval_publication"
+        eval_receipt = _write_exclusive_canonical_leaf_bytes(
+            eval_target_path,
+            validated["eval_yaml_bytes"],
+            destination_dir=resolved_dest_dir,
+            role="eval",
+            expected_sha256=validated["eval_sha256"],
+            owned_created_outputs=owned_created_outputs,
+        )
+        completed_steps.append("eval_written")
+        eval_verified_ref = _verify_published_canonical_leaf(
+            eval_target_path,
+            expected_bytes=validated["eval_yaml_bytes"],
+            expected_sha256=validated["eval_sha256"],
+            expected_dev=eval_receipt["created_dev"],
+            expected_ino=eval_receipt["created_ino"],
+            destination_dir=resolved_dest_dir,
+            role="eval",
+        )
+        eval_receipt["post_write_verified"] = True
+        completed_steps.append("eval_verified")
+        published_files["eval"] = {
+            "role": "eval",
+            "id": expected_identities["eval_run_id"],
+            "path": str(eval_target_path),
+            "relative_path": expected_identities["eval_rel_path"],
+            "sha256": validated["eval_sha256"],
+            "authoring_policy_issued_at": authoring_policy_issued_at,
+            "size_bytes": len(validated["eval_yaml_bytes"]),
+            "created_dev": eval_receipt["created_dev"],
+            "created_ino": eval_receipt["created_ino"],
+            "verified_reference": eval_verified_ref,
+        }
+
+        qds_receipt: dict[str, Any] | None = None
+        if expected_identities["emits_qds"]:
+            assert qds_target_path is not None
+            assert validated["qds_yaml_bytes"] is not None
+            assert validated["qds_sha256"] is not None
+            current_stage = "qds_publication"
+            qds_receipt = _write_exclusive_canonical_leaf_bytes(
+                qds_target_path,
+                validated["qds_yaml_bytes"],
+                destination_dir=resolved_dest_dir,
+                role="qds",
+                expected_sha256=validated["qds_sha256"],
+                owned_created_outputs=owned_created_outputs,
+            )
+            completed_steps.append("qds_written")
+            qds_verified_ref = _verify_published_canonical_leaf(
+                qds_target_path,
+                expected_bytes=validated["qds_yaml_bytes"],
+                expected_sha256=validated["qds_sha256"],
+                expected_dev=qds_receipt["created_dev"],
+                expected_ino=qds_receipt["created_ino"],
+                destination_dir=resolved_dest_dir,
+                role="qds",
+            )
+            qds_receipt["post_write_verified"] = True
+            completed_steps.append("qds_verified")
+            published_files["qds"] = {
+                "role": "qds",
+                "id": expected_identities["qds_id"],
+                "path": str(qds_target_path),
+                "relative_path": expected_identities["qds_rel_path"],
+                "sha256": validated["qds_sha256"],
+                "size_bytes": len(validated["qds_yaml_bytes"]),
+                "created_dev": qds_receipt["created_dev"],
+                "created_ino": qds_receipt["created_ino"],
+                "verified_reference": qds_verified_ref,
+            }
+
+        current_stage = "final_pair_verification"
+        final_eval_verified_ref = _verify_published_canonical_leaf(
+            eval_target_path,
+            expected_bytes=validated["eval_yaml_bytes"],
+            expected_sha256=validated["eval_sha256"],
+            expected_dev=eval_receipt["created_dev"],
+            expected_ino=eval_receipt["created_ino"],
+            destination_dir=resolved_dest_dir,
+            role="eval",
+        )
+        published_files["eval"]["verified_reference"] = final_eval_verified_ref
+        if expected_identities["emits_qds"]:
+            assert qds_target_path is not None
+            assert qds_receipt is not None
+            assert validated["qds_yaml_bytes"] is not None
+            assert validated["qds_sha256"] is not None
+            final_qds_verified_ref = _verify_published_canonical_leaf(
+                qds_target_path,
+                expected_bytes=validated["qds_yaml_bytes"],
+                expected_sha256=validated["qds_sha256"],
+                expected_dev=qds_receipt["created_dev"],
+                expected_ino=qds_receipt["created_ino"],
+                destination_dir=resolved_dest_dir,
+                role="qds",
+            )
+            published_files["qds"]["verified_reference"] = (
+                final_qds_verified_ref
+            )
+        completed_steps.append("canonical_outputs_reverified")
+
+        current_stage = "outcome_persistence"
+        authoring_outcome = _build_authoring_outcome_payload(
+            subject_id=effective_subject_id,
+            run_date=effective_run_date,
+            authoring_policy_issued_at=authoring_policy_issued_at,
+            status="published",
+            published=True,
+            failed_stage=None,
+            intended_paths=intended_paths,
+            completed_steps=completed_steps,
+            published_files=published_files,
+            staged_txt_paths=staged_txt_paths,
+            cleanup_result=cleanup_result,
+            exc=None,
+        )
+        published_completed_steps = (
+            [*completed_steps, "outcome_persisted"]
+            if resolved_outcome_dir is not None
+            else list(completed_steps)
+        )
+        success_result: dict[str, Any] = {
+            "publication_status": "published",
+            "published": True,
+            "subject_id": expected_identities["subject_id"],
+            "stage": expected_identities["stage"],
+            "run_date": expected_identities["run_date"],
+            "authoring_policy_issued_at": authoring_policy_issued_at,
+            "emits_qds": expected_identities["emits_qds"],
+            "identities": copy.deepcopy(expected_identities),
+            "output_repo_root": str(resolved_output_repo_root),
+            "destination_dir": str(resolved_dest_dir),
+            "staging_dir": str(resolved_staging_dir),
+            "eval_record": copy.deepcopy(published_files["eval"]),
+            "qds_record": copy.deepcopy(published_files["qds"]),
+            "staged_references": {
+                "staged_pre_pin_eval_txt": copy.deepcopy(
+                    validated["reopened_pre_pin"]["verified_reference"]
+                ),
+                "staged_eval_txt": copy.deepcopy(
+                    validated["reopened_eval"]["verified_reference"]
+                ),
+                "staged_qds_txt": (
+                    copy.deepcopy(
+                        validated["reopened_qds"]["verified_reference"]
+                    )
+                    if validated["reopened_qds"] is not None
+                    else None
+                ),
+            },
+            "replay_pin": (
+                copy.deepcopy(prepared_records["replay_pin"])
+                if expected_identities["emits_qds"]
+                else None
+            ),
+            "cross_tool_hkl_comparison": copy.deepcopy(
+                prepared_records["cross_tool_hkl_comparison"]
+            ),
+            "completed_steps": published_completed_steps,
+            "cleanup_result": copy.deepcopy(cleanup_result),
+            "authoring_outcome": None,
+            "authoring_outcome_path": None,
+        }
+        if resolved_outcome_dir is not None:
+            persisted_meta = _persist_authoring_outcome(
+                authoring_outcome,
+                outcome_dir=resolved_outcome_dir,
+                commit_receipt=outcome_commit_receipt,
+            )
+            committed_outcome = outcome_commit_receipt.get("committed_outcome")
+            if isinstance(committed_outcome, dict):
+                authoring_outcome = committed_outcome
+            else:
+                authoring_outcome.update(persisted_meta)
+                authoring_outcome["completed_steps"] = list(
+                    published_completed_steps
+                )
+            completed_steps.append("outcome_persisted")
+            success_result["authoring_outcome"] = authoring_outcome
+            success_result["authoring_outcome_path"] = authoring_outcome.get(
+                "outcome_path"
+            )
+        else:
+            success_result["authoring_outcome"] = copy.deepcopy(
+                authoring_outcome
+            )
+            success_result["authoring_outcome_path"] = authoring_outcome.get(
+                "outcome_path"
+            )
+
+        return success_result
+
+    except BaseException as exc:
+        resolved_policy_issued_at = (
+            outcome_commit_receipt.get("authoring_policy_issued_at")
+            or policy_time_holder.get("authoring_policy_issued_at")
+        )
+        commit_state = str(
+            outcome_commit_receipt.get("commit_state", "not_attempted")
+        )
+        if commit_state == "attempting" and resolved_outcome_dir is not None:
+            commit_state = _reconcile_outcome_link_commit_state(
+                outcome_commit_receipt,
+                outcome_dir=resolved_outcome_dir,
+            )
+        elif commit_state == "attempting":
+            commit_state = "unknown"
+            outcome_commit_receipt["commit_state"] = "unknown"
+            outcome_commit_receipt["committed"] = False
+
+        if commit_state == "committed":
+            committed_outcome_payload = outcome_commit_receipt.get(
+                "committed_outcome"
+            )
+            if not isinstance(committed_outcome_payload, dict):
+                committed_outcome_payload = _build_authoring_outcome_payload(
+                    subject_id=effective_subject_id,
+                    run_date=effective_run_date,
+                    authoring_policy_issued_at=resolved_policy_issued_at,
+                    status="published",
+                    published=True,
+                    failed_stage=None,
+                    intended_paths=intended_paths,
+                    completed_steps=[*completed_steps, "outcome_persisted"],
+                    published_files=published_files,
+                    staged_txt_paths=staged_txt_paths,
+                    cleanup_result=cleanup_result,
+                    exc=None,
+                )
+                persisted_meta_fallback = outcome_commit_receipt.get(
+                    "persisted_meta"
+                )
+                if isinstance(persisted_meta_fallback, dict):
+                    committed_outcome_payload.update(persisted_meta_fallback)
+            exc.commit_state = "committed"  # type: ignore[attr-defined]
+            exc.committed = True  # type: ignore[attr-defined]
+            exc.authoring_policy_issued_at = resolved_policy_issued_at  # type: ignore[attr-defined]
+            exc.authoring_outcome = copy.deepcopy(committed_outcome_payload)  # type: ignore[attr-defined]
+            exc.authoring_outcome_path = outcome_commit_receipt.get("outcome_path")  # type: ignore[attr-defined]
+            exc.provisional_outcome_path = outcome_commit_receipt.get("provisional_path")  # type: ignore[attr-defined]
+            exc.cleanup_result = copy.deepcopy(cleanup_result)  # type: ignore[attr-defined]
+            exc.intended_paths = copy.deepcopy(intended_paths)  # type: ignore[attr-defined]
+            exc.add_note(
+                "outcome_persistence: post-commit exception after authoritative outcome "
+                f"link commit at {outcome_commit_receipt.get('outcome_path')}; canonical outputs "
+                "and committed outcome retained without rollback or secondary failure outcome"
+            )
+            raise
+
+        if commit_state == "unknown":
+            exc.commit_state = "unknown"  # type: ignore[attr-defined]
+            exc.committed = None  # type: ignore[attr-defined]
+            exc.authoring_policy_issued_at = resolved_policy_issued_at  # type: ignore[attr-defined]
+            exc.authoring_outcome = None  # type: ignore[attr-defined]
+            exc.authoring_outcome_path = outcome_commit_receipt.get("outcome_path")  # type: ignore[attr-defined]
+            exc.provisional_outcome_path = outcome_commit_receipt.get("provisional_path")  # type: ignore[attr-defined]
+            exc.outcome_sha256 = outcome_commit_receipt.get("outcome_sha256")  # type: ignore[attr-defined]
+            exc.outcome_size_bytes = outcome_commit_receipt.get("outcome_size_bytes")  # type: ignore[attr-defined]
+            exc.cleanup_result = copy.deepcopy(cleanup_result)  # type: ignore[attr-defined]
+            exc.intended_paths = copy.deepcopy(intended_paths)  # type: ignore[attr-defined]
+            exc.add_note(
+                "outcome_persistence: indeterminate commit state after os.link exception "
+                f"for {outcome_commit_receipt.get('outcome_path')} "
+                f"(inspection_error={outcome_commit_receipt.get('inspection_error')!r}); "
+                "canonical outputs and provisional outcome retained without rollback or "
+                "secondary failure outcome"
+            )
+            raise
+
+        if owned_created_outputs:
+            cleanup_result = _cleanup_owned_canonical_outputs(
+                owned_created_outputs
+            )
+        if isinstance(exc, KeyboardInterrupt):
+            kbd_outcome = _build_authoring_outcome_payload(
+                subject_id=effective_subject_id,
+                run_date=effective_run_date,
+                authoring_policy_issued_at=resolved_policy_issued_at,
+                status="interrupted",
+                published=False,
+                failed_stage=current_stage,
+                intended_paths=intended_paths,
+                completed_steps=completed_steps,
+                published_files={"eval": None, "qds": None},
+                staged_txt_paths=staged_txt_paths,
+                cleanup_result=cleanup_result,
+                exc=exc,
+            )
+            _try_persist_outcome_without_masking(
+                kbd_outcome,
+                outcome_dir=resolved_outcome_dir,
+                active_exc=exc,
+            )
+            exc.commit_state = "not_attempted"  # type: ignore[attr-defined]
+            exc.committed = False  # type: ignore[attr-defined]
+            exc.authoring_policy_issued_at = resolved_policy_issued_at  # type: ignore[attr-defined]
+            exc.provisional_outcome_path = outcome_commit_receipt.get("provisional_path")  # type: ignore[attr-defined]
+            exc.authoring_outcome = copy.deepcopy(kbd_outcome)  # type: ignore[attr-defined]
+            exc.authoring_outcome_path = kbd_outcome.get("outcome_path")  # type: ignore[attr-defined]
+            exc.cleanup_result = copy.deepcopy(cleanup_result)  # type: ignore[attr-defined]
+            raise
+
+        outcome_status = (
+            "refused"
+            if isinstance(exc, (SystemExit, RetainedReferenceError))
+            else "failed"
+        )
+        failure_outcome = _build_authoring_outcome_payload(
+            subject_id=effective_subject_id,
+            run_date=effective_run_date,
+            authoring_policy_issued_at=resolved_policy_issued_at,
+            status=outcome_status,
+            published=False,
+            failed_stage=current_stage,
+            intended_paths=intended_paths,
+            completed_steps=completed_steps,
+            published_files={"eval": None, "qds": None},
+            staged_txt_paths=staged_txt_paths,
+            cleanup_result=cleanup_result,
+            exc=exc,
+        )
+        cleanup_suffix = (
+            f" [incomplete_cleanup=True; retained_unowned_or_failed_paths="
+            f"{cleanup_result['retained_unowned_or_failed_paths']}]"
+            if cleanup_result["incomplete_cleanup"]
+            else ""
+        )
+        if isinstance(exc, SystemExit):
+            base_msg = (
+                f"{current_stage}: authoring refused due to {type(exc).__name__} "
+                f"(code={exc.code!r}): {exc}{cleanup_suffix}"
+            )
+        else:
+            base_msg = str(exc)
+            if not base_msg.startswith(f"{current_stage}:"):
+                base_msg = f"{current_stage}: {base_msg}"
+            base_msg = f"{base_msg}{cleanup_suffix}"
+
+        pub_err = RfactorRecordPublicationError(
+            base_msg,
+            authoring_outcome=failure_outcome,
+        )
+        _try_persist_outcome_without_masking(
+            failure_outcome,
+            outcome_dir=resolved_outcome_dir,
+            active_exc=pub_err,
+        )
+        pub_err.commit_state = "not_attempted"  # type: ignore[attr-defined]
+        pub_err.committed = False  # type: ignore[attr-defined]
+        pub_err.authoring_policy_issued_at = resolved_policy_issued_at
+        pub_err.provisional_outcome_path = outcome_commit_receipt.get("provisional_path")  # type: ignore[attr-defined]
+        pub_err.authoring_outcome = copy.deepcopy(failure_outcome)
+        pub_err.authoring_outcome_path = failure_outcome.get("outcome_path")
+        pub_err.cleanup_result = copy.deepcopy(cleanup_result)
+        for note in getattr(exc, "__notes__", ()):
+            pub_err.add_note(note)
+        if isinstance(exc, RfactorRecordPublicationError):
+            raise pub_err from exc.__cause__
+        raise pub_err from exc
+
+
+def _try_admit_parent_attempt_root_from_checkpoint(
+    resolved_admitted_root: Path,
+    *,
+    subject_id: str,
+    expected_family: str,
+    checkpoint_reference: Mapping[str, Any] | None,
+    checkpoint_path: str | os.PathLike[str] | None,
+    checkpoint_sha256: str | None,
+    checkpoint_size_bytes: int | None,
+) -> tuple[Path, list[Path], list[Path], dict[str, Any], str | None] | None:
+    """Return ``(parent_root, [phenix_root, refmac_root], [checkpoint_path], cp_vref, run_date)`` when the checkpoint container itself is valid."""
+    try:
+        onesar_rerun, *_ = _load_record_assembly_deps()
+        expected_subject = onesar_rerun.resolve_subject_spec(subject_id)
+        cp_size_key = (
+            "size_bytes"
+            if isinstance(checkpoint_reference, Mapping)
+            and "size_bytes" in checkpoint_reference
+            else None
+        )
+        cp_loaded = load_retained_reference(
+            resolved_admitted_root,
+            checkpoint_reference,
+            path=checkpoint_path,
+            sha256=checkpoint_sha256,
+            size_bytes=checkpoint_size_bytes,
+            size_bytes_key=cp_size_key,
+            parse_json=True,
+            label="parent_execution_checkpoint",
+        )
+        cp_doc = cp_loaded["json"]
+        if not isinstance(cp_doc, Mapping):
+            return None
+        if FORBIDDEN_PARENT_CHECKPOINT_AUTHORING_OUTCOME_KEYS.intersection(
+            cp_doc.keys()
+        ):
+            return None
+        if set(cp_doc.keys()) != REQUIRED_PARENT_EXECUTION_CHECKPOINT_KEYS:
+            return None
+        if (
+            type(cp_doc.get("schema_version")) is not int
+            or cp_doc["schema_version"]
+            != PARENT_COMPLETED_EXECUTION_CHECKPOINT_SCHEMA_VERSION
+            or cp_doc.get("checkpoint_stage")
+            != PARENT_COMPLETED_EXECUTION_CHECKPOINT_STAGE
+            or cp_doc.get("family") != expected_family
+            or cp_doc.get("subject_id") != subject_id
+            or cp_doc.get("subject") != expected_subject
+        ):
+            return None
+        raw_parent = cp_doc.get("parent_evidence_root")
+        raw_phx = cp_doc.get("phenix_evidence_root")
+        raw_rm = cp_doc.get("refmac_evidence_root")
+        if (
+            not isinstance(raw_parent, str)
+            or not isinstance(raw_phx, str)
+            or not isinstance(raw_rm, str)
+        ):
+            return None
+        parent_root = _ensure_no_symlink_chain_to_directory(
+            Path(raw_parent),
+            label="parent_execution_checkpoint.parent_evidence_root",
+        )
+        phenix_root = _ensure_no_symlink_chain_to_directory(
+            Path(raw_phx),
+            label="parent_execution_checkpoint.phenix_evidence_root",
+        )
+        refmac_root = _ensure_no_symlink_chain_to_directory(
+            Path(raw_rm),
+            label="parent_execution_checkpoint.refmac_evidence_root",
+        )
+        reopened_cp_path = Path(str(cp_loaded["verified_reference"]["path"]))
+        if not parent_root.is_relative_to(resolved_admitted_root):
+            return None
+        if (
+            phenix_root == parent_root
+            or not phenix_root.is_relative_to(parent_root)
+            or refmac_root == parent_root
+            or not refmac_root.is_relative_to(parent_root)
+            or phenix_root == refmac_root
+            or phenix_root.is_relative_to(refmac_root)
+            or refmac_root.is_relative_to(phenix_root)
+        ):
+            return None
+        if (
+            not reopened_cp_path.is_relative_to(parent_root)
+            or reopened_cp_path.is_relative_to(phenix_root)
+            or reopened_cp_path.is_relative_to(refmac_root)
+        ):
+            return None
+        timing = validate_parent_execution_timing(
+            cp_doc.get("started_at_utc"),
+            cp_doc.get("finished_at_utc"),
+            cp_doc.get("run_date"),
+            label="parent_execution_checkpoint",
+        )
+        return (
+            parent_root,
+            [phenix_root, refmac_root],
+            [reopened_cp_path],
+            copy.deepcopy(dict(cp_loaded["verified_reference"])),
+            str(timing["run_date"]),
+        )
+    except Exception:
+        return None
+
+
+def publish_retained_rfactor_records(
+    admitted_root: str | os.PathLike[str],
+    *,
+    subject_id: str,
+    checkpoint_reference: Mapping[str, Any] | None = None,
+    checkpoint_path: str | os.PathLike[str] | None = None,
+    checkpoint_sha256: str | None = None,
+    checkpoint_size_bytes: int | None = None,
+    phenix_reconciled_manifest_reference: Mapping[str, Any] | None = None,
+    refmac_operation_manifest_reference: Any = None,
+    expected_family: str = EXPECTED_FAMILY_ID,
+    expected_run_date: str | None = None,
+    issued_at: str | None = None,
+    destination_rel: str = DEFAULT_RECORD_DESTINATION_REL,
+    repo_root: str | os.PathLike[str] | None = None,
+    output_repo_root: str | os.PathLike[str] | None = None,
+) -> dict[str, Any]:
+    """Public retained-input authoring boundary for 1SAR T03 R-factor records.
+
+    Accepts only retained parent/producer references and authoring options (never
+    caller-supplied measurements, prepared payloads, ``verified=True`` flags,
+    callbacks, bypass switches, or private registry overrides). Reopens and
+    verifies the immutable completed parent execution checkpoint via
+    ``verify_retained_parent_execution_checkpoint``, reopens the verified
+    checkpoint JSON via ``load_retained_reference`` to preserve the original
+    REFMAC manifest reference metadata for fallback paths, verifies retained
+    PHENIX evidence via ``verify_retained_phenix_rfactor_evidence``, and invokes
+    ``verify_retained_refmac_rfactor_evidence`` with the parent-bound REFMAC
+    evidence root and original manifest reference.
+
+    Under the current supported contract, ``verify_retained_refmac_rfactor_evidence``
+    always refuses scientific admission (for both R4 and supplemental EVAL-only
+    subjects ``start``, ``R5``, ``R6``); an unexpected non-raising return is
+    never permitted to authorize assembly or canonical record publication. Separate
+    authoring outcome diagnostics are persisted under the admitted attempt
+    (``<admitted_attempt_root>/authoring_outcomes/authoring_outcome_<NNNN>.json``)
+    without modifying the immutable parent execution checkpoint or overwriting
+    prior outcomes.
+    """
+    onesar_rerun, *_ = _load_record_assembly_deps()
+
+    current_stage = "admitted_root_validation"
+    effective_run_date: str | None = expected_run_date
+    intended_paths: dict[str, str | None] = {"eval_path": None, "qds_path": None}
+    completed_steps: list[str] = []
+    resolved_admitted_root: Path | None = None
+    admitted_attempt_root: Path | None = None
+    forbidden_overlap_roots: list[Path] = []
+    forbidden_file_paths: list[Path] = []
+    parent_cp_vref: dict[str, Any] | None = None
+    phx_manifest_vref: dict[str, Any] | None = None
+    rm_manifest_vref: dict[str, Any] | None = None
+
+    try:
+        try:
+            resolved_admitted_root = _ensure_no_symlink_chain_to_directory(
+                Path(os.fspath(admitted_root)), label="admitted_root"
+            )
+        except (TypeError, RetainedReferenceError) as exc:
+            raise ParentExecutionBindingError(str(exc)) from exc
+        completed_steps.append("admitted_root_validated")
+
+        raw_repo_root = (
+            onesar_rerun.REPO_ROOT if repo_root is None else repo_root
+        )
+        try:
+            resolved_repo_root = _ensure_no_symlink_chain_to_directory(
+                Path(os.fspath(raw_repo_root)), label="repo_root"
+            )
+        except (TypeError, RetainedReferenceError) as exc:
+            raise ParentExecutionBindingError(
+                f"repo_root: {exc}"
+            ) from exc
+
+        raw_output_repo_root = (
+            output_repo_root
+            if output_repo_root is not None
+            else resolved_repo_root
+        )
+        try:
+            resolved_output_repo_root = _ensure_no_symlink_chain_to_directory(
+                Path(os.fspath(raw_output_repo_root)),
+                label="output_repo_root",
+            )
+        except (TypeError, RetainedReferenceError) as exc:
+            raise RfactorRecordPublicationError(
+                f"output_repo_root: {exc}"
+            ) from exc
+
+        current_stage = "parent_checkpoint_verification"
+        prelim_admission = _try_admit_parent_attempt_root_from_checkpoint(
+            resolved_admitted_root,
+            subject_id=subject_id,
+            expected_family=expected_family,
+            checkpoint_reference=checkpoint_reference,
+            checkpoint_path=checkpoint_path,
+            checkpoint_sha256=checkpoint_sha256,
+            checkpoint_size_bytes=checkpoint_size_bytes,
+        )
+        if prelim_admission is not None:
+            (
+                admitted_attempt_root,
+                forbidden_overlap_roots,
+                forbidden_file_paths,
+                parent_cp_vref,
+                effective_run_date,
+            ) = prelim_admission
+
+        parent_result = verify_retained_parent_execution_checkpoint(
+            resolved_admitted_root,
+            subject_id=subject_id,
+            checkpoint_reference=checkpoint_reference,
+            checkpoint_path=checkpoint_path,
+            checkpoint_sha256=checkpoint_sha256,
+            checkpoint_size_bytes=checkpoint_size_bytes,
+            expected_family=expected_family,
+            expected_run_date=expected_run_date,
+            repo_root=resolved_repo_root,
+        )
+        admitted_attempt_root = Path(str(parent_result["parent_evidence_root"]))
+        phenix_child_root = Path(str(parent_result["phenix_evidence_root"]))
+        refmac_child_root = Path(str(parent_result["refmac_evidence_root"]))
+        checkpoint_file_path = Path(str(parent_result["checkpoint_path"]))
+        forbidden_overlap_roots = [phenix_child_root, refmac_child_root]
+        forbidden_file_paths = [checkpoint_file_path]
+        effective_run_date = str(parent_result["timing"]["run_date"])
+
+        parent_vrefs = parent_result["verified_references"]
+        parent_cp_vref = copy.deepcopy(
+            dict(parent_vrefs["parent_execution_checkpoint"])
+        )
+        phx_manifest_vref = copy.deepcopy(
+            dict(parent_vrefs["phenix_reconciled_manifest"])
+        )
+        rm_manifest_vref = copy.deepcopy(
+            dict(parent_vrefs["refmac_operation_manifest"])
+        )
+
+        checkpoint_reopened = load_retained_reference(
+            resolved_admitted_root,
+            parent_cp_vref,
+            size_bytes_key="size_bytes",
+            parse_json=True,
+            label="parent_execution_checkpoint",
+        )
+        checkpoint_doc = checkpoint_reopened["json"]
+        if not isinstance(checkpoint_doc, Mapping):
+            raise ParentExecutionBindingError(
+                "parent_execution_checkpoint: reopened JSON payload must be a mapping"
+            )
+        original_refmac_manifest_ref = copy.deepcopy(
+            checkpoint_doc["refmac_operation_manifest"]
+        )
+
+        if phenix_reconciled_manifest_reference is not None:
+            norm_caller_phx = normalize_retained_reference(
+                phenix_reconciled_manifest_reference,
+                size_bytes_key=(
+                    "size_bytes"
+                    if isinstance(phenix_reconciled_manifest_reference, Mapping)
+                    and "size_bytes" in phenix_reconciled_manifest_reference
+                    else None
+                ),
+                label="phenix_reconciled_manifest_reference",
+            )
+            if (
+                Path(norm_caller_phx["path"]).resolve(strict=False)
+                != Path(phx_manifest_vref["path"])
+                or norm_caller_phx["sha256"] != phx_manifest_vref["sha256"]
+                or (
+                    norm_caller_phx["size_bytes"] is not None
+                    and norm_caller_phx["size_bytes"]
+                    != phx_manifest_vref["size_bytes"]
+                )
+            ):
+                raise ParentExecutionBindingError(
+                    "phenix_reconciled_manifest_reference disagrees with parent execution checkpoint binding"
+                )
+
+        if refmac_operation_manifest_reference is not None:
+            selected_caller_rm = _select_refmac_manifest_reference(
+                refmac_operation_manifest_reference,
+                manifest_path=None,
+                manifest_sha256=None,
+                manifest_size_bytes=None,
+                label="refmac_operation_manifest_reference",
+            )
+            norm_caller_rm = normalize_retained_reference(
+                selected_caller_rm,
+                size_bytes_key=(
+                    "size_bytes"
+                    if isinstance(selected_caller_rm, Mapping)
+                    and "size_bytes" in selected_caller_rm
+                    else None
+                ),
+                label="refmac_operation_manifest_reference",
+            )
+            if (
+                Path(norm_caller_rm["path"]).resolve(strict=False)
+                != Path(rm_manifest_vref["path"])
+                or norm_caller_rm["sha256"] != rm_manifest_vref["sha256"]
+                or (
+                    norm_caller_rm["size_bytes"] is not None
+                    and norm_caller_rm["size_bytes"]
+                    != rm_manifest_vref["size_bytes"]
+                )
+            ):
+                raise ParentExecutionBindingError(
+                    "refmac_operation_manifest_reference disagrees with parent execution checkpoint binding"
+                )
+
+        completed_steps.append("parent_checkpoint_verified")
+
+        try:
+            expected_identities = _resolve_rfactor_record_identities(
+                subject_id,
+                run_date=effective_run_date,
+                destination_rel=destination_rel,
+            )
+        except RfactorRecordAssemblyError as exc:
+            current_stage = "destination_precheck"
+            raise RfactorRecordPublicationError(str(exc)) from exc
+        intended_paths = {
+            "eval_path": str(
+                resolved_output_repo_root / expected_identities["eval_rel_path"]
+            ),
+            "qds_path": (
+                str(
+                    resolved_output_repo_root
+                    / str(expected_identities["qds_rel_path"])
+                )
+                if expected_identities["qds_rel_path"] is not None
+                else None
+            ),
+        }
+
+        current_stage = "phenix_retained_verification"
+        phenix_result = verify_retained_phenix_rfactor_evidence(
+            phenix_child_root,
+            subject_id=subject_id,
+            reconciled_manifest_reference=phx_manifest_vref,
+            repo_root=resolved_repo_root,
+        )
+        _augment_verified_phenix_bundle_with_repo_evidence_refs(
+            phenix_result,
+            parent_result=parent_result,
+            repo_root=resolved_repo_root,
+        )
+        completed_steps.append("phenix_retained_evidence_verified")
+
+        current_stage = "refmac_retained_verification"
+        verify_retained_refmac_rfactor_evidence(
+            refmac_child_root,
+            subject_id=subject_id,
+            manifest_reference=original_refmac_manifest_ref,
+            repo_root=resolved_repo_root,
+        )
+        raise RfactorRecordPublicationError(
+            "refmac_retained_verification: unexpected non-raising return from "
+            "verify_retained_refmac_rfactor_evidence; no supported native REFMAC "
+            "numerical return contract exists to authorize record assembly or publication"
+        )
+
+    except BaseException as exc:
+        outcome_dir_for_attempt: Path | None = None
+        if admitted_attempt_root is not None:
+            try:
+                outcome_dir_for_attempt = _ensure_owned_child_directory(
+                    admitted_attempt_root,
+                    AUTHORING_OUTCOMES_SUBDIR_NAME,
+                    forbidden_overlap_roots=forbidden_overlap_roots,
+                    forbidden_file_paths=forbidden_file_paths,
+                    label="authoring_outcomes",
+                )
+            except BaseException as dir_exc:
+                if isinstance(dir_exc, KeyboardInterrupt):
+                    raise
+                exc.add_note(
+                    "authoring_outcomes directory setup also failed "
+                    f"({type(dir_exc).__name__}): {dir_exc}"
+                )
+                outcome_dir_for_attempt = None
+
+        if isinstance(exc, KeyboardInterrupt):
+            kbd_outcome = _build_authoring_outcome_payload(
+                subject_id=subject_id,
+                run_date=effective_run_date,
+                status="interrupted",
+                published=False,
+                failed_stage=current_stage,
+                intended_paths=intended_paths,
+                completed_steps=completed_steps,
+                exc=exc,
+                parent_checkpoint_reference=parent_cp_vref,
+                phenix_reconciled_manifest_reference=phx_manifest_vref,
+                refmac_operation_manifest_reference=rm_manifest_vref,
+            )
+            _try_persist_outcome_without_masking(
+                kbd_outcome,
+                outcome_dir=outcome_dir_for_attempt,
+                active_exc=exc,
+            )
+            exc.authoring_outcome = copy.deepcopy(kbd_outcome)  # type: ignore[attr-defined]
+            exc.authoring_outcome_path = kbd_outcome.get("outcome_path")  # type: ignore[attr-defined]
+            raise
+
+        outcome_status = (
+            "refused"
+            if isinstance(exc, (SystemExit, RetainedReferenceError))
+            else "failed"
+        )
+        failure_outcome = _build_authoring_outcome_payload(
+            subject_id=subject_id,
+            run_date=effective_run_date,
+            status=outcome_status,
+            published=False,
+            failed_stage=current_stage,
+            intended_paths=intended_paths,
+            completed_steps=completed_steps,
+            exc=exc,
+            parent_checkpoint_reference=parent_cp_vref,
+            phenix_reconciled_manifest_reference=phx_manifest_vref,
+            refmac_operation_manifest_reference=rm_manifest_vref,
+        )
+
+        if isinstance(exc, SystemExit):
+            pub_err = RfactorRecordPublicationError(
+                f"{current_stage}: authoring refused due to {type(exc).__name__} "
+                f"(code={exc.code!r}): {exc}",
+                authoring_outcome=failure_outcome,
+            )
+            _try_persist_outcome_without_masking(
+                failure_outcome,
+                outcome_dir=outcome_dir_for_attempt,
+                active_exc=pub_err,
+            )
+            pub_err.authoring_outcome = copy.deepcopy(failure_outcome)
+            pub_err.authoring_outcome_path = failure_outcome.get("outcome_path")
+            raise pub_err from exc
+
+        if isinstance(exc, RetainedReferenceError):
+            _try_persist_outcome_without_masking(
+                failure_outcome,
+                outcome_dir=outcome_dir_for_attempt,
+                active_exc=exc,
+            )
+            exc.authoring_outcome = copy.deepcopy(failure_outcome)  # type: ignore[attr-defined]
+            exc.authoring_outcome_path = failure_outcome.get("outcome_path")  # type: ignore[attr-defined]
+            if isinstance(exc, RfactorRecordPublicationError):
+                exc.failed_stage = failure_outcome.get("failed_stage")
+                exc.intended_paths = copy.deepcopy(
+                    dict(failure_outcome.get("intended_paths", {}))
+                )
+                exc.completed_steps = tuple(
+                    str(step)
+                    for step in failure_outcome.get("completed_steps", ())
+                )
+            raise
+
+        pub_err = RfactorRecordPublicationError(
+            f"{current_stage}: {exc}",
+            authoring_outcome=failure_outcome,
+        )
+        _try_persist_outcome_without_masking(
+            failure_outcome,
+            outcome_dir=outcome_dir_for_attempt,
+            active_exc=pub_err,
+        )
+        pub_err.authoring_outcome = copy.deepcopy(failure_outcome)
+        pub_err.authoring_outcome_path = failure_outcome.get("outcome_path")
+        raise pub_err from exc

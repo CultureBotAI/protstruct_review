@@ -37,10 +37,12 @@ from onesar_records import (
     RefmacRetainedVerificationError,
     RefmacScientificAdmissionRefusedError,
     RetainedReferenceError,
+    RfactorRecordPublicationError,
     build_parent_completed_execution_checkpoint_payload,
     decode_strict_json_mapping,
     load_retained_reference,
     normalize_retained_reference,
+    publish_retained_rfactor_records,
     validate_parent_execution_timing,
     verify_retained_parent_execution_checkpoint,
     verify_retained_phenix_rfactor_evidence,
@@ -7031,6 +7033,2809 @@ class TestPrivateRfactorRecordAssemblyAndLivePins(unittest.TestCase):
 
                     self.assertTrue(leaf_path.exists())
                     self.assertEqual(leaf_path.read_bytes(), expected_retained)
+
+
+class TestTask377ExclusiveRecordPublicationAndAdmissionBoundary(unittest.TestCase):
+    """Focused regression tests for Task 377/416/417/418/422/423/425/427 exclusive record publication."""
+
+    def _make_publication_dirs(
+        self, tmp_root: Path, tag: str
+    ) -> tuple[Path, Path, Path, Path]:
+        parent_root = tmp_root / f"parent_{tag}"
+        staging_dir = parent_root / "staging"
+        staging_dir.mkdir(parents=True, exist_ok=True)
+        output_repo_root = tmp_root / f"output_repo_{tag}"
+        dest_dir = output_repo_root / "data" / "coscientists" / "openscientist"
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        return parent_root, staging_dir, output_repo_root, dest_dir
+
+    def _prepare_synthetic_subject(
+        self,
+        *,
+        subject_id: str,
+        staging_dir: Path,
+        equal_hkl_sets: bool = False,
+        issued_at: str = "2026-11-07T14:20:00+00:00",
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        synth = _create_synthetic_private_rfactor_assembly_inputs(
+            subject_id=subject_id,
+            equal_hkl_sets=equal_hkl_sets,
+        )
+        prepared = onesar_records._prepare_rfactor_eval_and_live_qds_records(
+            parent_binding=synth["parent_binding"],
+            phenix_bundle=synth["phenix_bundle"],
+            refmac_bundle=synth["refmac_bundle"],
+            staging_dir=staging_dir,
+            issued_at=issued_at,
+            repo_root=REPO_ROOT,
+        )
+        return synth, prepared
+
+    def test_private_r4_pair_and_supplemental_eval_only_exact_byte_publication(
+        self,
+    ) -> None:
+        (
+            _,
+            _,
+            qds_emit_contract_v4,
+            check_qds_trust_invariant,
+            _,
+            _,
+            yaml,
+        ) = onesar_records._load_record_assembly_deps()
+
+        expected_subjects: tuple[tuple[str, str, str, str | None], ...] = (
+            (
+                "R4",
+                "final",
+                "EVAL_1sar_cdba2c07_2026-11-06",
+                "QDS_1sar_cdba2c07_2026-11-06",
+            ),
+            ("start", "start", "EVAL_1sar_cdba2c07-start_2026-11-06", None),
+            ("R5", "intermediate", "EVAL_1sar_cdba2c07-r5_2026-11-06", None),
+            ("R6", "intermediate", "EVAL_1sar_cdba2c07-r6_2026-11-06", None),
+        )
+        for subject_id, expected_stage, eval_stem, qds_id in expected_subjects:
+            with self.subTest(subject_id=subject_id):
+                with tempfile.TemporaryDirectory() as tmp:
+                    tmp_root = Path(tmp).resolve(strict=True)
+                    parent_root, staging_dir, output_repo_root, dest_dir = (
+                        self._make_publication_dirs(tmp_root, subject_id)
+                    )
+                    _, prepared = self._prepare_synthetic_subject(
+                        subject_id=subject_id,
+                        staging_dir=staging_dir,
+                    )
+                    pub_result = onesar_records._publish_prepared_rfactor_records(
+                        prepared,
+                        subject_id=subject_id,
+                        run_date="2026-11-06",
+                        staging_dir=staging_dir,
+                        admitted_parent_root=parent_root,
+                        output_repo_root=output_repo_root,
+                        issued_at="2026-11-07T14:20:00+00:00",
+                        repo_root=REPO_ROOT,
+                    )
+                    self.assertTrue(pub_result["published"])
+                    self.assertEqual(
+                        pub_result["publication_status"], "published"
+                    )
+                    self.assertEqual(pub_result["subject_id"], subject_id)
+                    self.assertEqual(pub_result["stage"], expected_stage)
+                    self.assertEqual(pub_result["run_date"], "2026-11-06")
+
+                    eval_path = dest_dir / f"{eval_stem}.yaml"
+                    self.assertTrue(eval_path.is_file())
+                    self.assertEqual(
+                        eval_path.read_bytes(), prepared["eval_yaml_bytes"]
+                    )
+                    self.assertEqual(
+                        hashlib.sha256(eval_path.read_bytes()).hexdigest(),
+                        prepared["eval_sha256"],
+                    )
+                    self.assertEqual(
+                        pub_result["eval_record"]["sha256"],
+                        prepared["eval_sha256"],
+                    )
+
+                    # Staged .txt carriers remain intact after canonical publication.
+                    self.assertTrue(
+                        Path(prepared["staged_pre_pin_eval_txt_path"]).is_file()
+                    )
+                    self.assertTrue(
+                        Path(prepared["staged_eval_txt_path"]).is_file()
+                    )
+                    self.assertEqual(
+                        Path(prepared["staged_eval_txt_path"]).read_bytes(),
+                        prepared["eval_yaml_bytes"],
+                    )
+
+                    # Authoritative outcome committed via os.link sharing inode with .provisional.txt.
+                    outcome = pub_result["authoring_outcome"]
+                    self.assertIsNotNone(outcome)
+                    self.assertTrue(outcome["published"])
+                    self.assertEqual(outcome["status"], "published")
+                    self.assertTrue(outcome["outcome_persisted"])
+                    outcome_json_path = Path(pub_result["authoring_outcome_path"])
+                    outcome_prov_path = (
+                        outcome_json_path.parent
+                        / "authoring_outcome_0001.provisional.txt"
+                    )
+                    self.assertTrue(outcome_json_path.is_file())
+                    self.assertTrue(outcome_prov_path.is_file())
+                    json_st = os.lstat(outcome_json_path)
+                    prov_st = os.lstat(outcome_prov_path)
+                    self.assertEqual(
+                        (json_st.st_dev, json_st.st_ino),
+                        (prov_st.st_dev, prov_st.st_ino),
+                    )
+                    self.assertEqual(json_st.st_nlink, 2)
+                    self.assertEqual(
+                        outcome_json_path.read_bytes(),
+                        outcome_prov_path.read_bytes(),
+                    )
+
+                    canonical_yamls = sorted(
+                        p.name for p in output_repo_root.rglob("*.yaml")
+                    )
+                    if qds_id is not None:
+                        qds_path = dest_dir / f"{qds_id}.yaml"
+                        self.assertEqual(
+                            canonical_yamls,
+                            sorted([f"{eval_stem}.yaml", f"{qds_id}.yaml"]),
+                        )
+                        self.assertTrue(qds_path.is_file())
+                        self.assertEqual(
+                            qds_path.read_bytes(), prepared["qds_yaml_bytes"]
+                        )
+                        self.assertEqual(
+                            hashlib.sha256(qds_path.read_bytes()).hexdigest(),
+                            prepared["qds_sha256"],
+                        )
+                        self.assertTrue(
+                            Path(prepared["staged_qds_txt_path"]).is_file()
+                        )
+                        self.assertEqual(
+                            Path(prepared["staged_qds_txt_path"]).read_bytes(),
+                            prepared["qds_yaml_bytes"],
+                        )
+                        qds_wrapper = yaml.safe_load(
+                            qds_path.read_text(encoding="utf-8")
+                        )
+                        qds_doc = qds_wrapper["quality_data_sheets"][0]
+                        self.assertEqual(
+                            qds_doc["derived_from_evaluation_run_refs"],
+                            [eval_stem],
+                        )
+                        self.assertEqual(
+                            qds_doc["active_evaluation_run_refs"],
+                            [eval_stem],
+                        )
+                        self.assertNotIn("evaluation_run_refs", qds_doc)
+
+                        eval_doc = yaml.safe_load(
+                            eval_path.read_text(encoding="utf-8")
+                        )
+                        fresh_proj = qds_emit_contract_v4.prepare_projection(
+                            [eval_doc],
+                            qds_id,
+                            "1sar",
+                            repo_root=REPO_ROOT,
+                        )
+                        replayed_qds = qds_emit_contract_v4.emit_projection(
+                            fresh_proj
+                        )
+                        self.assertEqual(replayed_qds, qds_doc)
+                        pin_errs = (
+                            check_qds_trust_invariant._validate_contract_4_pin(
+                                qds_path,
+                                qds_doc,
+                                fresh_proj,
+                                eval_doc["qds_replay_pins"],
+                            )
+                        )
+                        self.assertEqual(pin_errs, [])
+                        failures: list[str] = []
+                        grandfathered: list[str] = []
+                        eval_runs = check_qds_trust_invariant._load_eval_runs(
+                            output_repo_root, failures
+                        )
+                        self.assertEqual(failures, [])
+                        check_qds_trust_invariant.check_sheet(
+                            qds_path,
+                            output_repo_root,
+                            copy.deepcopy(qds_doc),
+                            eval_runs,
+                            failures,
+                            grandfathered,
+                        )
+                        self.assertEqual(failures, [])
+                        self.assertEqual(grandfathered, [])
+                    else:
+                        self.assertEqual(canonical_yamls, [f"{eval_stem}.yaml"])
+                        self.assertIsNone(pub_result["qds_record"])
+                        self.assertIsNone(pub_result["replay_pin"])
+                        self.assertIsNone(
+                            pub_result["staged_references"]["staged_qds_txt"]
+                        )
+                        self.assertNotIn(
+                            "qds_emission_contexts", prepared["eval_document"]
+                        )
+                        self.assertNotIn(
+                            "qds_replay_pins", prepared["eval_document"]
+                        )
+                        self.assertEqual(
+                            Path(
+                                prepared["staged_pre_pin_eval_txt_path"]
+                            ).read_bytes(),
+                            prepared["eval_yaml_bytes"],
+                        )
+
+        # Direct internal preparation mode (prepared_records=None) for R4 and start.
+        for direct_sid, expected_yaml_count in (("R4", 2), ("start", 1)):
+            with self.subTest(direct_mode_subject=direct_sid):
+                with tempfile.TemporaryDirectory() as tmp:
+                    tmp_root = Path(tmp).resolve(strict=True)
+                    parent_root = tmp_root / f"direct_parent_{direct_sid}"
+                    parent_root.mkdir(parents=True, exist_ok=True)
+                    output_repo_root = tmp_root / f"direct_out_{direct_sid}"
+                    (
+                        output_repo_root / "data" / "coscientists" / "openscientist"
+                    ).mkdir(parents=True, exist_ok=True)
+                    synth = _create_synthetic_private_rfactor_assembly_inputs(
+                        subject_id=direct_sid,
+                        equal_hkl_sets=False,
+                    )
+                    direct_res = onesar_records._publish_prepared_rfactor_records(
+                        parent_binding=synth["parent_binding"],
+                        phenix_bundle=synth["phenix_bundle"],
+                        refmac_bundle=synth["refmac_bundle"],
+                        admitted_parent_root=parent_root,
+                        output_repo_root=output_repo_root,
+                        issued_at="2026-11-07T14:20:00+00:00",
+                        repo_root=REPO_ROOT,
+                    )
+                    self.assertTrue(direct_res["published"])
+                    self.assertEqual(
+                        len(list(output_repo_root.rglob("*.yaml"))),
+                        expected_yaml_count,
+                    )
+
+    def test_prepared_source_admission_replay_equality_and_stage_hash_guards(
+        self,
+    ) -> None:
+        (
+            _,
+            _,
+            qds_emit_contract_v4,
+            check_qds_trust_invariant,
+            _,
+            _,
+            yaml,
+        ) = onesar_records._load_record_assembly_deps()
+
+        def serialize_eval_into_prep(
+            prep: dict[str, Any],
+            eval_doc: dict[str, Any],
+            *,
+            update_pre_pin: bool = True,
+        ) -> None:
+            prep["eval_document"] = eval_doc
+            prep["eval_yaml_text"] = yaml.safe_dump(
+                eval_doc,
+                sort_keys=False,
+                default_flow_style=False,
+                allow_unicode=True,
+            )
+            prep["eval_yaml_bytes"] = prep["eval_yaml_text"].encode("utf-8")
+            prep["eval_sha256"] = hashlib.sha256(
+                prep["eval_yaml_bytes"]
+            ).hexdigest()
+            Path(prep["staged_eval_txt_path"]).write_bytes(
+                prep["eval_yaml_bytes"]
+            )
+            if update_pre_pin:
+                pre_doc = copy.deepcopy(eval_doc)
+                pre_doc.pop("qds_replay_pins", None)
+                pre_bytes = yaml.safe_dump(
+                    pre_doc,
+                    sort_keys=False,
+                    default_flow_style=False,
+                    allow_unicode=True,
+                ).encode("utf-8")
+                Path(prep["staged_pre_pin_eval_txt_path"]).write_bytes(pre_bytes)
+
+        # 1. #1070: Coherent EVAL measurement note mutation with stale projection/QDS/replay_pin.
+        with self.subTest(case="issue_1070_stale_projection_note_mutation"):
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp_root = Path(tmp).resolve(strict=True)
+                parent_root, staging_dir, output_repo_root, _ = (
+                    self._make_publication_dirs(tmp_root, "1070")
+                )
+                _, prep = self._prepare_synthetic_subject(
+                    subject_id="R4", staging_dir=staging_dir
+                )
+                doc = copy.deepcopy(prep["eval_document"])
+                doc["evaluation_runs"][0]["measurements"][0]["notes"] = (
+                    doc["evaluation_runs"][0]["measurements"][0]["notes"]
+                    + " [synthetic mutation not reflected in QDS]"
+                )
+                serialize_eval_into_prep(prep, doc, update_pre_pin=True)
+                with self.assertRaisesRegex(
+                    RfactorRecordPublicationError,
+                    "prepared_record_validation: (contract-4 replay pin check failed|prepared_records\\.projection disagrees)",
+                ) as cm:
+                    onesar_records._publish_prepared_rfactor_records(
+                        prep,
+                        subject_id="R4",
+                        run_date="2026-11-06",
+                        staging_dir=staging_dir,
+                        admitted_parent_root=parent_root,
+                        output_repo_root=output_repo_root,
+                        repo_root=REPO_ROOT,
+                    )
+                self.assertEqual(
+                    cm.exception.failed_stage, "prepared_record_validation"
+                )
+                self.assertEqual(list(output_repo_root.rglob("*.yaml")), [])
+                self.assertTrue(Path(prep["staged_eval_txt_path"]).is_file())
+
+        # 2. #1076: Coherent QDS headline_verdict mutation with matching canonical_qds_sha256 pin.
+        with self.subTest(case="issue_1076_altered_qds_headline_verdict"):
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp_root = Path(tmp).resolve(strict=True)
+                parent_root, staging_dir, output_repo_root, _ = (
+                    self._make_publication_dirs(tmp_root, "1076")
+                )
+                _, prep = self._prepare_synthetic_subject(
+                    subject_id="R4", staging_dir=staging_dir
+                )
+                prep["qds_document"]["headline_verdict"] = (
+                    "Synthetic replacement absent from source context."
+                )
+                prep["qds_yaml_text"] = (
+                    check_qds_trust_invariant._canonical_qds_text(
+                        prep["qds_document"]
+                    )
+                )
+                prep["qds_yaml_bytes"] = prep["qds_yaml_text"].encode("utf-8")
+                prep["qds_sha256"] = hashlib.sha256(
+                    prep["qds_yaml_bytes"]
+                ).hexdigest()
+                Path(prep["staged_qds_txt_path"]).write_bytes(
+                    prep["qds_yaml_bytes"]
+                )
+                prep["replay_pin"]["canonical_qds_sha256"] = prep["qds_sha256"]
+                doc = copy.deepcopy(prep["eval_document"])
+                doc["qds_replay_pins"][0]["canonical_qds_sha256"] = prep[
+                    "qds_sha256"
+                ]
+                serialize_eval_into_prep(prep, doc, update_pre_pin=True)
+
+                # Confirm _validate_contract_4_pin alone passes on this forged state,
+                # so only full replay equality catches the altered headline_verdict.
+                fresh_proj = qds_emit_contract_v4.prepare_projection(
+                    [prep["eval_document"]],
+                    prep["identities"]["qds_id"],
+                    "1sar",
+                    repo_root=REPO_ROOT,
+                )
+                self.assertEqual(
+                    check_qds_trust_invariant._validate_contract_4_pin(
+                        Path(prep["staged_qds_txt_path"]),
+                        prep["qds_document"],
+                        fresh_proj,
+                        [prep["replay_pin"]],
+                    ),
+                    [],
+                )
+                with self.assertRaisesRegex(
+                    RfactorRecordPublicationError,
+                    "supplied qds_document differs from deterministic frozen contract-4 replay",
+                ) as cm:
+                    onesar_records._publish_prepared_rfactor_records(
+                        prep,
+                        subject_id="R4",
+                        run_date="2026-11-06",
+                        staging_dir=staging_dir,
+                        admitted_parent_root=parent_root,
+                        output_repo_root=output_repo_root,
+                        repo_root=REPO_ROOT,
+                    )
+                self.assertEqual(
+                    cm.exception.failed_stage, "prepared_record_validation"
+                )
+                self.assertEqual(list(output_repo_root.rglob("*.yaml")), [])
+
+        # 3. #1077: Coherent R4 source with tool_recommendations=[] and assumptions=[] rejected by live admission.
+        with self.subTest(case="issue_1077_omitted_live_guidance_r4"):
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp_root = Path(tmp).resolve(strict=True)
+                parent_root, staging_dir, output_repo_root, _ = (
+                    self._make_publication_dirs(tmp_root, "1077")
+                )
+                _, prep = self._prepare_synthetic_subject(
+                    subject_id="R4", staging_dir=staging_dir
+                )
+                doc = copy.deepcopy(prep["eval_document"])
+                doc.pop("qds_replay_pins", None)
+                doc["tool_recommendations"] = []
+                doc["assumptions"] = []
+                Path(prep["staged_pre_pin_eval_txt_path"]).write_text(
+                    yaml.safe_dump(
+                        doc,
+                        sort_keys=False,
+                        default_flow_style=False,
+                        allow_unicode=True,
+                    ),
+                    encoding="utf-8",
+                )
+                projection = qds_emit_contract_v4.prepare_projection(
+                    [doc],
+                    prep["identities"]["qds_id"],
+                    "1sar",
+                    repo_root=REPO_ROOT,
+                )
+                qds = qds_emit_contract_v4.emit_projection(projection)
+                pin = onesar_records._build_contract4_replay_pin(
+                    pin_id=prep["identities"]["replay_pin_id"],
+                    qds=qds,
+                    projection=projection,
+                )
+                doc["qds_replay_pins"] = [copy.deepcopy(pin)]
+                prep.update(
+                    eval_document=doc,
+                    projection=projection,
+                    qds_document=qds,
+                    replay_pin=pin,
+                )
+                serialize_eval_into_prep(prep, doc, update_pre_pin=False)
+                prep["qds_yaml_text"] = (
+                    check_qds_trust_invariant._canonical_qds_text(qds)
+                )
+                prep["qds_yaml_bytes"] = prep["qds_yaml_text"].encode("utf-8")
+                prep["qds_sha256"] = hashlib.sha256(
+                    prep["qds_yaml_bytes"]
+                ).hexdigest()
+                Path(prep["staged_qds_txt_path"]).write_bytes(
+                    prep["qds_yaml_bytes"]
+                )
+
+                with self.assertRaisesRegex(
+                    RfactorRecordPublicationError,
+                    "REC_T03_gap_top_considered",
+                ) as cm:
+                    onesar_records._publish_prepared_rfactor_records(
+                        prep,
+                        subject_id="R4",
+                        run_date="2026-11-06",
+                        staging_dir=staging_dir,
+                        admitted_parent_root=parent_root,
+                        output_repo_root=output_repo_root,
+                        repo_root=REPO_ROOT,
+                    )
+                self.assertEqual(
+                    cm.exception.failed_stage, "prepared_record_validation"
+                )
+                self.assertEqual(
+                    cm.exception.authoring_outcome["status"], "refused"
+                )
+                self.assertTrue(
+                    cm.exception.authoring_outcome["error"][
+                        "is_qds_completeness_error"
+                    ]
+                )
+                self.assertEqual(list(output_repo_root.rglob("*.yaml")), [])
+
+        # 4. #1067 recurrence: Reduced id/family-only tools rejected for both R4 and supplemental start.
+        for sid in ("R4", "start"):
+            with self.subTest(
+                case="issue_1067_reduced_id_family_tools", subject_id=sid
+            ):
+                with tempfile.TemporaryDirectory() as tmp:
+                    tmp_root = Path(tmp).resolve(strict=True)
+                    parent_root, staging_dir, output_repo_root, _ = (
+                        self._make_publication_dirs(tmp_root, f"1067_{sid}")
+                    )
+                    _, prep = self._prepare_synthetic_subject(
+                        subject_id=sid, staging_dir=staging_dir
+                    )
+                    doc = copy.deepcopy(prep["eval_document"])
+                    doc.pop("qds_replay_pins", None)
+                    doc["tools"] = [
+                        {"id": row["id"], "family": row["family"]}
+                        for row in doc["tools"]
+                    ]
+                    if sid == "R4":
+                        projection = qds_emit_contract_v4.prepare_projection(
+                            [doc],
+                            prep["identities"]["qds_id"],
+                            "1sar",
+                            repo_root=REPO_ROOT,
+                        )
+                        qds = qds_emit_contract_v4.emit_projection(projection)
+                        pin = onesar_records._build_contract4_replay_pin(
+                            pin_id=prep["identities"]["replay_pin_id"],
+                            qds=qds,
+                            projection=projection,
+                        )
+                        doc["qds_replay_pins"] = [copy.deepcopy(pin)]
+                        prep.update(
+                            projection=projection,
+                            qds_document=qds,
+                            replay_pin=pin,
+                        )
+                        prep["qds_yaml_text"] = (
+                            check_qds_trust_invariant._canonical_qds_text(qds)
+                        )
+                        prep["qds_yaml_bytes"] = prep["qds_yaml_text"].encode(
+                            "utf-8"
+                        )
+                        prep["qds_sha256"] = hashlib.sha256(
+                            prep["qds_yaml_bytes"]
+                        ).hexdigest()
+                        Path(prep["staged_qds_txt_path"]).write_bytes(
+                            prep["qds_yaml_bytes"]
+                        )
+                    serialize_eval_into_prep(prep, doc, update_pre_pin=True)
+
+                    with self.assertRaisesRegex(
+                        RfactorRecordPublicationError,
+                        r"prepared_record_validation: eval_document\.tools\['REFMAC5'\]: Tool row disagrees with complete canonical catalog Tool row.*missing_keys=\[.*'catalog_tasks_served'",
+                    ) as cm:
+                        onesar_records._publish_prepared_rfactor_records(
+                            prep,
+                            subject_id=sid,
+                            run_date="2026-11-06",
+                            staging_dir=staging_dir,
+                            admitted_parent_root=parent_root,
+                            output_repo_root=output_repo_root,
+                            issued_at="2026-11-07T14:20:00+00:00",
+                            repo_root=REPO_ROOT,
+                        )
+                    self.assertEqual(
+                        cm.exception.failed_stage, "prepared_record_validation"
+                    )
+                    self.assertEqual(list(output_repo_root.rglob("*.yaml")), [])
+
+        # 5. #1078: Unrelated or altered .pre_pin.txt bytes rejected for both R4 and supplemental start.
+        for sid in ("R4", "start"):
+            with self.subTest(
+                case="issue_1078_unrelated_pre_pin_txt", subject_id=sid
+            ):
+                with tempfile.TemporaryDirectory() as tmp:
+                    tmp_root = Path(tmp).resolve(strict=True)
+                    parent_root, staging_dir, output_repo_root, _ = (
+                        self._make_publication_dirs(tmp_root, f"1078_{sid}")
+                    )
+                    _, prep = self._prepare_synthetic_subject(
+                        subject_id=sid, staging_dir=staging_dir
+                    )
+                    Path(prep["staged_pre_pin_eval_txt_path"]).write_bytes(
+                        b"not the pre-pin EVAL\n"
+                    )
+                    with self.assertRaisesRegex(
+                        RfactorRecordPublicationError,
+                        "staged_pre_pin_eval_txt_path",
+                    ) as cm:
+                        onesar_records._publish_prepared_rfactor_records(
+                            prep,
+                            subject_id=sid,
+                            run_date="2026-11-06",
+                            staging_dir=staging_dir,
+                            admitted_parent_root=parent_root,
+                            output_repo_root=output_repo_root,
+                            issued_at="2026-11-07T14:20:00+00:00",
+                            repo_root=REPO_ROOT,
+                        )
+                    self.assertEqual(
+                        cm.exception.failed_stage, "prepared_record_validation"
+                    )
+                    self.assertEqual(list(output_repo_root.rglob("*.yaml")), [])
+                    self.assertTrue(
+                        Path(prep["staged_pre_pin_eval_txt_path"]).is_file()
+                    )
+
+        # 6. Additional table-driven validation guards (digest, staged bytes, path outside staging,
+        # subject/date mismatch, original document mismatch, cardinality mismatch).
+        extra_cases: tuple[tuple[str, str, Any, str], ...] = (
+            (
+                "mismatched_eval_sha256",
+                "R4",
+                lambda p, r: p.__setitem__("eval_sha256", "0" * 64),
+                "disagrees with eval_sha256",
+            ),
+            (
+                "mismatched_staged_eval_txt_bytes",
+                "R4",
+                lambda p, r: Path(p["staged_eval_txt_path"]).write_bytes(
+                    p["eval_yaml_bytes"] + b"\n"
+                ),
+                "staged_eval_txt_path",
+            ),
+            (
+                "staged_eval_outside_staging_dir",
+                "R4",
+                lambda p, r: p.__setitem__(
+                    "staged_eval_txt_path",
+                    r / "EVAL_1sar_cdba2c07_2026-11-06.staged.txt",
+                ),
+                "staged_eval_txt_path .* must be",
+            ),
+            (
+                "subject_mismatch_against_prepared_identities",
+                "R5",
+                lambda p, r: None,
+                "prepared_records\\.identities disagrees",
+            ),
+            (
+                "original_eval_document_disagrees_with_bytes",
+                "R4",
+                lambda p, r: p["eval_document"]["evaluation_runs"][0][
+                    "measurements"
+                ][0].__setitem__("notes", "unserialized note edit"),
+                "eval_document disagrees with prepared eval_yaml_bytes",
+            ),
+            (
+                "supplemental_with_non_null_qds_document",
+                "start",
+                lambda p, r: p.__setitem__("qds_document", {"id": "forged"}),
+                "must have qds_document=None",
+            ),
+            (
+                "r4_with_null_qds_document",
+                "R4",
+                lambda p, r: p.__setitem__("qds_document", None),
+                "R4 publication requires non-null QDS document",
+            ),
+        )
+        for case_name, call_sid, mutator, expected_regex in extra_cases:
+            with self.subTest(case=case_name):
+                with tempfile.TemporaryDirectory() as tmp:
+                    tmp_root = Path(tmp).resolve(strict=True)
+                    prep_sid = (
+                        "R4"
+                        if case_name
+                        == "subject_mismatch_against_prepared_identities"
+                        else call_sid
+                    )
+                    parent_root, staging_dir, output_repo_root, _ = (
+                        self._make_publication_dirs(tmp_root, case_name)
+                    )
+                    _, prep = self._prepare_synthetic_subject(
+                        subject_id=prep_sid, staging_dir=staging_dir
+                    )
+                    mutator(prep, tmp_root)
+                    with self.assertRaisesRegex(
+                        RfactorRecordPublicationError, expected_regex
+                    ):
+                        onesar_records._publish_prepared_rfactor_records(
+                            prep,
+                            subject_id=call_sid,
+                            run_date="2026-11-06",
+                            staging_dir=staging_dir,
+                            admitted_parent_root=parent_root,
+                            output_repo_root=output_repo_root,
+                            issued_at="2026-11-07T14:20:00+00:00",
+                            repo_root=REPO_ROOT,
+                        )
+                    self.assertEqual(list(output_repo_root.rglob("*.yaml")), [])
+
+    def test_pre_write_destination_collisions_and_hierarchy_refusal(
+        self,
+    ) -> None:
+        # 1. #1074: Existing target leaf collisions across R4 (eval or qds) and supplemental start.
+        collision_cases: tuple[tuple[str, str, str, str], ...] = (
+            ("start_eval_different_bytes", "start", "eval", "different_bytes"),
+            ("start_eval_identical_bytes", "start", "eval", "identical_bytes"),
+            ("r4_eval_different_bytes", "R4", "eval", "different_bytes"),
+            ("r4_eval_identical_bytes", "R4", "eval", "identical_bytes"),
+            ("r4_eval_regular_symlink", "R4", "eval", "regular_symlink"),
+            ("r4_eval_dangling_symlink", "R4", "eval", "dangling_symlink"),
+            ("r4_eval_hardlinked_file", "R4", "eval", "hardlinked_file"),
+            ("r4_eval_directory_leaf", "R4", "eval", "directory_leaf"),
+            ("r4_qds_different_bytes", "R4", "qds", "different_bytes"),
+            ("r4_qds_identical_bytes", "R4", "qds", "identical_bytes"),
+            ("r4_qds_dangling_symlink", "R4", "qds", "dangling_symlink"),
+            ("r4_qds_hardlinked_file", "R4", "qds", "hardlinked_file"),
+        )
+        for case_name, sid, collide_role, collide_kind in collision_cases:
+            with self.subTest(case=case_name):
+                with tempfile.TemporaryDirectory() as tmp:
+                    tmp_root = Path(tmp).resolve(strict=True)
+                    parent_root, staging_dir, output_repo_root, dest_dir = (
+                        self._make_publication_dirs(tmp_root, case_name)
+                    )
+                    _, prep = self._prepare_synthetic_subject(
+                        subject_id=sid, staging_dir=staging_dir
+                    )
+                    eval_target = (
+                        dest_dir
+                        / f"{prep['identities']['eval_filename_stem']}.yaml"
+                    )
+                    qds_target = (
+                        dest_dir / f"{prep['identities']['qds_id']}.yaml"
+                        if prep["identities"]["emits_qds"]
+                        else None
+                    )
+                    colliding_path = (
+                        eval_target if collide_role == "eval" else qds_target
+                    )
+                    assert colliding_path is not None
+                    other_path = (
+                        qds_target if collide_role == "eval" else eval_target
+                    )
+
+                    sentinel_bytes = (
+                        prep["eval_yaml_bytes"]
+                        if (
+                            collide_kind == "identical_bytes"
+                            and collide_role == "eval"
+                        )
+                        else (
+                            prep["qds_yaml_bytes"]
+                            if (
+                                collide_kind == "identical_bytes"
+                                and collide_role == "qds"
+                            )
+                            else b"PREEXISTING_CANONICAL_TARGET_SENTINEL\n"
+                        )
+                    )
+                    if collide_kind in (
+                        "different_bytes",
+                        "identical_bytes",
+                        "hardlinked_file",
+                    ):
+                        colliding_path.write_bytes(sentinel_bytes)
+                        if collide_kind == "hardlinked_file":
+                            os.link(
+                                colliding_path,
+                                tmp_root / f"hardlink_{case_name}.bak",
+                            )
+                    elif collide_kind == "regular_symlink":
+                        ext_target = tmp_root / f"ext_{case_name}.txt"
+                        ext_target.write_bytes(sentinel_bytes)
+                        os.symlink(ext_target, colliding_path)
+                    elif collide_kind == "dangling_symlink":
+                        os.symlink(
+                            tmp_root / f"missing_{case_name}.txt",
+                            colliding_path,
+                        )
+                    elif collide_kind == "directory_leaf":
+                        colliding_path.mkdir(parents=True, exist_ok=True)
+
+                    before_st = os.lstat(colliding_path)
+                    expected_collision_regex = {
+                        "different_bytes": (
+                            rf"destination_precheck: refusing pre-existing file at canonical {collide_role} target"
+                        ),
+                        "identical_bytes": (
+                            rf"destination_precheck: refusing pre-existing file at canonical {collide_role} target"
+                        ),
+                        "regular_symlink": (
+                            rf"destination_precheck: refusing pre-existing symlink at canonical {collide_role} target"
+                        ),
+                        "dangling_symlink": (
+                            rf"destination_precheck: refusing pre-existing symlink at canonical {collide_role} target"
+                        ),
+                        "hardlinked_file": (
+                            rf"destination_precheck: refusing pre-existing hardlinked file \(st_nlink=2\) at canonical {collide_role} target"
+                        ),
+                        "directory_leaf": (
+                            rf"destination_precheck: refusing pre-existing directory at canonical {collide_role} target"
+                        ),
+                    }[collide_kind]
+                    with self.assertRaisesRegex(
+                        RfactorRecordPublicationError,
+                        expected_collision_regex,
+                    ) as cm:
+                        onesar_records._publish_prepared_rfactor_records(
+                            prep,
+                            subject_id=sid,
+                            run_date="2026-11-06",
+                            staging_dir=staging_dir,
+                            admitted_parent_root=parent_root,
+                            output_repo_root=output_repo_root,
+                            issued_at="2026-11-07T14:20:00+00:00",
+                            repo_root=REPO_ROOT,
+                        )
+                    err = cm.exception
+                    self.assertEqual(err.failed_stage, "destination_precheck")
+                    self.assertEqual(
+                        err.intended_paths,
+                        {
+                            "eval_path": str(eval_target),
+                            "qds_path": (
+                                str(qds_target)
+                                if qds_target is not None
+                                else None
+                            ),
+                        },
+                    )
+                    self.assertEqual(
+                        err.authoring_outcome["intended_paths"],
+                        err.intended_paths,
+                    )
+                    self.assertFalse(err.authoring_outcome["published"])
+                    after_st = os.lstat(colliding_path)
+                    self.assertEqual(
+                        (after_st.st_dev, after_st.st_ino, after_st.st_mode),
+                        (
+                            before_st.st_dev,
+                            before_st.st_ino,
+                            before_st.st_mode,
+                        ),
+                    )
+                    if collide_kind in (
+                        "different_bytes",
+                        "identical_bytes",
+                        "hardlinked_file",
+                    ):
+                        self.assertEqual(
+                            colliding_path.read_bytes(), sentinel_bytes
+                        )
+                    if other_path is not None:
+                        self.assertFalse(other_path.exists())
+
+        # 2. Symlink ancestor, destination outside data/, and output_repo_root inside staging_dir.
+        with self.subTest(case="symlink_destination_ancestor"):
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp_root = Path(tmp).resolve(strict=True)
+                parent_root, staging_dir, _, _ = self._make_publication_dirs(
+                    tmp_root, "sym_anc"
+                )
+                _, prep = self._prepare_synthetic_subject(
+                    subject_id="R4", staging_dir=staging_dir
+                )
+                sym_output = tmp_root / "sym_output"
+                (sym_output / "data" / "coscientists").mkdir(
+                    parents=True, exist_ok=True
+                )
+                real_leaf_dir = tmp_root / "real_openscientist"
+                real_leaf_dir.mkdir(parents=True, exist_ok=True)
+                os.symlink(
+                    real_leaf_dir,
+                    sym_output / "data" / "coscientists" / "openscientist",
+                )
+                with self.assertRaisesRegex(
+                    RfactorRecordPublicationError,
+                    "destination_precheck: .*symlink component is not permitted",
+                ):
+                    onesar_records._publish_prepared_rfactor_records(
+                        prep,
+                        subject_id="R4",
+                        run_date="2026-11-06",
+                        staging_dir=staging_dir,
+                        admitted_parent_root=parent_root,
+                        output_repo_root=sym_output,
+                        repo_root=REPO_ROOT,
+                    )
+
+        with self.subTest(case="destination_outside_data"):
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp_root = Path(tmp).resolve(strict=True)
+                parent_root, staging_dir, output_repo_root, _ = (
+                    self._make_publication_dirs(tmp_root, "outside_data")
+                )
+                _, prep = self._prepare_synthetic_subject(
+                    subject_id="R4", staging_dir=staging_dir
+                )
+                with self.assertRaisesRegex(
+                    RfactorRecordPublicationError,
+                    "destination_rel: must reside under data/",
+                ):
+                    onesar_records._publish_prepared_rfactor_records(
+                        prep,
+                        subject_id="R4",
+                        run_date="2026-11-06",
+                        destination_rel="outside_data/coscientists",
+                        staging_dir=staging_dir,
+                        admitted_parent_root=parent_root,
+                        output_repo_root=output_repo_root,
+                        repo_root=REPO_ROOT,
+                    )
+
+        with self.subTest(case="output_repo_root_inside_staging_dir"):
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp_root = Path(tmp).resolve(strict=True)
+                parent_root, staging_dir, _, _ = self._make_publication_dirs(
+                    tmp_root, "overlap_stage"
+                )
+                _, prep = self._prepare_synthetic_subject(
+                    subject_id="R4", staging_dir=staging_dir
+                )
+                nested_output = staging_dir / "nested_output_repo"
+                (
+                    nested_output / "data" / "coscientists" / "openscientist"
+                ).mkdir(parents=True, exist_ok=True)
+                with self.assertRaisesRegex(
+                    RfactorRecordPublicationError,
+                    "destination_precheck: output_repo_root .* must not be equal to or inside staging_dir",
+                ):
+                    onesar_records._publish_prepared_rfactor_records(
+                        prep,
+                        subject_id="R4",
+                        run_date="2026-11-06",
+                        staging_dir=staging_dir,
+                        admitted_parent_root=parent_root,
+                        output_repo_root=nested_output,
+                        repo_root=REPO_ROOT,
+                    )
+
+    def test_pair_second_file_failure_fstat_unproven_ownership_and_late_replacement_cleanup(
+        self,
+    ) -> None:
+        real_fstat = os.fstat
+        real_open = os.open
+        real_write = os.write
+        real_close = os.close
+        real_unlink = os.unlink
+
+        # 1. #1072 Case A & B: os.fstat failure on first (EVAL) descriptor and second (QDS) descriptor.
+        for fail_role in ("eval", "qds"):
+            with self.subTest(
+                case=f"issue_1072_fstat_failure_on_{fail_role}_descriptor"
+            ):
+                with tempfile.TemporaryDirectory() as tmp:
+                    tmp_root = Path(tmp).resolve(strict=True)
+                    parent_root, staging_dir, output_repo_root, dest_dir = (
+                        self._make_publication_dirs(
+                            tmp_root, f"1072_{fail_role}"
+                        )
+                    )
+                    _, prep = self._prepare_synthetic_subject(
+                        subject_id="R4", staging_dir=staging_dir
+                    )
+                    eval_target = (
+                        dest_dir
+                        / f"{prep['identities']['eval_filename_stem']}.yaml"
+                    )
+                    qds_target = (
+                        dest_dir / f"{prep['identities']['qds_id']}.yaml"
+                    )
+                    target_for_fstat_fail = (
+                        eval_target if fail_role == "eval" else qds_target
+                    )
+                    opened_canonical_fds: list[int] = []
+                    fail_fd_holder: dict[str, int] = {}
+
+                    def open_hook(
+                        path: Any, flags: int, mode: int = 0o777, **kwargs: Any
+                    ) -> int:
+                        fd = real_open(path, flags, mode, **kwargs)
+                        p = Path(os.fspath(path))
+                        if p in (eval_target, qds_target):
+                            opened_canonical_fds.append(fd)
+                        if (
+                            p == target_for_fstat_fail
+                            and "fd" not in fail_fd_holder
+                        ):
+                            fail_fd_holder["fd"] = fd
+                        return fd
+
+                    def fstat_hook(fd: int) -> os.stat_result:
+                        if fd == fail_fd_holder.get("fd"):
+                            raise OSError(
+                                errno.EIO,
+                                f"synthetic fstat failure on {fail_role} descriptor",
+                            )
+                        return real_fstat(fd)
+
+                    with (
+                        mock.patch(
+                            "onesar_records.os.open", side_effect=open_hook
+                        ),
+                        mock.patch(
+                            "onesar_records.os.fstat", side_effect=fstat_hook
+                        ),
+                    ):
+                        with self.assertRaisesRegex(
+                            RfactorRecordPublicationError,
+                            f"{fail_role}_publication: .*synthetic fstat failure.*incomplete_cleanup=True",
+                        ) as cm:
+                            onesar_records._publish_prepared_rfactor_records(
+                                prep,
+                                subject_id="R4",
+                                run_date="2026-11-06",
+                                staging_dir=staging_dir,
+                                admitted_parent_root=parent_root,
+                                output_repo_root=output_repo_root,
+                                repo_root=REPO_ROOT,
+                            )
+                    err = cm.exception
+                    self.assertFalse(err.authoring_outcome["published"])
+                    cleanup = err.cleanup_result
+                    assert cleanup is not None
+                    self.assertTrue(cleanup["incomplete_cleanup"])
+                    self.assertFalse(cleanup["cleanup_complete"])
+                    self.assertIn(
+                        str(target_for_fstat_fail),
+                        cleanup["retained_unowned_or_failed_paths"],
+                    )
+                    self.assertTrue(target_for_fstat_fail.exists())
+                    by_role = {
+                        item["role"]: item for item in cleanup["items"]
+                    }
+                    self.assertEqual(
+                        by_role[fail_role]["status"],
+                        "ownership_unknown_retained",
+                    )
+                    self.assertFalse(
+                        by_role[fail_role]["ownership_established"]
+                    )
+                    if fail_role == "eval":
+                        self.assertFalse(qds_target.exists())
+                    else:
+                        self.assertFalse(eval_target.exists())
+                        self.assertEqual(
+                            cleanup["removed_paths"], [str(eval_target)]
+                        )
+                        self.assertEqual(
+                            by_role["eval"]["status"], "removed_owned_output"
+                        )
+
+                    self.assertTrue(opened_canonical_fds)
+                    for fd in set(opened_canonical_fds):
+                        with self.assertRaises(OSError) as fd_cm:
+                            real_fstat(fd)
+                        self.assertEqual(fd_cm.exception.errno, errno.EBADF)
+                    self.assertTrue(
+                        Path(prep["staged_eval_txt_path"]).is_file()
+                    )
+                    self.assertTrue(Path(prep["staged_qds_txt_path"]).is_file())
+
+        # 2. #1073 Case A & B: EVAL replaced by foreign file or removed during QDS write.
+        for tamper_mode in ("replace_with_foreign", "remove_eval"):
+            with self.subTest(case=f"issue_1073_{tamper_mode}_during_qds_write"):
+                with tempfile.TemporaryDirectory() as tmp:
+                    tmp_root = Path(tmp).resolve(strict=True)
+                    parent_root, staging_dir, output_repo_root, dest_dir = (
+                        self._make_publication_dirs(
+                            tmp_root, f"1073_{tamper_mode}"
+                        )
+                    )
+                    _, prep = self._prepare_synthetic_subject(
+                        subject_id="R4", staging_dir=staging_dir
+                    )
+                    eval_target = (
+                        dest_dir
+                        / f"{prep['identities']['eval_filename_stem']}.yaml"
+                    )
+                    qds_target = (
+                        dest_dir / f"{prep['identities']['qds_id']}.yaml"
+                    )
+                    foreign_eval_bytes = (
+                        b"FOREIGN_EVAL_REPLACEMENT_DURING_QDS_WRITE\n"
+                    )
+                    qds_fd_holder: dict[str, int] = {}
+                    tampered = {"done": False}
+
+                    def open_qds_hook(
+                        path: Any, flags: int, mode: int = 0o777, **kwargs: Any
+                    ) -> int:
+                        fd = real_open(path, flags, mode, **kwargs)
+                        if (
+                            Path(os.fspath(path)) == qds_target
+                            and "fd" not in qds_fd_holder
+                        ):
+                            qds_fd_holder["fd"] = fd
+                        return fd
+
+                    def write_qds_hook(fd: int, data: Any) -> int:
+                        written = real_write(fd, data)
+                        if (
+                            fd == qds_fd_holder.get("fd")
+                            and not tampered["done"]
+                        ):
+                            tampered["done"] = True
+                            if tamper_mode == "replace_with_foreign":
+                                moved_orig = tmp_root / "moved_orig_eval.yaml"
+                                os.replace(eval_target, moved_orig)
+                                eval_target.write_bytes(foreign_eval_bytes)
+                            else:
+                                os.unlink(eval_target)
+                        return written
+
+                    with (
+                        mock.patch(
+                            "onesar_records.os.open", side_effect=open_qds_hook
+                        ),
+                        mock.patch(
+                            "onesar_records.os.write",
+                            side_effect=write_qds_hook,
+                        ),
+                    ):
+                        with self.assertRaisesRegex(
+                            RfactorRecordPublicationError,
+                            "final_pair_verification: eval_post_write_verification:.*incomplete_cleanup=True",
+                        ) as cm:
+                            onesar_records._publish_prepared_rfactor_records(
+                                prep,
+                                subject_id="R4",
+                                run_date="2026-11-06",
+                                staging_dir=staging_dir,
+                                admitted_parent_root=parent_root,
+                                output_repo_root=output_repo_root,
+                                repo_root=REPO_ROOT,
+                            )
+                    err = cm.exception
+                    self.assertEqual(
+                        err.failed_stage, "final_pair_verification"
+                    )
+                    self.assertFalse(err.authoring_outcome["published"])
+                    cleanup = err.cleanup_result
+                    assert cleanup is not None
+                    self.assertTrue(cleanup["incomplete_cleanup"])
+                    self.assertEqual(
+                        cleanup["removed_paths"], [str(qds_target)]
+                    )
+                    self.assertFalse(qds_target.exists())
+                    by_role = {
+                        item["role"]: item for item in cleanup["items"]
+                    }
+                    self.assertEqual(
+                        by_role["qds"]["status"], "removed_owned_output"
+                    )
+                    if tamper_mode == "replace_with_foreign":
+                        self.assertEqual(
+                            by_role["eval"]["status"],
+                            "skipped_unowned_replacement",
+                        )
+                        self.assertTrue(eval_target.exists())
+                        self.assertEqual(
+                            eval_target.read_bytes(), foreign_eval_bytes
+                        )
+                    else:
+                        self.assertEqual(
+                            by_role["eval"]["status"], "ownership_lost_missing"
+                        )
+                        self.assertFalse(eval_target.exists())
+
+        # 3. Late FileExistsError on QDS os.open after destination_precheck removes owned EVAL and preserves foreign QDS.
+        with self.subTest(case="late_qds_file_exists_after_precheck"):
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp_root = Path(tmp).resolve(strict=True)
+                parent_root, staging_dir, output_repo_root, dest_dir = (
+                    self._make_publication_dirs(tmp_root, "late_qds_exists")
+                )
+                _, prep = self._prepare_synthetic_subject(
+                    subject_id="R4", staging_dir=staging_dir
+                )
+                eval_target = (
+                    dest_dir
+                    / f"{prep['identities']['eval_filename_stem']}.yaml"
+                )
+                qds_target = dest_dir / f"{prep['identities']['qds_id']}.yaml"
+                foreign_qds_bytes = b"LATE_FOREIGN_QDS_FILE\n"
+
+                def plant_foreign_qds_on_open(
+                    path: Any, flags: int, mode: int = 0o777, **kwargs: Any
+                ) -> int:
+                    if (
+                        Path(os.fspath(path)) == qds_target
+                        and not qds_target.exists()
+                    ):
+                        qds_target.write_bytes(foreign_qds_bytes)
+                    return real_open(path, flags, mode, **kwargs)
+
+                with mock.patch(
+                    "onesar_records.os.open",
+                    side_effect=plant_foreign_qds_on_open,
+                ):
+                    with self.assertRaisesRegex(
+                        RfactorRecordPublicationError,
+                        "qds_publication: refusing to overwrite pre-existing or colliding path",
+                    ) as cm:
+                        onesar_records._publish_prepared_rfactor_records(
+                            prep,
+                            subject_id="R4",
+                            run_date="2026-11-06",
+                            staging_dir=staging_dir,
+                            admitted_parent_root=parent_root,
+                            output_repo_root=output_repo_root,
+                            repo_root=REPO_ROOT,
+                        )
+                err = cm.exception
+                self.assertEqual(err.failed_stage, "qds_publication")
+                self.assertFalse(eval_target.exists())
+                self.assertTrue(qds_target.exists())
+                self.assertEqual(qds_target.read_bytes(), foreign_qds_bytes)
+                self.assertTrue(err.cleanup_result["cleanup_complete"])
+                self.assertEqual(
+                    err.cleanup_result["removed_paths"], [str(eval_target)]
+                )
+
+        # 4. os.close failure on canonical leaf write and os.unlink failure during cleanup.
+        with self.subTest(case="canonical_close_and_cleanup_unlink_failures"):
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp_root = Path(tmp).resolve(strict=True)
+                parent_root, staging_dir, output_repo_root, dest_dir = (
+                    self._make_publication_dirs(tmp_root, "close_unlink_fail")
+                )
+                _, prep = self._prepare_synthetic_subject(
+                    subject_id="start", staging_dir=staging_dir
+                )
+                eval_target = (
+                    dest_dir
+                    / f"{prep['identities']['eval_filename_stem']}.yaml"
+                )
+                eval_fd_box: dict[str, int] = {}
+
+                def open_eval_hook(
+                    path: Any, flags: int, mode: int = 0o777, **kwargs: Any
+                ) -> int:
+                    fd = real_open(path, flags, mode, **kwargs)
+                    if (
+                        Path(os.fspath(path)) == eval_target
+                        and "fd" not in eval_fd_box
+                    ):
+                        eval_fd_box["fd"] = fd
+                    return fd
+
+                def close_eval_hook(fd: int) -> None:
+                    real_close(fd)
+                    if fd == eval_fd_box.get("fd"):
+                        raise OSError(
+                            errno.EIO,
+                            "synthetic close failure on canonical EVAL",
+                        )
+
+                def unlink_eval_hook(path: Any, *args: Any, **kwargs: Any) -> None:
+                    if Path(os.fspath(path)) == eval_target:
+                        raise PermissionError(
+                            errno.EACCES,
+                            "synthetic unlink failure on canonical EVAL",
+                        )
+                    real_unlink(path, *args, **kwargs)
+
+                with (
+                    mock.patch(
+                        "onesar_records.os.open", side_effect=open_eval_hook
+                    ),
+                    mock.patch(
+                        "onesar_records.os.close", side_effect=close_eval_hook
+                    ),
+                    mock.patch(
+                        "onesar_records.os.unlink", side_effect=unlink_eval_hook
+                    ),
+                ):
+                    with self.assertRaisesRegex(
+                        RfactorRecordPublicationError,
+                        "eval_publication: os\\.close.*failed on canonical target.*incomplete_cleanup=True",
+                    ) as cm:
+                        onesar_records._publish_prepared_rfactor_records(
+                            prep,
+                            subject_id="start",
+                            run_date="2026-11-06",
+                            staging_dir=staging_dir,
+                            admitted_parent_root=parent_root,
+                            output_repo_root=output_repo_root,
+                            issued_at="2026-11-07T14:20:00+00:00",
+                            repo_root=REPO_ROOT,
+                        )
+                self.assertEqual(cm.exception.failed_stage, "eval_publication")
+                self.assertEqual(
+                    cm.exception.authoring_policy_issued_at,
+                    "2026-11-07T14:20:00+00:00",
+                )
+                cleanup = cm.exception.cleanup_result
+                assert cleanup is not None
+                self.assertTrue(cleanup["incomplete_cleanup"])
+                self.assertEqual(cleanup["items"][0]["status"], "unlink_failed")
+                self.assertIn(
+                    str(eval_target),
+                    cleanup["retained_unowned_or_failed_paths"],
+                )
+
+    def test_authoritative_outcome_commit_boundary_and_pre_open_serialization(
+        self,
+    ) -> None:
+        real_open = os.open
+        real_fsync = os.fsync
+        real_close = os.close
+        real_link = os.link
+        real_lstat = os.lstat
+        real_unlink = os.unlink
+
+        # 1. #1075: Pre-open JSON serialization validation (both probe and selected slot).
+        class _FailOnlyWhenOutcomePathPopulated:
+            def __init__(self, outcome_holder: dict[str, Any]) -> None:
+                self._holder = outcome_holder
+
+            def __deepcopy__(self, memo: Any) -> Any:
+                if self._holder.get("probe_done"):
+                    return object()
+                self._holder["probe_done"] = True
+                return "ok_during_probe"
+
+        for bad_case in ("direct_opaque_object", "slot_payload_only_failure"):
+            with self.subTest(case=f"issue_1075_{bad_case}"):
+                with tempfile.TemporaryDirectory() as tmp:
+                    out_dir = Path(tmp).resolve(strict=True)
+                    opened_fds: list[int] = []
+
+                    def open_spy(*args: Any, **kwargs: Any) -> int:
+                        fd = real_open(*args, **kwargs)
+                        opened_fds.append(fd)
+                        return fd
+
+                    holder: dict[str, Any] = {}
+                    payload: dict[str, Any] = (
+                        {"opaque": object()}
+                        if bad_case == "direct_opaque_object"
+                        else {
+                            "slot_dependent": _FailOnlyWhenOutcomePathPopulated(
+                                holder
+                            )
+                        }
+                    )
+                    with mock.patch(
+                        "onesar_records.os.open", side_effect=open_spy
+                    ):
+                        with self.assertRaises(TypeError):
+                            onesar_records._persist_authoring_outcome(
+                                payload, outcome_dir=out_dir
+                            )
+                    self.assertEqual(opened_fds, [])
+                    self.assertEqual(list(out_dir.iterdir()), [])
+
+        # 2. #1071 + Tasks 423/425: All 13 authoritative outcome commit-boundary scenarios.
+        commit_cases: tuple[str, ...] = (
+            "normal",
+            "provisional_fsync",
+            "provisional_close",
+            "provisional_fsync_and_final_unlink_failure",
+            "link_before_creation",
+            "link_collision_identical",
+            "link_collision_symlink",
+            "link_then_oserror",
+            "link_then_interrupt",
+            "helper_return_then_oserror",
+            "link_then_oserror_inspection_unavailable",
+            "link_then_move_before_error",
+            "link_then_symlink_before_error",
+        )
+        for case in commit_cases:
+            with self.subTest(commit_case=case):
+                with tempfile.TemporaryDirectory() as tmp:
+                    tmp_root = Path(tmp).resolve(strict=True)
+                    parent_root, staging_dir, output_repo_root, dest_dir = (
+                        self._make_publication_dirs(tmp_root, f"commit_{case}")
+                    )
+                    _, prep = self._prepare_synthetic_subject(
+                        subject_id="R4", staging_dir=staging_dir
+                    )
+                    out_dir = parent_root / "authoring_outcomes"
+                    final_first = out_dir / "authoring_outcome_0001.json"
+                    prov_first = (
+                        out_dir / "authoring_outcome_0001.provisional.txt"
+                    )
+                    moved_target = out_dir / "authoring_outcome_9000.json"
+
+                    prov_fds: set[int] = set()
+                    final_open_calls: list[str] = []
+                    final_unlink_calls: list[str] = []
+                    fired = {
+                        "fsync": False,
+                        "close": False,
+                        "link": False,
+                        "lstat": False,
+                        "helper": False,
+                    }
+
+                    def open_hook(
+                        path: Any, flags: int, mode: int = 0o777, **kwargs: Any
+                    ) -> int:
+                        p = Path(os.fspath(path))
+                        if p == final_first:
+                            final_open_calls.append(p.name)
+                        fd = real_open(path, flags, mode, **kwargs)
+                        if p == prov_first:
+                            prov_fds.add(fd)
+                        return fd
+
+                    def fsync_hook(
+                        fd: int, *, _case: str = case
+                    ) -> None:
+                        real_fsync(fd)
+                        if (
+                            _case
+                            in (
+                                "provisional_fsync",
+                                "provisional_fsync_and_final_unlink_failure",
+                            )
+                            and fd in prov_fds
+                            and not fired["fsync"]
+                        ):
+                            fired["fsync"] = True
+                            raise OSError(
+                                errno.EIO, "synthetic provisional fsync failure"
+                            )
+
+                    def close_hook(
+                        fd: int, *, _case: str = case
+                    ) -> None:
+                        real_close(fd)
+                        if (
+                            _case == "provisional_close"
+                            and fd in prov_fds
+                            and not fired["close"]
+                        ):
+                            fired["close"] = True
+                            raise OSError(
+                                errno.EIO, "synthetic provisional close failure"
+                            )
+
+                    def unlink_hook(
+                        path: Any,
+                        *args: Any,
+                        _case: str = case,
+                        **kwargs: Any,
+                    ) -> None:
+                        p = Path(os.fspath(path))
+                        if p == final_first:
+                            final_unlink_calls.append(p.name)
+                            if (
+                                _case
+                                == "provisional_fsync_and_final_unlink_failure"
+                            ):
+                                raise PermissionError(
+                                    errno.EACCES,
+                                    "synthetic final outcome unlink failure",
+                                )
+                        real_unlink(path, *args, **kwargs)
+
+                    def link_hook(
+                        src: Any,
+                        dst: Any,
+                        *args: Any,
+                        _case: str = case,
+                        **kwargs: Any,
+                    ) -> None:
+                        if (
+                            Path(os.fspath(src)) == prov_first
+                            and Path(os.fspath(dst)) == final_first
+                            and not fired["link"]
+                        ):
+                            fired["link"] = True
+                            if _case == "link_before_creation":
+                                raise OSError(
+                                    errno.EIO,
+                                    "synthetic pre-link failure before target creation",
+                                )
+                            if _case == "link_collision_identical":
+                                final_first.write_bytes(prov_first.read_bytes())
+                                return real_link(src, dst, *args, **kwargs)
+                            if _case == "link_collision_symlink":
+                                os.symlink(
+                                    prov_first.parent / "foreign_target.txt",
+                                    final_first,
+                                )
+                                return real_link(src, dst, *args, **kwargs)
+                            if _case in (
+                                "link_then_oserror",
+                                "link_then_oserror_inspection_unavailable",
+                            ):
+                                real_link(src, dst, *args, **kwargs)
+                                raise OSError(
+                                    errno.EIO,
+                                    "synthetic post-link failure after target creation",
+                                )
+                            if _case == "link_then_move_before_error":
+                                real_link(src, dst, *args, **kwargs)
+                                os.replace(final_first, moved_target)
+                                raise OSError(
+                                    errno.EIO,
+                                    "synthetic post-link failure after target move",
+                                )
+                            if _case == "link_then_symlink_before_error":
+                                real_link(src, dst, *args, **kwargs)
+                                os.replace(final_first, moved_target)
+                                os.symlink(moved_target, final_first)
+                                raise OSError(
+                                    errno.EIO,
+                                    "synthetic post-link failure after target move and symlink",
+                                )
+                            if _case == "link_then_interrupt":
+                                real_link(src, dst, *args, **kwargs)
+                                raise KeyboardInterrupt(
+                                    "synthetic post-link interrupt after target creation"
+                                )
+                        return real_link(src, dst, *args, **kwargs)
+
+                    def lstat_hook(
+                        path: Any,
+                        *args: Any,
+                        _case: str = case,
+                        **kwargs: Any,
+                    ) -> os.stat_result:
+                        if (
+                            _case == "link_then_oserror_inspection_unavailable"
+                            and fired["link"]
+                            and Path(os.fspath(path)) == final_first
+                            and not fired["lstat"]
+                        ):
+                            fired["lstat"] = True
+                            raise OSError(
+                                errno.EIO,
+                                "synthetic post-link lstat failure",
+                            )
+                        return real_lstat(path, *args, **kwargs)
+
+                    real_persist = onesar_records._persist_authoring_outcome
+
+                    def persist_hook(
+                        *args: Any,
+                        _case: str = case,
+                        **kwargs: Any,
+                    ) -> dict[str, Any]:
+                        meta = real_persist(*args, **kwargs)
+                        if (
+                            _case == "helper_return_then_oserror"
+                            and not fired["helper"]
+                        ):
+                            fired["helper"] = True
+                            raise OSError(
+                                errno.EIO,
+                                "synthetic post-commit helper failure",
+                            )
+                        return meta
+
+                    result: dict[str, Any] | None = None
+                    exc_caught: BaseException | None = None
+                    with (
+                        mock.patch(
+                            "onesar_records.os.open", side_effect=open_hook
+                        ),
+                        mock.patch(
+                            "onesar_records.os.fsync", side_effect=fsync_hook
+                        ),
+                        mock.patch(
+                            "onesar_records.os.close", side_effect=close_hook
+                        ),
+                        mock.patch(
+                            "onesar_records.os.unlink", side_effect=unlink_hook
+                        ),
+                        mock.patch(
+                            "onesar_records.os.link", side_effect=link_hook
+                        ),
+                        mock.patch(
+                            "onesar_records.os.lstat", side_effect=lstat_hook
+                        ),
+                        mock.patch(
+                            "onesar_records._persist_authoring_outcome",
+                            side_effect=persist_hook,
+                        ),
+                    ):
+                        try:
+                            result = onesar_records._publish_prepared_rfactor_records(
+                                prep,
+                                subject_id="R4",
+                                run_date="2026-11-06",
+                                staging_dir=staging_dir,
+                                admitted_parent_root=parent_root,
+                                output_repo_root=output_repo_root,
+                                repo_root=REPO_ROOT,
+                            )
+                        except BaseException as exc:
+                            exc_caught = exc
+
+                    self.assertEqual(final_open_calls, [])
+                    self.assertEqual(final_unlink_calls, [])
+                    canonical_files = sorted(
+                        p.name for p in output_repo_root.rglob("*.yaml")
+                    )
+                    json_outcomes = sorted(
+                        p.name for p in out_dir.glob("authoring_outcome_*.json")
+                    )
+
+                    if case == "normal":
+                        self.assertIsNone(exc_caught)
+                        assert result is not None
+                        self.assertTrue(result["published"])
+                        self.assertEqual(len(canonical_files), 2)
+                        self.assertEqual(
+                            json_outcomes, ["authoring_outcome_0001.json"]
+                        )
+                        self.assertEqual(os.lstat(final_first).st_nlink, 2)
+                    elif case in (
+                        "provisional_fsync",
+                        "provisional_close",
+                        "provisional_fsync_and_final_unlink_failure",
+                        "link_before_creation",
+                        "link_collision_identical",
+                        "link_collision_symlink",
+                    ):
+                        self.assertTrue(any(fired.values()))
+                        self.assertIsInstance(
+                            exc_caught, RfactorRecordPublicationError
+                        )
+                        self.assertEqual(
+                            getattr(exc_caught, "commit_state", None),
+                            "not_attempted",
+                        )
+                        self.assertIs(
+                            getattr(exc_caught, "committed", None), False
+                        )
+                        self.assertEqual(canonical_files, [])
+                        self.assertTrue(prov_first.is_file())
+                        self.assertEqual(os.lstat(prov_first).st_nlink, 1)
+                        second_outcome = json.loads(
+                            (out_dir / "authoring_outcome_0002.json").read_text(
+                                encoding="utf-8"
+                            )
+                        )
+                        self.assertFalse(second_outcome["published"])
+                        if case in (
+                            "provisional_fsync",
+                            "provisional_close",
+                            "provisional_fsync_and_final_unlink_failure",
+                            "link_before_creation",
+                        ):
+                            self.assertFalse(final_first.exists())
+                            self.assertEqual(
+                                json_outcomes, ["authoring_outcome_0002.json"]
+                            )
+                        elif case == "link_collision_identical":
+                            self.assertTrue(final_first.is_file())
+                            self.assertNotEqual(
+                                os.lstat(final_first).st_ino,
+                                os.lstat(prov_first).st_ino,
+                            )
+                        elif case == "link_collision_symlink":
+                            self.assertTrue(final_first.is_symlink())
+                    elif case in (
+                        "link_then_oserror",
+                        "link_then_interrupt",
+                        "helper_return_then_oserror",
+                    ):
+                        self.assertTrue(any(fired.values()))
+                        self.assertIsNotNone(exc_caught)
+                        if case == "link_then_interrupt":
+                            self.assertIsInstance(
+                                exc_caught, KeyboardInterrupt
+                            )
+                        else:
+                            self.assertIsInstance(exc_caught, OSError)
+                        self.assertEqual(
+                            getattr(exc_caught, "commit_state", None),
+                            "committed",
+                        )
+                        self.assertIs(
+                            getattr(exc_caught, "committed", None), True
+                        )
+                        self.assertEqual(len(canonical_files), 2)
+                        self.assertEqual(
+                            json_outcomes, ["authoring_outcome_0001.json"]
+                        )
+                        first_outcome = json.loads(
+                            final_first.read_text(encoding="utf-8")
+                        )
+                        self.assertTrue(first_outcome["published"])
+                    else:
+                        # link_then_oserror_inspection_unavailable, link_then_move_before_error, link_then_symlink_before_error
+                        self.assertTrue(any(fired.values()))
+                        self.assertIsInstance(exc_caught, OSError)
+                        self.assertEqual(
+                            getattr(exc_caught, "commit_state", None),
+                            "unknown",
+                        )
+                        self.assertIsNone(
+                            getattr(exc_caught, "committed", None)
+                        )
+                        self.assertIsNone(
+                            getattr(exc_caught, "authoring_outcome", None)
+                        )
+                        self.assertEqual(len(canonical_files), 2)
+                        self.assertNotIn(
+                            "authoring_outcome_0002.json", json_outcomes
+                        )
+                        self.assertEqual(os.lstat(prov_first).st_nlink, 2)
+                        if case in (
+                            "link_then_move_before_error",
+                            "link_then_symlink_before_error",
+                        ):
+                            self.assertTrue(moved_target.is_file())
+                            moved_doc = json.loads(
+                                moved_target.read_text(encoding="utf-8")
+                            )
+                            self.assertTrue(moved_doc["published"])
+
+    def test_exceptional_exits_and_non_masking_outcome_persistence(
+        self,
+    ) -> None:
+        # 1. SystemExit(0) and SystemExit(2) at private boundary treated as status="refused", published=False.
+        for exit_code in (0, 2):
+            with self.subTest(case=f"system_exit_{exit_code}"):
+                with tempfile.TemporaryDirectory() as tmp:
+                    tmp_root = Path(tmp).resolve(strict=True)
+                    parent_root, staging_dir, output_repo_root, _ = (
+                        self._make_publication_dirs(
+                            tmp_root, f"sysexit_{exit_code}"
+                        )
+                    )
+                    _, prep = self._prepare_synthetic_subject(
+                        subject_id="start", staging_dir=staging_dir
+                    )
+                    with mock.patch(
+                        "onesar_records._precheck_canonical_publication_targets",
+                        side_effect=SystemExit(exit_code),
+                    ):
+                        with self.assertRaisesRegex(
+                            RfactorRecordPublicationError,
+                            f"authoring refused due to SystemExit \\(code={exit_code!r}\\)",
+                        ) as cm:
+                            onesar_records._publish_prepared_rfactor_records(
+                                prep,
+                                subject_id="start",
+                                run_date="2026-11-06",
+                                staging_dir=staging_dir,
+                                admitted_parent_root=parent_root,
+                                output_repo_root=output_repo_root,
+                                issued_at="2026-11-07T14:20:00+00:00",
+                                repo_root=REPO_ROOT,
+                            )
+                    err = cm.exception
+                    self.assertEqual(err.system_exit_code, exit_code)
+                    self.assertEqual(
+                        err.authoring_outcome["status"], "refused"
+                    )
+                    self.assertFalse(err.authoring_outcome["published"])
+                    self.assertEqual(list(output_repo_root.rglob("*.yaml")), [])
+
+        # 2. Pre-commit KeyboardInterrupt rolls back owned EVAL, persists status="interrupted", and escapes unchanged.
+        with self.subTest(case="pre_commit_keyboard_interrupt"):
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp_root = Path(tmp).resolve(strict=True)
+                parent_root, staging_dir, output_repo_root, dest_dir = (
+                    self._make_publication_dirs(tmp_root, "kbd_pre_commit")
+                )
+                _, prep = self._prepare_synthetic_subject(
+                    subject_id="R4", staging_dir=staging_dir
+                )
+                eval_target = (
+                    dest_dir
+                    / f"{prep['identities']['eval_filename_stem']}.yaml"
+                )
+                qds_target = dest_dir / f"{prep['identities']['qds_id']}.yaml"
+                real_verify = onesar_records._verify_published_canonical_leaf
+
+                def interrupt_on_qds_verify(
+                    target_path: Path, *args: Any, **kwargs: Any
+                ) -> dict[str, Any]:
+                    if target_path == qds_target:
+                        raise KeyboardInterrupt("synthetic pre-commit interrupt")
+                    return real_verify(target_path, *args, **kwargs)
+
+                with mock.patch(
+                    "onesar_records._verify_published_canonical_leaf",
+                    side_effect=interrupt_on_qds_verify,
+                ):
+                    with self.assertRaisesRegex(
+                        KeyboardInterrupt, "synthetic pre-commit interrupt"
+                    ) as kbd_cm:
+                        onesar_records._publish_prepared_rfactor_records(
+                            prep,
+                            subject_id="R4",
+                            run_date="2026-11-06",
+                            staging_dir=staging_dir,
+                            admitted_parent_root=parent_root,
+                            output_repo_root=output_repo_root,
+                            repo_root=REPO_ROOT,
+                        )
+                kbd_exc = kbd_cm.exception
+                self.assertFalse(eval_target.exists())
+                self.assertFalse(qds_target.exists())
+                self.assertEqual(
+                    getattr(kbd_exc, "commit_state", None), "not_attempted"
+                )
+                kbd_outcome = getattr(kbd_exc, "authoring_outcome", None)
+                assert isinstance(kbd_outcome, dict)
+                self.assertEqual(kbd_outcome["status"], "interrupted")
+                self.assertFalse(kbd_outcome["published"])
+                self.assertTrue(kbd_outcome["outcome_persisted"])
+                self.assertTrue(Path(kbd_outcome["outcome_path"]).is_file())
+
+        # 3. Outcome persistence failure after primary error attaches note and does not mask primary error.
+        with self.subTest(case="non_masking_outcome_persistence_failure"):
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp_root = Path(tmp).resolve(strict=True)
+                parent_root, staging_dir, output_repo_root, _ = (
+                    self._make_publication_dirs(tmp_root, "non_masking")
+                )
+                _, prep = self._prepare_synthetic_subject(
+                    subject_id="start", staging_dir=staging_dir
+                )
+                bad_prep = copy.deepcopy(prep)
+                bad_prep["eval_sha256"] = "0" * 64
+                with mock.patch(
+                    "onesar_records._persist_authoring_outcome",
+                    side_effect=OSError(
+                        errno.ENOSPC, "synthetic outcome disk full"
+                    ),
+                ):
+                    with self.assertRaisesRegex(
+                        RfactorRecordPublicationError,
+                        "disagrees with eval_sha256",
+                    ) as cm:
+                        onesar_records._publish_prepared_rfactor_records(
+                            bad_prep,
+                            subject_id="start",
+                            run_date="2026-11-06",
+                            staging_dir=staging_dir,
+                            admitted_parent_root=parent_root,
+                            output_repo_root=output_repo_root,
+                            issued_at="2026-11-07T14:20:00+00:00",
+                            repo_root=REPO_ROOT,
+                        )
+                err = cm.exception
+                self.assertFalse(err.authoring_outcome["outcome_persisted"])
+                self.assertIn(
+                    "synthetic outcome disk full",
+                    err.authoring_outcome["outcome_write_error"],
+                )
+                self.assertTrue(
+                    any(
+                        "authoring outcome persistence also failed" in note
+                        for note in getattr(err, "__notes__", ())
+                    )
+                )
+
+    def test_public_publish_retained_rfactor_records_full_fixture_refusal_and_no_execution(
+        self,
+    ) -> None:
+        def build_full_parent_fixture(
+            tmp_root: Path, subject_id: str
+        ) -> dict[str, Any]:
+            parent_root = tmp_root / f"parent_attempt_{subject_id}"
+            parent_root.mkdir(parents=True, exist_ok=True)
+            phx_env = _create_synthetic_retained_phenix_envelope(
+                parent_root,
+                subject_id=subject_id,
+                run_name=f"phx_{subject_id}",
+            )
+            rm_env = _create_synthetic_retained_refmac_capture(
+                parent_root,
+                subject_id=subject_id,
+                run_name=f"rm_{subject_id}",
+            )
+            phx_ref = {
+                "path": str(phx_env["reconciled_manifest_path"]),
+                "sha256": phx_env["reconciled_manifest_sha256"],
+                "size_bytes": phx_env["reconciled_manifest_size_bytes"],
+                "persisted": True,
+            }
+            cp_payload = build_parent_completed_execution_checkpoint_payload(
+                subject_id=subject_id,
+                parent_evidence_root=parent_root,
+                phenix_evidence_root=phx_env["evidence_root"],
+                refmac_evidence_root=rm_env["evidence_root"],
+                phenix_reconciled_manifest=phx_ref,
+                refmac_operation_manifest=rm_env["manifest_ref"],
+                started_at_utc="2026-11-06T23:50:00Z",
+                finished_at_utc="2026-11-07T00:05:00Z",
+                run_date="2026-11-06",
+            )
+            cp_path = parent_root / "parent_execution_checkpoint.json"
+            cp_sha, cp_size, _ = _write_json_with_digest(cp_path, cp_payload)
+            return {
+                "parent_root": parent_root,
+                "phx_env": phx_env,
+                "rm_env": rm_env,
+                "cp_path": cp_path,
+                "cp_ref": {
+                    "path": str(cp_path),
+                    "sha256": cp_sha,
+                    "size_bytes": cp_size,
+                    "persisted": True,
+                },
+            }
+
+        for subject_id, expected_eval_stem, expected_qds_id in (
+            (
+                "R4",
+                "EVAL_1sar_cdba2c07_2026-11-06",
+                "QDS_1sar_cdba2c07_2026-11-06",
+            ),
+            ("start", "EVAL_1sar_cdba2c07-start_2026-11-06", None),
+        ):
+            with self.subTest(public_refusal_subject=subject_id):
+                with tempfile.TemporaryDirectory() as tmp:
+                    tmp_root = Path(tmp).resolve(strict=True)
+                    fixture = build_full_parent_fixture(tmp_root, subject_id)
+                    parent_root: Path = fixture["parent_root"]
+                    cp_ref: dict[str, Any] = fixture["cp_ref"]
+                    output_repo_root = tmp_root / f"public_out_{subject_id}"
+                    dest_dir = (
+                        output_repo_root
+                        / "data"
+                        / "coscientists"
+                        / "openscientist"
+                    )
+                    dest_dir.mkdir(parents=True, exist_ok=True)
+                    snapshot_before = _snapshot_tree_bytes(parent_root)
+
+                    with (
+                        mock.patch.object(
+                            onesar_rerun,
+                            "run_phenix_rfactor_operation",
+                            side_effect=AssertionError(
+                                "run_phenix_rfactor_operation must not be called"
+                            ),
+                        ) as m_phx,
+                        mock.patch.object(
+                            onesar_refmac,
+                            "run_refmac_rfactor_operation",
+                            side_effect=AssertionError(
+                                "run_refmac_rfactor_operation must not be called"
+                            ),
+                        ) as m_rm,
+                        mock.patch.object(
+                            refinement_cache,
+                            "cached_phenix_operation",
+                            side_effect=AssertionError(
+                                "cached_phenix_operation must not be called"
+                            ),
+                        ) as m_cache_phx,
+                        mock.patch.object(
+                            refinement_cache,
+                            "cached_operation",
+                            side_effect=AssertionError(
+                                "cached_operation must not be called"
+                            ),
+                        ) as m_cache,
+                        mock.patch.object(
+                            toolchain,
+                            "phenix_build_evidence",
+                            side_effect=AssertionError(
+                                "phenix_build_evidence must not be called"
+                            ),
+                        ) as m_phx_build,
+                        mock.patch.object(
+                            toolchain,
+                            "phenix",
+                            side_effect=AssertionError(
+                                "toolchain.phenix must not be called"
+                            ),
+                        ) as m_tphx,
+                        mock.patch.object(
+                            toolchain,
+                            "run_logged",
+                            side_effect=AssertionError(
+                                "toolchain.run_logged must not be called"
+                            ),
+                        ) as m_run_logged,
+                        mock.patch.object(
+                            toolchain,
+                            "run_refmac",
+                            side_effect=AssertionError(
+                                "toolchain.run_refmac must not be called"
+                            ),
+                        ) as m_run_refmac,
+                        mock.patch.object(
+                            toolchain,
+                            "ccp4_environment",
+                            side_effect=AssertionError(
+                                "toolchain.ccp4_environment must not be called"
+                            ),
+                        ) as m_ccp4_env,
+                        mock.patch.object(
+                            subprocess,
+                            "run",
+                            side_effect=AssertionError(
+                                "subprocess.run must not be called"
+                            ),
+                        ) as m_subp,
+                        mock.patch.object(
+                            onesar_records,
+                            "_assemble_six_row_t03_measurements",
+                            side_effect=AssertionError(
+                                "six-row assembler must not be called"
+                            ),
+                        ) as m_asm,
+                        mock.patch.object(
+                            onesar_records,
+                            "_prepare_rfactor_eval_and_live_qds_records",
+                            side_effect=AssertionError(
+                                "record preparer must not be called"
+                            ),
+                        ) as m_prep,
+                        mock.patch.object(
+                            onesar_records,
+                            "_publish_prepared_rfactor_records",
+                            side_effect=AssertionError(
+                                "byte publisher must not be called"
+                            ),
+                        ) as m_pub,
+                    ):
+                        sentinels = (
+                            m_phx,
+                            m_rm,
+                            m_cache_phx,
+                            m_cache,
+                            m_phx_build,
+                            m_tphx,
+                            m_run_logged,
+                            m_run_refmac,
+                            m_ccp4_env,
+                            m_subp,
+                            m_asm,
+                            m_prep,
+                            m_pub,
+                        )
+                        with self.assertRaises(
+                            RefmacScientificAdmissionRefusedError
+                        ) as cm1:
+                            publish_retained_rfactor_records(
+                                parent_root,
+                                subject_id=subject_id,
+                                checkpoint_reference=cp_ref,
+                                repo_root=REPO_ROOT,
+                                output_repo_root=output_repo_root,
+                            )
+                        for sentinel in sentinels:
+                            self.assertEqual(sentinel.call_count, 0)
+
+                        err1 = cm1.exception
+                        self.assertTrue(err1.integrity_verified)
+                        self.assertFalse(err1.scientific_proof_established)
+                        self.assertEqual(
+                            set(err1.unknown_native_premises.keys()),
+                            set(REFMAC_UNKNOWN_NATIVE_PREMISE_KEYS),
+                        )
+                        for premise_info in err1.unknown_native_premises.values():
+                            self.assertIs(premise_info["proven"], False)
+
+                        outcome1 = getattr(err1, "authoring_outcome", None)
+                        assert isinstance(outcome1, dict)
+                        self.assertEqual(outcome1["status"], "refused")
+                        self.assertFalse(outcome1["published"])
+                        self.assertEqual(
+                            outcome1["failed_stage"],
+                            "refmac_retained_verification",
+                        )
+                        self.assertEqual(
+                            outcome1["completed_steps"],
+                            [
+                                "admitted_root_validated",
+                                "parent_checkpoint_verified",
+                                "phenix_retained_evidence_verified",
+                            ],
+                        )
+                        self.assertEqual(
+                            outcome1["intended_paths"],
+                            {
+                                "eval_path": str(
+                                    dest_dir / f"{expected_eval_stem}.yaml"
+                                ),
+                                "qds_path": (
+                                    str(dest_dir / f"{expected_qds_id}.yaml")
+                                    if expected_qds_id is not None
+                                    else None
+                                ),
+                            },
+                        )
+                        self.assertTrue(outcome1["outcome_persisted"])
+                        outcome1_path = Path(outcome1["outcome_path"])
+                        self.assertEqual(
+                            outcome1_path.name, "authoring_outcome_0001.json"
+                        )
+                        outcome1_bytes = outcome1_path.read_bytes()
+
+                        # Second public attempt preserves authoring_outcome_0001.json and writes authoring_outcome_0002.json.
+                        with self.assertRaises(
+                            RefmacScientificAdmissionRefusedError
+                        ) as cm2:
+                            publish_retained_rfactor_records(
+                                parent_root,
+                                subject_id=subject_id,
+                                checkpoint_reference=cp_ref,
+                                repo_root=REPO_ROOT,
+                                output_repo_root=output_repo_root,
+                            )
+                        for sentinel in sentinels:
+                            self.assertEqual(sentinel.call_count, 0)
+                        outcome2 = getattr(
+                            cm2.exception, "authoring_outcome", None
+                        )
+                        assert isinstance(outcome2, dict)
+                        outcome2_path = Path(outcome2["outcome_path"])
+                        self.assertEqual(
+                            outcome2_path.name, "authoring_outcome_0002.json"
+                        )
+                        self.assertEqual(
+                            outcome1_path.read_bytes(), outcome1_bytes
+                        )
+
+                    self.assertEqual(
+                        list(output_repo_root.rglob("*.yaml")), []
+                    )
+                    # Original checkpoint and producer artifacts are completely unchanged.
+                    authoring_outcomes_dir = parent_root / "authoring_outcomes"
+                    snapshot_after = {
+                        path: data
+                        for path, data in _snapshot_tree_bytes(
+                            parent_root
+                        ).items()
+                        if not path.is_relative_to(authoring_outcomes_dir)
+                    }
+                    self.assertEqual(snapshot_after, snapshot_before)
+
+        # Tampered PHENIX control fails at phenix_retained_verification before REFMAC verification.
+        with self.subTest(public_refusal_subject="tampered_phenix_control"):
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp_root = Path(tmp).resolve(strict=True)
+                fixture = build_full_parent_fixture(tmp_root, "R4")
+                parent_root = fixture["parent_root"]
+                cp_ref = fixture["cp_ref"]
+                output_repo_root = tmp_root / "public_out_tampered_phx"
+                (
+                    output_repo_root / "data" / "coscientists" / "openscientist"
+                ).mkdir(parents=True, exist_ok=True)
+                rfactors_json_path = Path(
+                    fixture["phx_env"]["reconciled_record"][
+                        "phenix_rfactors_json_path"
+                    ]
+                )
+                rfactors_json_path.write_bytes(
+                    rfactors_json_path.read_bytes() + b"\n"
+                )
+                tampered_snapshot_before = _snapshot_tree_bytes(parent_root)
+                with (
+                    mock.patch.object(
+                        onesar_records,
+                        "verify_retained_refmac_rfactor_evidence",
+                        side_effect=AssertionError(
+                            "REFMAC verifier should not be reached when PHENIX fails"
+                        ),
+                    ) as m_rm_verify,
+                    mock.patch.object(
+                        onesar_rerun,
+                        "run_phenix_rfactor_operation",
+                        side_effect=AssertionError(
+                            "run_phenix_rfactor_operation must not be called"
+                        ),
+                    ) as m_phx_ctrl,
+                    mock.patch.object(
+                        onesar_refmac,
+                        "run_refmac_rfactor_operation",
+                        side_effect=AssertionError(
+                            "run_refmac_rfactor_operation must not be called"
+                        ),
+                    ) as m_rm_ctrl,
+                    mock.patch.object(
+                        refinement_cache,
+                        "cached_phenix_operation",
+                        side_effect=AssertionError(
+                            "cached_phenix_operation must not be called"
+                        ),
+                    ) as m_cache_phx_ctrl,
+                    mock.patch.object(
+                        refinement_cache,
+                        "cached_operation",
+                        side_effect=AssertionError(
+                            "cached_operation must not be called"
+                        ),
+                    ) as m_cache_ctrl,
+                    mock.patch.object(
+                        toolchain,
+                        "phenix_build_evidence",
+                        side_effect=AssertionError(
+                            "phenix_build_evidence must not be called"
+                        ),
+                    ) as m_phx_build_ctrl,
+                    mock.patch.object(
+                        toolchain,
+                        "phenix",
+                        side_effect=AssertionError(
+                            "toolchain.phenix must not be called"
+                        ),
+                    ) as m_tphx_ctrl,
+                    mock.patch.object(
+                        toolchain,
+                        "run_logged",
+                        side_effect=AssertionError(
+                            "toolchain.run_logged must not be called"
+                        ),
+                    ) as m_run_logged_ctrl,
+                    mock.patch.object(
+                        toolchain,
+                        "run_refmac",
+                        side_effect=AssertionError(
+                            "toolchain.run_refmac must not be called"
+                        ),
+                    ) as m_run_refmac_ctrl,
+                    mock.patch.object(
+                        toolchain,
+                        "ccp4_environment",
+                        side_effect=AssertionError(
+                            "toolchain.ccp4_environment must not be called"
+                        ),
+                    ) as m_ccp4_env_ctrl,
+                    mock.patch.object(
+                        subprocess,
+                        "run",
+                        side_effect=AssertionError(
+                            "subprocess.run must not be called"
+                        ),
+                    ) as m_subp_ctrl,
+                    mock.patch.object(
+                        onesar_records,
+                        "_assemble_six_row_t03_measurements",
+                        side_effect=AssertionError(
+                            "six-row assembler must not be called"
+                        ),
+                    ) as m_asm_ctrl,
+                    mock.patch.object(
+                        onesar_records,
+                        "_prepare_rfactor_eval_and_live_qds_records",
+                        side_effect=AssertionError(
+                            "record preparer must not be called"
+                        ),
+                    ) as m_prep_ctrl,
+                    mock.patch.object(
+                        onesar_records,
+                        "_publish_prepared_rfactor_records",
+                        side_effect=AssertionError(
+                            "byte publisher must not be called"
+                        ),
+                    ) as m_pub_ctrl,
+                ):
+                    with self.assertRaises(
+                        PhenixRetainedVerificationError
+                    ) as phx_cm:
+                        publish_retained_rfactor_records(
+                            parent_root,
+                            subject_id="R4",
+                            checkpoint_reference=cp_ref,
+                            repo_root=REPO_ROOT,
+                            output_repo_root=output_repo_root,
+                        )
+                    for ctrl_sentinel in (
+                        m_rm_verify,
+                        m_phx_ctrl,
+                        m_rm_ctrl,
+                        m_cache_phx_ctrl,
+                        m_cache_ctrl,
+                        m_phx_build_ctrl,
+                        m_tphx_ctrl,
+                        m_run_logged_ctrl,
+                        m_run_refmac_ctrl,
+                        m_ccp4_env_ctrl,
+                        m_subp_ctrl,
+                        m_asm_ctrl,
+                        m_prep_ctrl,
+                        m_pub_ctrl,
+                    ):
+                        self.assertEqual(ctrl_sentinel.call_count, 0)
+                phx_outcome = getattr(
+                    phx_cm.exception, "authoring_outcome", None
+                )
+                assert isinstance(phx_outcome, dict)
+                self.assertEqual(phx_outcome["status"], "refused")
+                self.assertFalse(phx_outcome["published"])
+                self.assertEqual(
+                    phx_outcome["failed_stage"], "phenix_retained_verification"
+                )
+                self.assertEqual(
+                    phx_outcome["completed_steps"],
+                    [
+                        "admitted_root_validated",
+                        "parent_checkpoint_verified",
+                    ],
+                )
+                self.assertEqual(list(output_repo_root.rglob("*.yaml")), [])
+                tampered_outcomes_dir = parent_root / "authoring_outcomes"
+                tampered_snapshot_after = {
+                    path: data
+                    for path, data in _snapshot_tree_bytes(parent_root).items()
+                    if not path.is_relative_to(tampered_outcomes_dir)
+                }
+                self.assertEqual(
+                    tampered_snapshot_after, tampered_snapshot_before
+                )
+
+    def test_supplemental_publication_policy_issued_at_and_complete_tool_selection(
+        self,
+    ) -> None:
+        *_, yaml = onesar_records._load_record_assembly_deps()
+
+        def serialize_supplemental_eval(
+            prep: dict[str, Any], eval_doc: dict[str, Any]
+        ) -> None:
+            prep["eval_document"] = eval_doc
+            prep["eval_yaml_text"] = yaml.safe_dump(
+                eval_doc,
+                sort_keys=False,
+                default_flow_style=False,
+                allow_unicode=True,
+            )
+            prep["eval_yaml_bytes"] = prep["eval_yaml_text"].encode("utf-8")
+            prep["eval_sha256"] = hashlib.sha256(
+                prep["eval_yaml_bytes"]
+            ).hexdigest()
+            Path(prep["staged_eval_txt_path"]).write_bytes(
+                prep["eval_yaml_bytes"]
+            )
+            Path(prep["staged_pre_pin_eval_txt_path"]).write_bytes(
+                prep["eval_yaml_bytes"]
+            )
+
+        # 1. Valid explicit supplemental policy time succeeds, normalizes to UTC, and on-disk outcome
+        # binds exact authoring_policy_issued_at + final published_files.eval.sha256 with full Tool rows intact.
+        with self.subTest(case="valid_supplemental_explicit_issued_at_outcome_binding"):
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp_root = Path(tmp).resolve(strict=True)
+                parent_root, staging_dir, output_repo_root, dest_dir = (
+                    self._make_publication_dirs(tmp_root, "supp_valid")
+                )
+                _, prep = self._prepare_synthetic_subject(
+                    subject_id="start", staging_dir=staging_dir
+                )
+                res = onesar_records._publish_prepared_rfactor_records(
+                    prep,
+                    subject_id="start",
+                    run_date="2026-11-06",
+                    staging_dir=staging_dir,
+                    admitted_parent_root=parent_root,
+                    output_repo_root=output_repo_root,
+                    issued_at="2026-11-07T09:20:00-05:00",
+                    repo_root=REPO_ROOT,
+                )
+                expected_norm_time = "2026-11-07T14:20:00+00:00"
+                self.assertTrue(res["published"])
+                self.assertEqual(
+                    res["authoring_policy_issued_at"], expected_norm_time
+                )
+                self.assertEqual(
+                    res["eval_record"]["authoring_policy_issued_at"],
+                    expected_norm_time,
+                )
+                outcome_path = Path(res["authoring_outcome_path"])
+                self.assertTrue(outcome_path.is_file())
+                on_disk_outcome = json.loads(
+                    outcome_path.read_text(encoding="utf-8")
+                )
+                self.assertEqual(
+                    on_disk_outcome["authoring_policy_issued_at"],
+                    expected_norm_time,
+                )
+                self.assertEqual(
+                    on_disk_outcome["published_files"]["eval"][
+                        "authoring_policy_issued_at"
+                    ],
+                    expected_norm_time,
+                )
+                self.assertEqual(
+                    on_disk_outcome["published_files"]["eval"]["sha256"],
+                    prep["eval_sha256"],
+                )
+                published_eval_doc = yaml.safe_load(
+                    (
+                        dest_dir / "EVAL_1sar_cdba2c07-start_2026-11-06.yaml"
+                    ).read_text(encoding="utf-8")
+                )
+                self.assertEqual(
+                    [row["id"] for row in published_eval_doc["tools"]],
+                    [
+                        "REFMAC5",
+                        "Servalcat",
+                        "phenix.model_vs_data",
+                        "gemmi sfcalc",
+                    ],
+                )
+                self.assertEqual(
+                    published_eval_doc["tools"],
+                    [
+                        {
+                            "id": "REFMAC5",
+                            "family": "non_cctbx",
+                            "catalog_tasks_served": ["T03", "T05", "T06"],
+                        },
+                        {
+                            "id": "Servalcat",
+                            "family": "non_cctbx",
+                            "catalog_tasks_served": ["T03", "T04", "T06"],
+                        },
+                        {
+                            "id": "phenix.model_vs_data",
+                            "family": "cctbx",
+                            "catalog_tasks_served": ["T03", "T06", "T13"],
+                        },
+                        {
+                            "id": "gemmi sfcalc",
+                            "family": "non_cctbx",
+                            "catalog_tasks_served": ["T06"],
+                        },
+                    ],
+                )
+
+        # 2. Task 429 reproduction (#1067 recurrence): removing the Servalcat recommendation and its Tool
+        # row from a supplemental record (with coherent .pre_pin.txt, .staged.txt, bytes, and sha256)
+        # is rejected before canonical writes.
+        with self.subTest(case="task_429_servalcat_and_recommendation_removed_rejected"):
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp_root = Path(tmp).resolve(strict=True)
+                parent_root, staging_dir, output_repo_root, _ = (
+                    self._make_publication_dirs(tmp_root, "supp_429_repro")
+                )
+                _, prep = self._prepare_synthetic_subject(
+                    subject_id="start", staging_dir=staging_dir
+                )
+                doc = copy.deepcopy(prep["eval_document"])
+                doc["tool_recommendations"] = [
+                    row
+                    for row in doc["tool_recommendations"]
+                    if row.get("tool_ref") != "Servalcat"
+                ]
+                doc["tools"] = [
+                    row
+                    for row in doc["tools"]
+                    if row.get("id") != "Servalcat"
+                ]
+                serialize_supplemental_eval(prep, doc)
+                with self.assertRaisesRegex(
+                    RfactorRecordPublicationError,
+                    r"eval_document\.tools: missing required canonical Tool row\(s\): \['Servalcat'\]",
+                ) as cm:
+                    onesar_records._publish_prepared_rfactor_records(
+                        prep,
+                        subject_id="start",
+                        run_date="2026-11-06",
+                        staging_dir=staging_dir,
+                        admitted_parent_root=parent_root,
+                        output_repo_root=output_repo_root,
+                        issued_at="2026-11-07T14:20:00+00:00",
+                        repo_root=REPO_ROOT,
+                    )
+                err = cm.exception
+                self.assertEqual(err.failed_stage, "prepared_record_validation")
+                self.assertEqual(
+                    err.authoring_policy_issued_at,
+                    "2026-11-07T14:20:00+00:00",
+                )
+                self.assertEqual(
+                    err.authoring_outcome["authoring_policy_issued_at"],
+                    "2026-11-07T14:20:00+00:00",
+                )
+                self.assertEqual(list(output_repo_root.rglob("*.yaml")), [])
+
+        # 3. Missing, naive, malformed, or pre-run_date issued_at and missing outcome destination refuse before canonical writes.
+        invalid_time_cases: tuple[tuple[str, Any, str], ...] = (
+            (
+                "missing_issued_at",
+                None,
+                "requires an explicit timezone-aware issued_at authoring-policy instant",
+            ),
+            (
+                "naive_issued_at",
+                "2026-11-07T14:20:00",
+                "issued_at: expected full timezone-qualified ISO-8601 timestamp",
+            ),
+            (
+                "malformed_issued_at",
+                "not-an-iso-timestamp",
+                "issued_at: expected full timezone-qualified ISO-8601 timestamp",
+            ),
+            (
+                "pre_run_date_issued_at",
+                "2026-11-05T23:59:59+00:00",
+                "supplemental issued_at UTC date '2026-11-05' precedes evaluation run_date '2026-11-06'",
+            ),
+        )
+        for case_name, bad_issued_at, expected_regex in invalid_time_cases:
+            with self.subTest(case=case_name):
+                with tempfile.TemporaryDirectory() as tmp:
+                    tmp_root = Path(tmp).resolve(strict=True)
+                    parent_root, staging_dir, output_repo_root, _ = (
+                        self._make_publication_dirs(tmp_root, case_name)
+                    )
+                    _, prep = self._prepare_synthetic_subject(
+                        subject_id="R5", staging_dir=staging_dir
+                    )
+                    with self.assertRaisesRegex(
+                        RfactorRecordPublicationError, expected_regex
+                    ) as cm:
+                        onesar_records._publish_prepared_rfactor_records(
+                            prep,
+                            subject_id="R5",
+                            run_date="2026-11-06",
+                            staging_dir=staging_dir,
+                            admitted_parent_root=parent_root,
+                            output_repo_root=output_repo_root,
+                            issued_at=bad_issued_at,
+                            repo_root=REPO_ROOT,
+                        )
+                    self.assertEqual(
+                        cm.exception.failed_stage, "prepared_record_validation"
+                    )
+                    self.assertEqual(list(output_repo_root.rglob("*.yaml")), [])
+
+        with self.subTest(case="missing_outcome_destination_supplemental"):
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp_root = Path(tmp).resolve(strict=True)
+                _, staging_dir, output_repo_root, _ = (
+                    self._make_publication_dirs(tmp_root, "no_outcome_dest")
+                )
+                _, prep = self._prepare_synthetic_subject(
+                    subject_id="R6", staging_dir=staging_dir
+                )
+                with self.assertRaisesRegex(
+                    RfactorRecordPublicationError,
+                    "destination_precheck: supplemental record publication requires admitted_parent_root or outcome_dir",
+                ) as cm:
+                    onesar_records._publish_prepared_rfactor_records(
+                        prep,
+                        subject_id="R6",
+                        run_date="2026-11-06",
+                        staging_dir=staging_dir,
+                        admitted_parent_root=None,
+                        outcome_dir=None,
+                        output_repo_root=output_repo_root,
+                        issued_at="2026-11-07T14:20:00+00:00",
+                        repo_root=REPO_ROOT,
+                    )
+                self.assertEqual(
+                    cm.exception.failed_stage, "destination_precheck"
+                )
+                self.assertEqual(
+                    cm.exception.authoring_policy_issued_at,
+                    "2026-11-07T14:20:00+00:00",
+                )
+                self.assertEqual(list(output_repo_root.rglob("*.yaml")), [])
+
+        # 4. Poisoned registry_snapshots metadata is not trusted as an authority for issued_at or tools.
+        with self.subTest(case="poisoned_registry_snapshots_not_authoritative"):
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp_root = Path(tmp).resolve(strict=True)
+                parent_root, staging_dir, output_repo_root, _ = (
+                    self._make_publication_dirs(tmp_root, "poison_reg")
+                )
+                _, prep = self._prepare_synthetic_subject(
+                    subject_id="start", staging_dir=staging_dir
+                )
+                prep["registry_snapshots"] = {
+                    "issued_at": "1999-01-01T00:00:00+00:00",
+                    "tools": [{"id": "forged_tool"}],
+                }
+                # Missing explicit issued_at still refuses despite registry_snapshots["issued_at"].
+                with self.assertRaisesRegex(
+                    RfactorRecordPublicationError,
+                    "requires an explicit timezone-aware issued_at authoring-policy instant",
+                ):
+                    onesar_records._publish_prepared_rfactor_records(
+                        prep,
+                        subject_id="start",
+                        run_date="2026-11-06",
+                        staging_dir=staging_dir,
+                        admitted_parent_root=parent_root,
+                        output_repo_root=output_repo_root,
+                        issued_at=None,
+                        repo_root=REPO_ROOT,
+                    )
+                self.assertEqual(list(output_repo_root.rglob("*.yaml")), [])
+                # Explicit valid issued_at succeeds with intact eval_document despite poisoned registry_snapshots.
+                res_poison = onesar_records._publish_prepared_rfactor_records(
+                    prep,
+                    subject_id="start",
+                    run_date="2026-11-06",
+                    staging_dir=staging_dir,
+                    admitted_parent_root=parent_root,
+                    output_repo_root=output_repo_root,
+                    issued_at="2026-11-07T15:30:00+00:00",
+                    repo_root=REPO_ROOT,
+                )
+                self.assertTrue(res_poison["published"])
+                self.assertEqual(
+                    res_poison["authoring_policy_issued_at"],
+                    "2026-11-07T15:30:00+00:00",
+                )
+
+        # 5. Internal preparation (prepared_records=None) forwards default parent timing.finished_at_utc
+        # and explicit issued_at consistently to preparation and supplemental admission.
+        for sub_case, explicit_time, expected_policy_time in (
+            ("internal_default_time", None, "2026-11-07T00:03:25+00:00"),
+            (
+                "internal_explicit_time",
+                "2026-11-08T10:15:00-05:00",
+                "2026-11-08T15:15:00+00:00",
+            ),
+        ):
+            with self.subTest(case=sub_case):
+                with tempfile.TemporaryDirectory() as tmp:
+                    tmp_root = Path(tmp).resolve(strict=True)
+                    parent_root = tmp_root / f"parent_{sub_case}"
+                    parent_root.mkdir(parents=True, exist_ok=True)
+                    output_repo_root = tmp_root / f"out_{sub_case}"
+                    (
+                        output_repo_root
+                        / "data"
+                        / "coscientists"
+                        / "openscientist"
+                    ).mkdir(parents=True, exist_ok=True)
+                    synth = _create_synthetic_private_rfactor_assembly_inputs(
+                        subject_id="start",
+                        equal_hkl_sets=False,
+                    )
+                    res_internal = (
+                        onesar_records._publish_prepared_rfactor_records(
+                            parent_binding=synth["parent_binding"],
+                            phenix_bundle=synth["phenix_bundle"],
+                            refmac_bundle=synth["refmac_bundle"],
+                            admitted_parent_root=parent_root,
+                            output_repo_root=output_repo_root,
+                            issued_at=explicit_time,
+                            repo_root=REPO_ROOT,
+                        )
+                    )
+                    self.assertTrue(res_internal["published"])
+                    self.assertEqual(
+                        res_internal["authoring_policy_issued_at"],
+                        expected_policy_time,
+                    )
+                    self.assertEqual(
+                        res_internal["authoring_outcome"][
+                            "authoring_policy_issued_at"
+                        ],
+                        expected_policy_time,
+                    )
+                    self.assertEqual(
+                        res_internal["authoring_outcome"]["published_files"][
+                            "eval"
+                        ]["authoring_policy_issued_at"],
+                        expected_policy_time,
+                    )
+
+        # 6. #1079: Internal preparation refusal after valid policy selection preserves normalized
+        # authoring_policy_issued_at on the exception and persisted refusal outcome; invalid explicit
+        # issued_at fails before policy selection and keeps authoring_policy_issued_at as None.
+        for refusal_case, explicit_time, expected_policy_time in (
+            (
+                "issue_1079_internal_refusal_explicit_offset_time",
+                "2026-11-07T09:20:00-05:00",
+                "2026-11-07T14:20:00+00:00",
+            ),
+            (
+                "issue_1079_internal_refusal_default_parent_finish_time",
+                None,
+                "2026-11-07T00:03:25+00:00",
+            ),
+        ):
+            with self.subTest(case=refusal_case):
+                with tempfile.TemporaryDirectory() as tmp:
+                    tmp_root = Path(tmp).resolve(strict=True)
+                    parent_root = tmp_root / f"parent_{refusal_case}"
+                    parent_root.mkdir(parents=True, exist_ok=True)
+                    output_repo_root = tmp_root / f"out_{refusal_case}"
+                    (
+                        output_repo_root
+                        / "data"
+                        / "coscientists"
+                        / "openscientist"
+                    ).mkdir(parents=True, exist_ok=True)
+                    synth = _create_synthetic_private_rfactor_assembly_inputs(
+                        subject_id="start",
+                        equal_hkl_sets=False,
+                    )
+                    canonical_snap = onesar_records._select_live_t03_registry_and_tool_snapshots(
+                        issued_at=expected_policy_time,
+                        repo_root=REPO_ROOT,
+                    )
+                    override = copy.deepcopy(canonical_snap)
+                    override["tools"] = [
+                        row
+                        for row in canonical_snap["tools"]
+                        if row.get("id") != "Servalcat"
+                    ]
+                    with self.assertRaisesRegex(
+                        RfactorRecordPublicationError,
+                        r"record_preparation: registry_snapshots_override\.tools: missing required canonical Tool row\(s\): \['Servalcat'\]",
+                    ) as cm:
+                        onesar_records._publish_prepared_rfactor_records(
+                            parent_binding=synth["parent_binding"],
+                            phenix_bundle=synth["phenix_bundle"],
+                            refmac_bundle=synth["refmac_bundle"],
+                            admitted_parent_root=parent_root,
+                            output_repo_root=output_repo_root,
+                            issued_at=explicit_time,
+                            registry_snapshots_override=override,
+                            repo_root=REPO_ROOT,
+                        )
+                    err = cm.exception
+                    self.assertEqual(err.failed_stage, "record_preparation")
+                    self.assertEqual(
+                        err.authoring_policy_issued_at,
+                        expected_policy_time,
+                    )
+                    self.assertEqual(err.authoring_outcome["status"], "refused")
+                    self.assertFalse(err.authoring_outcome["published"])
+                    self.assertEqual(
+                        err.authoring_outcome["authoring_policy_issued_at"],
+                        expected_policy_time,
+                    )
+                    self.assertTrue(err.authoring_outcome["outcome_persisted"])
+                    outcome_path = Path(err.authoring_outcome_path)
+                    self.assertTrue(outcome_path.is_file())
+                    on_disk_outcome = json.loads(
+                        outcome_path.read_text(encoding="utf-8")
+                    )
+                    self.assertEqual(
+                        on_disk_outcome["authoring_policy_issued_at"],
+                        expected_policy_time,
+                    )
+                    self.assertEqual(
+                        list(output_repo_root.rglob("*.yaml")), []
+                    )
+
+        for bad_internal_case, bad_time, expected_err_regex in (
+            (
+                "issue_1079_internal_naive_issued_at",
+                "2026-11-07T14:20:00",
+                "record_preparation: issued_at: expected full timezone-qualified ISO-8601 timestamp",
+            ),
+            (
+                "issue_1079_internal_malformed_issued_at",
+                "invalid timestamp",
+                "record_preparation: issued_at: expected full timezone-qualified ISO-8601 timestamp",
+            ),
+            (
+                "issue_1079_internal_pre_run_date_issued_at",
+                "2026-11-05T23:59:59+00:00",
+                "record_preparation: issued_at UTC date '2026-11-05' precedes evaluation run_date '2026-11-06'",
+            ),
+        ):
+            with self.subTest(case=bad_internal_case):
+                with tempfile.TemporaryDirectory() as tmp:
+                    tmp_root = Path(tmp).resolve(strict=True)
+                    parent_root = tmp_root / f"parent_{bad_internal_case}"
+                    parent_root.mkdir(parents=True, exist_ok=True)
+                    output_repo_root = tmp_root / f"out_{bad_internal_case}"
+                    (
+                        output_repo_root
+                        / "data"
+                        / "coscientists"
+                        / "openscientist"
+                    ).mkdir(parents=True, exist_ok=True)
+                    synth = _create_synthetic_private_rfactor_assembly_inputs(
+                        subject_id="start",
+                        equal_hkl_sets=False,
+                    )
+                    with mock.patch.object(
+                        onesar_records,
+                        "_select_live_t03_registry_and_tool_snapshots",
+                        wraps=onesar_records._select_live_t03_registry_and_tool_snapshots,
+                    ) as select_spy:
+                        with self.assertRaisesRegex(
+                            RfactorRecordPublicationError,
+                            expected_err_regex,
+                        ) as cm:
+                            onesar_records._publish_prepared_rfactor_records(
+                                parent_binding=synth["parent_binding"],
+                                phenix_bundle=synth["phenix_bundle"],
+                                refmac_bundle=synth["refmac_bundle"],
+                                admitted_parent_root=parent_root,
+                                output_repo_root=output_repo_root,
+                                issued_at=bad_time,
+                                repo_root=REPO_ROOT,
+                            )
+                        self.assertEqual(select_spy.call_count, 0)
+                    err = cm.exception
+                    self.assertEqual(err.failed_stage, "record_preparation")
+                    self.assertIsNone(err.authoring_policy_issued_at)
+                    self.assertIsNone(
+                        err.authoring_outcome["authoring_policy_issued_at"]
+                    )
+                    outcome_path = Path(err.authoring_outcome_path)
+                    self.assertTrue(outcome_path.is_file())
+                    on_disk_outcome = json.loads(
+                        outcome_path.read_text(encoding="utf-8")
+                    )
+                    self.assertIsNone(
+                        on_disk_outcome["authoring_policy_issued_at"]
+                    )
+                    self.assertEqual(
+                        list(output_repo_root.rglob("*.yaml")), []
+                    )
 
 
 if __name__ == "__main__":

@@ -419,6 +419,163 @@ def _inspect_mtz_layout(
     }
 
 
+def _canonical_mtz_column_lookup_label(label: str) -> str:
+    """Apply CCP4 ``MtzColLookup`` alias normalization (``cmtzlib.c:697,727``)."""
+    return "M_ISYM" if label == "M/ISYM" else label
+
+
+def _parse_mtz_int_token(token: str, *, card: str, field: str) -> int:
+    if not token or not token.isascii():
+        raise ValueError(f"Malformed {field} token {token!r} in MTZ card {card!r}")
+    body = token[1:] if token[0] in "+-" else token
+    if not body or not body.isdecimal():
+        raise ValueError(f"Malformed {field} token {token!r} in MTZ card {card!r}")
+    return int(token, 10)
+
+
+def _parse_mtz_column_extension_card(rec: str) -> tuple[str, str, int]:
+    """Validate a ``COLSRC`` or ``COLGRP`` card per CCP4 ``cmtzlib.c:688-754,2828-2844``.
+
+    Enforces a conservative printable-ASCII (``0x20..0x7E``), space-separated
+    simple-token subset that excludes ``ccp4_parser`` non-space delimiters
+    (``,``, ``=``), comment leaders (``#``, ``!``), quote characters (``'``,
+    ``"``), and control/non-ASCII characters (``ccp4_parser.c:299,373,477``) so
+    that whitespace splitting cannot disagree with native CCP4 tokenization.
+    Returns ``(keyword, lookup_label, dataset_id)`` where ``dataset_id`` is parsed
+    from token index 3 for ``COLSRC`` and token index 5 for ``COLGRP``.
+    """
+    for ch in rec:
+        code = ord(ch)
+        if code < 0x20 or code > 0x7E or ch in ",=#!\"'":
+            raise ValueError(
+                f"MTZ column extension card contains unsupported control/non-ASCII "
+                f"or CCP4 parser metacharacter {ch!r}: {rec!r}"
+            )
+    tokens = [tok for tok in rec.strip(" ").split(" ") if tok]
+    if not tokens:
+        raise ValueError(f"Empty MTZ column extension card {rec!r}")
+    keyword = tokens[0]
+    if keyword.startswith("COLS"):
+        if keyword != "COLSRC" or len(tokens) != 4:
+            raise ValueError(
+                f"Malformed COLSRC card (expected 4 tokens): {rec!r}"
+            )
+        raw_label, colsource, dataset_token = tokens[1], tokens[2], tokens[3]
+        if not (1 <= len(raw_label) <= 30) or not (1 <= len(colsource) <= 36):
+            raise ValueError(
+                f"COLSRC label/source length out of CCP4 bounds in card {rec!r}"
+            )
+        dataset_id = _parse_mtz_int_token(
+            dataset_token, card=rec, field="COLSRC dataset ID"
+        )
+        return (
+            "COLSRC",
+            _canonical_mtz_column_lookup_label(raw_label),
+            dataset_id,
+        )
+    if keyword.startswith("COLG"):
+        if keyword != "COLGRP" or len(tokens) != 6:
+            raise ValueError(
+                f"Malformed COLGRP card (expected 6 tokens): {rec!r}"
+            )
+        raw_label, grpname, grptype, grpposn_token, dataset_token = tokens[1:6]
+        if (
+            not (1 <= len(raw_label) <= 30)
+            or not (1 <= len(grpname) <= 30)
+            or not (1 <= len(grptype) <= 4)
+        ):
+            raise ValueError(
+                f"COLGRP token length out of CCP4 bounds in card {rec!r}"
+            )
+        grpposn = _parse_mtz_int_token(
+            grpposn_token, card=rec, field="COLGRP group position"
+        )
+        if grpposn < 0:
+            raise ValueError(
+                f"COLGRP group position must be non-negative in card {rec!r}"
+            )
+        dataset_id = _parse_mtz_int_token(
+            dataset_token, card=rec, field="COLGRP dataset ID"
+        )
+        return (
+            "COLGRP",
+            _canonical_mtz_column_lookup_label(raw_label),
+            dataset_id,
+        )
+    raise ValueError(f"Unsupported MTZ column extension card {rec!r}")
+
+
+def _verify_projected_mtz_raw_header_and_trailer(
+    mtz_bytes: bytes,
+    *,
+    expected_column_pairs: set[tuple[str, int]],
+    expected_dataset_ids: set[int],
+) -> None:
+    """Independently verify raw 80-byte header cards and ``END``/``MTZENDOFHEADERS`` trailer."""
+    if len(mtz_bytes) < 160 or mtz_bytes[:4] != b"MTZ ":
+        raise ValueError("Projected MTZ is truncated or missing MTZ magic")
+    header_offset_words = struct.unpack("<I", mtz_bytes[4:8])[0]
+    header_byte_offset = (header_offset_words - 1) * 4
+    if (
+        header_byte_offset < 80
+        or header_byte_offset > len(mtz_bytes)
+        or (len(mtz_bytes) - header_byte_offset) % 80 != 0
+    ):
+        raise ValueError(
+            "Projected MTZ header byte offset or 80-byte card alignment is invalid"
+        )
+    raw_cards = [
+        mtz_bytes[pos : pos + 80].decode("ascii")
+        for pos in range(header_byte_offset, len(mtz_bytes), 80)
+    ]
+    if len(raw_cards) < 2:
+        raise ValueError("Projected MTZ header lacks END and MTZENDOFHEADERS trailer")
+    if raw_cards[-2] != "END".ljust(80) or raw_cards[-1] != "MTZENDOFHEADERS".ljust(80):
+        raise ValueError(
+            "Projected MTZ must terminate with exact 80-byte END then MTZENDOFHEADERS cards"
+        )
+    dataset_card_prefixes = ("PROJECT", "CRYSTAL", "DATASET", "DCELL", "DWAVEL", "DWAV")
+    seen_columns: set[tuple[str, int]] = set()
+    for card in raw_cards[:-2]:
+        stripped = card.strip()
+        if not stripped:
+            raise ValueError("Projected MTZ contains blank main-header card")
+        tokens = stripped.split()
+        keyword = tokens[0]
+        if keyword.startswith("END") or keyword.startswith("MTZE") or keyword.startswith("MTZH") or keyword.startswith("MTZB"):
+            raise ValueError(
+                f"Unexpected trailer/history/batch card inside projected main header: {card!r}"
+            )
+        if keyword.startswith("COLU"):
+            if keyword != "COLUMN" or len(tokens) != 6:
+                raise ValueError(f"Malformed COLUMN card in projected MTZ: {card!r}")
+            col_pair = (
+                _canonical_mtz_column_lookup_label(tokens[1]),
+                _parse_mtz_int_token(tokens[5], card=card, field="COLUMN dataset ID"),
+            )
+            seen_columns.add(col_pair)
+        elif keyword.startswith("COLS") or keyword.startswith("COLG"):
+            _, lookup_label, ext_ds_id = _parse_mtz_column_extension_card(card)
+            if (lookup_label, ext_ds_id) not in expected_column_pairs:
+                raise ValueError(
+                    f"Projected MTZ retained orphaned column extension card: {card!r}"
+                )
+        elif keyword in dataset_card_prefixes:
+            if len(tokens) < 2:
+                raise ValueError(f"Malformed dataset card in projected MTZ: {card!r}")
+            ds_id = _parse_mtz_int_token(
+                tokens[1], card=card, field=f"{keyword} dataset ID"
+            )
+            if ds_id not in expected_dataset_ids:
+                raise ValueError(
+                    f"Projected MTZ retained removed dataset card: {card!r}"
+                )
+    if seen_columns != expected_column_pairs:
+        raise ValueError(
+            f"Projected MTZ COLUMN associations {sorted(seen_columns)} != expected {sorted(expected_column_pairs)}"
+        )
+
+
 def project_observation_mtz(
     mtz_bytes: bytes,
     *,
@@ -429,8 +586,11 @@ def project_observation_mtz(
     """Project an MTZ byte stream to ``H, K, L, F-obs, SIGF-obs, R-free-flags``.
 
     Preserves all raw rows in exact row order, exact 4-byte IEEE-754 words, cell,
-    symmetry, resolution, ``VALM NAN``, and dataset metadata for the retained
-    observation dataset while stripping all archived model and map columns.
+    symmetry, resolution, ``VALM NAN``, dataset metadata for the retained
+    observation dataset, and ``COLSRC``/``COLGRP`` column extensions belonging to
+    the six emitted ``(column label, dataset ID)`` pairs while stripping all
+    archived model/map columns and their extensions and terminating the supported
+    zero-batch header with ``END`` followed by ``MTZENDOFHEADERS``.
     Verifies retention via :func:`t03_reflection_retention.audit_mtz_retention`.
     """
     layout = _inspect_mtz_layout(mtz_bytes, labels)
@@ -462,24 +622,62 @@ def project_observation_mtz(
             projected_chunks.append(mtz_bytes[word_start : word_start + 4])
     projected_data = b"".join(projected_chunks)
 
-    # Identify the COLUMN cards and dataset IDs for the six retained columns.
+    # Identify all input COLUMN associations and the six retained COLUMN cards.
     column_cards_by_name: dict[str, str] = {}
+    original_column_pairs: set[tuple[str, int]] = set()
+    emitted_column_pairs: set[tuple[str, int]] = set()
     retained_dataset_ids: set[str] = set()
+    retained_dataset_int_ids: set[int] = set()
     for rec in header:
-        if rec.startswith("COLUMN "):
-            tokens = rec.split()
-            if len(tokens) == 6 and tokens[1] in retained_names:
-                column_cards_by_name[tokens[1]] = rec
+        stripped = rec.strip()
+        if not stripped:
+            continue
+        tokens = stripped.split()
+        if tokens[0].startswith("COLU"):
+            if (
+                tokens[0] != "COLUMN"
+                or len(tokens) != 6
+                or not (1 <= len(tokens[1]) <= 30)
+            ):
+                raise ValueError(f"Malformed COLUMN card in MTZ header: {rec!r}")
+            col_name = tokens[1]
+            col_lookup = _canonical_mtz_column_lookup_label(col_name)
+            col_dataset_id = _parse_mtz_int_token(
+                tokens[5], card=rec, field="COLUMN dataset ID"
+            )
+            col_pair = (col_lookup, col_dataset_id)
+            if col_pair in original_column_pairs:
+                raise ValueError(
+                    f"Duplicate COLUMN (label, dataset_id) association {col_pair} in MTZ header"
+                )
+            original_column_pairs.add(col_pair)
+            if col_name in retained_names:
+                column_cards_by_name[col_name] = rec
                 retained_dataset_ids.add(tokens[5])
-    if set(column_cards_by_name) != set(retained_names):
+                retained_dataset_int_ids.add(col_dataset_id)
+                emitted_column_pairs.add(col_pair)
+    if (
+        set(column_cards_by_name) != set(retained_names)
+        or len(emitted_column_pairs) != len(retained_names)
+    ):
         raise ValueError(
             f"Could not locate all retained COLUMN cards {retained_names} in MTZ header"
         )
 
     dataset_card_prefixes = ("PROJECT", "CRYSTAL", "DATASET", "DCELL", "DWAVEL", "DWAV")
+    seen_extension_pairs: dict[str, set[tuple[str, int]]] = {
+        "COLSRC": set(),
+        "COLGRP": set(),
+    }
+    raw_header_cards = [
+        mtz_bytes[
+            header_byte_offset + idx * 80 : header_byte_offset + (idx + 1) * 80
+        ].decode("ascii")
+        for idx in range(len(header))
+    ]
     projected_cards: list[bytes] = []
     emitted_columns = False
-    for rec in header:
+    for rec, raw_rec in zip(header, raw_header_cards):
         stripped = rec.strip()
         if not stripped:
             continue
@@ -489,21 +687,43 @@ def project_observation_mtz(
             projected_cards.append(
                 _format_mtz_card(f"NCOL {len(retained_names):8d} {nrows:12d} {0:8d}")
             )
-        elif keyword == "NDIF" and retained_dataset_ids:
+        elif keyword == "NDIF" and retained_dataset_int_ids:
             projected_cards.append(
-                _format_mtz_card(f"NDIF {len(retained_dataset_ids):8d}")
+                _format_mtz_card(f"NDIF {len(retained_dataset_int_ids):8d}")
             )
-        elif keyword in dataset_card_prefixes and retained_dataset_ids:
-            if len(tokens) >= 2 and tokens[1] in retained_dataset_ids:
+        elif keyword in dataset_card_prefixes and retained_dataset_int_ids:
+            if len(tokens) < 2:
+                raise ValueError(f"Malformed {keyword} card in MTZ header: {rec!r}")
+            ds_id = _parse_mtz_int_token(
+                tokens[1], card=rec, field=f"{keyword} dataset ID"
+            )
+            if ds_id in retained_dataset_int_ids:
                 projected_cards.append(_format_mtz_card(rec))
         elif keyword == "COLUMN":
             if not emitted_columns:
                 for col_name in retained_names:
                     projected_cards.append(_format_mtz_card(column_cards_by_name[col_name]))
                 emitted_columns = True
+        elif keyword.startswith("COLS") or keyword.startswith("COLG"):
+            ext_kind, lookup_label, ext_dataset_id = _parse_mtz_column_extension_card(
+                raw_rec
+            )
+            ext_pair = (lookup_label, ext_dataset_id)
+            if ext_pair not in original_column_pairs:
+                raise ValueError(
+                    f"{ext_kind} card {raw_rec!r} references unresolved (column, dataset_id) {ext_pair}"
+                )
+            if ext_pair in seen_extension_pairs[ext_kind]:
+                raise ValueError(
+                    f"Duplicate {ext_kind} card for (column, dataset_id) {ext_pair}: {raw_rec!r}"
+                )
+            seen_extension_pairs[ext_kind].add(ext_pair)
+            if ext_pair in emitted_column_pairs:
+                projected_cards.append(_format_mtz_card(raw_rec.strip(" ")))
         else:
             projected_cards.append(_format_mtz_card(rec))
     projected_cards.append(_format_mtz_card("END"))
+    projected_cards.append(_format_mtz_card("MTZENDOFHEADERS"))
 
     projected_header_bytes = b"".join(projected_cards)
     new_header_offset = (80 + len(projected_data)) // 4 + 1
@@ -513,6 +733,12 @@ def project_observation_mtz(
         + mtz_bytes[8:80]
         + projected_data
         + projected_header_bytes
+    )
+
+    _verify_projected_mtz_raw_header_and_trailer(
+        projected_bytes,
+        expected_column_pairs=emitted_column_pairs,
+        expected_dataset_ids=retained_dataset_int_ids,
     )
 
     proj_layout = _inspect_mtz_layout(projected_bytes, labels)

@@ -1,0 +1,46 @@
+{
+  "actual_free": null,
+  "actual_work": null,
+  "algorithm": "mmtbx.model_vs_data.first_block_public_api",
+  "artifact_role": "partial_unverified_phenix_evidence",
+  "canonical_eval_qds_eligible": false,
+  "completed_stages": [],
+  "crystal_symmetry": null,
+  "current_phase": "reflection_file_input",
+  "expected_phenix_version": null,
+  "expected_resolved_prefix": null,
+  "extracted_pre_fmodel": null,
+  "extraction": null,
+  "failure": {
+    "constructor_log_limitation": null,
+    "exception_message": "'utf-8' codec can't decode byte 0xf5 in position 4: invalid start byte",
+    "exception_type": "UnicodeDecodeError",
+    "failed_phase": "reflection_file_input"
+  },
+  "final_effective": null,
+  "map_coefficients": null,
+  "map_export_verified": false,
+  "nonfinite_raw_values": [],
+  "phase_history": [
+    "parameter_validation",
+    "vendor_imports",
+    "runtime_environment_inspection",
+    "pdb_input",
+    "reflection_file_input"
+  ],
+  "resolution_ranges": null,
+  "reusable_cache_output": false,
+  "rfactor_replay_comparison": null,
+  "rfactor_replay_verified": false,
+  "runtime_environment": null,
+  "scales_and_rfactors": null,
+  "schema_version": 1,
+  "status": "failed_partial_unverified",
+  "xray_structure_invariance": null,
+  "xray_structure_snapshots_raw": {
+    "after_fmodel": null,
+    "after_model": null,
+    "before": null,
+    "invariance_verified": false
+  }
+}

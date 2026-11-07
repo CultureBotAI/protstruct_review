@@ -1,0 +1,27 @@
+=== [onesar_phenix_measure] FAILURE DIAGNOSTIC ===
+{
+  "constructor_log_limitation": null,
+  "exception_message": "'utf-8' codec can't decode byte 0xf5 in position 4: invalid start byte",
+  "exception_type": "UnicodeDecodeError",
+  "failed_phase": "reflection_file_input"
+}
+Traceback (most recent call last):
+  File "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/onesar_phenix_measure.py", line 1795, in <module>
+    raise SystemExit(main())
+  File "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/onesar_phenix_measure.py", line 1781, in main
+    measure_first_block_rfactors(
+  File "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/onesar_phenix_measure.py", line 965, in measure_first_block_rfactors
+    reflection_file = reflection_file_reader.any_reflection_file(
+  File "/Users/marcin/phenix-2.0-5936/lib/python3.9/site-packages/iotbx/reflection_file_reader.py", line 229, in __init__
+    self._file_type, self._file_content = try_all_readers(
+  File "/Users/marcin/phenix-2.0-5936/lib/python3.9/site-packages/iotbx/reflection_file_reader.py", line 111, in try_all_readers
+    content = cns_reflection_reader.cns_reflection_file(fh)
+  File "/Users/marcin/phenix-2.0-5936/lib/python3.9/site-packages/iotbx/cns/reflection_reader.py", line 319, in __init__
+    reader.load(self)
+  File "/Users/marcin/phenix-2.0-5936/lib/python3.9/site-packages/iotbx/cns/reflection_reader.py", line 254, in load
+    word = gNW(4)
+  File "/Users/marcin/phenix-2.0-5936/lib/python3.9/site-packages/iotbx/cns/reflection_reader.py", line 49, in getNextWord
+    line = self._readline()
+  File "/Users/marcin/phenix-2.0-5936/python.app/Contents/MacOS/../../../lib/python3.9/codecs.py", line 322, in decode
+    (result, consumed) = self._buffer_decode(data, self.errors, final)
+UnicodeDecodeError: 'utf-8' codec can't decode byte 0xf5 in position 4: invalid start byte

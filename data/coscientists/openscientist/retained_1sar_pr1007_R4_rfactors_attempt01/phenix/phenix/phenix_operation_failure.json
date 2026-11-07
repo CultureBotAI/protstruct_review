@@ -1,0 +1,58 @@
+{
+  "attempt_directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt01/phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/.attempt-e2d73bc31226779e-evkois7_",
+  "canonical_eval_qds_eligible": false,
+  "diagnostics_summary": {
+    "completed_raw_stages": [],
+    "current_phase": "reflection_file_input",
+    "failure": {
+      "constructor_log_limitation": null,
+      "exception_message": "'utf-8' codec can't decode byte 0xf5 in position 4: invalid start byte",
+      "exception_type": "UnicodeDecodeError",
+      "failed_phase": "reflection_file_input"
+    },
+    "partial_evidence_status": "failed_partial_unverified",
+    "status": "failed"
+  },
+  "exception_message": "Operation failed (1); retained attempt: /Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt01/phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/.attempt-e2d73bc31226779e-evkois7_",
+  "exception_type": "OperationFailed",
+  "failed_stage": "cached_phenix_operation",
+  "partial_evidence_summary": {
+    "artifact_role": "partial_unverified_phenix_evidence",
+    "completed_stages": [],
+    "current_phase": "reflection_file_input",
+    "failure": {
+      "constructor_log_limitation": null,
+      "exception_message": "'utf-8' codec can't decode byte 0xf5 in position 4: invalid start byte",
+      "exception_type": "UnicodeDecodeError",
+      "failed_phase": "reflection_file_input"
+    },
+    "map_export_verified": false,
+    "rfactor_replay_verified": false,
+    "status": "failed_partial_unverified"
+  },
+  "preflight_build_evidence_json_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt01/phenix/phenix/phenix_preflight_build_evidence.json",
+  "preflight_build_evidence_sha256": "7a3457ad1a72bcb7bbfdc2a7afcdd5bef865fd0229223cfd83af52bc5a07b7d8",
+  "retained_attempt_artifacts": {
+    "invocation_json": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt01/phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/.attempt-e2d73bc31226779e-evkois7_/invocation.json",
+      "sha256": "2c9ad8468f557ec101bcfeb95530392b77d3dc41b6b5d6243823aaa60d7d3d7b"
+    },
+    "phenix_diagnostics_json": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt01/phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/.attempt-e2d73bc31226779e-evkois7_/phenix_diagnostics.json",
+      "sha256": "a9c36562bba13b28f7815d174465d44a307fb83857830508340e22993cc78ddd"
+    },
+    "phenix_partial_evidence_json": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt01/phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/.attempt-e2d73bc31226779e-evkois7_/phenix_rfactors_partial_evidence.json",
+      "sha256": "8a7266d70fdf94fc17a29d2a5ee48e3c3f26a58bbc2e99b1ca20c8bdf399bf4f"
+    },
+    "stdout_log": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt01/phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/.attempt-e2d73bc31226779e-evkois7_/stdout.log",
+      "sha256": "f172fdf9368c61f9fbd4c937154d9e88c5769624de8095d45573b4c479df9d8d"
+    }
+  },
+  "returncode": null,
+  "reusable_cache_output": false,
+  "schema_version": 1,
+  "status": "failed",
+  "subject_id": "R4"
+}

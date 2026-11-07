@@ -68,6 +68,7 @@ def _build_synthetic_mtz(
         "SYMM X+1/2,-Y+1/2,-Z",
     ),
     valm: str = "VALM NAN",
+    extra_header_cards: tuple[str, ...] | list[str] = (),
 ) -> bytes:
     """Construct a synthetic little-endian MTZ byte stream for pure unit testing."""
     if columns is None:
@@ -120,7 +121,10 @@ def _build_synthetic_mtz(
         cards.append(_card(f"DWAVEL {d_id:8d}    1.00000"))
     for name, ctype, d_id in columns:
         cards.append(_card(f"COLUMN {name:<30s} {ctype} 0.0 100.0 {d_id}"))
+    for extra_card in extra_header_cards:
+        cards.append(_card(extra_card))
     cards.append(_card("END"))
+    cards.append(_card("MTZENDOFHEADERS"))
 
     preamble = (
         b"MTZ "
@@ -129,6 +133,58 @@ def _build_synthetic_mtz(
         + b"\x00" * 68
     )
     return preamble + data_bytes + b"".join(cards)
+
+
+def _parse_raw_mtz_header_and_trailer(mtz_bytes: bytes) -> dict[str, Any]:
+    """Independently scan all 80-byte MTZ header/trailer cards through EOF without _mtz_headers."""
+    if len(mtz_bytes) < 160 or mtz_bytes[:4] != b"MTZ ":
+        raise AssertionError("Invalid MTZ magic or truncated stream")
+    header_offset_words = struct.unpack("<I", mtz_bytes[4:8])[0]
+    header_byte_offset = (header_offset_words - 1) * 4
+    if (len(mtz_bytes) - header_byte_offset) % 80 != 0:
+        raise AssertionError("Header region is not a multiple of 80 bytes")
+    raw_cards_bytes = [
+        mtz_bytes[pos : pos + 80]
+        for pos in range(header_byte_offset, len(mtz_bytes), 80)
+    ]
+    raw_cards_text = [card.decode("ascii") for card in raw_cards_bytes]
+    end_indices = [
+        idx for idx, card in enumerate(raw_cards_text) if card.strip() == "END"
+    ]
+    if len(end_indices) != 1:
+        raise AssertionError(f"Expected exactly one END card, got {end_indices}")
+    end_idx = end_indices[0]
+    main_cards_bytes = raw_cards_bytes[:end_idx]
+    main_cards_text = raw_cards_text[:end_idx]
+    trailer_cards_bytes = raw_cards_bytes[end_idx:]
+    trailer_cards_text = raw_cards_text[end_idx:]
+    column_pairs = [
+        (tokens[1], int(tokens[5]))
+        for card in main_cards_text
+        for tokens in [card.split()]
+        if tokens and tokens[0] == "COLUMN"
+    ]
+    colsrc_cards = [
+        card
+        for card in main_cards_bytes
+        if card.decode("ascii").lstrip().startswith("COLS")
+    ]
+    colgrp_cards = [
+        card
+        for card in main_cards_bytes
+        if card.decode("ascii").lstrip().startswith("COLG")
+    ]
+    return {
+        "header_byte_offset": header_byte_offset,
+        "raw_cards_bytes": raw_cards_bytes,
+        "main_cards_bytes": main_cards_bytes,
+        "main_cards_text": main_cards_text,
+        "trailer_cards_bytes": trailer_cards_bytes,
+        "trailer_cards_text": trailer_cards_text,
+        "column_pairs": column_pairs,
+        "colsrc_cards": colsrc_cards,
+        "colgrp_cards": colgrp_cards,
+    }
 
 
 def _build_synthetic_map_mtz_pair(
@@ -861,6 +917,59 @@ class TestMtzProjectionAndHklLedger(unittest.TestCase):
             self.assertEqual(len(row["sigf_obs_word_hex"]), 8)
             self.assertEqual(len(row["r_free_flag_word_hex"]), 8)
 
+        # Independent raw-header and byte-for-byte word verification (#1099, #1100):
+        orig_raw = _parse_raw_mtz_header_and_trailer(mtz_bytes)
+        proj_raw = _parse_raw_mtz_header_and_trailer(projected_bytes)
+        expected_pairs = [
+            ("H", 1),
+            ("K", 1),
+            ("L", 1),
+            ("F-obs", 1),
+            ("SIGF-obs", 1),
+            ("R-free-flags", 1),
+        ]
+        self.assertEqual(proj_raw["column_pairs"], expected_pairs)
+        self.assertEqual(
+            proj_raw["trailer_cards_bytes"],
+            [_card("END"), _card("MTZENDOFHEADERS")],
+        )
+        self.assertEqual(len(orig_raw["colsrc_cards"]), 16)
+        self.assertEqual(len(proj_raw["colsrc_cards"]), 6)
+        self.assertEqual(proj_raw["colgrp_cards"], [])
+        orig_retained_colsrc = [
+            card
+            for card in orig_raw["colsrc_cards"]
+            if (
+                card.decode("ascii").split()[1],
+                int(card.decode("ascii").split()[3]),
+            )
+            in set(expected_pairs)
+        ]
+        self.assertEqual(proj_raw["colsrc_cards"], orig_retained_colsrc)
+        self.assertEqual(
+            [
+                (
+                    card.decode("ascii").split()[1],
+                    int(card.decode("ascii").split()[3]),
+                )
+                for card in proj_raw["colsrc_cards"]
+            ],
+            expected_pairs,
+        )
+        orig_col_names = [label for label, _ in orig_raw["column_pairs"]]
+        orig_col_indices = [
+            orig_col_names.index(label) for label, _ in expected_pairs
+        ]
+        expected_proj_data = b"".join(
+            mtz_bytes[80 + row_idx * 64 + col_idx * 4 : 80 + row_idx * 64 + col_idx * 4 + 4]
+            for row_idx in range(7248)
+            for col_idx in orig_col_indices
+        )
+        self.assertEqual(
+            projected_bytes[80 : proj_raw["header_byte_offset"]],
+            expected_proj_data,
+        )
+
     def test_synthetic_mtz_eligibility_zero_negative_nan_and_failure_modes(
         self,
     ) -> None:
@@ -973,6 +1082,298 @@ class TestMtzProjectionAndHklLedger(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "Non-integral Miller index"):
             onesar_rerun.build_input_hkl_ledger(frac_hkl_mtz)
+
+        # Synthetic COLSRC/COLGRP retention, removal (both retained and removed datasets),
+        # trailer verification, and malformed/unresolved extension rejection (#1099, #1100):
+        synth_raw_in = _parse_raw_mtz_header_and_trailer(mtz_bytes)
+        synth_raw_out = _parse_raw_mtz_header_and_trailer(proj_bytes)
+        self.assertEqual(
+            synth_raw_in["trailer_cards_bytes"],
+            [_card("END"), _card("MTZENDOFHEADERS")],
+        )
+        self.assertEqual(
+            synth_raw_out["trailer_cards_bytes"],
+            [_card("END"), _card("MTZENDOFHEADERS")],
+        )
+
+        ext_cols = [
+            ("H", "H", "1"),
+            ("K", "H", "1"),
+            ("L", "H", "1"),
+            ("F-obs", "F", "1"),
+            ("SIGF-obs", "Q", "1"),
+            ("R-free-flags", "I", "1"),
+            ("FC", "F", "1"),
+            ("F-model", "F", "2"),
+            ("2FOFCWT", "F", "3"),
+        ]
+        retained_colsrc_cards = (
+            "COLSRC H                              iotbx_mtz_dump_1                         1",
+            "COLSRC F-obs                          iotbx_mtz_dump_4                         1",
+            "COLSRC SIGF-obs                       iotbx_mtz_dump_5                         1",
+            "COLSRC R-free-flags                   iotbx_mtz_dump_6                         1",
+        )
+        removed_colsrc_cards = (
+            "COLSRC FC                             removed_col_retained_ds                  1",
+            "COLSRC F-model                        removed_col_removed_ds2                  2",
+            "COLSRC 2FOFCWT                        removed_col_removed_ds3                  3",
+        )
+        retained_colgrp_cards = (
+            "COLGRP F-obs                          obs_fsigf                      F    0    1",
+            "COLGRP SIGF-obs                       obs_fsigf                      F    1    1",
+            "COLGRP R-free-flags                   free_flags                     I    0    1",
+        )
+        removed_colgrp_cards = (
+            "COLGRP FC                             calc_group_retained_ds         F    0    1",
+            "COLGRP F-model                        model_group_removed_ds2        F    0    2",
+            "COLGRP 2FOFCWT                        map_group_removed_ds3          F    0    3",
+        )
+        ext_rows = [
+            (1, 0, 0, 50.0, 2.0, 0.0, 49.0, 48.0, 51.0),
+            (0, 1, 0, 60.0, 2.5, 1.0, 59.0, 58.0, 61.0),
+        ]
+        ext_mtz = _build_synthetic_mtz(
+            ext_rows,
+            columns=ext_cols,
+            datasets=datasets,
+            extra_header_cards=(
+                *retained_colsrc_cards,
+                *removed_colsrc_cards,
+                *retained_colgrp_cards,
+                *removed_colgrp_cards,
+            ),
+        )
+        ext_proj_bytes, ext_proj_summary = onesar_rerun.project_observation_mtz(
+            ext_mtz
+        )
+        self.assertEqual(ext_proj_summary["input_ncols"], 9)
+        self.assertEqual(ext_proj_summary["projected_ncols"], 6)
+        self.assertEqual(ext_proj_summary["retained_dataset_ids"], ["1"])
+        ext_proj_raw = _parse_raw_mtz_header_and_trailer(ext_proj_bytes)
+        self.assertEqual(
+            ext_proj_raw["column_pairs"],
+            [
+                ("H", 1),
+                ("K", 1),
+                ("L", 1),
+                ("F-obs", 1),
+                ("SIGF-obs", 1),
+                ("R-free-flags", 1),
+            ],
+        )
+        self.assertEqual(
+            ext_proj_raw["colsrc_cards"],
+            [_card(c) for c in retained_colsrc_cards],
+        )
+        self.assertEqual(
+            ext_proj_raw["colgrp_cards"],
+            [_card(c) for c in retained_colgrp_cards],
+        )
+        self.assertEqual(
+            ext_proj_raw["trailer_cards_bytes"],
+            [_card("END"), _card("MTZENDOFHEADERS")],
+        )
+        for main_card in ext_proj_raw["main_cards_text"]:
+            tokens = main_card.split()
+            self.assertNotIn("FC", tokens)
+            self.assertNotIn("F-model", tokens)
+            self.assertNotIn("2FOFCWT", tokens)
+            if tokens[0] in ("PROJECT", "CRYSTAL", "DATASET", "DCELL", "DWAVEL", "DWAV"):
+                self.assertEqual(int(tokens[1]), 1)
+
+        for bad_ext_cards, bad_ext_regex in (
+            (
+                ("COLSRC NO_SUCH_COL                    src_1                                    1",),
+                "COLSRC card .* references unresolved \\(column, dataset_id\\)",
+            ),
+            (
+                ("COLGRP NO_SUCH_COL                    grp_1                          F    0    1",),
+                "COLGRP card .* references unresolved \\(column, dataset_id\\)",
+            ),
+            (
+                ("COLSRC F-obs                          src_wrong_ds                             2",),
+                "COLSRC card .* references unresolved \\(column, dataset_id\\)",
+            ),
+            (
+                ("COLGRP F-obs                          grp_wrong_ds                   F    0    2",),
+                "COLGRP card .* references unresolved \\(column, dataset_id\\)",
+            ),
+            (
+                ("COLSRC FC                             src_wrong_removed_ds                     2",),
+                "COLSRC card .* references unresolved \\(column, dataset_id\\)",
+            ),
+            (
+                ("COLGRP FC                             grp_wrong_removed_ds           F    0    2",),
+                "COLGRP card .* references unresolved \\(column, dataset_id\\)",
+            ),
+            (
+                ("COLSRC F-obs                          missing_ds_token",),
+                "Malformed COLSRC card",
+            ),
+            (
+                ("COLGRP F-obs                          missing_ds_token               F    0",),
+                "Malformed COLGRP card",
+            ),
+            (
+                ("COLSRC F-obs                          bad_ds_int                             1.5",),
+                "Malformed COLSRC dataset ID token",
+            ),
+            (
+                ("COLGRP F-obs                          bad_ds_int                     F    0  abc",),
+                "Malformed COLGRP dataset ID token",
+            ),
+            (
+                ("COLGRP F-obs                          neg_pos                        F   -1    1",),
+                "COLGRP group position must be non-negative",
+            ),
+            (
+                (
+                    "COLSRC F-obs                          dup_1                                    1",
+                    "COLSRC F-obs                          dup_2                                    1",
+                ),
+                "Duplicate COLSRC card",
+            ),
+            (
+                (
+                    "COLGRP F-obs                          dup_grp_1                      F    0    1",
+                    "COLGRP F-obs                          dup_grp_2                      F    1    1",
+                ),
+                "Duplicate COLGRP card",
+            ),
+            (
+                ("COLSRC F-obs src,2 1",),
+                "unsupported control/non-ASCII or CCP4 parser metacharacter ','",
+            ),
+            (
+                ("COLGRP F-obs grp,2 F 0 1",),
+                "unsupported control/non-ASCII or CCP4 parser metacharacter ','",
+            ),
+            (
+                ("COLSRC F-obs src=2 1",),
+                "unsupported control/non-ASCII or CCP4 parser metacharacter '='",
+            ),
+            (
+                ("COLGRP F-obs grp=2 F 0 1",),
+                "unsupported control/non-ASCII or CCP4 parser metacharacter '='",
+            ),
+            (
+                ("COLSRC F-obs src#2 1",),
+                "unsupported control/non-ASCII or CCP4 parser metacharacter '#'",
+            ),
+            (
+                ("COLSRC F-obs src!2 1",),
+                "unsupported control/non-ASCII or CCP4 parser metacharacter '!'",
+            ),
+            (
+                ("COLGRP F-obs grp#2 F 0 1",),
+                "unsupported control/non-ASCII or CCP4 parser metacharacter '#'",
+            ),
+            (
+                ("COLGRP F-obs grp!2 F 0 1",),
+                "unsupported control/non-ASCII or CCP4 parser metacharacter '!'",
+            ),
+            (
+                ("COLSRC F-obs 'src' 1",),
+                "unsupported control/non-ASCII or CCP4 parser metacharacter \"'\"",
+            ),
+            (
+                ('COLSRC F-obs "src" 1',),
+                'unsupported control/non-ASCII or CCP4 parser metacharacter \'"\'',
+            ),
+            (
+                ("COLGRP F-obs 'grp' F 0 1",),
+                "unsupported control/non-ASCII or CCP4 parser metacharacter \"'\"",
+            ),
+            (
+                ('COLGRP F-obs "grp" F 0 1',),
+                'unsupported control/non-ASCII or CCP4 parser metacharacter \'"\'',
+            ),
+            (
+                ("COLSRC F-obs\tsrc 1",),
+                r"unsupported control/non-ASCII or CCP4 parser metacharacter '\\t'",
+            ),
+            (
+                ("COLSRC F-obs src\x01 1",),
+                r"unsupported control/non-ASCII or CCP4 parser metacharacter '\\x01'",
+            ),
+            (
+                ("COLSRC F-obs src\x7f 1",),
+                r"unsupported control/non-ASCII or CCP4 parser metacharacter '\\x7f'",
+            ),
+            (
+                ("COLGRP F-obs\tgrp F 0 1",),
+                r"unsupported control/non-ASCII or CCP4 parser metacharacter '\\t'",
+            ),
+            (
+                ("COLGRP F-obs grp\x01 F 0 1",),
+                r"unsupported control/non-ASCII or CCP4 parser metacharacter '\\x01'",
+            ),
+            (
+                ("COLGRP F-obs grp\x7f F 0 1",),
+                r"unsupported control/non-ASCII or CCP4 parser metacharacter '\\x7f'",
+            ),
+            (
+                ("COLSRC F-obs src 1\x0b",),
+                r"unsupported control/non-ASCII or CCP4 parser metacharacter '\\x0b'",
+            ),
+            (
+                ("COLSRC F-obs src 1\x0c",),
+                r"unsupported control/non-ASCII or CCP4 parser metacharacter '\\x0c'",
+            ),
+            (
+                ("COLGRP F-obs grp F 0 1\x0b",),
+                r"unsupported control/non-ASCII or CCP4 parser metacharacter '\\x0b'",
+            ),
+            (
+                ("COLGRP F-obs grp F 0 1\x0c",),
+                r"unsupported control/non-ASCII or CCP4 parser metacharacter '\\x0c'",
+            ),
+            (
+                ("\x0bCOLSRC F-obs src 1",),
+                r"unsupported control/non-ASCII or CCP4 parser metacharacter '\\x0b'",
+            ),
+            (
+                ("\x0cCOLSRC F-obs src 1",),
+                r"unsupported control/non-ASCII or CCP4 parser metacharacter '\\x0c'",
+            ),
+            (
+                ("\tCOLSRC F-obs src 1",),
+                r"unsupported control/non-ASCII or CCP4 parser metacharacter '\\t'",
+            ),
+            (
+                ("\x0bCOLGRP F-obs grp F 0 1",),
+                r"unsupported control/non-ASCII or CCP4 parser metacharacter '\\x0b'",
+            ),
+            (
+                ("\x0cCOLGRP F-obs grp F 0 1",),
+                r"unsupported control/non-ASCII or CCP4 parser metacharacter '\\x0c'",
+            ),
+            (
+                ("\tCOLGRP F-obs grp F 0 1",),
+                r"unsupported control/non-ASCII or CCP4 parser metacharacter '\\t'",
+            ),
+        ):
+            with self.subTest(bad_ext_cards=bad_ext_cards):
+                bad_ext_mtz = _build_synthetic_mtz(
+                    ext_rows,
+                    columns=ext_cols,
+                    datasets=datasets,
+                    extra_header_cards=bad_ext_cards,
+                )
+                with self.assertRaisesRegex(ValueError, bad_ext_regex):
+                    onesar_rerun.project_observation_mtz(bad_ext_mtz)
+        for non_ascii_card in (
+            "COLSRC F-obs src_\u00e9 1",
+            "COLGRP F-obs grp_\u00e9 F 0 1",
+        ):
+            with self.subTest(non_ascii_card=non_ascii_card):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "unsupported control/non-ASCII or CCP4 parser metacharacter",
+                ):
+                    onesar_rerun._parse_mtz_column_extension_card(
+                        non_ascii_card
+                    )
 
 
 class TestPhenixReconciliationAndPureHelpers(unittest.TestCase):

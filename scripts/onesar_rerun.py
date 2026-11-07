@@ -23,7 +23,10 @@ This module implements Phase 1 of the preregistered 1SAR rerun harness:
 
 from __future__ import annotations
 
+import argparse
 import copy
+import datetime as dt
+import errno
 import hashlib
 import json
 import math
@@ -31,7 +34,9 @@ import os
 import re
 import stat
 import struct
+import subprocess
 import sys
+import time
 import zipfile
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -248,18 +253,71 @@ def prepare_fresh_evidence_root(
     evidence_root: Path, *, repo_root: Path = REPO_ROOT
 ) -> Path:
     """Create a fresh repository-local directory, rejecting symlinks and existing paths."""
-    repo_candidate = Path(repo_root)
-    if repo_candidate.is_symlink():
-        raise ValueError(f"Repository root must not be a symlink: {repo_candidate}")
-    resolved_repo = repo_candidate.resolve(strict=True)
+    raw_repo_text = os.fspath(repo_root)
+    if (
+        not isinstance(raw_repo_text, str)
+        or not raw_repo_text.strip()
+        or "\x00" in raw_repo_text
+    ):
+        raise ValueError(f"Invalid repository root path: {repo_root!r}")
+    repo_candidate = Path(raw_repo_text)
+    if ".." in repo_candidate.parts or ".." in [
+        part for part in re.split(r"[/\\]+", raw_repo_text) if part
+    ]:
+        raise ValueError(
+            f"Repository root must not contain parent-directory traversal ('..'): {repo_root}"
+        )
+
+    raw_target_text = os.fspath(evidence_root)
+    if (
+        not isinstance(raw_target_text, str)
+        or not raw_target_text.strip()
+        or "\x00" in raw_target_text
+    ):
+        raise ValueError(f"Invalid evidence root path: {evidence_root!r}")
+    raw_target = Path(raw_target_text)
+    if ".." in raw_target.parts or ".." in [
+        part for part in re.split(r"[/\\]+", raw_target_text) if part
+    ]:
+        raise ValueError(
+            f"Evidence root must not contain parent-directory traversal ('..'): {evidence_root}"
+        )
+
+    if repo_candidate.is_absolute():
+        repo_walk = Path(repo_candidate.anchor)
+        repo_parts = [p for p in repo_candidate.parts[1:] if p not in ("", ".")]
+    else:
+        cwd_path = Path(os.getcwd())
+        repo_walk = Path(cwd_path.anchor)
+        repo_parts = [
+            p
+            for p in (*cwd_path.parts[1:], *repo_candidate.parts)
+            if p not in ("", ".")
+        ]
+    for part in repo_parts:
+        repo_walk = repo_walk / part
+        try:
+            repo_st = os.lstat(repo_walk)
+        except FileNotFoundError as exc:
+            raise ValueError(
+                f"Repository root does not exist: {repo_candidate}"
+            ) from exc
+        if stat.S_ISLNK(repo_st.st_mode):
+            raise ValueError(
+                f"Repository root must not be a symlink: {repo_walk}"
+            )
+        if not stat.S_ISDIR(repo_st.st_mode):
+            raise ValueError(
+                f"Repository root is not a directory: {repo_walk}"
+            )
+    resolved_repo = repo_walk.resolve(strict=True)
     if not resolved_repo.is_dir():
         raise ValueError(f"Repository root is not a directory: {resolved_repo}")
 
-    raw_target = Path(evidence_root)
     if not raw_target.is_absolute():
         raw_target = resolved_repo / raw_target
 
-    # Normalize lexical "." and ".." without resolving symlinks along the suffix.
+    # Normalize lexical "." without resolving symlinks along the suffix.
     normalized_target = Path(os.path.abspath(os.fspath(raw_target)))
     if (
         normalized_target == resolved_repo
@@ -3324,3 +3382,1824 @@ def run_phenix_rfactor_operation(
         reconciled_record, reconciled_json_path
     )
     return reconciled_record
+
+
+CLI_SUBJECT_ALIASES: dict[str, str] = {
+    "start": "start",
+    "R4": "R4",
+    "r4": "R4",
+    "R5": "R5",
+    "r5": "R5",
+    "R6": "R6",
+    "r6": "R6",
+}
+ALLOWED_CLI_MEASUREMENT_FAMILIES: tuple[str, ...] = ("rfactors",)
+DEFAULT_PRODUCER_OPERATION_TIMEOUT_SECONDS: float = 900.0
+PARENT_ATTEMPT_STARTED_FILENAME: str = "parent_attempt_started.json"
+PARENT_COMPLETED_CHECKPOINT_FILENAME: str = (
+    "parent_completed_execution_checkpoint.json"
+)
+PARENT_ATTEMPT_OUTCOME_FILENAME: str = "parent_attempt_outcome.json"
+PARENT_ATTEMPT_STARTED_STAGE: str = "parent_attempt_started_v1"
+PARENT_ATTEMPT_OUTCOME_STAGE: str = "parent_attempt_outcome_v1"
+
+
+def normalize_cli_subject_id(raw_subject: str) -> str:
+    """Normalize a single-subject CLI identifier and reject R7/r7/all or unknown subjects."""
+    if not isinstance(raw_subject, str) or raw_subject not in CLI_SUBJECT_ALIASES:
+        raise ValueError(
+            f"Unsupported subject {raw_subject!r}; allowed subjects are "
+            f"{sorted(ALLOWED_SUBJECTS)} (aliases r4, r5, r6 accepted; R7/r7/all rejected)"
+        )
+    return CLI_SUBJECT_ALIASES[raw_subject]
+
+
+def validate_cli_measurement_family(raw_family: str) -> str:
+    """Validate the single-family CLI measurement family (currently only ``rfactors``)."""
+    if (
+        not isinstance(raw_family, str)
+        or raw_family not in ALLOWED_CLI_MEASUREMENT_FAMILIES
+    ):
+        raise ValueError(
+            f"Unsupported measurement family {raw_family!r}; only "
+            f"{list(ALLOWED_CLI_MEASUREMENT_FAMILIES)} is supported"
+        )
+    return raw_family
+
+
+def _validate_operation_timeout(timeout: float) -> float:
+    """Validate that a per-producer operation timeout is a finite positive number."""
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
+        raise ValueError(
+            f"Operation timeout must be a finite positive number, got {timeout!r}"
+        )
+    timeout_val = float(timeout)
+    if not math.isfinite(timeout_val) or timeout_val <= 0.0:
+        raise ValueError(
+            f"Operation timeout must be finite and > 0, got {timeout!r}"
+        )
+    return timeout_val
+
+
+def _reject_nonfinite_json_constant(token: str) -> Any:
+    raise ValueError(f"Non-standard JSON constant {token!r} is not permitted")
+
+
+def _write_exclusive_parent_json_record(
+    payload: Mapping[str, Any],
+    target_path: Path,
+    *,
+    parent_root: Path,
+) -> dict[str, Any]:
+    """Persist a parent-owned JSON record once, exclusively, directly under ``parent_root``."""
+    parent_st = os.lstat(parent_root)
+    if stat.S_ISLNK(parent_st.st_mode) or not stat.S_ISDIR(parent_st.st_mode):
+        raise ValueError(
+            f"Parent evidence root must be a non-symlink directory: {parent_root}"
+        )
+    normalized_parent = parent_root.resolve(strict=True)
+    normalized_target = Path(os.path.abspath(os.fspath(target_path)))
+    if normalized_target.parent != normalized_parent:
+        raise ValueError(
+            f"Parent JSON record {normalized_target} must reside directly inside {normalized_parent}"
+        )
+    if os.path.lexists(normalized_target):
+        raise FileExistsError(
+            f"Refusing to overwrite existing parent JSON record: {normalized_target}"
+        )
+
+    encoded = (
+        json.dumps(
+            dict(payload),
+            indent=2,
+            sort_keys=True,
+            allow_nan=False,
+        )
+        + "\n"
+    ).encode("utf-8")
+
+    open_flags = (
+        os.O_WRONLY
+        | os.O_CREAT
+        | os.O_EXCL
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    fd = os.open(normalized_target, open_flags, 0o644)
+    primary_exc: BaseException | None = None
+    try:
+        view = memoryview(encoded)
+        written_total = 0
+        while written_total < len(view):
+            written = os.write(fd, view[written_total:])
+            if written <= 0:
+                raise OSError(f"Short write on {normalized_target}")
+            written_total += written
+        os.fsync(fd)
+    except BaseException as exc:
+        primary_exc = exc
+        raise
+    finally:
+        try:
+            os.close(fd)
+        except OSError:
+            if primary_exc is None:
+                raise
+
+    try:
+        dir_fd = os.open(
+            normalized_parent,
+            os.O_RDONLY | getattr(os, "O_DIRECTORY", 0),
+        )
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+    except OSError:
+        pass
+
+    target_st = os.lstat(normalized_target)
+    if stat.S_ISLNK(target_st.st_mode) or not stat.S_ISREG(target_st.st_mode):
+        raise ValueError(
+            f"Persisted parent JSON record is not a regular file: {normalized_target}"
+        )
+    reopened_bytes = normalized_target.read_bytes()
+    if reopened_bytes != encoded:
+        raise ValueError(
+            f"Reopened parent JSON record bytes disagree with written payload: {normalized_target}"
+        )
+    return {
+        "path": str(normalized_target),
+        "sha256": _sha256_bytes(reopened_bytes),
+        "size_bytes": len(reopened_bytes),
+        "persisted": True,
+    }
+
+
+def _inspect_regular_file_reference_under_root(
+    file_path: Path,
+    *,
+    root: Path,
+    inspection_errors: list[dict[str, Any]] | None = None,
+) -> dict[str, Any] | None:
+    """Inspect a candidate regular file inside ``root`` without following symlinks."""
+    try:
+        normalized_root = root.resolve(strict=True)
+        normalized_file = Path(os.path.abspath(os.fspath(file_path)))
+        if (
+            normalized_file == normalized_root
+            or not normalized_file.is_relative_to(normalized_root)
+        ):
+            return None
+        current = normalized_root
+        for part in normalized_file.relative_to(normalized_root).parts:
+            current = current / part
+            st = os.lstat(current)
+            if stat.S_ISLNK(st.st_mode):
+                return None
+        leaf_st = os.lstat(normalized_file)
+        if not stat.S_ISREG(leaf_st.st_mode):
+            return None
+        data = normalized_file.read_bytes()
+        return {
+            "path": str(normalized_file),
+            "sha256": _sha256_bytes(data),
+            "size_bytes": len(data),
+            "persisted": True,
+        }
+    except OSError as exc:
+        if inspection_errors is not None and exc.errno not in (
+            errno.ENOENT,
+            errno.ENOTDIR,
+        ):
+            inspection_errors.append(
+                {
+                    "path": str(file_path),
+                    "exception_type": type(exc).__name__,
+                    "exception_message": str(exc),
+                    "errno": getattr(exc, "errno", None),
+                }
+            )
+        return None
+
+
+def _build_inventory_inspection_error_record(
+    exc: BaseException,
+    *,
+    path: Path | str | None = None,
+) -> dict[str, Any]:
+    """Build a structured inventory inspection error dictionary without suppressing the failure."""
+    record: dict[str, Any] = {
+        "exception_type": type(exc).__name__,
+        "exception_message": str(exc),
+        "errno": getattr(exc, "errno", None),
+    }
+    if path is not None:
+        record["path"] = str(path)
+    return record
+
+
+def _probe_inventory_evidence_root(
+    evidence_root: Path,
+) -> tuple[bool | None, str, dict[str, Any] | None]:
+    """Probe a child evidence root without turning filesystem errors into confirmed absence."""
+    try:
+        root_is_symlink = bool(evidence_root.is_symlink())
+        root_exists = bool(evidence_root.exists())
+        if root_is_symlink:
+            return (
+                False,
+                "unavailable",
+                {
+                    "path": str(evidence_root),
+                    "exception_type": "ValueError",
+                    "exception_message": (
+                        f"Child evidence root must not be a symlink: {evidence_root}"
+                    ),
+                    "errno": None,
+                },
+            )
+        if root_exists:
+            evidence_root.resolve(strict=True)
+            return True, "available", None
+        return False, "available", None
+    except Exception as exc:
+        return (
+            None,
+            "unavailable",
+            _build_inventory_inspection_error_record(exc, path=evidence_root),
+        )
+
+
+def _bind_phenix_reconciled_manifest_reference(
+    phenix_evidence_root: Path,
+    phenix_result: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Bind the on-disk ``phenix_reconciled_manifest.json`` reference, rejecting cache ``success.json``."""
+    if not isinstance(phenix_result, Mapping):
+        raise ValueError(
+            f"PHENIX producer did not return a mapping, got {type(phenix_result).__name__}"
+        )
+    expected_reconciled_path = (
+        phenix_evidence_root / "phenix" / "phenix_reconciled_manifest.json"
+    )
+    cache_manifest_path_str = phenix_result.get("manifest_path")
+    if isinstance(cache_manifest_path_str, str) and cache_manifest_path_str.strip():
+        cache_manifest_path = Path(
+            os.path.abspath(os.fspath(cache_manifest_path_str))
+        )
+        if cache_manifest_path == Path(
+            os.path.abspath(os.fspath(expected_reconciled_path))
+        ):
+            raise ValueError(
+                "PHENIX producer manifest_path points to phenix_reconciled_manifest.json; "
+                "cache manifest and reconciled manifest must remain distinct"
+            )
+
+    ref = _inspect_regular_file_reference_under_root(
+        expected_reconciled_path, root=phenix_evidence_root
+    )
+    if ref is None:
+        raise FileNotFoundError(
+            f"Required PHENIX reconciled manifest is missing or not a regular file: "
+            f"{expected_reconciled_path}"
+        )
+
+    raw_text = expected_reconciled_path.read_text(encoding="utf-8")
+    loaded = json.loads(
+        raw_text,
+        parse_constant=_reject_nonfinite_json_constant,
+    )
+    if not isinstance(loaded, dict):
+        raise ValueError(
+            f"PHENIX reconciled manifest must be a JSON object: {expected_reconciled_path}"
+        )
+    for required_key in (
+        "schema_version",
+        "subject",
+        "mtz",
+        "staged_files",
+        "manifest_path",
+        "manifest_sha256",
+        "operation_manifest",
+        "reconciliation",
+    ):
+        if required_key not in loaded:
+            raise ValueError(
+                f"PHENIX reconciled manifest at {expected_reconciled_path} is missing "
+                f"required key {required_key!r} (cache success.json cannot substitute)"
+            )
+    if Path(os.path.abspath(str(loaded["manifest_path"]))) == Path(
+        os.path.abspath(os.fspath(expected_reconciled_path))
+    ):
+        raise ValueError(
+            "PHENIX reconciled manifest self-references its own path as cache manifest_path"
+        )
+    return ref
+
+
+def _bind_refmac_operation_manifest_reference(
+    refmac_evidence_root: Path,
+    refmac_result: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Bind the persisted REFMAC ``manifest_json`` reference while preserving fallback ancestry metadata."""
+    if not isinstance(refmac_result, Mapping):
+        raise ValueError(
+            f"REFMAC producer did not return a mapping, got {type(refmac_result).__name__}"
+        )
+    raw_manifest_ref = refmac_result.get("manifest_json")
+    if not isinstance(raw_manifest_ref, Mapping):
+        raise ValueError(
+            "REFMAC producer return value is missing required manifest_json reference mapping"
+        )
+    if (
+        "persisted" in raw_manifest_ref
+        and raw_manifest_ref.get("persisted") is not True
+    ):
+        raise ValueError(
+            f"REFMAC manifest_json reference is not persisted: {raw_manifest_ref!r}"
+        )
+    raw_path = raw_manifest_ref.get("path")
+    raw_sha = raw_manifest_ref.get("sha256")
+    raw_size = raw_manifest_ref.get("size_bytes")
+    if (
+        not isinstance(raw_path, str)
+        or not raw_path.strip()
+        or not isinstance(raw_sha, str)
+        or len(raw_sha) != 64
+        or isinstance(raw_size, bool)
+        or not isinstance(raw_size, int)
+        or raw_size < 0
+    ):
+        raise ValueError(
+            f"REFMAC manifest_json reference has invalid path/sha256/size_bytes: {raw_manifest_ref!r}"
+        )
+    manifest_path = Path(raw_path)
+    inspected = _inspect_regular_file_reference_under_root(
+        manifest_path, root=refmac_evidence_root
+    )
+    if inspected is None:
+        raise FileNotFoundError(
+            f"REFMAC operation manifest is missing or outside child root {refmac_evidence_root}: {manifest_path}"
+        )
+    if (
+        inspected["sha256"] != raw_sha
+        or inspected["size_bytes"] != raw_size
+    ):
+        raise ValueError(
+            f"REFMAC operation manifest on-disk digest/size mismatch at {manifest_path}: "
+            f"expected ({raw_sha}, {raw_size}), got ({inspected['sha256']}, {inspected['size_bytes']})"
+        )
+    raw_text = manifest_path.read_text(encoding="utf-8")
+    loaded = json.loads(
+        raw_text,
+        parse_constant=_reject_nonfinite_json_constant,
+    )
+    if not isinstance(loaded, dict):
+        raise ValueError(
+            f"REFMAC operation manifest must be a JSON object: {manifest_path}"
+        )
+    bound_ref = copy.deepcopy(dict(raw_manifest_ref))
+    bound_ref["path"] = inspected["path"]
+    bound_ref["sha256"] = inspected["sha256"]
+    bound_ref["size_bytes"] = inspected["size_bytes"]
+    bound_ref["persisted"] = True
+    return bound_ref
+
+
+def _collect_phenix_attempt_inventory(
+    phenix_evidence_root: Path,
+    phenix_result: Mapping[str, Any] | None,
+    reconciled_manifest_reference: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Collect a manifest-linked, non-recursive inventory of retained PHENIX child artifacts."""
+    known_candidates: dict[str, Path] = {
+        "input_admission_json": phenix_evidence_root
+        / "inputs"
+        / "input_admission.json",
+        "original_model_pdb": phenix_evidence_root
+        / "inputs"
+        / "original_model.pdb",
+        "original_data_mtz": phenix_evidence_root
+        / "inputs"
+        / "original_data.mtz",
+        "projected_observations_mtz": phenix_evidence_root
+        / "inputs"
+        / "projected_observations.mtz",
+        "input_hkl_ledger_json": phenix_evidence_root
+        / "inputs"
+        / "input_hkl_ledger.json",
+        "preflight_build_evidence_json": phenix_evidence_root
+        / "phenix"
+        / "phenix_preflight_build_evidence.json",
+        "phenix_build_admission_failure_json": phenix_evidence_root
+        / "phenix"
+        / "phenix_build_admission_failure.json",
+        "phenix_operation_parameters_json": phenix_evidence_root
+        / "phenix"
+        / "phenix_operation_parameters.json",
+        "phenix_operation_failure_json": phenix_evidence_root
+        / "phenix"
+        / "phenix_operation_failure.json",
+        "phenix_reconciled_manifest_json": phenix_evidence_root
+        / "phenix"
+        / "phenix_reconciled_manifest.json",
+    }
+    if isinstance(phenix_result, Mapping):
+        staged_files = phenix_result.get("staged_files")
+        if isinstance(staged_files, Mapping):
+            for sf_key in (
+                "original_model_pdb",
+                "original_data_mtz",
+                "projected_observations_mtz",
+                "input_hkl_ledger_json",
+            ):
+                sf_val = staged_files.get(sf_key)
+                if isinstance(sf_val, str) and sf_val.strip():
+                    known_candidates[sf_key] = Path(sf_val)
+
+        cache_artifacts = phenix_result.get("cache_artifacts")
+        if isinstance(cache_artifacts, Mapping):
+            cache_key_map = {
+                "manifest": "cache_manifest_json",
+                "stdout": "stdout_log",
+            }
+            for cache_key, cache_val in sorted(cache_artifacts.items()):
+                if (
+                    isinstance(cache_key, str)
+                    and isinstance(cache_val, str)
+                    and cache_val.strip()
+                ):
+                    inv_key = cache_key_map.get(cache_key, cache_key)
+                    known_candidates[inv_key] = Path(cache_val)
+
+        for result_key, inv_key in (
+            ("input_hkl_ledger_json_path", "input_hkl_ledger_json"),
+            (
+                "preflight_build_evidence_json_path",
+                "preflight_build_evidence_json",
+            ),
+            ("manifest_path", "cache_manifest_json"),
+            ("stdout_log_path", "stdout_log"),
+            ("phenix_rfactors_json_path", "phenix_rfactors_json"),
+            ("phenix_diagnostics_json_path", "phenix_diagnostics_json"),
+            (
+                "phenix_partial_evidence_json_path",
+                "phenix_partial_evidence_json",
+            ),
+            ("phx_maps_mtz_path", "phx_maps_mtz"),
+            ("phx_obs_pair_only_mtz_path", "phx_obs_pair_only_mtz"),
+        ):
+            val = phenix_result.get(result_key)
+            if isinstance(val, str) and val.strip():
+                known_candidates[inv_key] = Path(val)
+
+    if isinstance(reconciled_manifest_reference, Mapping) and isinstance(
+        reconciled_manifest_reference.get("path"), str
+    ):
+        reconciled_ref_path = reconciled_manifest_reference["path"].strip()
+        if reconciled_ref_path:
+            known_candidates["phenix_reconciled_manifest_json"] = Path(
+                reconciled_ref_path
+            )
+
+    evidence_root_exists, inventory_status, inspection_error = (
+        _probe_inventory_evidence_root(phenix_evidence_root)
+    )
+    candidate_inspection_errors: list[dict[str, Any]] = []
+    retained_attempt_artifacts_available = False
+    failure_manifest_inspected: dict[str, Any] | None = None
+    if evidence_root_exists is True and inspection_error is None:
+        failure_manifest_cand = known_candidates["phenix_operation_failure_json"]
+        failure_manifest_inspected = _inspect_regular_file_reference_under_root(
+            failure_manifest_cand,
+            root=phenix_evidence_root,
+            inspection_errors=candidate_inspection_errors,
+        )
+        if failure_manifest_inspected is not None:
+            try:
+                failure_doc = json.loads(
+                    Path(failure_manifest_inspected["path"]).read_text(
+                        encoding="utf-8"
+                    ),
+                    parse_constant=_reject_nonfinite_json_constant,
+                )
+            except Exception:
+                failure_doc = None
+            if isinstance(failure_doc, Mapping):
+                preflight_from_fail = failure_doc.get(
+                    "preflight_build_evidence_json_path"
+                )
+                if (
+                    isinstance(preflight_from_fail, str)
+                    and preflight_from_fail.strip()
+                ):
+                    known_candidates["preflight_build_evidence_json"] = Path(
+                        preflight_from_fail
+                    )
+                raw_retained_attempt = failure_doc.get(
+                    "retained_attempt_artifacts"
+                )
+                if isinstance(raw_retained_attempt, Mapping):
+                    retained_attempt_artifacts_available = True
+                    for art_key, art_entry in sorted(
+                        raw_retained_attempt.items()
+                    ):
+                        if (
+                            isinstance(art_key, str)
+                            and isinstance(art_entry, Mapping)
+                            and isinstance(art_entry.get("path"), str)
+                            and art_entry["path"].strip()
+                        ):
+                            art_path = Path(str(art_entry["path"]))
+                            known_candidates[art_key] = art_path
+                            if art_key == "manifest_json":
+                                known_candidates.setdefault(
+                                    "cache_manifest_json", art_path
+                                )
+
+    retained_files: dict[str, dict[str, Any]] = {}
+    if evidence_root_exists is True and inspection_error is None:
+        for key, candidate_path in sorted(known_candidates.items()):
+            inspected = _inspect_regular_file_reference_under_root(
+                candidate_path,
+                root=phenix_evidence_root,
+                inspection_errors=candidate_inspection_errors,
+            )
+            if inspected is not None:
+                retained_files[key] = inspected
+
+    if candidate_inspection_errors and inspection_error is None:
+        inspection_error = candidate_inspection_errors[0]
+        inventory_status = "unavailable"
+
+    if inspection_error is not None:
+        retained_attempt_artifacts_available = False
+        retained_attempt_artifacts_status = "unavailable"
+    elif retained_attempt_artifacts_available:
+        retained_attempt_artifacts_status = "available"
+    elif phenix_result is not None and failure_manifest_inspected is None:
+        retained_attempt_artifacts_status = "not_applicable"
+    else:
+        retained_attempt_artifacts_status = "unavailable"
+
+    return {
+        "evidence_root": str(phenix_evidence_root),
+        "evidence_root_exists": evidence_root_exists,
+        "inventory_status": inventory_status,
+        "inspection_error": inspection_error,
+        "reconciled_manifest_reference": (
+            copy.deepcopy(dict(reconciled_manifest_reference))
+            if isinstance(reconciled_manifest_reference, Mapping)
+            else None
+        ),
+        "retained_attempt_artifacts_available": retained_attempt_artifacts_available,
+        "retained_attempt_artifacts_status": retained_attempt_artifacts_status,
+        "retained_files": retained_files,
+    }
+
+
+def _collect_refmac_attempt_inventory(
+    refmac_evidence_root: Path,
+    refmac_result: Mapping[str, Any] | None,
+    operation_manifest_reference: Mapping[str, Any] | None,
+    refmac_exc: BaseException | None = None,
+) -> dict[str, Any]:
+    """Collect a manifest-linked, non-recursive inventory of retained REFMAC child artifacts."""
+    known_candidates: dict[str, Path] = {
+        "input_admission_json": refmac_evidence_root
+        / "inputs"
+        / "input_admission.json",
+        "original_model_pdb": refmac_evidence_root
+        / "inputs"
+        / "original_model.pdb",
+        "original_data_mtz": refmac_evidence_root
+        / "inputs"
+        / "original_data.mtz",
+        "projected_observations_mtz": refmac_evidence_root
+        / "inputs"
+        / "projected_observations.mtz",
+        "input_hkl_ledger_json": refmac_evidence_root
+        / "inputs"
+        / "input_hkl_ledger.json",
+        "refmac_keywords_txt": refmac_evidence_root
+        / "refmac"
+        / "refmac_keywords.txt",
+        "pre_execution_checkpoint_json": refmac_evidence_root
+        / "refmac"
+        / "refmac_pre_execution_checkpoint.json",
+        "post_execution_checkpoint_json": refmac_evidence_root
+        / "refmac"
+        / "refmac_post_execution_checkpoint.json",
+        "refmac_log": refmac_evidence_root / "refmac" / "refmac.log",
+        "refmac_xyzout_pdb": refmac_evidence_root
+        / "refmac"
+        / "refmac_xyzout.pdb",
+        "refmac_hklout_mtz": refmac_evidence_root
+        / "refmac"
+        / "refmac_hklout.mtz",
+        "refmac_xmlout_xml": refmac_evidence_root
+        / "refmac"
+        / "refmac_xmlout.xml",
+        "parsed_log_json": refmac_evidence_root
+        / "refmac"
+        / "refmac_parsed_log.json",
+        "xmlout_audit_json": refmac_evidence_root
+        / "refmac"
+        / "refmac_xmlout_audit.json",
+        "hklout_raw_export_json": refmac_evidence_root
+        / "refmac"
+        / "refmac_hklout_raw_export.json",
+        "hklout_audit_json": refmac_evidence_root
+        / "refmac"
+        / "refmac_hklout_audit.json",
+        "xyzout_audit_json": refmac_evidence_root
+        / "refmac"
+        / "refmac_xyzout_audit.json",
+        "diagnostics_json": refmac_evidence_root
+        / "refmac"
+        / "refmac_diagnostics.json",
+        "operation_manifest_json": refmac_evidence_root
+        / "refmac"
+        / "refmac_operation_manifest.json",
+    }
+
+    if refmac_exc is not None:
+        exc_manifest_path = getattr(refmac_exc, "manifest_path", None)
+        if exc_manifest_path is not None:
+            known_candidates["operation_manifest_json"] = Path(
+                os.fspath(exc_manifest_path)
+            )
+        exc_diag_path = getattr(refmac_exc, "diagnostics_path", None)
+        if exc_diag_path is not None:
+            known_candidates["diagnostics_json"] = Path(
+                os.fspath(exc_diag_path)
+            )
+
+    if isinstance(operation_manifest_reference, Mapping) and isinstance(
+        operation_manifest_reference.get("path"), str
+    ):
+        known_candidates["operation_manifest_json"] = Path(
+            str(operation_manifest_reference["path"])
+        )
+
+    evidence_root_exists, inventory_status, inspection_error = (
+        _probe_inventory_evidence_root(refmac_evidence_root)
+    )
+    candidate_inspection_errors: list[dict[str, Any]] = []
+
+    payload_source: Mapping[str, Any] | None = None
+    if isinstance(refmac_result, Mapping):
+        payload_source = refmac_result
+    elif refmac_exc is not None and isinstance(
+        getattr(refmac_exc, "manifest_payload", None), Mapping
+    ):
+        payload_source = getattr(refmac_exc, "manifest_payload")
+    elif evidence_root_exists is True and inspection_error is None:
+        inspected_op_manifest = _inspect_regular_file_reference_under_root(
+            known_candidates["operation_manifest_json"],
+            root=refmac_evidence_root,
+            inspection_errors=candidate_inspection_errors,
+        )
+        if inspected_op_manifest is not None:
+            try:
+                loaded_op_doc = json.loads(
+                    Path(inspected_op_manifest["path"]).read_text(
+                        encoding="utf-8"
+                    ),
+                    parse_constant=_reject_nonfinite_json_constant,
+                )
+                if isinstance(loaded_op_doc, Mapping):
+                    payload_source = loaded_op_doc
+            except Exception:
+                payload_source = None
+
+    retained_attempt_artifacts_available = False
+    if isinstance(payload_source, Mapping):
+        for ref_key, inv_key in (
+            ("manifest_json", "operation_manifest_json"),
+            ("diagnostics_json", "diagnostics_json"),
+            ("pre_execution_checkpoint_json", "pre_execution_checkpoint_json"),
+            (
+                "pre_execution_checkpoint_initial_json",
+                "pre_execution_checkpoint_initial_json",
+            ),
+            (
+                "pre_execution_checkpoint_recovery_json",
+                "pre_execution_checkpoint_recovery_json",
+            ),
+            ("post_execution_checkpoint_json", "post_execution_checkpoint_json"),
+            ("parsed_log_json", "parsed_log_json"),
+            ("xmlout_audit_json", "xmlout_audit_json"),
+            ("hklout_raw_export_json", "hklout_raw_export_json"),
+            ("hklout_audit_json", "hklout_audit_json"),
+            ("xyzout_audit_json", "xyzout_audit_json"),
+        ):
+            ref_obj = payload_source.get(ref_key)
+            if isinstance(ref_obj, Mapping) and isinstance(
+                ref_obj.get("path"), str
+            ):
+                known_candidates[inv_key] = Path(str(ref_obj["path"]))
+
+        raw_outputs = payload_source.get("raw_outputs")
+        if isinstance(raw_outputs, Mapping):
+            for raw_key, inv_key in (
+                ("log", "refmac_log"),
+                ("xyzout", "refmac_xyzout_pdb"),
+                ("hklout", "refmac_hklout_mtz"),
+                ("xmlout", "refmac_xmlout_xml"),
+            ):
+                raw_entry = raw_outputs.get(raw_key)
+                if (
+                    isinstance(raw_entry, Mapping)
+                    and isinstance(raw_entry.get("path"), str)
+                    and raw_entry["path"].strip()
+                ):
+                    known_candidates[inv_key] = Path(str(raw_entry["path"]))
+
+        paths_map = payload_source.get("paths")
+        if isinstance(paths_map, Mapping):
+            kw_path_val = paths_map.get("keywords_path")
+            if not (isinstance(kw_path_val, str) and kw_path_val.strip()):
+                kw_path_val = paths_map.get("keywords_file")
+            if isinstance(kw_path_val, str) and kw_path_val.strip():
+                known_candidates["refmac_keywords_txt"] = Path(
+                    str(kw_path_val)
+                )
+
+        raw_retained_attempt = payload_source.get("retained_attempt_artifacts")
+        if isinstance(raw_retained_attempt, Mapping):
+            retained_attempt_artifacts_available = True
+            for art_key, art_entry in sorted(raw_retained_attempt.items()):
+                if (
+                    isinstance(art_key, str)
+                    and isinstance(art_entry, Mapping)
+                    and isinstance(art_entry.get("path"), str)
+                    and art_entry["path"].strip()
+                ):
+                    known_candidates[art_key] = Path(str(art_entry["path"]))
+
+    retained_files: dict[str, dict[str, Any]] = {}
+    if evidence_root_exists is True and inspection_error is None:
+        for key, candidate_path in sorted(known_candidates.items()):
+            inspected = _inspect_regular_file_reference_under_root(
+                candidate_path,
+                root=refmac_evidence_root,
+                inspection_errors=candidate_inspection_errors,
+            )
+            if inspected is not None:
+                retained_files[key] = inspected
+
+    if candidate_inspection_errors and inspection_error is None:
+        inspection_error = candidate_inspection_errors[0]
+        inventory_status = "unavailable"
+
+    if inspection_error is not None:
+        retained_attempt_artifacts_available = False
+        retained_attempt_artifacts_status = "unavailable"
+    elif retained_attempt_artifacts_available or (
+        refmac_exc is not None and isinstance(payload_source, Mapping)
+    ):
+        retained_attempt_artifacts_status = "available"
+    elif refmac_result is not None and refmac_exc is None:
+        retained_attempt_artifacts_status = "not_applicable"
+    else:
+        retained_attempt_artifacts_status = "unavailable"
+
+    return {
+        "evidence_root": str(refmac_evidence_root),
+        "evidence_root_exists": evidence_root_exists,
+        "inventory_status": inventory_status,
+        "inspection_error": inspection_error,
+        "operation_manifest_reference": (
+            copy.deepcopy(dict(operation_manifest_reference))
+            if isinstance(operation_manifest_reference, Mapping)
+            else None
+        ),
+        "retained_attempt_artifacts_available": bool(
+            retained_attempt_artifacts_status == "available"
+        ),
+        "retained_attempt_artifacts_status": retained_attempt_artifacts_status,
+        "retained_files": retained_files,
+    }
+
+
+def _load_canary_dependencies() -> tuple[Any, Any]:
+    """Import ``onesar_refmac`` and ``onesar_records`` lazily to avoid circular initialization."""
+    import onesar_records as _onesar_records
+    import onesar_refmac as _onesar_refmac
+
+    return _onesar_refmac, _onesar_records
+
+
+def _attach_attempt_state_to_exception(
+    exc: BaseException,
+    outcome: Mapping[str, Any],
+    *,
+    outcome_record_reference: Mapping[str, Any] | None,
+    outcome_persistence_error: Mapping[str, Any] | None = None,
+    outcome_persistence_exception: BaseException | None = None,
+) -> None:
+    """Attach structured attempt outcome and stage/commit metadata to ``exc``."""
+    outcome_copy = copy.deepcopy(dict(outcome))
+    exc.attempt_outcome = outcome_copy  # type: ignore[attr-defined]
+    exc.attempt_outcome_reference = (  # type: ignore[attr-defined]
+        copy.deepcopy(dict(outcome_record_reference))
+        if isinstance(outcome_record_reference, Mapping)
+        else None
+    )
+    exc.outcome_persistence_error = (  # type: ignore[attr-defined]
+        copy.deepcopy(dict(outcome_persistence_error))
+        if isinstance(outcome_persistence_error, Mapping)
+        else None
+    )
+    exc.outcome_persistence_exception = outcome_persistence_exception  # type: ignore[attr-defined]
+    if (
+        getattr(exc, "failed_stage", None) is None
+        and outcome_copy.get("failed_stage") is not None
+    ):
+        exc.failed_stage = outcome_copy["failed_stage"]  # type: ignore[attr-defined]
+    if (
+        getattr(exc, "commit_state", None) is None
+        and outcome_copy.get("commit_state") is not None
+    ):
+        exc.commit_state = outcome_copy["commit_state"]  # type: ignore[attr-defined]
+    if getattr(exc, "committed", None) is None and "committed" in outcome_copy:
+        exc.committed = outcome_copy["committed"]  # type: ignore[attr-defined]
+    if getattr(exc, "published", None) is None and "published" in outcome_copy:
+        exc.published = outcome_copy["published"]  # type: ignore[attr-defined]
+    if (
+        getattr(exc, "status", None) is None
+        and outcome_copy.get("status") is not None
+    ):
+        exc.status = outcome_copy["status"]  # type: ignore[attr-defined]
+    if (
+        getattr(exc, "authoring_outcome", None) is None
+        and outcome_copy.get("authoring_outcome") is not None
+    ):
+        exc.authoring_outcome = copy.deepcopy(outcome_copy["authoring_outcome"])  # type: ignore[attr-defined]
+    if (
+        getattr(exc, "authoring_outcome_path", None) is None
+        and outcome_copy.get("authoring_outcome_path") is not None
+    ):
+        exc.authoring_outcome_path = outcome_copy["authoring_outcome_path"]  # type: ignore[attr-defined]
+    if (
+        getattr(exc, "provisional_outcome_path", None) is None
+        and outcome_copy.get("provisional_outcome_path") is not None
+    ):
+        exc.provisional_outcome_path = outcome_copy["provisional_outcome_path"]  # type: ignore[attr-defined]
+    if (
+        getattr(exc, "authoring_policy_issued_at", None) is None
+        and outcome_copy.get("authoring_policy_issued_at") is not None
+    ):
+        exc.authoring_policy_issued_at = outcome_copy["authoring_policy_issued_at"]  # type: ignore[attr-defined]
+    if (
+        getattr(exc, "cleanup_result", None) is None
+        and outcome_copy.get("cleanup_result") is not None
+    ):
+        exc.cleanup_result = copy.deepcopy(outcome_copy["cleanup_result"])  # type: ignore[attr-defined]
+    if (
+        getattr(exc, "intended_paths", None) is None
+        and outcome_copy.get("intended_paths") is not None
+    ):
+        exc.intended_paths = copy.deepcopy(outcome_copy["intended_paths"])  # type: ignore[attr-defined]
+    if (
+        getattr(exc, "scientific_refusal", None) is None
+        and outcome_copy.get("scientific_refusal") is not None
+    ):
+        exc.scientific_refusal = copy.deepcopy(outcome_copy["scientific_refusal"])  # type: ignore[attr-defined]
+
+
+def run_single_subject_rfactor_attempt(
+    evidence_out: Path | str,
+    subject_id: str,
+    *,
+    family: str = "rfactors",
+    repo_root: Path | str = REPO_ROOT,
+    output_repo_root: Path | str | None = None,
+    archive_path: Path | str | None = None,
+    timeout: float = DEFAULT_PRODUCER_OPERATION_TIMEOUT_SECONDS,
+    require_no_protstruct_overrides: bool = True,
+    phenix_runner: Callable[..., Any] | None = None,
+    refmac_runner: Callable[..., subprocess.CompletedProcess[str]] | None = None,
+    cli_argv: Sequence[str] | None = None,
+    started_at_utc_override: str | None = None,
+    checkpoint_finished_at_utc_override: str | None = None,
+    raise_on_failure: bool = False,
+) -> dict[str, Any]:
+    """Execute one single-subject R-factor attempt across PHENIX, REFMAC5, and the record layer.
+
+    Pre-admission validation (subject, family, timeout, ``PROTSTRUCT_*`` environment
+    override check, and fresh parent ``evidence_out`` boundary check) runs before
+    creating ``<parent A>`` or invoking any producer.
+
+    Once ``<parent A>`` is created:
+    1. Persists ``<parent A>/parent_attempt_started.json`` exclusively before Producer 1.
+    2. Runs Producer 1 (:func:`run_phenix_rfactor_operation`) on ``<parent A>/phenix``.
+       If Producer 1 fails, stops before Producer 2.
+    3. Runs Producer 2 (:func:`onesar_refmac.run_refmac_rfactor_operation`) on
+       ``<parent A>/refmac``.
+    4. Only when both producers return valid persisted manifests, builds the exact
+       14-key completed checkpoint via
+       :func:`onesar_records.build_parent_completed_execution_checkpoint_payload`
+       and persists it once, exclusively at
+       ``<parent A>/parent_completed_execution_checkpoint.json``.
+    5. Calls :func:`onesar_records.publish_retained_rfactor_records` once with the
+       retained references.
+    6. Persists ``<parent A>/parent_attempt_outcome.json`` exclusively across both
+       return and exception paths without mutating the completed execution checkpoint.
+    """
+    if not isinstance(require_no_protstruct_overrides, bool):
+        raise ValueError("require_no_protstruct_overrides must be a boolean")
+    normalized_subject_id = normalize_cli_subject_id(subject_id)
+    validated_family = validate_cli_measurement_family(family)
+    timeout_seconds = _validate_operation_timeout(timeout)
+
+    if require_no_protstruct_overrides:
+        _verify_no_protstruct_overrides()
+
+    _onesar_refmac, _onesar_records = _load_canary_dependencies()
+
+    start_monotonic = time.monotonic()
+    if started_at_utc_override is not None:
+        parsed_start = dt.datetime.fromisoformat(started_at_utc_override)
+        if parsed_start.tzinfo is None:
+            raise ValueError(
+                f"started_at_utc_override must be timezone-qualified: {started_at_utc_override!r}"
+            )
+        started_dt_utc = parsed_start.astimezone(dt.timezone.utc)
+        started_at_utc = started_at_utc_override
+    else:
+        started_dt_utc = dt.datetime.now(dt.timezone.utc)
+        started_at_utc = started_dt_utc.isoformat()
+    run_date = started_dt_utc.date().isoformat()
+
+    repo_root_path = Path(repo_root)
+    parent_root = prepare_fresh_evidence_root(
+        Path(evidence_out), repo_root=repo_root_path
+    )
+    resolved_repo_root = repo_root_path.resolve(strict=True)
+    effective_output_repo_root = (
+        Path(output_repo_root).resolve(strict=True)
+        if output_repo_root is not None
+        else resolved_repo_root
+    )
+    resolved_archive_path = (
+        Path(archive_path)
+        if archive_path is not None
+        else (resolved_repo_root / ARCHIVE_REL_PATH)
+    )
+
+    phenix_evidence_root = parent_root / "phenix"
+    refmac_evidence_root = parent_root / "refmac"
+
+    recorded_argv = (
+        [str(arg) for arg in cli_argv]
+        if cli_argv is not None
+        else [
+            str(Path(__file__).resolve()),
+            "--subject",
+            normalized_subject_id,
+            "--family",
+            validated_family,
+            "--evidence-out",
+            str(parent_root),
+            "--timeout",
+            str(timeout_seconds),
+        ]
+    )
+    subject_spec = resolve_subject_spec(normalized_subject_id)
+    mtz_spec = {
+        "member": MTZ_MEMBER,
+        "sha256": MTZ_SHA256,
+        "subject_ref": MTZ_SUBJECT_REF,
+    }
+
+    started_payload: dict[str, Any] = {
+        "schema_version": 1,
+        "record_stage": PARENT_ATTEMPT_STARTED_STAGE,
+        "argv": recorded_argv,
+        "subject_id": normalized_subject_id,
+        "subject": copy.deepcopy(subject_spec),
+        "family": validated_family,
+        "mtz": copy.deepcopy(mtz_spec),
+        "archive_path": str(resolved_archive_path),
+        "repo_root": str(resolved_repo_root),
+        "output_repo_root": str(effective_output_repo_root),
+        "parent_evidence_root": str(parent_root),
+        "phenix_evidence_root": str(phenix_evidence_root),
+        "refmac_evidence_root": str(refmac_evidence_root),
+        "producer_operation_timeout_seconds": timeout_seconds,
+        "require_no_protstruct_overrides": require_no_protstruct_overrides,
+        "started_at_utc": started_at_utc,
+        "run_date": run_date,
+    }
+    started_record_reference = _write_exclusive_parent_json_record(
+        started_payload,
+        parent_root / PARENT_ATTEMPT_STARTED_FILENAME,
+        parent_root=parent_root,
+    )
+
+    completed_steps: list[str] = ["parent_attempt_started"]
+    status: str = "failed"
+    published: bool | None = False
+    commit_state: str = "not_committed"
+    committed: bool | None = False
+    failed_stage: str | None = None
+    phenix_result: dict[str, Any] | None = None
+    refmac_result: dict[str, Any] | None = None
+    refmac_caught_exc: BaseException | None = None
+    phenix_reconciled_manifest_reference: dict[str, Any] | None = None
+    refmac_operation_manifest_reference: dict[str, Any] | None = None
+    completed_checkpoint_reference: dict[str, Any] | None = None
+    authoring_outcome: dict[str, Any] | None = None
+    authoring_outcome_path: str | None = None
+    provisional_outcome_path: str | None = None
+    authoring_policy_issued_at: str | None = None
+    cleanup_result: dict[str, Any] | None = None
+    intended_paths: dict[str, str | None] = {
+        "eval_path": None,
+        "qds_path": None,
+    }
+    scientific_refusal: dict[str, Any] | None = None
+    error_record: dict[str, Any] | None = None
+    active_exception: BaseException | None = None
+
+    current_stage = "record_identity_resolution"
+    try:
+        expected_identities = (
+            _onesar_records._resolve_rfactor_record_identities(
+                normalized_subject_id,
+                run_date=run_date,
+            )
+        )
+        intended_paths = {
+            "eval_path": str(
+                effective_output_repo_root
+                / str(expected_identities["eval_rel_path"])
+            ),
+            "qds_path": (
+                str(
+                    effective_output_repo_root
+                    / str(expected_identities["qds_rel_path"])
+                )
+                if expected_identities.get("qds_rel_path") is not None
+                else None
+            ),
+        }
+        completed_steps.append("record_identity_resolution")
+
+        current_stage = "phenix_rfactor_operation"
+        phenix_result = run_phenix_rfactor_operation(
+            phenix_evidence_root,
+            subject_id=normalized_subject_id,
+            repo_root=resolved_repo_root,
+            archive_path=Path(archive_path) if archive_path is not None else None,
+            timeout=timeout_seconds,
+            require_no_protstruct_overrides=require_no_protstruct_overrides,
+            runner=phenix_runner,
+        )
+        completed_steps.append("phenix_rfactor_operation")
+
+        current_stage = "phenix_reconciled_manifest_binding"
+        phenix_reconciled_manifest_reference = (
+            _bind_phenix_reconciled_manifest_reference(
+                phenix_evidence_root, phenix_result
+            )
+        )
+        completed_steps.append("phenix_reconciled_manifest_bound")
+
+        current_stage = "refmac_rfactor_operation"
+        try:
+            refmac_result = _onesar_refmac.run_refmac_rfactor_operation(
+                refmac_evidence_root,
+                subject_id=normalized_subject_id,
+                repo_root=resolved_repo_root,
+                archive_path=(
+                    Path(archive_path) if archive_path is not None else None
+                ),
+                timeout=timeout_seconds,
+                require_no_protstruct_overrides=require_no_protstruct_overrides,
+                runner=refmac_runner,
+            )
+        except BaseException as rm_exc:
+            refmac_caught_exc = rm_exc
+            raise
+        completed_steps.append("refmac_rfactor_operation")
+
+        current_stage = "refmac_operation_manifest_binding"
+        refmac_operation_manifest_reference = (
+            _bind_refmac_operation_manifest_reference(
+                refmac_evidence_root, refmac_result
+            )
+        )
+        completed_steps.append("refmac_operation_manifest_bound")
+
+        current_stage = "parent_completed_execution_checkpoint"
+        checkpoint_finished_at_utc = (
+            checkpoint_finished_at_utc_override
+            if checkpoint_finished_at_utc_override is not None
+            else dt.datetime.now(dt.timezone.utc).isoformat()
+        )
+        checkpoint_payload = (
+            _onesar_records.build_parent_completed_execution_checkpoint_payload(
+                subject_id=normalized_subject_id,
+                family=validated_family,
+                parent_evidence_root=parent_root,
+                phenix_evidence_root=phenix_evidence_root,
+                refmac_evidence_root=refmac_evidence_root,
+                phenix_reconciled_manifest=phenix_reconciled_manifest_reference,
+                refmac_operation_manifest=refmac_operation_manifest_reference,
+                started_at_utc=started_at_utc,
+                finished_at_utc=checkpoint_finished_at_utc,
+                run_date=run_date,
+            )
+        )
+        completed_checkpoint_reference = _write_exclusive_parent_json_record(
+            checkpoint_payload,
+            parent_root / PARENT_COMPLETED_CHECKPOINT_FILENAME,
+            parent_root=parent_root,
+        )
+        completed_steps.append("parent_completed_execution_checkpoint_written")
+
+        current_stage = "publish_retained_rfactor_records"
+        pub_result = _onesar_records.publish_retained_rfactor_records(
+            parent_root,
+            subject_id=normalized_subject_id,
+            checkpoint_reference=completed_checkpoint_reference,
+            phenix_reconciled_manifest_reference=phenix_reconciled_manifest_reference,
+            refmac_operation_manifest_reference=refmac_operation_manifest_reference,
+            expected_family=validated_family,
+            expected_run_date=run_date,
+            repo_root=resolved_repo_root,
+            output_repo_root=effective_output_repo_root,
+        )
+        completed_steps.append("publish_retained_rfactor_records")
+        if isinstance(pub_result, Mapping):
+            if isinstance(pub_result.get("authoring_outcome"), Mapping):
+                authoring_outcome = copy.deepcopy(
+                    dict(pub_result["authoring_outcome"])
+                )
+            if pub_result.get("authoring_outcome_path") is not None:
+                authoring_outcome_path = str(
+                    pub_result["authoring_outcome_path"]
+                )
+            elif (
+                isinstance(authoring_outcome, Mapping)
+                and authoring_outcome.get("outcome_path") is not None
+            ):
+                authoring_outcome_path = str(authoring_outcome["outcome_path"])
+            if pub_result.get("provisional_outcome_path") is not None:
+                provisional_outcome_path = str(
+                    pub_result["provisional_outcome_path"]
+                )
+            if pub_result.get("issued_at") is not None:
+                authoring_policy_issued_at = str(pub_result["issued_at"])
+            elif (
+                isinstance(authoring_outcome, Mapping)
+                and authoring_outcome.get("authoring_policy_issued_at") is not None
+            ):
+                authoring_policy_issued_at = str(
+                    authoring_outcome["authoring_policy_issued_at"]
+                )
+            if isinstance(pub_result.get("cleanup_result"), Mapping):
+                cleanup_result = copy.deepcopy(
+                    dict(pub_result["cleanup_result"])
+                )
+            elif isinstance(authoring_outcome, Mapping) and isinstance(
+                authoring_outcome.get("cleanup_result"), Mapping
+            ):
+                cleanup_result = copy.deepcopy(
+                    dict(authoring_outcome["cleanup_result"])
+                )
+            if isinstance(pub_result.get("intended_paths"), Mapping):
+                intended_paths = {
+                    "eval_path": (
+                        str(pub_result["intended_paths"]["eval_path"])
+                        if pub_result["intended_paths"].get("eval_path")
+                        is not None
+                        else None
+                    ),
+                    "qds_path": (
+                        str(pub_result["intended_paths"]["qds_path"])
+                        if pub_result["intended_paths"].get("qds_path")
+                        is not None
+                        else None
+                    ),
+                }
+            pub_commit_state = pub_result.get("commit_state") or (
+                authoring_outcome.get("commit_state")
+                if isinstance(authoring_outcome, Mapping)
+                else None
+            )
+            if pub_commit_state == "unknown":
+                status = "unknown"
+                published = None
+                commit_state = "unknown"
+                committed = None
+            elif (
+                pub_result.get("published") is True
+                or pub_commit_state == "committed"
+            ):
+                status = "published"
+                published = True
+                commit_state = "committed"
+                committed = True
+            else:
+                status = str(pub_result.get("status") or "refused")
+                published = False
+                commit_state = str(pub_commit_state or "not_committed")
+                committed = False
+        else:
+            status = "published"
+            published = True
+            commit_state = "committed"
+            committed = True
+
+    except BaseException as exc:
+        active_exception = exc
+        if isinstance(getattr(exc, "authoring_outcome", None), Mapping):
+            authoring_outcome = copy.deepcopy(
+                dict(getattr(exc, "authoring_outcome"))
+            )
+        if getattr(exc, "authoring_outcome_path", None) is not None:
+            authoring_outcome_path = str(
+                getattr(exc, "authoring_outcome_path")
+            )
+        elif (
+            isinstance(authoring_outcome, Mapping)
+            and authoring_outcome.get("outcome_path") is not None
+        ):
+            authoring_outcome_path = str(authoring_outcome["outcome_path"])
+
+        if getattr(exc, "provisional_outcome_path", None) is not None:
+            provisional_outcome_path = str(
+                getattr(exc, "provisional_outcome_path")
+            )
+        elif (
+            isinstance(authoring_outcome, Mapping)
+            and authoring_outcome.get("provisional_outcome_path") is not None
+        ):
+            provisional_outcome_path = str(
+                authoring_outcome["provisional_outcome_path"]
+            )
+
+        # Never fabricate authoring_policy_issued_at from the CLI wall clock.
+        if getattr(exc, "authoring_policy_issued_at", None) is not None:
+            authoring_policy_issued_at = str(
+                getattr(exc, "authoring_policy_issued_at")
+            )
+        elif (
+            isinstance(authoring_outcome, Mapping)
+            and authoring_outcome.get("authoring_policy_issued_at") is not None
+        ):
+            authoring_policy_issued_at = str(
+                authoring_outcome["authoring_policy_issued_at"]
+            )
+
+        if isinstance(getattr(exc, "cleanup_result", None), Mapping):
+            cleanup_result = copy.deepcopy(
+                dict(getattr(exc, "cleanup_result"))
+            )
+        elif isinstance(authoring_outcome, Mapping) and isinstance(
+            authoring_outcome.get("cleanup_result"), Mapping
+        ):
+            cleanup_result = copy.deepcopy(
+                dict(authoring_outcome["cleanup_result"])
+            )
+
+        if isinstance(getattr(exc, "intended_paths", None), Mapping):
+            raw_ip = getattr(exc, "intended_paths")
+            intended_paths = {
+                "eval_path": (
+                    str(raw_ip["eval_path"])
+                    if raw_ip.get("eval_path") is not None
+                    else None
+                ),
+                "qds_path": (
+                    str(raw_ip["qds_path"])
+                    if raw_ip.get("qds_path") is not None
+                    else None
+                ),
+            }
+        elif isinstance(authoring_outcome, Mapping) and isinstance(
+            authoring_outcome.get("intended_paths"), Mapping
+        ):
+            raw_ip = authoring_outcome["intended_paths"]
+            intended_paths = {
+                "eval_path": (
+                    str(raw_ip["eval_path"])
+                    if raw_ip.get("eval_path") is not None
+                    else None
+                ),
+                "qds_path": (
+                    str(raw_ip["qds_path"])
+                    if raw_ip.get("qds_path") is not None
+                    else None
+                ),
+            }
+
+        if isinstance(exc, _onesar_records.RefmacScientificAdmissionRefusedError):
+            scientific_refusal = copy.deepcopy(exc.refusal_record)
+        elif isinstance(
+            getattr(exc, "__cause__", None),
+            _onesar_records.RefmacScientificAdmissionRefusedError,
+        ):
+            scientific_refusal = copy.deepcopy(exc.__cause__.refusal_record)
+
+        exc_stage = getattr(exc, "failed_stage", None) or (
+            authoring_outcome.get("failed_stage")
+            if isinstance(authoring_outcome, Mapping)
+            else None
+        )
+        if isinstance(exc, _onesar_records.RefmacScientificAdmissionRefusedError):
+            failed_stage = str(exc_stage or "refmac_retained_verification")
+        elif current_stage == "refmac_rfactor_operation" and isinstance(
+            exc, _onesar_refmac.RefmacCollectorError
+        ):
+            failed_stage = f"refmac_rfactor_operation:{exc.failed_stage}"
+        elif exc_stage is not None and current_stage == "publish_retained_rfactor_records":
+            failed_stage = str(exc_stage)
+        else:
+            failed_stage = current_stage
+
+        exc_commit_state = getattr(exc, "commit_state", None) or (
+            authoring_outcome.get("commit_state")
+            if isinstance(authoring_outcome, Mapping)
+            else None
+        )
+        exc_committed_flag = getattr(exc, "committed", None)
+
+        is_system_exit = (
+            isinstance(exc, SystemExit)
+            or isinstance(getattr(exc, "__cause__", None), SystemExit)
+            or getattr(exc, "system_exit_code", None) is not None
+        )
+        is_qds_completeness = (
+            type(exc).__name__ == "QdsCompletenessError"
+            or (
+                getattr(exc, "__cause__", None) is not None
+                and type(exc.__cause__).__name__ == "QdsCompletenessError"
+            )
+        )
+
+        if (
+            exc_commit_state == "committed"
+            or exc_committed_flag is True
+            or (
+                isinstance(authoring_outcome, Mapping)
+                and authoring_outcome.get("published") is True
+            )
+        ):
+            commit_state = "committed"
+            committed = True
+            published = True
+            status = "published"
+        elif exc_commit_state == "unknown":
+            commit_state = "unknown"
+            committed = None
+            published = None
+            status = "unknown"
+        elif isinstance(exc, KeyboardInterrupt):
+            commit_state = str(exc_commit_state or "not_committed")
+            committed = False
+            published = False
+            status = "interrupted"
+        elif current_stage == "publish_retained_rfactor_records" and (
+            is_system_exit
+            or is_qds_completeness
+            or isinstance(exc, _onesar_records.RetainedReferenceError)
+            or (
+                isinstance(authoring_outcome, Mapping)
+                and authoring_outcome.get("status") == "refused"
+            )
+        ):
+            commit_state = str(exc_commit_state or "not_committed")
+            committed = False
+            published = False
+            status = "refused"
+        else:
+            commit_state = str(exc_commit_state or "not_committed")
+            committed = False
+            published = False
+            status = "failed"
+
+        system_exit_code: Any = None
+        if isinstance(exc, SystemExit):
+            system_exit_code = exc.code
+        elif isinstance(getattr(exc, "__cause__", None), SystemExit):
+            system_exit_code = exc.__cause__.code
+        elif getattr(exc, "system_exit_code", None) is not None:
+            system_exit_code = getattr(exc, "system_exit_code")
+
+        error_record = {
+            "exception_type": type(exc).__name__,
+            "exception_message": str(exc),
+            "cause_type": (
+                type(exc.__cause__).__name__
+                if getattr(exc, "__cause__", None) is not None
+                else None
+            ),
+            "cause_message": (
+                str(exc.__cause__)
+                if getattr(exc, "__cause__", None) is not None
+                else None
+            ),
+            "system_exit_code": system_exit_code,
+            "notes": [str(n) for n in getattr(exc, "__notes__", ())],
+        }
+
+    finished_at_utc = dt.datetime.now(dt.timezone.utc).isoformat()
+    elapsed_seconds = round(max(0.0, time.monotonic() - start_monotonic), 6)
+
+    try:
+        phenix_inventory = _collect_phenix_attempt_inventory(
+            phenix_evidence_root,
+            phenix_result,
+            phenix_reconciled_manifest_reference,
+        )
+    except Exception as inv_exc:
+        phenix_inventory = {
+            "evidence_root": str(phenix_evidence_root),
+            "evidence_root_exists": None,
+            "inventory_status": "unavailable",
+            "inspection_error": _build_inventory_inspection_error_record(
+                inv_exc, path=phenix_evidence_root
+            ),
+            "reconciled_manifest_reference": (
+                copy.deepcopy(dict(phenix_reconciled_manifest_reference))
+                if isinstance(phenix_reconciled_manifest_reference, Mapping)
+                else None
+            ),
+            "cache_manifest_reference": None,
+            "retained_attempt_artifacts_available": False,
+            "retained_attempt_artifacts_status": "unavailable",
+            "retained_files": {
+                "reconciled_manifest_json": None,
+                "cache_manifest_json": None,
+                "stdout_log": None,
+                "stderr_log": None,
+                "partial_json": None,
+                "verified_json": None,
+            },
+        }
+    try:
+        refmac_inventory = _collect_refmac_attempt_inventory(
+            refmac_evidence_root,
+            refmac_result,
+            refmac_operation_manifest_reference,
+            refmac_exc=refmac_caught_exc,
+        )
+    except Exception as inv_exc:
+        refmac_inventory = {
+            "evidence_root": str(refmac_evidence_root),
+            "evidence_root_exists": None,
+            "inventory_status": "unavailable",
+            "inspection_error": _build_inventory_inspection_error_record(
+                inv_exc, path=refmac_evidence_root
+            ),
+            "operation_manifest_reference": (
+                copy.deepcopy(dict(refmac_operation_manifest_reference))
+                if isinstance(refmac_operation_manifest_reference, Mapping)
+                else None
+            ),
+            "retained_attempt_artifacts_available": False,
+            "retained_attempt_artifacts_status": "unavailable",
+            "retained_files": {
+                "operation_manifest_json": None,
+                "stdout_log": None,
+                "stderr_log": None,
+                "keywords_file": None,
+                "xyzin_pdb": None,
+                "hklin_mtz": None,
+                "xyzout_pdb": None,
+                "hklout_mtz": None,
+            },
+        }
+
+    outcome_payload: dict[str, Any] = {
+        "schema_version": 1,
+        "record_stage": PARENT_ATTEMPT_OUTCOME_STAGE,
+        "argv": recorded_argv,
+        "subject_id": normalized_subject_id,
+        "subject": copy.deepcopy(subject_spec),
+        "family": validated_family,
+        "mtz": copy.deepcopy(mtz_spec),
+        "repo_root": str(resolved_repo_root),
+        "output_repo_root": str(effective_output_repo_root),
+        "parent_evidence_root": str(parent_root),
+        "phenix_evidence_root": str(phenix_evidence_root),
+        "refmac_evidence_root": str(refmac_evidence_root),
+        "producer_operation_timeout_seconds": timeout_seconds,
+        "status": status,
+        "published": published,
+        "commit_state": commit_state,
+        "committed": committed,
+        "failed_stage": failed_stage,
+        "completed_steps": list(completed_steps),
+        "started_at_utc": started_at_utc,
+        "finished_at_utc": finished_at_utc,
+        "run_date": run_date,
+        "elapsed_seconds": elapsed_seconds,
+        "authoring_policy_issued_at": authoring_policy_issued_at,
+        "started_record_reference": copy.deepcopy(started_record_reference),
+        "completed_checkpoint_reference": (
+            copy.deepcopy(completed_checkpoint_reference)
+            if completed_checkpoint_reference is not None
+            else None
+        ),
+        "phenix_reconciled_manifest_reference": (
+            copy.deepcopy(phenix_reconciled_manifest_reference)
+            if phenix_reconciled_manifest_reference is not None
+            else None
+        ),
+        "refmac_operation_manifest_reference": (
+            copy.deepcopy(refmac_operation_manifest_reference)
+            if refmac_operation_manifest_reference is not None
+            else None
+        ),
+        "phenix_inventory": phenix_inventory,
+        "refmac_inventory": refmac_inventory,
+        "authoring_outcome": authoring_outcome,
+        "authoring_outcome_path": authoring_outcome_path,
+        "provisional_outcome_path": provisional_outcome_path,
+        "cleanup_result": cleanup_result,
+        "intended_paths": intended_paths,
+        "scientific_refusal": scientific_refusal,
+        "error": error_record,
+    }
+
+    outcome_target_path = parent_root / PARENT_ATTEMPT_OUTCOME_FILENAME
+    result_with_ref = copy.deepcopy(outcome_payload)
+    result_with_ref["outcome_record_reference"] = None
+    result_with_ref["outcome_persistence_error"] = None
+    outcome_record_reference: dict[str, Any] | None = None
+    try:
+        outcome_record_reference = _write_exclusive_parent_json_record(
+            outcome_payload,
+            outcome_target_path,
+            parent_root=parent_root,
+        )
+    except BaseException as persistence_exc:
+        persistence_diagnostic: dict[str, Any] = {
+            "stage": "parent_attempt_outcome_persistence",
+            "target_path": str(outcome_target_path),
+            "persisted": False,
+            "exception_type": type(persistence_exc).__name__,
+            "exception_message": str(persistence_exc),
+            "errno": getattr(persistence_exc, "errno", None),
+        }
+        result_with_ref["outcome_record_reference"] = None
+        result_with_ref["outcome_persistence_error"] = copy.deepcopy(
+            persistence_diagnostic
+        )
+        if active_exception is not None:
+            if isinstance(
+                persistence_exc, KeyboardInterrupt
+            ) and not isinstance(active_exception, KeyboardInterrupt):
+                _attach_attempt_state_to_exception(
+                    persistence_exc,
+                    result_with_ref,
+                    outcome_record_reference=None,
+                    outcome_persistence_error=persistence_diagnostic,
+                    outcome_persistence_exception=persistence_exc,
+                )
+                raise persistence_exc from active_exception
+            active_exception.add_note(
+                "parent_attempt_outcome_persistence: failed to persist "
+                f"{outcome_target_path} ({type(persistence_exc).__name__}): "
+                f"{persistence_exc}"
+            )
+            _attach_attempt_state_to_exception(
+                active_exception,
+                result_with_ref,
+                outcome_record_reference=None,
+                outcome_persistence_error=persistence_diagnostic,
+                outcome_persistence_exception=persistence_exc,
+            )
+            raise active_exception
+
+        if result_with_ref.get("failed_stage") is None:
+            result_with_ref["failed_stage"] = (
+                "parent_attempt_outcome_persistence"
+            )
+        if result_with_ref.get("commit_state") not in ("committed", "unknown"):
+            if isinstance(persistence_exc, KeyboardInterrupt):
+                result_with_ref["status"] = "interrupted"
+            elif result_with_ref.get("status") != "refused":
+                result_with_ref["status"] = "failed"
+        if result_with_ref.get("error") is None:
+            result_with_ref["error"] = {
+                "exception_type": type(persistence_exc).__name__,
+                "exception_message": str(persistence_exc),
+                "cause_type": (
+                    type(persistence_exc.__cause__).__name__
+                    if getattr(persistence_exc, "__cause__", None) is not None
+                    else None
+                ),
+                "cause_message": (
+                    str(persistence_exc.__cause__)
+                    if getattr(persistence_exc, "__cause__", None) is not None
+                    else None
+                ),
+                "system_exit_code": (
+                    persistence_exc.code
+                    if isinstance(persistence_exc, SystemExit)
+                    else None
+                ),
+                "notes": [
+                    str(n) for n in getattr(persistence_exc, "__notes__", ())
+                ],
+            }
+        _attach_attempt_state_to_exception(
+            persistence_exc,
+            result_with_ref,
+            outcome_record_reference=None,
+            outcome_persistence_error=persistence_diagnostic,
+            outcome_persistence_exception=persistence_exc,
+        )
+        raise persistence_exc
+
+    result_with_ref["outcome_record_reference"] = outcome_record_reference
+    result_with_ref["outcome_persistence_error"] = None
+
+    if active_exception is not None:
+        _attach_attempt_state_to_exception(
+            active_exception,
+            result_with_ref,
+            outcome_record_reference=outcome_record_reference,
+            outcome_persistence_error=None,
+            outcome_persistence_exception=None,
+        )
+
+    if isinstance(active_exception, KeyboardInterrupt):
+        raise active_exception
+
+    if raise_on_failure and active_exception is not None:
+        raise active_exception
+
+    return result_with_ref
+
+
+def build_arg_parser() -> argparse.ArgumentParser:
+    """Build the thin single-subject, single-family 1SAR CLI parser."""
+    parser = argparse.ArgumentParser(
+        prog="onesar_rerun.py",
+        description=(
+            "Thin single-subject, single-family 1SAR R-factor execution and "
+            "retained-record verification harness."
+        ),
+    )
+    parser.add_argument(
+        "--subject",
+        required=True,
+        help=(
+            "Single preregistered trajectory subject to evaluate "
+            "(start, R4, R5, R6; lowercase aliases r4, r5, r6 accepted; "
+            "R7/r7/all rejected)."
+        ),
+    )
+    parser.add_argument(
+        "--family",
+        required=True,
+        help="Single measurement family to run (only 'rfactors' is supported).",
+    )
+    parser.add_argument(
+        "--evidence-out",
+        required=True,
+        type=Path,
+        help=(
+            "Fresh non-existing repository-local parent evidence directory "
+            "<parent A>."
+        ),
+    )
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=DEFAULT_PRODUCER_OPERATION_TIMEOUT_SECONDS,
+        help=(
+            "Finite positive per-producer operation timeout in seconds "
+            f"(default: {DEFAULT_PRODUCER_OPERATION_TIMEOUT_SECONDS})."
+        ),
+    )
+    parser.add_argument(
+        "--repo-root",
+        type=Path,
+        default=REPO_ROOT,
+        help="Repository root directory (default: current repository root).",
+    )
+    parser.add_argument(
+        "--archive",
+        type=Path,
+        default=None,
+        help="Optional override path to the verified 1SAR archive ZIP.",
+    )
+    return parser
+
+
+def parse_cli_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """Parse and validate single-subject CLI arguments."""
+    parser = build_arg_parser()
+    ns = parser.parse_args(list(argv) if argv is not None else None)
+    ns.subject = normalize_cli_subject_id(ns.subject)
+    ns.family = validate_cli_measurement_family(ns.family)
+    ns.timeout = _validate_operation_timeout(ns.timeout)
+    return ns
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Thin CLI entrypoint over :func:`run_single_subject_rfactor_attempt`."""
+    effective_argv = (
+        [str(arg) for arg in argv]
+        if argv is not None
+        else [str(arg) for arg in sys.argv[1:]]
+    )
+    try:
+        ns = parse_cli_args(effective_argv)
+    except SystemExit as exc:
+        if exc.code in (0, None):
+            return 0
+        return int(exc.code) if isinstance(exc.code, int) and exc.code != 0 else 2
+    except (ValueError, FileExistsError) as exc:
+        sys.stderr.write(
+            json.dumps(
+                {
+                    "status": "rejected_pre_admission",
+                    "error_type": type(exc).__name__,
+                    "error_message": str(exc),
+                },
+                sort_keys=True,
+            )
+            + "\n"
+        )
+        return 2
+
+    cli_record_argv = [str(Path(__file__).resolve()), *effective_argv]
+    try:
+        outcome = run_single_subject_rfactor_attempt(
+            ns.evidence_out,
+            ns.subject,
+            family=ns.family,
+            repo_root=ns.repo_root,
+            archive_path=ns.archive,
+            timeout=ns.timeout,
+            require_no_protstruct_overrides=True,
+            cli_argv=cli_record_argv,
+        )
+    except (Exception, SystemExit) as exc:
+        if isinstance(getattr(exc, "attempt_outcome", None), Mapping):
+            outcome = copy.deepcopy(dict(getattr(exc, "attempt_outcome")))
+        elif isinstance(exc, (ValueError, FileExistsError)):
+            sys.stderr.write(
+                json.dumps(
+                    {
+                        "status": "rejected_pre_admission",
+                        "error_type": type(exc).__name__,
+                        "error_message": str(exc),
+                    },
+                    sort_keys=True,
+                )
+                + "\n"
+            )
+            return 2
+        else:
+            raise
+
+    summary: dict[str, Any] = {
+        "status": outcome.get("status"),
+        "published": outcome.get("published"),
+        "commit_state": outcome.get("commit_state"),
+        "committed": outcome.get("committed"),
+        "subject_id": outcome.get("subject_id"),
+        "family": outcome.get("family"),
+        "run_date": outcome.get("run_date"),
+        "parent_evidence_root": outcome.get("parent_evidence_root"),
+        "failed_stage": outcome.get("failed_stage"),
+        "outcome_record_path": (
+            outcome["outcome_record_reference"]["path"]
+            if isinstance(outcome.get("outcome_record_reference"), Mapping)
+            else None
+        ),
+        "authoring_outcome_path": outcome.get("authoring_outcome_path"),
+    }
+    if outcome.get("outcome_persistence_error") is not None:
+        summary["outcome_persistence_error"] = copy.deepcopy(
+            outcome["outcome_persistence_error"]
+        )
+    if (
+        outcome.get("status") == "published"
+        and outcome.get("published") is True
+        and outcome.get("committed") is True
+        and outcome.get("error") is None
+        and outcome.get("outcome_persistence_error") is None
+        and isinstance(outcome.get("outcome_record_reference"), Mapping)
+        and outcome["outcome_record_reference"].get("persisted") is True
+    ):
+        sys.stdout.write(json.dumps(summary, sort_keys=True) + "\n")
+        return 0
+
+    sys.stderr.write(json.dumps(summary, sort_keys=True) + "\n")
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

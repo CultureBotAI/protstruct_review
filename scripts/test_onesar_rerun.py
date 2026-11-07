@@ -8,12 +8,14 @@ execution, zero vendor library imports, and zero network access.
 from __future__ import annotations
 
 import ast
+import contextlib
 import copy
 import hashlib
 import io
 import json
 import math
 import os
+import shutil
 import struct
 import subprocess
 import sys
@@ -24,7 +26,7 @@ import unittest
 import warnings
 import zipfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Mapping
 from unittest import mock
 
 _SCRIPTS_DIR = Path(__file__).resolve().parent
@@ -722,9 +724,14 @@ class TestFreshEvidenceRootBoundary(unittest.TestCase):
             )
             self.assertTrue(fresh.is_dir())
 
-            # Reusing an existing directory must fail with FileExistsError.
+            # Reusing an existing directory must fail with FileExistsError without mutating contents.
+            marker = fresh / "marker.txt"
+            marker.write_text("do not touch\n", encoding="utf-8")
             with self.assertRaises(FileExistsError):
                 onesar_rerun.prepare_fresh_evidence_root(fresh, repo_root=fake_repo)
+            self.assertEqual(
+                marker.read_text(encoding="utf-8"), "do not touch\n"
+            )
 
             # Repo root itself is rejected.
             with self.assertRaisesRegex(ValueError, "strict subdirectory"):
@@ -735,6 +742,25 @@ class TestFreshEvidenceRootBoundary(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "strict subdirectory"):
                 onesar_rerun.prepare_fresh_evidence_root(outside, repo_root=fake_repo)
 
+            # Raw '..' traversal segments in evidence_root or repo_root are rejected.
+            for bad_target in (
+                Path("runs/../escape"),
+                Path(f"{fake_repo}/runs/../still_inside"),
+            ):
+                with self.assertRaisesRegex(
+                    ValueError, "parent-directory traversal"
+                ):
+                    onesar_rerun.prepare_fresh_evidence_root(
+                        bad_target, repo_root=fake_repo
+                    )
+            with self.assertRaisesRegex(
+                ValueError, "parent-directory traversal"
+            ):
+                onesar_rerun.prepare_fresh_evidence_root(
+                    fake_repo / "runs" / "canary_02",
+                    repo_root=Path(f"{fake_repo}/../repo"),
+                )
+
             # Symlink ancestor inside repo is rejected.
             real_sub = fake_repo / "real_sub"
             real_sub.mkdir()
@@ -743,6 +769,36 @@ class TestFreshEvidenceRootBoundary(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "must not be a symlink"):
                 onesar_rerun.prepare_fresh_evidence_root(
                     sym_sub / "child", repo_root=fake_repo
+                )
+
+            # Dangling symlink at leaf is rejected.
+            dangling_leaf = fake_repo / "runs" / "dangling_leaf"
+            dangling_leaf.symlink_to(fake_repo / "runs" / "missing_target")
+            with self.assertRaisesRegex(ValueError, "must not be a symlink"):
+                onesar_rerun.prepare_fresh_evidence_root(
+                    dangling_leaf, repo_root=fake_repo
+                )
+
+            # Symlinked repo_root or symlinked ancestor of repo_root is rejected.
+            sym_repo = Path(tmp).resolve(strict=True) / "sym_repo"
+            sym_repo.symlink_to(fake_repo)
+            with self.assertRaisesRegex(
+                ValueError, "Repository root must not be a symlink"
+            ):
+                onesar_rerun.prepare_fresh_evidence_root(
+                    sym_repo / "runs" / "c3", repo_root=sym_repo
+                )
+            real_parent = Path(tmp).resolve(strict=True) / "real_parent"
+            nested_repo = real_parent / "nested_repo"
+            nested_repo.mkdir(parents=True)
+            sym_parent = Path(tmp).resolve(strict=True) / "sym_parent"
+            sym_parent.symlink_to(real_parent)
+            with self.assertRaisesRegex(
+                ValueError, "Repository root must not be a symlink"
+            ):
+                onesar_rerun.prepare_fresh_evidence_root(
+                    sym_parent / "nested_repo" / "runs" / "c4",
+                    repo_root=sym_parent / "nested_repo",
                 )
 
 
@@ -2436,15 +2492,44 @@ class TestPhenixReconciliationAndPureHelpers(unittest.TestCase):
     def test_operation_rejects_protstruct_env_overrides(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             fake_repo = Path(tmp).resolve(strict=True)
-            with mock.patch.dict(
-                os.environ, {"PROTSTRUCT_PHENIX_BIN": "/custom/phenix_bin"}
-            ):
-                with self.assertRaisesRegex(
-                    ValueError, "no PROTSTRUCT_\\* environment overrides"
+            saved_protstruct = {
+                k: v
+                for k, v in os.environ.items()
+                if k.startswith("PROTSTRUCT_")
+            }
+            try:
+                for k in saved_protstruct:
+                    os.environ.pop(k, None)
+                for env_override, expected_var in (
+                    (
+                        {"PROTSTRUCT_PHENIX_BIN": "/custom/phenix_bin"},
+                        "PROTSTRUCT_PHENIX_BIN",
+                    ),
+                    (
+                        {"PROTSTRUCT_UNRELATED_CUSTOM": "1"},
+                        "PROTSTRUCT_UNRELATED_CUSTOM",
+                    ),
+                    (
+                        {"PROTSTRUCT_PHENIX_BIN": ""},
+                        "PROTSTRUCT_PHENIX_BIN",
+                    ),
                 ):
-                    onesar_rerun.run_phenix_rfactor_operation(
-                        fake_repo / "out", subject_id="R4", repo_root=fake_repo
-                    )
+                    with mock.patch.dict(os.environ, env_override, clear=False):
+                        with self.assertRaisesRegex(
+                            ValueError,
+                            rf"no PROTSTRUCT_\* environment overrides.*{expected_var}",
+                        ):
+                            onesar_rerun.run_phenix_rfactor_operation(
+                                fake_repo / "out",
+                                subject_id="R4",
+                                repo_root=fake_repo,
+                            )
+                        self.assertFalse((fake_repo / "out").exists())
+            finally:
+                for k in list(os.environ.keys()):
+                    if k.startswith("PROTSTRUCT_"):
+                        os.environ.pop(k, None)
+                os.environ.update(saved_protstruct)
 
     def test_stage_subject_inputs_and_unmeasured_build_rejection(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -5800,6 +5885,3080 @@ class TestPhenixReconciliationAndPureHelpers(unittest.TestCase):
             self._verify_atomic_checkpoint_interrupted_write_and_promotion(
                 tmp_dir
             )
+
+
+class TestTask179CanaryCliAndAttemptOrchestration(unittest.TestCase):
+    """Hermetic tests for the Task 179 thin single-subject CLI and attempt orchestration."""
+
+    @staticmethod
+    def _write_json_file(path: Path, payload: Mapping[str, Any]) -> dict[str, Any]:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        raw = (
+            json.dumps(dict(payload), indent=2, sort_keys=True, allow_nan=False)
+            + "\n"
+        ).encode("utf-8")
+        path.write_bytes(raw)
+        return {
+            "path": str(path),
+            "sha256": hashlib.sha256(raw).hexdigest(),
+            "size_bytes": len(raw),
+            "persisted": True,
+        }
+
+    @staticmethod
+    @contextlib.contextmanager
+    def _without_protstruct_env_overrides() -> Any:
+        saved = {
+            k: v
+            for k, v in os.environ.items()
+            if k.startswith("PROTSTRUCT_")
+        }
+        try:
+            for k in saved:
+                os.environ.pop(k, None)
+            yield
+        finally:
+            for k in list(os.environ.keys()):
+                if k.startswith("PROTSTRUCT_"):
+                    os.environ.pop(k, None)
+            os.environ.update(saved)
+
+    @classmethod
+    def _make_fake_phenix_runner_and_build(
+        cls, base_dir: Path
+    ) -> tuple[Path, dict[str, Any], Callable[..., subprocess.CompletedProcess[str]]]:
+        fake_prefix = base_dir / "phenix-2.0-5936-synthetic"
+        fake_bin = fake_prefix / "phenix_bin"
+        fake_site = fake_prefix / "lib" / "python3.9" / "site-packages"
+        fake_bin.mkdir(parents=True, exist_ok=True)
+        (fake_prefix / "phenix_env.sh").write_text(
+            "#!/bin/sh\nexport PHENIX_VERSION=2.0\nexport PHENIX_RELEASE_TAG=5936\n",
+            encoding="utf-8",
+        )
+        (fake_bin / "phenix.version").write_text("#!/bin/sh\n", encoding="utf-8")
+        (fake_bin / "phenix.python").write_text("#!/bin/sh\n", encoding="utf-8")
+
+        vendor_modules_payload: dict[str, dict[str, str]] = {}
+        for key, rel in onesar_rerun.PHENIX_VENDOR_SOURCE_RELPATHS.items():
+            mod_file = fake_site / rel
+            mod_file.parent.mkdir(parents=True, exist_ok=True)
+            content = f"# synthetic test module {key}\n".encode("utf-8")
+            mod_file.write_bytes(content)
+            resolved_mod = mod_file.resolve(strict=True)
+            vendor_modules_payload[key] = {
+                "module_name": key,
+                "configured_path": str(resolved_mod),
+                "resolved_path": str(resolved_mod),
+                "sha256": hashlib.sha256(content).hexdigest(),
+            }
+
+        banner = "PHENIX: 2.0-5936\n  Version: 2.0\n  Release tag: 5936"
+        setup_resolved = (fake_prefix / "phenix_env.sh").resolve(strict=True)
+        disp_resolved = (fake_bin / "phenix.version").resolve(strict=True)
+        resolved_prefix_str = str(fake_prefix.resolve(strict=True))
+        fake_measured_build: dict[str, Any] = {
+            "reported_version_source": "vendor_setup_environment",
+            "reported_version": banner,
+            "parsed_build": "2.0-5936",
+            "version_probe": {
+                "error": None,
+                "probe_mode": "vendor_setup_environment",
+                "configured_prefix": str(fake_prefix),
+                "resolved_prefix": resolved_prefix_str,
+                "setup_configured_path": str(fake_prefix / "phenix_env.sh"),
+                "setup_resolved_path": str(setup_resolved),
+                "setup_sha256": hashlib.sha256(
+                    setup_resolved.read_bytes()
+                ).hexdigest(),
+                "setup_argv": toolchain.phenix_setup_argv(setup_resolved),
+                "setup_returncode": 0,
+                "setup_stdout": "",
+                "setup_stderr": "",
+                "setup_version_fields": {
+                    "PHENIX_VERSION": "2.0",
+                    "PHENIX_RELEASE_TAG": "5936",
+                },
+                "setup_parsed_build": "2.0-5936",
+                "configured_path": str(fake_bin / "phenix.version"),
+                "resolved_path": str(disp_resolved),
+                "sha256": hashlib.sha256(disp_resolved.read_bytes()).hexdigest(),
+                "argv": [str(disp_resolved)],
+                "returncode": 0,
+                "stdout": banner + "\n",
+                "stderr": "",
+                "parsed_build": "2.0-5936",
+                "ignored_inherited_version_variables": [],
+                "ignored_inherited_shell_hooks": [],
+            },
+        }
+
+        def fake_phenix_runner(
+            argv: list[str], log: Path, *, cwd: Path, timeout: float
+        ) -> subprocess.CompletedProcess[str]:
+            mtz_arg = Path(argv[argv.index("--mtz") + 1])
+            out_json = Path(argv[argv.index("--out-json") + 1])
+            out_maps = Path(argv[argv.index("--out-maps-mtz") + 1])
+            out_obs_pair = Path(argv[argv.index("--out-obs-pair-mtz") + 1])
+            out_diag = Path(argv[argv.index("--out-diagnostics-json") + 1])
+
+            ledger = onesar_rerun.build_input_hkl_ledger(mtz_arg.read_bytes())
+            work_candidates = [
+                v
+                for v in ledger["eligible_by_hkl"].values()
+                if not v["is_free"] and v["f_obs"] > 0.0
+            ][:3]
+            free_candidates = [
+                v
+                for v in ledger["eligible_by_hkl"].values()
+                if v["is_free"] and v["f_obs"] > 0.0
+            ][:2]
+            w0, w1, w_outlier = (
+                work_candidates[0],
+                work_candidates[1],
+                work_candidates[2],
+            )
+            f0, f1 = free_candidates[0], free_candidates[1]
+
+            scale_k1_w = 0.5
+            scale_k1_t = 0.5
+            scale_k1 = 0.5
+            work_ratio = 0.875
+            free_ratio = 0.75
+
+            _, base_payload, _, _, _ = _make_reconciliation_fixture()
+            synth = copy.deepcopy(base_payload)
+            synth["expected_resolved_prefix"] = resolved_prefix_str
+            synth["expected_phenix_version"] = toolchain.PHENIX_VERSION
+            synth["runtime_environment"]["sys_prefix"] = str(fake_prefix)
+            synth["runtime_environment"]["resolved_sys_prefix"] = (
+                resolved_prefix_str
+            )
+            synth["runtime_environment"]["sys_executable"] = str(
+                (fake_bin / "phenix.python").resolve(strict=True)
+            )
+            synth["runtime_environment"]["resolved_sys_executable"] = str(
+                (fake_bin / "phenix.python").resolve(strict=True)
+            )
+            synth["runtime_environment"]["vendor_modules"] = (
+                vendor_modules_payload
+            )
+
+            extracted_items = [w0, w1, w_outlier, f0, f1]
+            final_items = [w0, w1, f0, f1]
+            synth["extracted_pre_fmodel"] = [
+                {
+                    "hkl": list(item["hkl"]),
+                    "f_obs": float(item["f_obs"]),
+                    "sigf_obs": float(item["sigf_obs"]),
+                    "is_free": bool(item["is_free"]),
+                }
+                for item in extracted_items
+            ]
+            synth["final_effective"] = [
+                {
+                    "hkl": list(item["hkl"]),
+                    "f_obs": float(item["f_obs"]),
+                    "sigf_obs": float(item["sigf_obs"]),
+                    "is_free": bool(item["is_free"]),
+                }
+                for item in final_items
+            ]
+            synth["actual_work"] = [
+                {
+                    "hkl": list(item["hkl"]),
+                    "f_obs": float(item["f_obs"]),
+                    "sigf_obs": float(item["sigf_obs"]),
+                    "f_model_real": (work_ratio * float(item["f_obs"]))
+                    / scale_k1_w,
+                    "f_model_imag": 0.0,
+                    "f_model_amplitude": (work_ratio * float(item["f_obs"]))
+                    / scale_k1_w,
+                    "f_model_scaled_with_k1_w_real": work_ratio
+                    * float(item["f_obs"]),
+                    "f_model_scaled_with_k1_w_imag": 0.0,
+                    "f_model_scaled_with_k1_w_amplitude": work_ratio
+                    * float(item["f_obs"]),
+                }
+                for item in (w0, w1)
+            ]
+            synth["actual_free"] = [
+                {
+                    "hkl": list(item["hkl"]),
+                    "f_obs": float(item["f_obs"]),
+                    "sigf_obs": float(item["sigf_obs"]),
+                    "f_model_real": (free_ratio * float(item["f_obs"]))
+                    / scale_k1_t,
+                    "f_model_imag": 0.0,
+                    "f_model_amplitude": (free_ratio * float(item["f_obs"]))
+                    / scale_k1_t,
+                    "f_model_scaled_with_k1_t_real": free_ratio
+                    * float(item["f_obs"]),
+                    "f_model_scaled_with_k1_t_imag": 0.0,
+                    "f_model_scaled_with_k1_t_amplitude": free_ratio
+                    * float(item["f_obs"]),
+                }
+                for item in (f0, f1)
+            ]
+
+            w_den = float(w0["f_obs"]) + float(w1["f_obs"])
+            w_num = abs(
+                float(w0["f_obs"]) - work_ratio * float(w0["f_obs"])
+            ) + abs(float(w1["f_obs"]) - work_ratio * float(w1["f_obs"]))
+            f_den = float(f0["f_obs"]) + float(f1["f_obs"])
+            f_num = abs(
+                float(f0["f_obs"]) - free_ratio * float(f0["f_obs"])
+            ) + abs(float(f1["f_obs"]) - free_ratio * float(f1["f_obs"]))
+            all_num = w_num + f_num
+            all_den = w_den + f_den
+            r_work = w_num / w_den
+            r_free = f_num / f_den
+            r_all = all_num / all_den
+            r_gap = r_free - r_work
+
+            synth["scales_and_rfactors"].update(
+                {
+                    "r_work": r_work,
+                    "r_free": r_free,
+                    "r_all": r_all,
+                    "r_free_r_work_gap": r_gap,
+                    "scale_k1_w": scale_k1_w,
+                    "scale_k1_t": scale_k1_t,
+                    "scale_k1": scale_k1,
+                    "work_numerator": w_num,
+                    "work_denominator": w_den,
+                    "free_numerator": f_num,
+                    "free_denominator": f_den,
+                    "all_numerator": all_num,
+                    "all_denominator": all_den,
+                    "work_count": 2,
+                    "free_count": 2,
+                    "final_effective_count": 4,
+                    "extracted_pre_fmodel_count": 5,
+                }
+            )
+
+            map_recs = [
+                {
+                    "hkl": list(item["hkl"]),
+                    "real": 1.0,
+                    "imag": 0.0,
+                    "amplitude": 1.0,
+                    "phase_deg": 0.0,
+                    "is_centric": True,
+                }
+                for item in final_items
+            ]
+            synth["map_coefficients"]["2mFo-DFc"]["records"] = copy.deepcopy(
+                map_recs
+            )
+            synth["map_coefficients"]["2mFo-DFc"]["centric_count"] = 4
+            synth["map_coefficients"]["2mFo-DFc"]["acentric_count"] = 0
+            synth["map_coefficients"]["mFo-DFc"]["records"] = copy.deepcopy(
+                map_recs
+            )
+            synth["map_coefficients"]["mFo-DFc"]["centric_count"] = 4
+            synth["map_coefficients"]["mFo-DFc"]["acentric_count"] = 0
+
+            cell_floats = tuple(
+                float(x)
+                for x in ledger["crystallographic_context"][
+                    "cell_a_b_c_alpha_beta_gamma"
+                ]
+            )
+            runtime_cell_floats = onesar_rerun.ccp4_mtz_float32_unit_cell(
+                ledger["crystallographic_context"][
+                    "cell_a_b_c_alpha_beta_gamma"
+                ]
+            )
+            synth["crystal_symmetry"] = {
+                "unit_cell": list(runtime_cell_floats),
+                "space_group_symbol": "P 21 21 21 (No. 19)",
+                "space_group_number": 19,
+                "space_group_operators_xyz": [
+                    "x,y,z",
+                    "-x+1/2,-y,z+1/2",
+                    "-x,y+1/2,-z+1/2",
+                    "x+1/2,-y+1/2,-z",
+                ],
+            }
+            ca, cb, cc = (
+                runtime_cell_floats[0],
+                runtime_cell_floats[1],
+                runtime_cell_floats[2],
+            )
+
+            def _orth_range(items: list[dict[str, Any]]) -> dict[str, float]:
+                ds = [
+                    1.0
+                    / math.sqrt(
+                        (it["hkl"][0] / ca) ** 2
+                        + (it["hkl"][1] / cb) ** 2
+                        + (it["hkl"][2] / cc) ** 2
+                    )
+                    for it in items
+                ]
+                return {"d_max": max(ds), "d_min": min(ds)}
+
+            synth["resolution_ranges"] = {
+                "extracted_pre_fmodel": _orth_range(extracted_items),
+                "final_effective": _orth_range(final_items),
+                "actual_work": _orth_range([w0, w1]),
+                "actual_free": _orth_range([f0, f1]),
+            }
+
+            m_bytes, p_bytes = _build_synthetic_map_mtz_pair(
+                map_recs, map_recs, cell=cell_floats  # type: ignore[arg-type]
+            )
+            synth["map_coefficients"]["mtz_supplements"]["phx_maps_sha256"] = (
+                hashlib.sha256(m_bytes).hexdigest()
+            )
+            synth["map_coefficients"]["mtz_supplements"][
+                "obs_pair_only_sha256"
+            ] = hashlib.sha256(p_bytes).hexdigest()
+
+            diag_doc = {
+                "schema_version": 1,
+                "status": "succeeded",
+                "extract_xtal_data_log": synth["diagnostics"][
+                    "extract_xtal_data_log"
+                ],
+                "model_manager_log": synth["diagnostics"]["model_manager_log"],
+                "fmodel_update_all_scales_log": synth["diagnostics"][
+                    "fmodel_update_all_scales_log"
+                ],
+                "failure": None,
+            }
+            log.write_text("synthetic phenix.python stdout\n", encoding="utf-8")
+            out_maps.write_bytes(m_bytes)
+            out_obs_pair.write_bytes(p_bytes)
+            out_diag.write_text(
+                json.dumps(diag_doc, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            if "--out-partial-json" in argv:
+                out_partial = Path(argv[argv.index("--out-partial-json") + 1])
+                out_partial.write_text(
+                    json.dumps(
+                        {
+                            "schema_version": 1,
+                            "artifact_role": "partial_unverified_phenix_evidence",
+                            "status": "completed_superseded_by_verified_payload",
+                            "current_phase": "completed",
+                            "completed_stages": [
+                                "extract_xtal_data",
+                                "fmodel_manager_init",
+                                "update_all_scales",
+                                "rfactor_replay",
+                                "map_export",
+                            ],
+                            "rfactor_replay_verified": True,
+                            "map_export_verified": True,
+                            "nonfinite_raw_values": [],
+                            "failure": None,
+                        },
+                        indent=2,
+                        sort_keys=True,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+            out_json.write_text(
+                json.dumps(synth, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(argv, 0)
+
+        return fake_bin, fake_measured_build, fake_phenix_runner
+
+    def test_cli_parser_required_flags_aliases_and_rejections(self) -> None:
+        """Verify CLI required flags, lowercase aliases, rejections, and help vs refusal exit codes."""
+        # Valid subjects and lowercase aliases normalize cleanly.
+        for raw_subj, expected_norm in (
+            ("start", "start"),
+            ("R4", "R4"),
+            ("r4", "R4"),
+            ("R5", "R5"),
+            ("r5", "R5"),
+            ("R6", "R6"),
+            ("r6", "R6"),
+        ):
+            ns = onesar_rerun.parse_cli_args(
+                [
+                    "--subject",
+                    raw_subj,
+                    "--family",
+                    "rfactors",
+                    "--evidence-out",
+                    ".temp/canary_test",
+                ]
+            )
+            self.assertEqual(ns.subject, expected_norm)
+            self.assertEqual(ns.family, "rfactors")
+            self.assertEqual(ns.timeout, 900.0)
+            self.assertEqual(ns.evidence_out, Path(".temp/canary_test"))
+
+        # Custom positive timeout is accepted.
+        ns_timeout = onesar_rerun.parse_cli_args(
+            [
+                "--subject",
+                "R4",
+                "--family",
+                "rfactors",
+                "--evidence-out",
+                ".temp/canary_timeout",
+                "--timeout",
+                "120.5",
+            ]
+        )
+        self.assertEqual(ns_timeout.timeout, 120.5)
+
+        # Rejected subjects: R7, r7, all, unknown.
+        for bad_subject in ("R7", "r7", "all", "START", "R0", ""):
+            with self.assertRaisesRegex(ValueError, "Unsupported subject"):
+                onesar_rerun.parse_cli_args(
+                    [
+                        "--subject",
+                        bad_subject,
+                        "--family",
+                        "rfactors",
+                        "--evidence-out",
+                        ".temp/bad_subj",
+                    ]
+                )
+
+        # Rejected families: all, t01, t05, empty.
+        for bad_family in ("all", "t01", "t05", "RFACTORS", ""):
+            with self.assertRaisesRegex(
+                ValueError, "Unsupported measurement family"
+            ):
+                onesar_rerun.parse_cli_args(
+                    [
+                        "--subject",
+                        "R4",
+                        "--family",
+                        bad_family,
+                        "--evidence-out",
+                        ".temp/bad_fam",
+                    ]
+                )
+
+        # Rejected timeouts: <= 0, NaN, inf, -inf (using --timeout=<val> so -inf reaches the validator).
+        for bad_timeout in ("0", "-5", "nan", "inf", "-inf"):
+            with self.assertRaisesRegex(ValueError, "Operation timeout"):
+                onesar_rerun.parse_cli_args(
+                    [
+                        "--subject",
+                        "R4",
+                        "--family",
+                        "rfactors",
+                        "--evidence-out",
+                        ".temp/bad_to",
+                        f"--timeout={bad_timeout}",
+                    ]
+                )
+
+        # Missing required flags or --all rejected by argparse (SystemExit != 0; main returns 2).
+        for bad_argv in (
+            [],
+            ["--subject", "R4", "--family", "rfactors"],
+            ["--subject", "R4", "--evidence-out", ".temp/x"],
+            ["--family", "rfactors", "--evidence-out", ".temp/x"],
+            [
+                "--subject",
+                "R4",
+                "--family",
+                "rfactors",
+                "--evidence-out",
+                ".temp/x",
+                "--all",
+            ],
+        ):
+            with self.assertRaises(SystemExit) as cm:
+                onesar_rerun.parse_cli_args(bad_argv)
+            self.assertNotEqual(cm.exception.code, 0)
+            self.assertEqual(onesar_rerun.main(bad_argv), 2)
+
+        # --help exits 0 via main(["--help"]).
+        self.assertEqual(onesar_rerun.main(["--help"]), 0)
+
+    def test_pre_admission_rejections_occur_before_parent_creation_or_producer_calls(
+        self,
+    ) -> None:
+        """Verify pre-admission rejections never create <parent A>, mutate existing targets, or call producers."""
+        import onesar_records
+        import onesar_refmac
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fake_repo = Path(tmp).resolve(strict=True) / "repo"
+            fake_repo.mkdir()
+
+            existing_dir = fake_repo / "runs" / "existing_attempt"
+            existing_dir.mkdir(parents=True)
+            marker_file = existing_dir / "keep.txt"
+            marker_file.write_text("immutable marker\n", encoding="utf-8")
+
+            real_sub = fake_repo / "real_sub"
+            real_sub.mkdir()
+            sym_sub = fake_repo / "sym_sub"
+            sym_sub.symlink_to(real_sub)
+
+            outside_target = Path(tmp).resolve(strict=True) / "outside_attempt"
+
+            with (
+                self._without_protstruct_env_overrides(),
+                mock.patch.object(
+                    onesar_rerun,
+                    "run_phenix_rfactor_operation",
+                    side_effect=AssertionError("PHENIX producer must not run"),
+                ) as phx_mock,
+                mock.patch.object(
+                    onesar_refmac,
+                    "run_refmac_rfactor_operation",
+                    side_effect=AssertionError("REFMAC producer must not run"),
+                ) as rm_mock,
+                mock.patch.object(
+                    onesar_records,
+                    "publish_retained_rfactor_records",
+                    side_effect=AssertionError("Record publisher must not run"),
+                ) as pub_mock,
+            ):
+                # 1. Invalid subject R7 / r7.
+                fresh_r7 = fake_repo / "runs" / "r7_attempt"
+                self.assertEqual(
+                    onesar_rerun.main(
+                        [
+                            "--subject",
+                            "R7",
+                            "--family",
+                            "rfactors",
+                            "--evidence-out",
+                            str(fresh_r7),
+                            "--repo-root",
+                            str(fake_repo),
+                        ]
+                    ),
+                    2,
+                )
+                self.assertFalse(fresh_r7.exists())
+
+                # 2. Invalid family.
+                fresh_fam = fake_repo / "runs" / "fam_attempt"
+                self.assertEqual(
+                    onesar_rerun.main(
+                        [
+                            "--subject",
+                            "R4",
+                            "--family",
+                            "t05",
+                            "--evidence-out",
+                            str(fresh_fam),
+                            "--repo-root",
+                            str(fake_repo),
+                        ]
+                    ),
+                    2,
+                )
+                self.assertFalse(fresh_fam.exists())
+
+                # 3. PROTSTRUCT_* environment override (unrelated var and empty var).
+                for env_override in (
+                    {"PROTSTRUCT_CUSTOM_FOO": "bar"},
+                    {"PROTSTRUCT_PHENIX_BIN": ""},
+                ):
+                    fresh_env = fake_repo / "runs" / "env_attempt"
+                    with mock.patch.dict(os.environ, env_override):
+                        self.assertEqual(
+                            onesar_rerun.main(
+                                [
+                                    "--subject",
+                                    "R4",
+                                    "--family",
+                                    "rfactors",
+                                    "--evidence-out",
+                                    str(fresh_env),
+                                    "--repo-root",
+                                    str(fake_repo),
+                                ]
+                            ),
+                            2,
+                        )
+                    self.assertFalse(fresh_env.exists())
+
+                # 4. Existing target directory preserved untouched.
+                self.assertEqual(
+                    onesar_rerun.main(
+                        [
+                            "--subject",
+                            "R4",
+                            "--family",
+                            "rfactors",
+                            "--evidence-out",
+                            str(existing_dir),
+                            "--repo-root",
+                            str(fake_repo),
+                        ]
+                    ),
+                    2,
+                )
+                self.assertEqual(
+                    marker_file.read_text(encoding="utf-8"),
+                    "immutable marker\n",
+                )
+                self.assertEqual(
+                    list(existing_dir.iterdir()), [marker_file]
+                )
+
+                # 5. Symlink ancestor, outside-repo target, and raw '..' target rejected.
+                for bad_out in (
+                    sym_sub / "attempt_01",
+                    outside_target,
+                    Path(f"{fake_repo}/runs/../runs/attempt_dotdot"),
+                ):
+                    self.assertEqual(
+                        onesar_rerun.main(
+                            [
+                                "--subject",
+                                "R4",
+                                "--family",
+                                "rfactors",
+                                "--evidence-out",
+                                str(bad_out),
+                                "--repo-root",
+                                str(fake_repo),
+                            ]
+                        ),
+                        2,
+                    )
+                self.assertFalse(outside_target.exists())
+
+                self.assertEqual(phx_mock.call_count, 0)
+                self.assertEqual(rm_mock.call_count, 0)
+                self.assertEqual(pub_mock.call_count, 0)
+
+    def test_sequential_orchestration_distinct_children_midnight_date_and_all_four_subjects(
+        self,
+    ) -> None:
+        """Verify sequential 2-producer orchestration, distinct children, 14-key checkpoint, and midnight UTC start date."""
+        import onesar_records
+        import onesar_refmac
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fake_repo = Path(tmp).resolve(strict=True) / "repo"
+            fake_repo.mkdir()
+
+            for raw_subject, expected_subject in (
+                ("r4", "R4"),
+                ("start", "start"),
+                ("r5", "R5"),
+                ("r6", "R6"),
+            ):
+                with self.subTest(subject=raw_subject):
+                    call_order: list[tuple[str, Path, str]] = []
+                    parent_out = (
+                        fake_repo / "runs" / f"attempt_{expected_subject.lower()}"
+                    )
+
+                    def fake_phenix_op(
+                        evidence_root: Path,
+                        subject_id: str = "R4",
+                        *,
+                        repo_root: Path = REPO_ROOT,
+                        archive_path: Path | None = None,
+                        timeout: float = 900.0,
+                        require_no_protstruct_overrides: bool = True,
+                        runner: Any = None,
+                    ) -> dict[str, Any]:
+                        # parent_attempt_started.json must already exist before Producer 1 starts.
+                        started_path = (
+                            parent_out
+                            / onesar_rerun.PARENT_ATTEMPT_STARTED_FILENAME
+                        )
+                        self.assertTrue(started_path.is_file())
+                        self.assertFalse(evidence_root.exists())
+                        call_order.append(("phenix", evidence_root, subject_id))
+                        self.assertEqual(subject_id, expected_subject)
+                        self.assertEqual(repo_root, fake_repo)
+                        self.assertEqual(timeout, 450.0)
+                        self.assertFalse(require_no_protstruct_overrides)
+
+                        cache_manifest_path = (
+                            evidence_root
+                            / "phenix"
+                            / "cache"
+                            / "op"
+                            / "bundle"
+                            / "success.json"
+                        )
+                        cache_ref = self._write_json_file(
+                            cache_manifest_path,
+                            {
+                                "returncode": 0,
+                                "reusable": True,
+                                "invocation": {"executable": "phenix.python"},
+                                "artifacts": {},
+                            },
+                        )
+                        reconciled_path = (
+                            evidence_root
+                            / "phenix"
+                            / "phenix_reconciled_manifest.json"
+                        )
+                        reconciled_payload = {
+                            "schema_version": 1,
+                            "subject": onesar_rerun.resolve_subject_spec(
+                                subject_id
+                            ),
+                            "mtz": {
+                                "member": onesar_rerun.MTZ_MEMBER,
+                                "sha256": onesar_rerun.MTZ_SHA256,
+                                "subject_ref": onesar_rerun.MTZ_SUBJECT_REF,
+                            },
+                            "staged_files": {},
+                            "manifest_path": str(cache_manifest_path),
+                            "manifest_sha256": cache_ref["sha256"],
+                            "operation_manifest": {"returncode": 0},
+                            "reconciliation": {
+                                "reconciliation_status": "verified"
+                            },
+                        }
+                        self._write_json_file(
+                            reconciled_path, reconciled_payload
+                        )
+                        return reconciled_payload
+
+                    def fake_refmac_op(
+                        evidence_root: Path | str,
+                        subject_id: str = "R4",
+                        *,
+                        repo_root: Path | str = REPO_ROOT,
+                        archive_path: Path | str | None = None,
+                        timeout: float = 900.0,
+                        require_no_protstruct_overrides: bool = True,
+                        runner: Any = None,
+                    ) -> dict[str, Any]:
+                        ev_path = Path(evidence_root)
+                        self.assertFalse(ev_path.exists())
+                        call_order.append(("refmac", ev_path, subject_id))
+                        self.assertEqual(subject_id, expected_subject)
+                        self.assertEqual(Path(repo_root), fake_repo)
+                        self.assertEqual(timeout, 450.0)
+                        self.assertFalse(require_no_protstruct_overrides)
+
+                        rm_manifest_path = (
+                            ev_path / "refmac" / "refmac_operation_manifest.json"
+                        )
+                        rm_payload = {
+                            "schema_version": 1,
+                            "status": "diagnostic_captured_gates_unproven",
+                            "subject_id": subject_id,
+                        }
+                        rm_ref = self._write_json_file(
+                            rm_manifest_path, rm_payload
+                        )
+                        # Match onesar_refmac.run_refmac_rfactor_operation return shape (no "persisted" key).
+                        rm_ref.pop("persisted", None)
+                        # Include fallback ancestry metadata to verify intact forwarding.
+                        rm_ref["is_fallback"] = True
+                        rm_ref["fallback_for_preexisting_path"] = str(
+                            ev_path / "refmac" / "intended.json"
+                        )
+                        out = dict(rm_payload)
+                        out["manifest_json"] = rm_ref
+                        return out
+
+                    def fake_publish(
+                        admitted_root: Path | str,
+                        *,
+                        subject_id: str,
+                        checkpoint_reference: Mapping[str, Any] | None = None,
+                        phenix_reconciled_manifest_reference: (
+                            Mapping[str, Any] | None
+                        ) = None,
+                        refmac_operation_manifest_reference: (
+                            Mapping[str, Any] | None
+                        ) = None,
+                        expected_family: str = "rfactors",
+                        expected_run_date: str | None = None,
+                        repo_root: Path | str | None = None,
+                        output_repo_root: Path | str | None = None,
+                        **kwargs: Any,
+                    ) -> dict[str, Any]:
+                        call_order.append(
+                            ("publish", Path(admitted_root), subject_id)
+                        )
+                        self.assertEqual(subject_id, expected_subject)
+                        self.assertEqual(expected_family, "rfactors")
+                        # Midnight-spanning interval must forward UTC start date 2026-11-06.
+                        self.assertEqual(expected_run_date, "2026-11-06")
+                        assert isinstance(checkpoint_reference, Mapping)
+                        assert isinstance(
+                            phenix_reconciled_manifest_reference, Mapping
+                        )
+                        assert isinstance(
+                            refmac_operation_manifest_reference, Mapping
+                        )
+                        self.assertTrue(
+                            Path(
+                                str(phenix_reconciled_manifest_reference["path"])
+                            ).name
+                            == "phenix_reconciled_manifest.json"
+                        )
+                        self.assertIs(
+                            refmac_operation_manifest_reference.get(
+                                "persisted"
+                            ),
+                            True,
+                        )
+                        self.assertIs(
+                            refmac_operation_manifest_reference.get(
+                                "is_fallback"
+                            ),
+                            True,
+                        )
+                        err = onesar_records.RefmacScientificAdmissionRefusedError(
+                            "synthetic refusal after checkpoint",
+                            refusal_record={
+                                "producer": "refmac",
+                                "subject_id": subject_id,
+                                "integrity_verified": True,
+                                "scientific_proof_established": False,
+                                "unknown_native_premises": {},
+                                "refusal_reasons": ["unproven"],
+                                "unsupported_proof_claims": [],
+                                "verified_references": {},
+                            },
+                        )
+                        err.authoring_outcome = {  # type: ignore[attr-defined]
+                            "status": "refused",
+                            "published": False,
+                            "failed_stage": "refmac_retained_verification",
+                            "authoring_policy_issued_at": None,
+                            "outcome_path": str(
+                                Path(admitted_root)
+                                / "authoring_outcomes"
+                                / "authoring_outcome_0001.json"
+                            ),
+                        }
+                        err.authoring_outcome_path = err.authoring_outcome[  # type: ignore[attr-defined]
+                            "outcome_path"
+                        ]
+                        raise err
+
+                    with (
+                        mock.patch.object(
+                            onesar_rerun,
+                            "run_phenix_rfactor_operation",
+                            side_effect=fake_phenix_op,
+                        ),
+                        mock.patch.object(
+                            onesar_refmac,
+                            "run_refmac_rfactor_operation",
+                            side_effect=fake_refmac_op,
+                        ),
+                        mock.patch.object(
+                            onesar_records,
+                            "publish_retained_rfactor_records",
+                            side_effect=fake_publish,
+                        ),
+                    ):
+                        outcome = onesar_rerun.run_single_subject_rfactor_attempt(
+                            parent_out,
+                            raw_subject,
+                            family="rfactors",
+                            repo_root=fake_repo,
+                            timeout=450.0,
+                            require_no_protstruct_overrides=False,
+                            started_at_utc_override="2026-11-06T23:58:10+00:00",
+                            checkpoint_finished_at_utc_override="2026-11-07T00:03:25+00:00",
+                        )
+
+                    self.assertEqual(
+                        call_order,
+                        [
+                            ("phenix", parent_out / "phenix", expected_subject),
+                            ("refmac", parent_out / "refmac", expected_subject),
+                            ("publish", parent_out, expected_subject),
+                        ],
+                    )
+                    self.assertEqual(outcome["status"], "refused")
+                    self.assertIs(outcome["published"], False)
+                    self.assertEqual(outcome["run_date"], "2026-11-06")
+                    self.assertIsNone(outcome["authoring_policy_issued_at"])
+
+                    # Verify parent_completed_execution_checkpoint.json has exact 14 keys and no outcome/CLI fields.
+                    cp_path = (
+                        parent_out
+                        / onesar_rerun.PARENT_COMPLETED_CHECKPOINT_FILENAME
+                    )
+                    cp_doc = json.loads(cp_path.read_text(encoding="utf-8"))
+                    self.assertEqual(
+                        set(cp_doc.keys()),
+                        onesar_records.REQUIRED_PARENT_EXECUTION_CHECKPOINT_KEYS,
+                    )
+                    self.assertEqual(len(cp_doc), 14)
+                    self.assertEqual(cp_doc["run_date"], "2026-11-06")
+                    self.assertEqual(
+                        cp_doc["started_at_utc"], "2026-11-06T23:58:10+00:00"
+                    )
+                    self.assertEqual(
+                        cp_doc["finished_at_utc"], "2026-11-07T00:03:25+00:00"
+                    )
+                    self.assertTrue(
+                        cp_doc["refmac_operation_manifest"]["is_fallback"]
+                    )
+                    for forbidden_key in (
+                        "argv",
+                        "final_outcome",
+                        "authoring_outcome",
+                        "published",
+                        "status",
+                    ):
+                        self.assertNotIn(forbidden_key, cp_doc)
+
+    def test_post_start_record_identity_resolution_failure_persists_failed_outcome(
+        self,
+    ) -> None:
+        """Verify a post-start _resolve_rfactor_record_identities exception persists a failed outcome before any producer."""
+        import onesar_records
+        import onesar_refmac
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fake_repo = Path(tmp).resolve(strict=True) / "repo"
+            fake_repo.mkdir()
+            fail_out = fake_repo / "runs" / "identity_res_fail"
+
+            with (
+                self._without_protstruct_env_overrides(),
+                mock.patch.object(
+                    onesar_records,
+                    "_resolve_rfactor_record_identities",
+                    side_effect=onesar_records.RfactorRecordAssemblyError(
+                        "injected post-start identity resolution failure"
+                    ),
+                ) as res_mock,
+                mock.patch.object(
+                    onesar_rerun,
+                    "run_phenix_rfactor_operation",
+                    side_effect=AssertionError(
+                        "PHENIX must not run after identity resolution failure"
+                    ),
+                ) as phx_mock,
+                mock.patch.object(
+                    onesar_refmac,
+                    "run_refmac_rfactor_operation",
+                    side_effect=AssertionError(
+                        "REFMAC must not run after identity resolution failure"
+                    ),
+                ) as rm_mock,
+                mock.patch.object(
+                    onesar_records,
+                    "publish_retained_rfactor_records",
+                    side_effect=AssertionError(
+                        "Publisher must not run after identity resolution failure"
+                    ),
+                ) as pub_mock,
+            ):
+                rc = onesar_rerun.main(
+                    [
+                        "--subject",
+                        "R4",
+                        "--family",
+                        "rfactors",
+                        "--evidence-out",
+                        str(fail_out),
+                        "--repo-root",
+                        str(fake_repo),
+                    ]
+                )
+                self.assertEqual(rc, 1)
+                self.assertEqual(res_mock.call_count, 1)
+                self.assertEqual(phx_mock.call_count, 0)
+                self.assertEqual(rm_mock.call_count, 0)
+                self.assertEqual(pub_mock.call_count, 0)
+
+            self.assertTrue(
+                (fail_out / onesar_rerun.PARENT_ATTEMPT_STARTED_FILENAME).is_file()
+            )
+            outcome_path = fail_out / onesar_rerun.PARENT_ATTEMPT_OUTCOME_FILENAME
+            self.assertTrue(outcome_path.is_file())
+            self.assertFalse((fail_out / "phenix").exists())
+            self.assertFalse((fail_out / "refmac").exists())
+
+            outcome_doc = json.loads(outcome_path.read_text(encoding="utf-8"))
+            self.assertEqual(outcome_doc["status"], "failed")
+            self.assertIs(outcome_doc["published"], False)
+            self.assertEqual(outcome_doc["commit_state"], "not_committed")
+            self.assertIs(outcome_doc["committed"], False)
+            self.assertEqual(
+                outcome_doc["failed_stage"], "record_identity_resolution"
+            )
+            self.assertEqual(
+                outcome_doc["completed_steps"], ["parent_attempt_started"]
+            )
+            self.assertEqual(
+                outcome_doc["intended_paths"],
+                {"eval_path": None, "qds_path": None},
+            )
+            self.assertEqual(
+                outcome_doc["error"]["exception_type"],
+                "RfactorRecordAssemblyError",
+            )
+            self.assertIn(
+                "injected post-start identity resolution failure",
+                outcome_doc["error"]["exception_message"],
+            )
+
+    def test_phenix_cache_manifest_vs_reconciled_manifest_binding_and_producer_failures(
+        self,
+    ) -> None:
+        """Verify Producer 1/2 failure handling and rejection of cache success.json as reconciled manifest."""
+        import onesar_records
+        import onesar_refmac
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fake_repo = Path(tmp).resolve(strict=True) / "repo"
+            fake_repo.mkdir()
+
+            # 1. Producer 1 failure before staging stops before Producer 2 and writes parent_attempt_outcome.json.
+            p1_fail_out = fake_repo / "runs" / "p1_fail"
+            with (
+                mock.patch.object(
+                    onesar_rerun,
+                    "run_phenix_rfactor_operation",
+                    side_effect=RuntimeError("synthetic phenix pre-stage failure"),
+                ),
+                mock.patch.object(
+                    onesar_refmac,
+                    "run_refmac_rfactor_operation",
+                    side_effect=AssertionError("REFMAC must not run after PHENIX failure"),
+                ) as rm_mock,
+                mock.patch.object(
+                    onesar_records,
+                    "publish_retained_rfactor_records",
+                    side_effect=AssertionError("Publisher must not run after PHENIX failure"),
+                ) as pub_mock,
+            ):
+                outcome_p1 = onesar_rerun.run_single_subject_rfactor_attempt(
+                    p1_fail_out,
+                    "R4",
+                    repo_root=fake_repo,
+                    require_no_protstruct_overrides=False,
+                )
+                self.assertEqual(rm_mock.call_count, 0)
+                self.assertEqual(pub_mock.call_count, 0)
+            self.assertEqual(outcome_p1["status"], "failed")
+            self.assertIs(outcome_p1["published"], False)
+            self.assertEqual(
+                outcome_p1["failed_stage"], "phenix_rfactor_operation"
+            )
+            self.assertIsNone(outcome_p1["completed_checkpoint_reference"])
+            self.assertIs(
+                outcome_p1["phenix_inventory"][
+                    "retained_attempt_artifacts_available"
+                ],
+                False,
+            )
+            self.assertEqual(
+                outcome_p1["phenix_inventory"][
+                    "retained_attempt_artifacts_status"
+                ],
+                "unavailable",
+            )
+            self.assertFalse(
+                (
+                    p1_fail_out
+                    / onesar_rerun.PARENT_COMPLETED_CHECKPOINT_FILENAME
+                ).exists()
+            )
+            self.assertTrue(
+                (
+                    p1_fail_out / onesar_rerun.PARENT_ATTEMPT_OUTCOME_FILENAME
+                ).is_file()
+            )
+
+            # 2. Producer 1 failure with phenix_operation_failure.json inventories retained_attempt_artifacts
+            # and inputs/original_data.mtz while rejecting symlink/outside-root entries.
+            p1_ret_fail_out = fake_repo / "runs" / "p1_retained_fail"
+            outside_secret = Path(tmp).resolve(strict=True) / "outside_secret.json"
+            outside_secret.write_text('{"secret": true}\n', encoding="utf-8")
+
+            def _retained_fail_phenix(
+                evidence_root: Path, *args: Any, **kwargs: Any
+            ) -> dict[str, Any]:
+                inputs_dir = evidence_root / "inputs"
+                inputs_dir.mkdir(parents=True, exist_ok=True)
+                (inputs_dir / "original_model.pdb").write_text(
+                    "ATOM      1  N   VAL A   1       1.000   2.000   3.000  1.00 10.00           N\nEND\n",
+                    encoding="utf-8",
+                )
+                (inputs_dir / "original_data.mtz").write_bytes(b"MTZ_ORIG_BYTES")
+                (inputs_dir / "projected_observations.mtz").write_bytes(
+                    b"MTZ_PROJ_BYTES"
+                )
+                self._write_json_file(
+                    inputs_dir / "input_hkl_ledger.json", {"schema_version": 1}
+                )
+                self._write_json_file(
+                    inputs_dir / "input_admission.json", {"schema_version": 1}
+                )
+
+                phx_dir = evidence_root / "phenix"
+                phx_dir.mkdir(parents=True, exist_ok=True)
+                preflight_path = phx_dir / "phenix_preflight_build_evidence.json"
+                preflight_ref = self._write_json_file(
+                    preflight_path, {"parsed_build": "2.0-5936"}
+                )
+
+                attempt_dir = (
+                    phx_dir
+                    / "cache"
+                    / "refinement_cache_v1"
+                    / "onesar_phenix_first_block_rfactors_R4"
+                    / ".attempt-0123456789abcdef-x"
+                )
+                attempt_dir.mkdir(parents=True, exist_ok=True)
+                stdout_p = attempt_dir / "stdout.log"
+                stdout_p.write_text("failed worker stdout\n", encoding="utf-8")
+                inv_p = attempt_dir / "invocation.json"
+                self._write_json_file(inv_p, {"contract": 1})
+                diag_p = attempt_dir / "phenix_diagnostics.json"
+                self._write_json_file(diag_p, {"status": "failed"})
+                partial_p = attempt_dir / "phenix_rfactors_partial_evidence.json"
+                self._write_json_file(partial_p, {"status": "failed"})
+                maps_p = attempt_dir / "phx_maps.mtz"
+                maps_p.write_bytes(b"MAPS_BYTES")
+                obs_p = attempt_dir / "PHX_OBS_PAIR_ONLY.mtz"
+                obs_p.write_bytes(b"OBS_BYTES")
+                rf_p = attempt_dir / "phenix_rfactors.json"
+                self._write_json_file(rf_p, {"schema_version": 1})
+                man_p = attempt_dir / "success.json"
+                self._write_json_file(man_p, {"returncode": 0, "reusable": True})
+
+                symlink_p = attempt_dir / "symlink_escape.json"
+                symlink_p.symlink_to(outside_secret)
+
+                retained_map = {}
+                for k, p in (
+                    ("stdout_log", stdout_p),
+                    ("invocation_json", inv_p),
+                    ("phenix_diagnostics_json", diag_p),
+                    ("phenix_partial_evidence_json", partial_p),
+                    ("phx_maps_mtz", maps_p),
+                    ("phx_obs_pair_only_mtz", obs_p),
+                    ("phenix_rfactors_json", rf_p),
+                    ("manifest_json", man_p),
+                ):
+                    retained_map[k] = {
+                        "path": str(p),
+                        "sha256": hashlib.sha256(p.read_bytes()).hexdigest(),
+                    }
+                retained_map["escaped_outside"] = {
+                    "path": str(outside_secret),
+                    "sha256": hashlib.sha256(
+                        outside_secret.read_bytes()
+                    ).hexdigest(),
+                }
+                retained_map["escaped_symlink"] = {
+                    "path": str(symlink_p),
+                    "sha256": hashlib.sha256(
+                        outside_secret.read_bytes()
+                    ).hexdigest(),
+                }
+
+                self._write_json_file(
+                    phx_dir / "phenix_operation_failure.json",
+                    {
+                        "schema_version": 1,
+                        "status": "failed",
+                        "failed_stage": "reconcile_phenix_rfactor_output",
+                        "preflight_build_evidence_json_path": str(preflight_path),
+                        "preflight_build_evidence_sha256": preflight_ref["sha256"],
+                        "retained_attempt_artifacts": retained_map,
+                    },
+                )
+                raise RuntimeError("reconciliation failed after worker execution")
+
+            with (
+                mock.patch.object(
+                    onesar_rerun,
+                    "run_phenix_rfactor_operation",
+                    side_effect=_retained_fail_phenix,
+                ),
+                mock.patch.object(
+                    onesar_refmac,
+                    "run_refmac_rfactor_operation",
+                    side_effect=AssertionError("REFMAC must not run"),
+                ),
+            ):
+                outcome_p1_ret = onesar_rerun.run_single_subject_rfactor_attempt(
+                    p1_ret_fail_out,
+                    "R4",
+                    repo_root=fake_repo,
+                    require_no_protstruct_overrides=False,
+                )
+            self.assertEqual(outcome_p1_ret["status"], "failed")
+            self.assertIs(outcome_p1_ret["published"], False)
+            phx_inv_ret = outcome_p1_ret["phenix_inventory"]
+            self.assertIs(
+                phx_inv_ret["retained_attempt_artifacts_available"], True
+            )
+            self.assertEqual(
+                phx_inv_ret["retained_attempt_artifacts_status"], "available"
+            )
+            for expected_key in (
+                "original_data_mtz",
+                "original_model_pdb",
+                "projected_observations_mtz",
+                "input_hkl_ledger_json",
+                "input_admission_json",
+                "preflight_build_evidence_json",
+                "phenix_operation_failure_json",
+                "stdout_log",
+                "invocation_json",
+                "phenix_diagnostics_json",
+                "phenix_partial_evidence_json",
+                "phx_maps_mtz",
+                "phx_obs_pair_only_mtz",
+                "phenix_rfactors_json",
+                "manifest_json",
+                "cache_manifest_json",
+            ):
+                self.assertIn(expected_key, phx_inv_ret["retained_files"])
+            self.assertNotIn("escaped_outside", phx_inv_ret["retained_files"])
+            self.assertNotIn("escaped_symlink", phx_inv_ret["retained_files"])
+
+            # 3. Producer 1 returns only cache success.json (missing phenix_reconciled_manifest.json) -> fails closed.
+            p1_cache_only_out = fake_repo / "runs" / "p1_cache_only"
+
+            def _cache_only_phenix(
+                evidence_root: Path, *args: Any, **kwargs: Any
+            ) -> dict[str, Any]:
+                cache_path = (
+                    evidence_root
+                    / "phenix"
+                    / "cache"
+                    / "op"
+                    / "bundle"
+                    / "success.json"
+                )
+                ref = self._write_json_file(
+                    cache_path,
+                    {"returncode": 0, "reusable": True, "artifacts": {}},
+                )
+                return {
+                    "manifest_path": str(cache_path),
+                    "manifest_sha256": ref["sha256"],
+                }
+
+            with (
+                mock.patch.object(
+                    onesar_rerun,
+                    "run_phenix_rfactor_operation",
+                    side_effect=_cache_only_phenix,
+                ),
+                mock.patch.object(
+                    onesar_refmac,
+                    "run_refmac_rfactor_operation",
+                    side_effect=AssertionError("REFMAC must not run when reconciled manifest is missing"),
+                ) as rm_mock2,
+            ):
+                outcome_cache_only = (
+                    onesar_rerun.run_single_subject_rfactor_attempt(
+                        p1_cache_only_out,
+                        "R4",
+                        repo_root=fake_repo,
+                        require_no_protstruct_overrides=False,
+                    )
+                )
+                self.assertEqual(rm_mock2.call_count, 0)
+            self.assertEqual(outcome_cache_only["status"], "failed")
+            self.assertEqual(
+                outcome_cache_only["failed_stage"],
+                "phenix_reconciled_manifest_binding",
+            )
+            self.assertFalse(
+                (
+                    p1_cache_only_out
+                    / onesar_rerun.PARENT_COMPLETED_CHECKPOINT_FILENAME
+                ).exists()
+            )
+
+            # 4. Producer 2 failure (RefmacCollectorError) preserves PHENIX and REFMAC artifacts and skips checkpoint/publish.
+            p2_fail_out = fake_repo / "runs" / "p2_fail"
+
+            def _ok_phenix(
+                evidence_root: Path, *args: Any, **kwargs: Any
+            ) -> dict[str, Any]:
+                cache_path = (
+                    evidence_root
+                    / "phenix"
+                    / "cache"
+                    / "op"
+                    / "bundle"
+                    / "success.json"
+                )
+                c_ref = self._write_json_file(
+                    cache_path, {"returncode": 0, "reusable": True}
+                )
+                rec_path = (
+                    evidence_root
+                    / "phenix"
+                    / "phenix_reconciled_manifest.json"
+                )
+                rec_payload = {
+                    "schema_version": 1,
+                    "subject": onesar_rerun.resolve_subject_spec("R4"),
+                    "mtz": {
+                        "member": onesar_rerun.MTZ_MEMBER,
+                        "sha256": onesar_rerun.MTZ_SHA256,
+                        "subject_ref": onesar_rerun.MTZ_SUBJECT_REF,
+                    },
+                    "staged_files": {},
+                    "manifest_path": str(cache_path),
+                    "manifest_sha256": c_ref["sha256"],
+                    "operation_manifest": {"returncode": 0},
+                    "reconciliation": {"reconciliation_status": "verified"},
+                }
+                self._write_json_file(rec_path, rec_payload)
+                return rec_payload
+
+            def _failing_refmac(
+                evidence_root: Path | str, *args: Any, **kwargs: Any
+            ) -> dict[str, Any]:
+                ev_path = Path(evidence_root)
+                rm_man_path = (
+                    ev_path / "refmac" / "refmac_operation_manifest.json"
+                )
+                rm_diag_path = ev_path / "refmac" / "refmac_diagnostics.json"
+                man_ref = self._write_json_file(
+                    rm_man_path,
+                    {"schema_version": 1, "failed_stage": "refmac_returncode"},
+                )
+                diag_ref = self._write_json_file(
+                    rm_diag_path,
+                    {"schema_version": 1, "failed_stage": "refmac_returncode"},
+                )
+                raise onesar_refmac.RefmacCollectorError(
+                    "REFMAC exited with code 7",
+                    failed_stage="refmac_returncode",
+                    manifest_path=rm_man_path,
+                    diagnostics_path=rm_diag_path,
+                    returncode=7,
+                    manifest_payload={
+                        "manifest_json": man_ref,
+                        "diagnostics_json": diag_ref,
+                    },
+                )
+
+            with (
+                mock.patch.object(
+                    onesar_rerun,
+                    "run_phenix_rfactor_operation",
+                    side_effect=_ok_phenix,
+                ),
+                mock.patch.object(
+                    onesar_refmac,
+                    "run_refmac_rfactor_operation",
+                    side_effect=_failing_refmac,
+                ),
+                mock.patch.object(
+                    onesar_records,
+                    "publish_retained_rfactor_records",
+                    side_effect=AssertionError("Publisher must not run after REFMAC failure"),
+                ) as pub_mock3,
+            ):
+                outcome_p2 = onesar_rerun.run_single_subject_rfactor_attempt(
+                    p2_fail_out,
+                    "R4",
+                    repo_root=fake_repo,
+                    require_no_protstruct_overrides=False,
+                )
+                self.assertEqual(pub_mock3.call_count, 0)
+            self.assertEqual(outcome_p2["status"], "failed")
+            self.assertEqual(
+                outcome_p2["failed_stage"],
+                "refmac_rfactor_operation:refmac_returncode",
+            )
+            self.assertFalse(
+                (
+                    p2_fail_out
+                    / onesar_rerun.PARENT_COMPLETED_CHECKPOINT_FILENAME
+                ).exists()
+            )
+            self.assertIn(
+                "phenix_reconciled_manifest_json",
+                outcome_p2["phenix_inventory"]["retained_files"],
+            )
+            self.assertIn(
+                "operation_manifest_json",
+                outcome_p2["refmac_inventory"]["retained_files"],
+            )
+            self.assertIn(
+                "diagnostics_json",
+                outcome_p2["refmac_inventory"]["retained_files"],
+            )
+
+    def test_record_layer_exceptions_commit_states_system_exit_and_keyboard_interrupt(
+        self,
+    ) -> None:
+        """Verify SystemExit(0), QdsCompletenessError, KeyboardInterrupt, and committed/unknown commit_state preservation."""
+        import onesar_records
+        import onesar_refmac
+        from qds_emit_contract_v4 import QdsCompletenessError
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fake_repo = Path(tmp).resolve(strict=True) / "repo"
+            fake_repo.mkdir()
+
+            def _stub_phenix(
+                evidence_root: Path, *args: Any, **kwargs: Any
+            ) -> dict[str, Any]:
+                cache_path = (
+                    evidence_root
+                    / "phenix"
+                    / "cache"
+                    / "op"
+                    / "bundle"
+                    / "success.json"
+                )
+                c_ref = self._write_json_file(
+                    cache_path, {"returncode": 0, "reusable": True}
+                )
+                rec_path = (
+                    evidence_root
+                    / "phenix"
+                    / "phenix_reconciled_manifest.json"
+                )
+                rec_payload = {
+                    "schema_version": 1,
+                    "subject": onesar_rerun.resolve_subject_spec("R4"),
+                    "mtz": {
+                        "member": onesar_rerun.MTZ_MEMBER,
+                        "sha256": onesar_rerun.MTZ_SHA256,
+                        "subject_ref": onesar_rerun.MTZ_SUBJECT_REF,
+                    },
+                    "staged_files": {},
+                    "manifest_path": str(cache_path),
+                    "manifest_sha256": c_ref["sha256"],
+                    "operation_manifest": {"returncode": 0},
+                    "reconciliation": {"reconciliation_status": "verified"},
+                }
+                self._write_json_file(rec_path, rec_payload)
+                return rec_payload
+
+            def _stub_refmac(
+                evidence_root: Path | str, *args: Any, **kwargs: Any
+            ) -> dict[str, Any]:
+                ev_path = Path(evidence_root)
+                rm_man_path = (
+                    ev_path / "refmac" / "refmac_operation_manifest.json"
+                )
+                rm_payload = {
+                    "schema_version": 1,
+                    "status": "diagnostic_captured_gates_unproven",
+                }
+                rm_ref = self._write_json_file(rm_man_path, rm_payload)
+                rm_ref.pop("persisted", None)
+                out = dict(rm_payload)
+                out["manifest_json"] = rm_ref
+                return out
+
+            with (
+                self._without_protstruct_env_overrides(),
+                mock.patch.object(
+                    onesar_rerun,
+                    "run_phenix_rfactor_operation",
+                    side_effect=_stub_phenix,
+                ),
+                mock.patch.object(
+                    onesar_refmac,
+                    "run_refmac_rfactor_operation",
+                    side_effect=_stub_refmac,
+                ),
+            ):
+                # 1. SystemExit(0) inside record layer is treated as status="refused" and main returns 1 (nonzero).
+                sysexit_out = fake_repo / "runs" / "sysexit_zero"
+                with mock.patch.object(
+                    onesar_records,
+                    "publish_retained_rfactor_records",
+                    side_effect=SystemExit(0),
+                ):
+                    rc_sysexit = onesar_rerun.main(
+                        [
+                            "--subject",
+                            "R4",
+                            "--family",
+                            "rfactors",
+                            "--evidence-out",
+                            str(sysexit_out),
+                            "--repo-root",
+                            str(fake_repo),
+                        ]
+                    )
+                self.assertEqual(rc_sysexit, 1)
+                sysexit_doc = json.loads(
+                    (
+                        sysexit_out
+                        / onesar_rerun.PARENT_ATTEMPT_OUTCOME_FILENAME
+                    ).read_text(encoding="utf-8")
+                )
+                self.assertEqual(sysexit_doc["status"], "refused")
+                self.assertIs(sysexit_doc["published"], False)
+                self.assertEqual(
+                    sysexit_doc["error"]["system_exit_code"], 0
+                )
+
+                # 2. QdsCompletenessError is treated as status="refused" and main returns 1.
+                qds_err_out = fake_repo / "runs" / "qds_completeness_err"
+                with mock.patch.object(
+                    onesar_records,
+                    "publish_retained_rfactor_records",
+                    side_effect=QdsCompletenessError("missing active tool_ref"),
+                ):
+                    rc_qds = onesar_rerun.main(
+                        [
+                            "--subject",
+                            "R4",
+                            "--family",
+                            "rfactors",
+                            "--evidence-out",
+                            str(qds_err_out),
+                            "--repo-root",
+                            str(fake_repo),
+                        ]
+                    )
+                self.assertEqual(rc_qds, 1)
+                qds_doc = json.loads(
+                    (
+                        qds_err_out
+                        / onesar_rerun.PARENT_ATTEMPT_OUTCOME_FILENAME
+                    ).read_text(encoding="utf-8")
+                )
+                self.assertEqual(qds_doc["status"], "refused")
+                self.assertIs(qds_doc["published"], False)
+
+                # 3. Post-commit exception (commit_state="committed") preserves published=True, committed=True
+                # without contradictory published=False, while main returns 1 due to unhandled post-commit error.
+                committed_err_out = fake_repo / "runs" / "post_commit_err"
+                post_commit_exc = RuntimeError(
+                    "staging cleanup failed after commit"
+                )
+                post_commit_exc.commit_state = "committed"  # type: ignore[attr-defined]
+                post_commit_exc.committed = True  # type: ignore[attr-defined]
+                post_commit_exc.authoring_policy_issued_at = (  # type: ignore[attr-defined]
+                    "2026-11-06T23:59:59+00:00"
+                )
+                post_commit_exc.authoring_outcome = {  # type: ignore[attr-defined]
+                    "status": "published",
+                    "published": True,
+                    "authoring_policy_issued_at": "2026-11-06T23:59:59+00:00",
+                }
+                with mock.patch.object(
+                    onesar_records,
+                    "publish_retained_rfactor_records",
+                    side_effect=post_commit_exc,
+                ):
+                    rc_post_commit = onesar_rerun.main(
+                        [
+                            "--subject",
+                            "R4",
+                            "--family",
+                            "rfactors",
+                            "--evidence-out",
+                            str(committed_err_out),
+                            "--repo-root",
+                            str(fake_repo),
+                        ]
+                    )
+                self.assertEqual(rc_post_commit, 1)
+                committed_doc = json.loads(
+                    (
+                        committed_err_out
+                        / onesar_rerun.PARENT_ATTEMPT_OUTCOME_FILENAME
+                    ).read_text(encoding="utf-8")
+                )
+                self.assertEqual(committed_doc["commit_state"], "committed")
+                self.assertIs(committed_doc["committed"], True)
+                self.assertIs(committed_doc["published"], True)
+                self.assertEqual(
+                    committed_doc["authoring_policy_issued_at"],
+                    "2026-11-06T23:59:59+00:00",
+                )
+                self.assertIsNotNone(committed_doc["error"])
+
+                # 4. Indeterminate commit state (commit_state="unknown") preserves published=None, committed=None.
+                unknown_err_out = fake_repo / "runs" / "unknown_commit_err"
+                unknown_exc = OSError("os.link EIO with lost provisional inode")
+                unknown_exc.commit_state = "unknown"  # type: ignore[attr-defined]
+                unknown_exc.committed = None  # type: ignore[attr-defined]
+                unknown_exc.provisional_outcome_path = str(  # type: ignore[attr-defined]
+                    unknown_err_out
+                    / "authoring_outcomes"
+                    / "authoring_outcome_0001.json.provisional.txt"
+                )
+                with mock.patch.object(
+                    onesar_records,
+                    "publish_retained_rfactor_records",
+                    side_effect=unknown_exc,
+                ):
+                    rc_unknown = onesar_rerun.main(
+                        [
+                            "--subject",
+                            "R4",
+                            "--family",
+                            "rfactors",
+                            "--evidence-out",
+                            str(unknown_err_out),
+                            "--repo-root",
+                            str(fake_repo),
+                        ]
+                    )
+                self.assertEqual(rc_unknown, 1)
+                unknown_doc = json.loads(
+                    (
+                        unknown_err_out
+                        / onesar_rerun.PARENT_ATTEMPT_OUTCOME_FILENAME
+                    ).read_text(encoding="utf-8")
+                )
+                self.assertEqual(unknown_doc["commit_state"], "unknown")
+                self.assertIsNone(unknown_doc["committed"])
+                self.assertIsNone(unknown_doc["published"])
+                self.assertEqual(unknown_doc["status"], "unknown")
+                self.assertIsNotNone(unknown_doc["provisional_outcome_path"])
+
+                # 5. KeyboardInterrupt writes status="interrupted" to parent_attempt_outcome.json and re-raises.
+                kbd_out = fake_repo / "runs" / "kbd_interrupt"
+                with mock.patch.object(
+                    onesar_records,
+                    "publish_retained_rfactor_records",
+                    side_effect=KeyboardInterrupt("simulated Ctrl-C"),
+                ):
+                    with self.assertRaises(KeyboardInterrupt):
+                        onesar_rerun.run_single_subject_rfactor_attempt(
+                            kbd_out,
+                            "R4",
+                            repo_root=fake_repo,
+                            require_no_protstruct_overrides=False,
+                        )
+                kbd_doc = json.loads(
+                    (
+                        kbd_out / onesar_rerun.PARENT_ATTEMPT_OUTCOME_FILENAME
+                    ).read_text(encoding="utf-8")
+                )
+                self.assertEqual(kbd_doc["status"], "interrupted")
+                self.assertIs(kbd_doc["published"], False)
+
+    def test_finalization_outcome_persistence_and_inventory_eio_resilience(
+        self,
+    ) -> None:
+        """Verify #1093 outcome-write failure preservation, #1094 inventory EIO resilience, and #1095 REFMAC manifest binding."""
+        import errno
+        import io
+        import onesar_records
+        import onesar_refmac
+        from qds_emit_contract_v4 import QdsCompletenessError
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fake_repo = Path(tmp).resolve(strict=True) / "repo"
+            fake_repo.mkdir()
+
+            def _stub_phenix(
+                evidence_root: Path, *args: Any, **kwargs: Any
+            ) -> dict[str, Any]:
+                cache_path = (
+                    evidence_root
+                    / "phenix"
+                    / "cache"
+                    / "op"
+                    / "bundle"
+                    / "success.json"
+                )
+                c_ref = self._write_json_file(
+                    cache_path, {"returncode": 0, "reusable": True}
+                )
+                rec_path = (
+                    evidence_root
+                    / "phenix"
+                    / "phenix_reconciled_manifest.json"
+                )
+                rec_payload = {
+                    "schema_version": 1,
+                    "subject": onesar_rerun.resolve_subject_spec("R4"),
+                    "mtz": {
+                        "member": onesar_rerun.MTZ_MEMBER,
+                        "sha256": onesar_rerun.MTZ_SHA256,
+                        "subject_ref": onesar_rerun.MTZ_SUBJECT_REF,
+                    },
+                    "staged_files": {},
+                    "manifest_path": str(cache_path),
+                    "manifest_sha256": c_ref["sha256"],
+                    "operation_manifest": {"returncode": 0},
+                    "reconciliation": {"reconciliation_status": "verified"},
+                }
+                self._write_json_file(rec_path, rec_payload)
+                return rec_payload
+
+            def _stub_refmac(
+                evidence_root: Path | str, *args: Any, **kwargs: Any
+            ) -> dict[str, Any]:
+                ev_path = Path(evidence_root)
+                rm_man_path = (
+                    ev_path / "refmac" / "refmac_operation_manifest.json"
+                )
+                rm_payload = {
+                    "schema_version": 1,
+                    "status": "diagnostic_captured_gates_unproven",
+                }
+                rm_ref = self._write_json_file(rm_man_path, rm_payload)
+                rm_ref.pop("persisted", None)
+                rm_ref["is_fallback"] = True
+                rm_ref["fallback_anchor_dir"] = str(ev_path / "refmac")
+                out = dict(rm_payload)
+                out["manifest_json"] = rm_ref
+                return out
+
+            # Direct #1095 check: _bind_refmac_operation_manifest_reference accepts onesar_refmac
+            # manifest_json without "persisted", derives persisted=True, and rejects persisted=False.
+            rm_bind_root = fake_repo / "runs" / "rm_bind_unit" / "refmac"
+            rm_bind_result = _stub_refmac(rm_bind_root)
+            self.assertNotIn("persisted", rm_bind_result["manifest_json"])
+            bound_rm_ref = onesar_rerun._bind_refmac_operation_manifest_reference(
+                rm_bind_root, rm_bind_result
+            )
+            self.assertIs(bound_rm_ref["persisted"], True)
+            self.assertIs(bound_rm_ref["is_fallback"], True)
+            bad_rm_result = copy.deepcopy(rm_bind_result)
+            bad_rm_result["manifest_json"]["persisted"] = False
+            with self.assertRaisesRegex(
+                ValueError, "REFMAC manifest_json reference is not persisted"
+            ):
+                onesar_rerun._bind_refmac_operation_manifest_reference(
+                    rm_bind_root, bad_rm_result
+                )
+
+            # Mutate the no-"persisted" rm_bind_result to verify real disk revalidation:
+            # (i) same-length valid JSON byte edit without refreshing digest (restored afterward),
+            # (ii) separate size-only mismatch, and (iii) unsafe outside-root and symlink paths.
+            rm_manifest_disk_path = Path(
+                str(rm_bind_result["manifest_json"]["path"])
+            )
+            orig_rm_manifest_bytes = rm_manifest_disk_path.read_bytes()
+            same_len_tampered_bytes = orig_rm_manifest_bytes.replace(
+                b'"schema_version": 1', b'"schema_version": 2', 1
+            )
+            self.assertEqual(
+                len(same_len_tampered_bytes), len(orig_rm_manifest_bytes)
+            )
+            self.assertNotEqual(
+                same_len_tampered_bytes, orig_rm_manifest_bytes
+            )
+            try:
+                rm_manifest_disk_path.write_bytes(same_len_tampered_bytes)
+                self.assertNotIn("persisted", rm_bind_result["manifest_json"])
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "REFMAC operation manifest on-disk digest/size mismatch",
+                ):
+                    onesar_rerun._bind_refmac_operation_manifest_reference(
+                        rm_bind_root, rm_bind_result
+                    )
+            finally:
+                rm_manifest_disk_path.write_bytes(orig_rm_manifest_bytes)
+            self.assertEqual(
+                rm_manifest_disk_path.read_bytes(), orig_rm_manifest_bytes
+            )
+            self.assertEqual(
+                onesar_rerun._bind_refmac_operation_manifest_reference(
+                    rm_bind_root, rm_bind_result
+                ),
+                bound_rm_ref,
+            )
+
+            size_mismatch_rm_result = copy.deepcopy(rm_bind_result)
+            self.assertNotIn(
+                "persisted", size_mismatch_rm_result["manifest_json"]
+            )
+            size_mismatch_rm_result["manifest_json"]["size_bytes"] = (
+                int(rm_bind_result["manifest_json"]["size_bytes"]) + 1
+            )
+            with self.assertRaisesRegex(
+                ValueError,
+                "REFMAC operation manifest on-disk digest/size mismatch",
+            ):
+                onesar_rerun._bind_refmac_operation_manifest_reference(
+                    rm_bind_root, size_mismatch_rm_result
+                )
+
+            outside_rm_manifest_path = (
+                fake_repo / "runs" / "outside_refmac_manifest.json"
+            )
+            outside_rm_manifest_path.write_bytes(orig_rm_manifest_bytes)
+            outside_rm_result = copy.deepcopy(rm_bind_result)
+            self.assertNotIn("persisted", outside_rm_result["manifest_json"])
+            outside_rm_result["manifest_json"]["path"] = str(
+                outside_rm_manifest_path
+            )
+            with self.assertRaisesRegex(
+                FileNotFoundError,
+                "REFMAC operation manifest is missing or outside child root",
+            ):
+                onesar_rerun._bind_refmac_operation_manifest_reference(
+                    rm_bind_root, outside_rm_result
+                )
+
+            symlink_rm_manifest_path = (
+                rm_bind_root / "refmac" / "symlink_operation_manifest.json"
+            )
+            symlink_rm_manifest_path.symlink_to(rm_manifest_disk_path)
+            symlink_rm_result = copy.deepcopy(rm_bind_result)
+            self.assertNotIn("persisted", symlink_rm_result["manifest_json"])
+            symlink_rm_result["manifest_json"]["path"] = str(
+                symlink_rm_manifest_path
+            )
+            with self.assertRaisesRegex(
+                FileNotFoundError,
+                "REFMAC operation manifest is missing or outside child root",
+            ):
+                onesar_rerun._bind_refmac_operation_manifest_reference(
+                    rm_bind_root, symlink_rm_result
+                )
+            self.assertEqual(
+                rm_manifest_disk_path.read_bytes(), orig_rm_manifest_bytes
+            )
+            self.assertEqual(
+                onesar_rerun._bind_refmac_operation_manifest_reference(
+                    rm_bind_root, rm_bind_result
+                ),
+                bound_rm_ref,
+            )
+
+            real_write_exclusive = onesar_rerun._write_exclusive_parent_json_record
+
+            def _fail_only_outcome_write(
+                payload: Mapping[str, Any],
+                target_path: Path,
+                *,
+                parent_root: Path,
+            ) -> dict[str, Any]:
+                if (
+                    target_path.name
+                    == onesar_rerun.PARENT_ATTEMPT_OUTCOME_FILENAME
+                ):
+                    raise PermissionError(
+                        errno.EACCES,
+                        "simulated parent_attempt_outcome.json write failure",
+                        str(target_path),
+                    )
+                return real_write_exclusive(
+                    payload, target_path, parent_root=parent_root
+                )
+
+            # 1a. #1093: Ordinary producer failure + outcome write failure preserves original exception and attaches state.
+            p1_write_fail_out = fake_repo / "runs" / "p1_outcome_write_fail"
+            orig_p1_exc = RuntimeError("simulated phenix producer failure")
+            with (
+                self._without_protstruct_env_overrides(),
+                mock.patch.object(
+                    onesar_rerun,
+                    "run_phenix_rfactor_operation",
+                    side_effect=orig_p1_exc,
+                ),
+                mock.patch.object(
+                    onesar_rerun,
+                    "_write_exclusive_parent_json_record",
+                    side_effect=_fail_only_outcome_write,
+                ),
+            ):
+                with self.assertRaises(RuntimeError) as cm_p1:
+                    onesar_rerun.run_single_subject_rfactor_attempt(
+                        p1_write_fail_out,
+                        "R4",
+                        repo_root=fake_repo,
+                        require_no_protstruct_overrides=False,
+                    )
+            self.assertIs(cm_p1.exception, orig_p1_exc)
+            self.assertEqual(
+                getattr(cm_p1.exception, "failed_stage", None),
+                "phenix_rfactor_operation",
+            )
+            self.assertEqual(
+                getattr(cm_p1.exception, "commit_state", None), "not_committed"
+            )
+            self.assertIs(getattr(cm_p1.exception, "committed", None), False)
+            self.assertIs(getattr(cm_p1.exception, "published", None), False)
+            p1_attached = getattr(cm_p1.exception, "attempt_outcome", None)
+            self.assertIsInstance(p1_attached, Mapping)
+            self.assertEqual(p1_attached["status"], "failed")
+            self.assertIsNone(p1_attached["outcome_record_reference"])
+            self.assertEqual(
+                p1_attached["outcome_persistence_error"]["exception_type"],
+                "PermissionError",
+            )
+            self.assertEqual(
+                p1_attached["outcome_persistence_error"]["errno"],
+                errno.EACCES,
+            )
+            self.assertTrue(
+                any(
+                    "parent_attempt_outcome_persistence" in n
+                    for n in getattr(cm_p1.exception, "__notes__", ())
+                )
+            )
+
+            # 1b. #1093: Post-admission ValueError + outcome write failure via main() exits 1 (not 2 rejected_pre_admission).
+            val_write_fail_out = fake_repo / "runs" / "val_outcome_write_fail"
+            stderr_val = io.StringIO()
+            with (
+                self._without_protstruct_env_overrides(),
+                mock.patch.object(
+                    onesar_rerun,
+                    "run_phenix_rfactor_operation",
+                    side_effect=ValueError("post-admission producer ValueError"),
+                ),
+                mock.patch.object(
+                    onesar_rerun,
+                    "_write_exclusive_parent_json_record",
+                    side_effect=_fail_only_outcome_write,
+                ),
+                mock.patch.object(sys, "stderr", stderr_val),
+            ):
+                rc_val = onesar_rerun.main(
+                    [
+                        "--subject",
+                        "R4",
+                        "--family",
+                        "rfactors",
+                        "--evidence-out",
+                        str(val_write_fail_out),
+                        "--repo-root",
+                        str(fake_repo),
+                    ]
+                )
+            self.assertEqual(rc_val, 1)
+            val_summary = json.loads(stderr_val.getvalue())
+            self.assertEqual(val_summary["status"], "failed")
+            self.assertEqual(
+                val_summary["failed_stage"], "phenix_rfactor_operation"
+            )
+            self.assertIsNone(val_summary["outcome_record_path"])
+            self.assertEqual(
+                val_summary["outcome_persistence_error"]["exception_type"],
+                "PermissionError",
+            )
+
+            # 1b-ii. #1093: Stored SystemExit(0) and QdsCompletenessError + outcome write failure
+            # across both run_single_subject_rfactor_attempt and main() (never process success).
+            sysexit_write_fail_out = (
+                fake_repo / "runs" / "sysexit_outcome_write_fail"
+            )
+            orig_sysexit_exc = SystemExit(0)
+            with (
+                self._without_protstruct_env_overrides(),
+                mock.patch.object(
+                    onesar_rerun,
+                    "run_phenix_rfactor_operation",
+                    side_effect=_stub_phenix,
+                ),
+                mock.patch.object(
+                    onesar_refmac,
+                    "run_refmac_rfactor_operation",
+                    side_effect=_stub_refmac,
+                ),
+                mock.patch.object(
+                    onesar_records,
+                    "publish_retained_rfactor_records",
+                    side_effect=orig_sysexit_exc,
+                ),
+                mock.patch.object(
+                    onesar_rerun,
+                    "_write_exclusive_parent_json_record",
+                    side_effect=_fail_only_outcome_write,
+                ),
+            ):
+                with self.assertRaises(SystemExit) as cm_sysexit:
+                    onesar_rerun.run_single_subject_rfactor_attempt(
+                        sysexit_write_fail_out,
+                        "R4",
+                        repo_root=fake_repo,
+                        require_no_protstruct_overrides=False,
+                    )
+            self.assertIs(cm_sysexit.exception, orig_sysexit_exc)
+            self.assertIs(type(cm_sysexit.exception), SystemExit)
+            self.assertEqual(cm_sysexit.exception.code, 0)
+            self.assertEqual(
+                getattr(cm_sysexit.exception, "status", None), "refused"
+            )
+            self.assertEqual(
+                getattr(cm_sysexit.exception, "failed_stage", None),
+                "publish_retained_rfactor_records",
+            )
+            self.assertEqual(
+                getattr(cm_sysexit.exception, "commit_state", None),
+                "not_committed",
+            )
+            self.assertIs(
+                getattr(cm_sysexit.exception, "committed", None), False
+            )
+            self.assertIs(
+                getattr(cm_sysexit.exception, "published", None), False
+            )
+            sysexit_attached = getattr(
+                cm_sysexit.exception, "attempt_outcome", None
+            )
+            self.assertIsInstance(sysexit_attached, Mapping)
+            self.assertEqual(sysexit_attached["status"], "refused")
+            self.assertEqual(
+                sysexit_attached["failed_stage"],
+                "publish_retained_rfactor_records",
+            )
+            self.assertEqual(sysexit_attached["commit_state"], "not_committed")
+            self.assertIs(sysexit_attached["committed"], False)
+            self.assertIs(sysexit_attached["published"], False)
+            self.assertEqual(sysexit_attached["error"]["system_exit_code"], 0)
+            self.assertIsNone(sysexit_attached["outcome_record_reference"])
+            self.assertEqual(
+                sysexit_attached["outcome_persistence_error"]["exception_type"],
+                "PermissionError",
+            )
+            self.assertEqual(
+                sysexit_attached["outcome_persistence_error"]["errno"],
+                errno.EACCES,
+            )
+
+            sysexit_cli_write_fail_out = (
+                fake_repo / "runs" / "sysexit_cli_outcome_write_fail"
+            )
+            orig_sysexit_cli_exc = SystemExit(0)
+            stderr_sysexit_cli = io.StringIO()
+            with (
+                self._without_protstruct_env_overrides(),
+                mock.patch.object(
+                    onesar_rerun,
+                    "run_phenix_rfactor_operation",
+                    side_effect=_stub_phenix,
+                ),
+                mock.patch.object(
+                    onesar_refmac,
+                    "run_refmac_rfactor_operation",
+                    side_effect=_stub_refmac,
+                ),
+                mock.patch.object(
+                    onesar_records,
+                    "publish_retained_rfactor_records",
+                    side_effect=orig_sysexit_cli_exc,
+                ),
+                mock.patch.object(
+                    onesar_rerun,
+                    "_write_exclusive_parent_json_record",
+                    side_effect=_fail_only_outcome_write,
+                ),
+                mock.patch.object(sys, "stderr", stderr_sysexit_cli),
+            ):
+                rc_sysexit_cli = onesar_rerun.main(
+                    [
+                        "--subject",
+                        "R4",
+                        "--family",
+                        "rfactors",
+                        "--evidence-out",
+                        str(sysexit_cli_write_fail_out),
+                        "--repo-root",
+                        str(fake_repo),
+                    ]
+                )
+            self.assertEqual(rc_sysexit_cli, 1)
+            sysexit_cli_summary = json.loads(stderr_sysexit_cli.getvalue())
+            self.assertEqual(sysexit_cli_summary["status"], "refused")
+            self.assertIs(sysexit_cli_summary["published"], False)
+            self.assertEqual(
+                sysexit_cli_summary["commit_state"], "not_committed"
+            )
+            self.assertIs(sysexit_cli_summary["committed"], False)
+            self.assertEqual(
+                sysexit_cli_summary["failed_stage"],
+                "publish_retained_rfactor_records",
+            )
+            self.assertIsNone(sysexit_cli_summary["outcome_record_path"])
+            self.assertEqual(
+                sysexit_cli_summary["outcome_persistence_error"][
+                    "exception_type"
+                ],
+                "PermissionError",
+            )
+            self.assertEqual(
+                sysexit_cli_summary["outcome_persistence_error"]["errno"],
+                errno.EACCES,
+            )
+
+            qds_write_fail_out = (
+                fake_repo / "runs" / "qds_outcome_write_fail"
+            )
+            orig_qds_exc = QdsCompletenessError(
+                "missing active tool_ref before write fail"
+            )
+            with (
+                self._without_protstruct_env_overrides(),
+                mock.patch.object(
+                    onesar_rerun,
+                    "run_phenix_rfactor_operation",
+                    side_effect=_stub_phenix,
+                ),
+                mock.patch.object(
+                    onesar_refmac,
+                    "run_refmac_rfactor_operation",
+                    side_effect=_stub_refmac,
+                ),
+                mock.patch.object(
+                    onesar_records,
+                    "publish_retained_rfactor_records",
+                    side_effect=orig_qds_exc,
+                ),
+                mock.patch.object(
+                    onesar_rerun,
+                    "_write_exclusive_parent_json_record",
+                    side_effect=_fail_only_outcome_write,
+                ),
+            ):
+                with self.assertRaises(QdsCompletenessError) as cm_qds:
+                    onesar_rerun.run_single_subject_rfactor_attempt(
+                        qds_write_fail_out,
+                        "R4",
+                        repo_root=fake_repo,
+                        require_no_protstruct_overrides=False,
+                    )
+            self.assertIs(cm_qds.exception, orig_qds_exc)
+            self.assertIs(type(cm_qds.exception), QdsCompletenessError)
+            self.assertEqual(
+                getattr(cm_qds.exception, "status", None), "refused"
+            )
+            self.assertEqual(
+                getattr(cm_qds.exception, "failed_stage", None),
+                "publish_retained_rfactor_records",
+            )
+            self.assertEqual(
+                getattr(cm_qds.exception, "commit_state", None), "not_committed"
+            )
+            self.assertIs(getattr(cm_qds.exception, "committed", None), False)
+            self.assertIs(getattr(cm_qds.exception, "published", None), False)
+            qds_attached = getattr(cm_qds.exception, "attempt_outcome", None)
+            self.assertIsInstance(qds_attached, Mapping)
+            self.assertEqual(qds_attached["status"], "refused")
+            self.assertEqual(
+                qds_attached["failed_stage"],
+                "publish_retained_rfactor_records",
+            )
+            self.assertEqual(qds_attached["commit_state"], "not_committed")
+            self.assertIs(qds_attached["committed"], False)
+            self.assertIs(qds_attached["published"], False)
+            self.assertIsNone(qds_attached["outcome_record_reference"])
+            self.assertEqual(
+                qds_attached["outcome_persistence_error"]["exception_type"],
+                "PermissionError",
+            )
+            self.assertEqual(
+                qds_attached["outcome_persistence_error"]["errno"],
+                errno.EACCES,
+            )
+
+            qds_cli_write_fail_out = (
+                fake_repo / "runs" / "qds_cli_outcome_write_fail"
+            )
+            orig_qds_cli_exc = QdsCompletenessError(
+                "missing active tool_ref cli before write fail"
+            )
+            stderr_qds_cli = io.StringIO()
+            with (
+                self._without_protstruct_env_overrides(),
+                mock.patch.object(
+                    onesar_rerun,
+                    "run_phenix_rfactor_operation",
+                    side_effect=_stub_phenix,
+                ),
+                mock.patch.object(
+                    onesar_refmac,
+                    "run_refmac_rfactor_operation",
+                    side_effect=_stub_refmac,
+                ),
+                mock.patch.object(
+                    onesar_records,
+                    "publish_retained_rfactor_records",
+                    side_effect=orig_qds_cli_exc,
+                ),
+                mock.patch.object(
+                    onesar_rerun,
+                    "_write_exclusive_parent_json_record",
+                    side_effect=_fail_only_outcome_write,
+                ),
+                mock.patch.object(sys, "stderr", stderr_qds_cli),
+            ):
+                rc_qds_cli = onesar_rerun.main(
+                    [
+                        "--subject",
+                        "R4",
+                        "--family",
+                        "rfactors",
+                        "--evidence-out",
+                        str(qds_cli_write_fail_out),
+                        "--repo-root",
+                        str(fake_repo),
+                    ]
+                )
+            self.assertEqual(rc_qds_cli, 1)
+            qds_cli_summary = json.loads(stderr_qds_cli.getvalue())
+            self.assertEqual(qds_cli_summary["status"], "refused")
+            self.assertIs(qds_cli_summary["published"], False)
+            self.assertEqual(qds_cli_summary["commit_state"], "not_committed")
+            self.assertIs(qds_cli_summary["committed"], False)
+            self.assertEqual(
+                qds_cli_summary["failed_stage"],
+                "publish_retained_rfactor_records",
+            )
+            self.assertIsNone(qds_cli_summary["outcome_record_path"])
+            self.assertEqual(
+                qds_cli_summary["outcome_persistence_error"]["exception_type"],
+                "PermissionError",
+            )
+            self.assertEqual(
+                qds_cli_summary["outcome_persistence_error"]["errno"],
+                errno.EACCES,
+            )
+
+            # 1c. #1093: Public scientific refusal + outcome write failure preserves RefmacScientificAdmissionRefusedError.
+            refusal_write_fail_out = (
+                fake_repo / "runs" / "refusal_outcome_write_fail"
+            )
+            refusal_exc = onesar_records.RefmacScientificAdmissionRefusedError(
+                "simulated public scientific refusal",
+                refusal_record={
+                    "producer": "refmac",
+                    "subject_id": "R4",
+                    "integrity_verified": True,
+                    "scientific_proof_established": False,
+                    "unknown_native_premises": {},
+                    "refusal_reasons": ["unproven"],
+                    "unsupported_proof_claims": [],
+                    "verified_references": {},
+                },
+            )
+            refusal_exc.authoring_outcome = {  # type: ignore[attr-defined]
+                "status": "refused",
+                "published": False,
+                "failed_stage": "refmac_retained_verification",
+                "outcome_path": str(
+                    refusal_write_fail_out
+                    / "authoring_outcomes"
+                    / "authoring_outcome_0001.json"
+                ),
+            }
+            refusal_exc.authoring_outcome_path = refusal_exc.authoring_outcome[  # type: ignore[attr-defined]
+                "outcome_path"
+            ]
+            with (
+                self._without_protstruct_env_overrides(),
+                mock.patch.object(
+                    onesar_rerun,
+                    "run_phenix_rfactor_operation",
+                    side_effect=_stub_phenix,
+                ),
+                mock.patch.object(
+                    onesar_refmac,
+                    "run_refmac_rfactor_operation",
+                    side_effect=_stub_refmac,
+                ),
+                mock.patch.object(
+                    onesar_records,
+                    "publish_retained_rfactor_records",
+                    side_effect=refusal_exc,
+                ),
+                mock.patch.object(
+                    onesar_rerun,
+                    "_write_exclusive_parent_json_record",
+                    side_effect=_fail_only_outcome_write,
+                ),
+            ):
+                with self.assertRaises(
+                    onesar_records.RefmacScientificAdmissionRefusedError
+                ) as cm_ref:
+                    onesar_rerun.run_single_subject_rfactor_attempt(
+                        refusal_write_fail_out,
+                        "R4",
+                        repo_root=fake_repo,
+                        require_no_protstruct_overrides=False,
+                    )
+            self.assertIs(cm_ref.exception, refusal_exc)
+            self.assertEqual(
+                getattr(cm_ref.exception, "failed_stage", None),
+                "refmac_retained_verification",
+            )
+            self.assertEqual(
+                getattr(cm_ref.exception, "commit_state", None), "not_committed"
+            )
+            self.assertIs(getattr(cm_ref.exception, "committed", None), False)
+            ref_attached = getattr(cm_ref.exception, "attempt_outcome", None)
+            self.assertIsInstance(ref_attached, Mapping)
+            self.assertEqual(ref_attached["status"], "refused")
+            self.assertIsNone(ref_attached["outcome_record_reference"])
+            self.assertEqual(
+                ref_attached["scientific_refusal"]["integrity_verified"], True
+            )
+
+            # 1d. #1093: Post-commit publisher exception (commit_state="committed") + outcome write failure.
+            committed_write_fail_out = (
+                fake_repo / "runs" / "committed_outcome_write_fail"
+            )
+            committed_pub_exc = RuntimeError(
+                "post-commit cleanup error before parent outcome write"
+            )
+            committed_pub_exc.commit_state = "committed"  # type: ignore[attr-defined]
+            committed_pub_exc.committed = True  # type: ignore[attr-defined]
+            committed_pub_exc.authoring_policy_issued_at = (  # type: ignore[attr-defined]
+                "2026-11-06T23:59:59+00:00"
+            )
+            committed_pub_exc.authoring_outcome = {  # type: ignore[attr-defined]
+                "status": "published",
+                "published": True,
+                "commit_state": "committed",
+                "authoring_policy_issued_at": "2026-11-06T23:59:59+00:00",
+                "outcome_path": str(
+                    committed_write_fail_out
+                    / "authoring_outcomes"
+                    / "authoring_outcome_0001.json"
+                ),
+            }
+            committed_pub_exc.authoring_outcome_path = (  # type: ignore[attr-defined]
+                committed_pub_exc.authoring_outcome["outcome_path"]
+            )
+            with (
+                self._without_protstruct_env_overrides(),
+                mock.patch.object(
+                    onesar_rerun,
+                    "run_phenix_rfactor_operation",
+                    side_effect=_stub_phenix,
+                ),
+                mock.patch.object(
+                    onesar_refmac,
+                    "run_refmac_rfactor_operation",
+                    side_effect=_stub_refmac,
+                ),
+                mock.patch.object(
+                    onesar_records,
+                    "publish_retained_rfactor_records",
+                    side_effect=committed_pub_exc,
+                ),
+                mock.patch.object(
+                    onesar_rerun,
+                    "_write_exclusive_parent_json_record",
+                    side_effect=_fail_only_outcome_write,
+                ),
+            ):
+                with self.assertRaises(RuntimeError) as cm_comm:
+                    onesar_rerun.run_single_subject_rfactor_attempt(
+                        committed_write_fail_out,
+                        "R4",
+                        repo_root=fake_repo,
+                        require_no_protstruct_overrides=False,
+                    )
+            self.assertIs(cm_comm.exception, committed_pub_exc)
+            self.assertEqual(
+                getattr(cm_comm.exception, "commit_state", None), "committed"
+            )
+            self.assertIs(getattr(cm_comm.exception, "committed", None), True)
+            self.assertIs(getattr(cm_comm.exception, "published", None), True)
+            comm_attached = getattr(cm_comm.exception, "attempt_outcome", None)
+            self.assertIsInstance(comm_attached, Mapping)
+            self.assertEqual(comm_attached["commit_state"], "committed")
+            self.assertIs(comm_attached["committed"], True)
+            self.assertIs(comm_attached["published"], True)
+            self.assertIsNone(comm_attached["outcome_record_reference"])
+            self.assertEqual(
+                comm_attached["outcome_persistence_error"]["exception_type"],
+                "PermissionError",
+            )
+
+            # 1e. #1093: Indeterminate commit state (commit_state="unknown") + outcome write failure.
+            unknown_write_fail_out = (
+                fake_repo / "runs" / "unknown_outcome_write_fail"
+            )
+            unknown_pub_exc = OSError("os.link EIO with indeterminate commit")
+            unknown_pub_exc.commit_state = "unknown"  # type: ignore[attr-defined]
+            unknown_pub_exc.committed = None  # type: ignore[attr-defined]
+            unknown_pub_exc.provisional_outcome_path = str(  # type: ignore[attr-defined]
+                unknown_write_fail_out
+                / "authoring_outcomes"
+                / "authoring_outcome_0001.json.provisional.txt"
+            )
+            with (
+                self._without_protstruct_env_overrides(),
+                mock.patch.object(
+                    onesar_rerun,
+                    "run_phenix_rfactor_operation",
+                    side_effect=_stub_phenix,
+                ),
+                mock.patch.object(
+                    onesar_refmac,
+                    "run_refmac_rfactor_operation",
+                    side_effect=_stub_refmac,
+                ),
+                mock.patch.object(
+                    onesar_records,
+                    "publish_retained_rfactor_records",
+                    side_effect=unknown_pub_exc,
+                ),
+                mock.patch.object(
+                    onesar_rerun,
+                    "_write_exclusive_parent_json_record",
+                    side_effect=_fail_only_outcome_write,
+                ),
+            ):
+                with self.assertRaises(OSError) as cm_unk:
+                    onesar_rerun.run_single_subject_rfactor_attempt(
+                        unknown_write_fail_out,
+                        "R4",
+                        repo_root=fake_repo,
+                        require_no_protstruct_overrides=False,
+                    )
+            self.assertIs(cm_unk.exception, unknown_pub_exc)
+            self.assertEqual(
+                getattr(cm_unk.exception, "commit_state", None), "unknown"
+            )
+            self.assertIsNone(getattr(cm_unk.exception, "committed", None))
+            self.assertIsNone(getattr(cm_unk.exception, "published", None))
+            unk_attached = getattr(cm_unk.exception, "attempt_outcome", None)
+            self.assertIsInstance(unk_attached, Mapping)
+            self.assertEqual(unk_attached["status"], "unknown")
+            self.assertIsNone(unk_attached["outcome_record_reference"])
+
+            # 1f. #1093: No-exception committed return where a foreign file pre-exists at parent_attempt_outcome.json.
+            foreign_outcome_out = (
+                fake_repo / "runs" / "foreign_outcome_collision"
+            )
+            foreign_bytes = b'{"foreign": "do_not_clobber"}\n'
+
+            def _committed_pub_creating_foreign_outcome(
+                admitted_root: Path | str, *args: Any, **kwargs: Any
+            ) -> dict[str, Any]:
+                foreign_target = (
+                    Path(admitted_root)
+                    / onesar_rerun.PARENT_ATTEMPT_OUTCOME_FILENAME
+                )
+                foreign_target.write_bytes(foreign_bytes)
+                return {
+                    "status": "published",
+                    "published": True,
+                    "commit_state": "committed",
+                    "committed": True,
+                    "issued_at": "2026-11-06T23:59:59+00:00",
+                    "authoring_outcome_path": str(
+                        Path(admitted_root)
+                        / "authoring_outcomes"
+                        / "authoring_outcome_0001.json"
+                    ),
+                    "authoring_outcome": {
+                        "status": "published",
+                        "published": True,
+                        "commit_state": "committed",
+                        "authoring_policy_issued_at": "2026-11-06T23:59:59+00:00",
+                        "outcome_path": str(
+                            Path(admitted_root)
+                            / "authoring_outcomes"
+                            / "authoring_outcome_0001.json"
+                        ),
+                    },
+                }
+
+            stderr_foreign = io.StringIO()
+            with (
+                self._without_protstruct_env_overrides(),
+                mock.patch.object(
+                    onesar_rerun,
+                    "run_phenix_rfactor_operation",
+                    side_effect=_stub_phenix,
+                ),
+                mock.patch.object(
+                    onesar_refmac,
+                    "run_refmac_rfactor_operation",
+                    side_effect=_stub_refmac,
+                ),
+                mock.patch.object(
+                    onesar_records,
+                    "publish_retained_rfactor_records",
+                    side_effect=_committed_pub_creating_foreign_outcome,
+                ),
+                mock.patch.object(sys, "stderr", stderr_foreign),
+            ):
+                rc_foreign = onesar_rerun.main(
+                    [
+                        "--subject",
+                        "R4",
+                        "--family",
+                        "rfactors",
+                        "--evidence-out",
+                        str(foreign_outcome_out),
+                        "--repo-root",
+                        str(fake_repo),
+                    ]
+                )
+            self.assertEqual(rc_foreign, 1)
+            self.assertEqual(
+                (
+                    foreign_outcome_out
+                    / onesar_rerun.PARENT_ATTEMPT_OUTCOME_FILENAME
+                ).read_bytes(),
+                foreign_bytes,
+            )
+            foreign_summary = json.loads(stderr_foreign.getvalue())
+            self.assertEqual(foreign_summary["status"], "published")
+            self.assertIs(foreign_summary["published"], True)
+            self.assertEqual(foreign_summary["commit_state"], "committed")
+            self.assertIs(foreign_summary["committed"], True)
+            self.assertEqual(
+                foreign_summary["failed_stage"],
+                "parent_attempt_outcome_persistence",
+            )
+            self.assertIsNone(foreign_summary["outcome_record_path"])
+            self.assertEqual(
+                foreign_summary["outcome_persistence_error"]["exception_type"],
+                "FileExistsError",
+            )
+
+            # 1g. #1093: KeyboardInterrupt + outcome write failure preserves KeyboardInterrupt identity and attaches outcome.
+            kbd_write_fail_out = fake_repo / "runs" / "kbd_outcome_write_fail"
+            orig_kbd_exc = KeyboardInterrupt("simulated Ctrl-C before write fail")
+            with (
+                self._without_protstruct_env_overrides(),
+                mock.patch.object(
+                    onesar_rerun,
+                    "run_phenix_rfactor_operation",
+                    side_effect=_stub_phenix,
+                ),
+                mock.patch.object(
+                    onesar_refmac,
+                    "run_refmac_rfactor_operation",
+                    side_effect=_stub_refmac,
+                ),
+                mock.patch.object(
+                    onesar_records,
+                    "publish_retained_rfactor_records",
+                    side_effect=orig_kbd_exc,
+                ),
+                mock.patch.object(
+                    onesar_rerun,
+                    "_write_exclusive_parent_json_record",
+                    side_effect=_fail_only_outcome_write,
+                ),
+            ):
+                with self.assertRaises(KeyboardInterrupt) as cm_kbd:
+                    onesar_rerun.run_single_subject_rfactor_attempt(
+                        kbd_write_fail_out,
+                        "R4",
+                        repo_root=fake_repo,
+                        require_no_protstruct_overrides=False,
+                    )
+            self.assertIs(cm_kbd.exception, orig_kbd_exc)
+            kbd_attached = getattr(cm_kbd.exception, "attempt_outcome", None)
+            self.assertIsInstance(kbd_attached, Mapping)
+            self.assertEqual(kbd_attached["status"], "interrupted")
+            self.assertIsNone(kbd_attached["outcome_record_reference"])
+            self.assertEqual(
+                kbd_attached["outcome_persistence_error"]["exception_type"],
+                "PermissionError",
+            )
+
+            # 2a. #1094: Child-root OSError(errno.EIO) after ordinary producer failure writes parent_attempt_outcome.json
+            # with evidence_root_exists=None and inventory_status="unavailable" (never confirmed absence False).
+            eio_fail_out = fake_repo / "runs" / "child_inventory_eio_fail"
+            orig_eio_producer_exc = RuntimeError(
+                "simulated phenix failure before child EIO"
+            )
+            real_is_symlink = Path.is_symlink
+
+            def _eio_on_child_roots(path_obj: Path) -> bool:
+                if path_obj in (
+                    eio_fail_out / "phenix",
+                    eio_fail_out / "refmac",
+                    eio_kbd_out / "phenix",
+                    eio_kbd_out / "refmac",
+                ):
+                    raise OSError(
+                        errno.EIO, "simulated child stat I/O failure"
+                    )
+                return real_is_symlink(path_obj)
+
+            eio_kbd_out = fake_repo / "runs" / "child_inventory_eio_kbd"
+            with (
+                self._without_protstruct_env_overrides(),
+                mock.patch.object(
+                    onesar_rerun,
+                    "run_phenix_rfactor_operation",
+                    side_effect=orig_eio_producer_exc,
+                ),
+                mock.patch.object(
+                    Path,
+                    "is_symlink",
+                    autospec=True,
+                    side_effect=_eio_on_child_roots,
+                ),
+            ):
+                outcome_eio = onesar_rerun.run_single_subject_rfactor_attempt(
+                    eio_fail_out,
+                    "R4",
+                    repo_root=fake_repo,
+                    require_no_protstruct_overrides=False,
+                )
+            self.assertEqual(outcome_eio["status"], "failed")
+            self.assertEqual(
+                outcome_eio["failed_stage"], "phenix_rfactor_operation"
+            )
+            self.assertEqual(
+                outcome_eio["error"]["exception_type"], "RuntimeError"
+            )
+            for inv_key in ("phenix_inventory", "refmac_inventory"):
+                inv_block = outcome_eio[inv_key]
+                self.assertIsNone(inv_block["evidence_root_exists"])
+                self.assertEqual(inv_block["inventory_status"], "unavailable")
+                self.assertEqual(
+                    inv_block["inspection_error"]["errno"], errno.EIO
+                )
+            eio_outcome_path = (
+                eio_fail_out / onesar_rerun.PARENT_ATTEMPT_OUTCOME_FILENAME
+            )
+            self.assertTrue(eio_outcome_path.is_file())
+            self.assertEqual(
+                hashlib.sha256(eio_outcome_path.read_bytes()).hexdigest(),
+                outcome_eio["outcome_record_reference"]["sha256"],
+            )
+
+            # 2b. #1094: Child-root OSError(errno.EIO) after KeyboardInterrupt persists parent_attempt_outcome.json and re-raises.
+            orig_eio_kbd_exc = KeyboardInterrupt(
+                "simulated Ctrl-C before child EIO"
+            )
+            with (
+                self._without_protstruct_env_overrides(),
+                mock.patch.object(
+                    onesar_rerun,
+                    "run_phenix_rfactor_operation",
+                    side_effect=orig_eio_kbd_exc,
+                ),
+                mock.patch.object(
+                    Path,
+                    "is_symlink",
+                    autospec=True,
+                    side_effect=_eio_on_child_roots,
+                ),
+            ):
+                with self.assertRaises(KeyboardInterrupt) as cm_eio_kbd:
+                    onesar_rerun.run_single_subject_rfactor_attempt(
+                        eio_kbd_out,
+                        "R4",
+                        repo_root=fake_repo,
+                        require_no_protstruct_overrides=False,
+                    )
+            self.assertIs(cm_eio_kbd.exception, orig_eio_kbd_exc)
+            eio_kbd_outcome_path = (
+                eio_kbd_out / onesar_rerun.PARENT_ATTEMPT_OUTCOME_FILENAME
+            )
+            self.assertTrue(eio_kbd_outcome_path.is_file())
+            eio_kbd_doc = json.loads(
+                eio_kbd_outcome_path.read_text(encoding="utf-8")
+            )
+            self.assertEqual(eio_kbd_doc["status"], "interrupted")
+            self.assertIsNone(
+                eio_kbd_doc["phenix_inventory"]["evidence_root_exists"]
+            )
+            self.assertEqual(
+                eio_kbd_doc["phenix_inventory"]["inventory_status"],
+                "unavailable",
+            )
+            self.assertEqual(
+                eio_kbd_doc["phenix_inventory"]["inspection_error"]["errno"],
+                errno.EIO,
+            )
+
+    def test_real_retained_public_verification_and_scientific_refusal_r4_and_start(
+        self,
+    ) -> None:
+        """Exercise real PHENIX, REFMAC, parent-checkpoint, and record-layer verifiers on R4 and start."""
+        import onesar_records
+        import test_onesar_refmac
+
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp).resolve(strict=True)
+            fake_repo = base / "repo"
+            fake_repo.mkdir()
+            fake_output_repo = base / "output_repo"
+            fake_output_repo.mkdir()
+
+            fake_phx_bin, fake_phx_build, fake_phx_runner = (
+                self._make_fake_phenix_runner_and_build(base)
+            )
+            fake_ccp4 = test_onesar_refmac._FakeCcp4Fixture(base)
+
+            def fake_refmac_runner(
+                xyzin: Path,
+                hklin: Path,
+                xyzout: Path,
+                hklout: Path,
+                log_path: Path,
+                keywords: str,
+                *,
+                cwd: Path,
+                timeout: float,
+                xml_output: Path,
+                executable: Path,
+                env: Mapping[str, str],
+                ccp4: bool,
+            ) -> subprocess.CompletedProcess[str]:
+                test_onesar_refmac.TestRefmacCollectorFirstSlice._write_capture_success_outputs(
+                    xyzin, hklin, xyzout, hklout, log_path
+                )
+                argv = [
+                    str(executable),
+                    "XYZIN",
+                    str(xyzin),
+                    "HKLIN",
+                    str(hklin),
+                    "XYZOUT",
+                    str(xyzout),
+                    "HKLOUT",
+                    str(hklout),
+                    "XMLOUT",
+                    str(xml_output),
+                ]
+                return subprocess.CompletedProcess(
+                    args=argv,
+                    returncode=0,
+                    stdout=test_onesar_refmac.SYNTHETIC_SINGLE_CYCLE_NCYC0_LOG,
+                    stderr="",
+                )
+
+            for subject_id, expect_qds_path in (
+                ("R4", True),
+                ("start", False),
+            ):
+                with self.subTest(subject_id=subject_id):
+                    attempt_out = (
+                        REPO_ROOT
+                        / ".temp"
+                        / f"test_task179_real_refusal_{subject_id.lower()}_{os.getpid()}"
+                    )
+                    self.assertFalse(attempt_out.exists())
+                    try:
+                        with (
+                            self._without_protstruct_env_overrides(),
+                            mock.patch.object(
+                                toolchain,
+                                "phenix",
+                                side_effect=lambda exe: fake_phx_bin / exe,
+                            ),
+                            mock.patch.object(
+                                toolchain,
+                                "phenix_build_evidence",
+                                return_value=fake_phx_build,
+                            ),
+                            mock.patch.object(
+                                toolchain,
+                                "CCP4_SETUP",
+                                fake_ccp4.setup_script,
+                            ),
+                            mock.patch.object(
+                                toolchain,
+                                "ccp4_environment",
+                                return_value=dict(fake_ccp4.sourced_env),
+                            ),
+                            mock.patch.object(
+                                onesar_records,
+                                "_prepare_rfactor_eval_and_live_qds_records",
+                                side_effect=AssertionError(
+                                    "Private record assembly must never be called on scientific refusal"
+                                ),
+                            ) as prep_mock,
+                            mock.patch.object(
+                                onesar_records,
+                                "_publish_prepared_rfactor_records",
+                                side_effect=AssertionError(
+                                    "Private record publication must never be called on scientific refusal"
+                                ),
+                            ) as priv_pub_mock,
+                        ):
+                            outcome = onesar_rerun.run_single_subject_rfactor_attempt(
+                                attempt_out,
+                                subject_id,
+                                family="rfactors",
+                                repo_root=REPO_ROOT,
+                                output_repo_root=fake_output_repo,
+                                archive_path=COMMITTED_ARCHIVE,
+                                timeout=120.0,
+                                require_no_protstruct_overrides=False,
+                                phenix_runner=fake_phx_runner,
+                                refmac_runner=fake_refmac_runner,
+                                started_at_utc_override="2026-11-06T23:58:10+00:00",
+                                checkpoint_finished_at_utc_override="2026-11-07T00:03:25+00:00",
+                            )
+                            self.assertEqual(prep_mock.call_count, 0)
+                            self.assertEqual(priv_pub_mock.call_count, 0)
+
+                        self.assertEqual(outcome["status"], "refused")
+                        self.assertIs(outcome["published"], False)
+                        self.assertIs(outcome["committed"], False)
+                        self.assertEqual(
+                            outcome["failed_stage"],
+                            "refmac_retained_verification",
+                        )
+                        self.assertEqual(outcome["run_date"], "2026-11-06")
+                        self.assertIsNone(outcome["authoring_policy_issued_at"])
+
+                        # Verify real-layout PHENIX and REFMAC inventories include original_data.mtz
+                        # and all returned cache/raw/audit/manifest files.
+                        phx_files = outcome["phenix_inventory"]["retained_files"]
+                        for expected_phx_key in (
+                            "input_admission_json",
+                            "original_model_pdb",
+                            "original_data_mtz",
+                            "projected_observations_mtz",
+                            "input_hkl_ledger_json",
+                            "preflight_build_evidence_json",
+                            "phenix_operation_parameters_json",
+                            "phenix_reconciled_manifest_json",
+                            "cache_manifest_json",
+                            "stdout_log",
+                            "phenix_rfactors_json",
+                            "phenix_diagnostics_json",
+                            "phenix_partial_evidence_json",
+                            "phx_maps_mtz",
+                            "phx_obs_pair_only_mtz",
+                        ):
+                            self.assertIn(expected_phx_key, phx_files)
+                        self.assertTrue(
+                            phx_files["original_data_mtz"]["path"].endswith(
+                                "inputs/original_data.mtz"
+                            )
+                        )
+                        self.assertIn(
+                            "refinement_cache_v1",
+                            phx_files["phenix_rfactors_json"]["path"],
+                        )
+                        self.assertIn(
+                            "refinement_cache_v1",
+                            phx_files["phx_maps_mtz"]["path"],
+                        )
+
+                        rm_files = outcome["refmac_inventory"]["retained_files"]
+                        for expected_rm_key in (
+                            "input_admission_json",
+                            "original_model_pdb",
+                            "original_data_mtz",
+                            "projected_observations_mtz",
+                            "input_hkl_ledger_json",
+                            "refmac_keywords_txt",
+                            "pre_execution_checkpoint_json",
+                            "post_execution_checkpoint_json",
+                            "refmac_log",
+                            "refmac_xyzout_pdb",
+                            "refmac_hklout_mtz",
+                            "parsed_log_json",
+                            "hklout_raw_export_json",
+                            "hklout_audit_json",
+                            "xyzout_audit_json",
+                            "diagnostics_json",
+                            "operation_manifest_json",
+                        ):
+                            self.assertIn(expected_rm_key, rm_files)
+                        self.assertTrue(
+                            rm_files["original_data_mtz"]["path"].endswith(
+                                "inputs/original_data.mtz"
+                            )
+                        )
+
+                        # Verify intended_paths for R4 (EVAL + QDS) vs start (EVAL-only).
+                        if expect_qds_path:
+                            self.assertTrue(
+                                str(outcome["intended_paths"]["eval_path"]).endswith(
+                                    "data/coscientists/openscientist/EVAL_1sar_cdba2c07_2026-11-06.yaml"
+                                )
+                            )
+                            self.assertTrue(
+                                str(outcome["intended_paths"]["qds_path"]).endswith(
+                                    "data/coscientists/openscientist/QDS_1sar_cdba2c07_2026-11-06.yaml"
+                                )
+                            )
+                        else:
+                            self.assertTrue(
+                                str(outcome["intended_paths"]["eval_path"]).endswith(
+                                    "data/coscientists/openscientist/EVAL_1sar_cdba2c07-start_2026-11-06.yaml"
+                                )
+                            )
+                            self.assertIsNone(
+                                outcome["intended_paths"]["qds_path"]
+                            )
+
+                        # Zero canonical files created in fake_output_repo.
+                        self.assertEqual(list(fake_output_repo.rglob("*.yaml")), [])
+
+                        # Verify parent_completed_execution_checkpoint.json is byte-identical to its reference
+                        # and passes verify_retained_parent_execution_checkpoint directly.
+                        cp_ref = outcome["completed_checkpoint_reference"]
+                        assert isinstance(cp_ref, Mapping)
+                        cp_path = Path(str(cp_ref["path"]))
+                        self.assertEqual(
+                            hashlib.sha256(cp_path.read_bytes()).hexdigest(),
+                            cp_ref["sha256"],
+                        )
+                        verified_cp = (
+                            onesar_records.verify_retained_parent_execution_checkpoint(
+                                attempt_out,
+                                subject_id=subject_id,
+                                checkpoint_reference=cp_ref,
+                                expected_family="rfactors",
+                                expected_run_date="2026-11-06",
+                                repo_root=REPO_ROOT,
+                            )
+                        )
+                        self.assertEqual(
+                            verified_cp["verification_status"], "verified"
+                        )
+
+                        # Verify scientific_refusal and persisted authoring_outcome_0001.json.
+                        sci_refusal = outcome["scientific_refusal"]
+                        assert isinstance(sci_refusal, Mapping)
+                        self.assertIs(sci_refusal["integrity_verified"], True)
+                        self.assertIs(
+                            sci_refusal["scientific_proof_established"], False
+                        )
+                        self.assertEqual(
+                            set(sci_refusal["unknown_native_premises"].keys()),
+                            set(onesar_records.REFMAC_UNKNOWN_NATIVE_PREMISE_KEYS),
+                        )
+                        auth_outcome_path = Path(
+                            str(outcome["authoring_outcome_path"])
+                        )
+                        self.assertTrue(auth_outcome_path.is_file())
+                        auth_outcome_doc = json.loads(
+                            auth_outcome_path.read_text(encoding="utf-8")
+                        )
+                        self.assertEqual(auth_outcome_doc["status"], "refused")
+                        self.assertIs(auth_outcome_doc["published"], False)
+                        self.assertEqual(
+                            auth_outcome_doc["failed_stage"],
+                            "refmac_retained_verification",
+                        )
+
+                        # Cross-child staged input hash disagreement is rejected at parent_checkpoint_verification.
+                        if subject_id == "R4":
+                            rm_pdb = (
+                                attempt_out
+                                / "refmac"
+                                / "inputs"
+                                / "original_model.pdb"
+                            )
+                            orig_pdb_bytes = rm_pdb.read_bytes()
+                            try:
+                                rm_pdb.write_bytes(
+                                    orig_pdb_bytes + b"\nREMARK TAMPERED\n"
+                                )
+                                with self.assertRaises(
+                                    onesar_records.ParentExecutionBindingError
+                                ):
+                                    onesar_records.verify_retained_parent_execution_checkpoint(
+                                        attempt_out,
+                                        subject_id="R4",
+                                        checkpoint_reference=cp_ref,
+                                        expected_family="rfactors",
+                                        expected_run_date="2026-11-06",
+                                        repo_root=REPO_ROOT,
+                                    )
+                            finally:
+                                rm_pdb.write_bytes(orig_pdb_bytes)
+                    finally:
+                        if attempt_out.exists():
+                            shutil.rmtree(attempt_out)
+
+            # Also exercise the top-level CLI main() entrypoint on R4 with fake native runners.
+            cli_attempt_out = (
+                REPO_ROOT
+                / ".temp"
+                / f"test_task179_cli_main_r4_{os.getpid()}"
+            )
+            self.assertFalse(cli_attempt_out.exists())
+            try:
+                with (
+                    self._without_protstruct_env_overrides(),
+                    mock.patch.object(
+                        toolchain,
+                        "phenix",
+                        side_effect=lambda exe: fake_phx_bin / exe,
+                    ),
+                    mock.patch.object(
+                        toolchain,
+                        "phenix_build_evidence",
+                        return_value=fake_phx_build,
+                    ),
+                    mock.patch.object(
+                        toolchain,
+                        "run_logged",
+                        side_effect=fake_phx_runner,
+                    ),
+                    mock.patch.object(
+                        toolchain,
+                        "CCP4_SETUP",
+                        fake_ccp4.setup_script,
+                    ),
+                    mock.patch.object(
+                        toolchain,
+                        "ccp4_environment",
+                        return_value=dict(fake_ccp4.sourced_env),
+                    ),
+                    mock.patch.object(
+                        toolchain,
+                        "run_refmac",
+                        side_effect=fake_refmac_runner,
+                    ),
+                    mock.patch.object(
+                        onesar_records,
+                        "_prepare_rfactor_eval_and_live_qds_records",
+                        side_effect=AssertionError(
+                            "Private record assembly must never be called on scientific refusal"
+                        ),
+                    ),
+                    mock.patch.object(
+                        onesar_records,
+                        "_publish_prepared_rfactor_records",
+                        side_effect=AssertionError(
+                            "Private record publication must never be called on scientific refusal"
+                        ),
+                    ),
+                ):
+                    rc_main = onesar_rerun.main(
+                        [
+                            "--subject",
+                            "R4",
+                            "--family",
+                            "rfactors",
+                            "--evidence-out",
+                            str(cli_attempt_out),
+                            "--repo-root",
+                            str(REPO_ROOT),
+                            "--archive",
+                            str(COMMITTED_ARCHIVE),
+                            "--timeout",
+                            "120.0",
+                        ]
+                    )
+                self.assertEqual(rc_main, 1)
+                cli_outcome_doc = json.loads(
+                    (
+                        cli_attempt_out
+                        / onesar_rerun.PARENT_ATTEMPT_OUTCOME_FILENAME
+                    ).read_text(encoding="utf-8")
+                )
+                self.assertEqual(cli_outcome_doc["status"], "refused")
+                self.assertIs(cli_outcome_doc["published"], False)
+                self.assertEqual(
+                    cli_outcome_doc["failed_stage"],
+                    "refmac_retained_verification",
+                )
+            finally:
+                if cli_attempt_out.exists():
+                    shutil.rmtree(cli_attempt_out)
 
 
 if __name__ == "__main__":

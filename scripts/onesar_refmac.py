@@ -49,6 +49,7 @@ import xml.etree.ElementTree as ET
 from decimal import Decimal, InvalidOperation
 from fractions import Fraction
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Callable, Mapping, Sequence
 
 _SCRIPTS_DIR = Path(__file__).resolve().parent
@@ -72,7 +73,7 @@ REFMAC_KEYWORDS_LINES: tuple[str, ...] = (
     "REFI BREF MIXED",
     "NCYC 0",
     "MONI MANY",
-    "LABOUT FP=FP SIGFP=SIGFP FREE=FREE FC=FC PHIC=PHIC FWT=FWT PHWT=PHWT DELFWT=DELFWT PHDELWT=PHDELWT FOM=FOM",
+    "LABOUT FC=FC PHIC=PHIC FWT=FWT PHWT=PHWT DELFWT=DELFWT PHDELWT=PHDELWT FOM=FOM",
     "END",
 )
 REFMAC_KEYWORDS: str = "\n".join(REFMAC_KEYWORDS_LINES) + "\n"
@@ -82,7 +83,18 @@ EXPECTED_FREE_FLAG_VALUE: int = 1
 PRESELECTED_NATIVE_LS_FC_COLUMN: str = "FC_ALL_LS"
 FORBIDDEN_FALLBACK_FC_COLUMNS: tuple[str, str] = ("FC", "FC_ALL")
 MTZ_WORD_HEX_CONVENTION: str = "uint32_le_hex_8char"
-HKLOUT_OBSERVATION_LABELS: tuple[str, str, str] = ("FP", "SIGFP", "FREE")
+HKLOUT_OBSERVATION_ROLE_TO_LABEL: Mapping[str, str] = MappingProxyType(
+    {
+        "FP": "F-obs",
+        "SIGFP": "SIGF-obs",
+        "FREE": "R-free-flags",
+    }
+)
+HKLOUT_OBSERVATION_LABELS: tuple[str, str, str] = (
+    HKLOUT_OBSERVATION_ROLE_TO_LABEL["FP"],
+    HKLOUT_OBSERVATION_ROLE_TO_LABEL["SIGFP"],
+    HKLOUT_OBSERVATION_ROLE_TO_LABEL["FREE"],
+)
 
 NON_SECRET_CCP4_ENV_KEYS: tuple[str, ...] = (
     "CCP4_MASTER",
@@ -6924,7 +6936,7 @@ def _export_and_audit_refmac_hklout(
     input_work_positive_count: int = ledger_index["input_work_positive_count"]
     input_free_positive_count: int = ledger_index["input_free_positive_count"]
 
-    # Verify required output columns (H, K, L, FP, SIGFP, FREE) and check FC_ALL_LS.
+    # Verify required output columns (H, K, L, and declared HKLOUT observation labels) and check FC_ALL_LS.
     out_columns_meta = raw_export["header_parse"]["columns"]
     out_col_by_label: dict[str, list[dict[str, Any]]] = {}
     for col_meta in out_columns_meta:
@@ -6945,7 +6957,14 @@ def _export_and_audit_refmac_hklout(
             "HKLOUT first three columns must be ('H', 'K', 'L') with MTZ column type 'H'"
         )
 
-    expected_obs_types = {"FP": "F", "SIGFP": "Q", "FREE": "I"}
+    fp_label = HKLOUT_OBSERVATION_ROLE_TO_LABEL["FP"]
+    sigfp_label = HKLOUT_OBSERVATION_ROLE_TO_LABEL["SIGFP"]
+    free_label = HKLOUT_OBSERVATION_ROLE_TO_LABEL["FREE"]
+    expected_obs_types = {
+        fp_label: "F",
+        sigfp_label: "Q",
+        free_label: "I",
+    }
     obs_dataset_ids: set[str | None] = set()
     for req_label, req_type in expected_obs_types.items():
         matches = out_col_by_label.get(req_label, [])
@@ -6962,7 +6981,7 @@ def _export_and_audit_refmac_hklout(
             obs_dataset_ids.add(col_entry["dataset_id"])
     if len(obs_dataset_ids) > 1:
         errors.append(
-            f"HKLOUT observation columns ('FP', 'SIGFP', 'FREE') span multiple dataset IDs: {sorted(str(x) for x in obs_dataset_ids)}"
+            f"HKLOUT observation columns {HKLOUT_OBSERVATION_LABELS!r} span multiple dataset IDs: {sorted(str(x) for x in obs_dataset_ids)}"
         )
 
     fc_all_ls_meta = (
@@ -7074,7 +7093,7 @@ def _export_and_audit_refmac_hklout(
     fwt_finite_total_count = 0
 
     can_inspect_obs_cols = all(
-        len(out_col_by_label.get(lbl, [])) == 1 for lbl in ("FP", "SIGFP", "FREE")
+        len(out_col_by_label.get(lbl, [])) == 1 for lbl in HKLOUT_OBSERVATION_LABELS
     )
     has_fc_all_ls = fc_all_ls_meta is not None
     has_fwt = len(out_col_by_label.get("FWT", [])) == 1
@@ -7089,12 +7108,12 @@ def _export_and_audit_refmac_hklout(
             c_hex = out_row["column_words_hex"]
             c_cls = out_row["column_value_classes"]
 
-            out_fp = c_vals.get("FP")
-            out_sigfp = c_vals.get("SIGFP")
-            out_free = c_vals.get("FREE")
-            out_fp_cls = c_cls.get("FP")
-            out_sigfp_cls = c_cls.get("SIGFP")
-            out_free_cls = c_cls.get("FREE")
+            out_fp = c_vals.get(fp_label)
+            out_sigfp = c_vals.get(sigfp_label)
+            out_free = c_vals.get(free_label)
+            out_fp_cls = c_cls.get(fp_label)
+            out_sigfp_cls = c_cls.get(sigfp_label)
+            out_free_cls = c_cls.get(free_label)
 
             if has_fc_all_ls and c_vals.get("FC_ALL_LS") is not None:
                 fc_all_ls_finite_total_count += 1
@@ -7144,23 +7163,23 @@ def _export_and_audit_refmac_hklout(
                             "input_f_obs": in_f,
                             "input_sigf_obs": in_sigf,
                             "output_fp": out_fp,
-                            "output_fp_word_hex": c_hex.get("FP"),
+                            "output_fp_word_hex": c_hex.get(fp_label),
                             "output_fp_class": out_fp_cls,
                             "output_sigfp": out_sigfp,
-                            "output_sigfp_word_hex": c_hex.get("SIGFP"),
+                            "output_sigfp_word_hex": c_hex.get(sigfp_label),
                             "output_sigfp_class": out_sigfp_cls,
                         }
                     )
                 else:
-                    if c_hex.get("FP") == in_row.get("f_obs_word_hex"):
+                    if c_hex.get(fp_label) == in_row.get("f_obs_word_hex"):
                         usable_fp_word_unchanged_count += 1
                     else:
                         usable_fp_rescaled_count += 1
-                    if c_hex.get("SIGFP") == in_row.get("sigf_obs_word_hex"):
+                    if c_hex.get(sigfp_label) == in_row.get("sigf_obs_word_hex"):
                         usable_sigfp_word_unchanged_count += 1
                     else:
                         usable_sigfp_rescaled_count += 1
-                    if c_hex.get("FREE") == in_row.get("r_free_flag_word_hex"):
+                    if c_hex.get(free_label) == in_row.get("r_free_flag_word_hex"):
                         usable_free_word_unchanged_count += 1
                     else:
                         usable_free_word_changed_count += 1
@@ -7180,7 +7199,7 @@ def _export_and_audit_refmac_hklout(
                             "hkl": list(key),
                             "input_r_free_flag": in_flag,
                             "output_free": out_free,
-                            "output_free_word_hex": c_hex.get("FREE"),
+                            "output_free_word_hex": c_hex.get(free_label),
                             "output_free_class": out_free_cls,
                         }
                     )
@@ -7190,7 +7209,7 @@ def _export_and_audit_refmac_hklout(
                             "hkl": list(key),
                             "input_r_free_flag": in_flag,
                             "output_free_flag": out_free_int,
-                            "output_free_word_hex": c_hex.get("FREE"),
+                            "output_free_word_hex": c_hex.get(free_label),
                         }
                     )
             else:
@@ -7200,10 +7219,10 @@ def _export_and_audit_refmac_hklout(
                         {
                             "hkl": list(key),
                             "output_fp": out_fp,
-                            "output_fp_word_hex": c_hex.get("FP"),
+                            "output_fp_word_hex": c_hex.get(fp_label),
                             "output_fp_class": out_fp_cls,
                             "output_sigfp": out_sigfp,
-                            "output_sigfp_word_hex": c_hex.get("SIGFP"),
+                            "output_sigfp_word_hex": c_hex.get(sigfp_label),
                             "output_sigfp_class": out_sigfp_cls,
                         }
                     )
@@ -7226,7 +7245,7 @@ def _export_and_audit_refmac_hklout(
                             {
                                 "hkl": list(key),
                                 "output_free": out_free,
-                                "output_free_word_hex": c_hex.get("FREE"),
+                                "output_free_word_hex": c_hex.get(free_label),
                                 "output_free_class": out_free_cls,
                             }
                         )
@@ -7429,9 +7448,9 @@ def _export_and_audit_refmac_hklout(
             if out_row is None:
                 continue
             c_vals = out_row["column_values"]
-            fp_v = c_vals.get("FP")
+            fp_v = c_vals.get(fp_label)
             fc_v = c_vals.get("FC_ALL_LS")
-            free_v = c_vals.get("FREE")
+            free_v = c_vals.get(free_label)
             if (
                 fp_v is None
                 or fc_v is None

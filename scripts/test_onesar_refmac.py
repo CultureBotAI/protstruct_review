@@ -62,7 +62,6 @@ import hashlib
 import json
 import math
 import os
-import re
 import stat
 import struct
 import subprocess
@@ -151,15 +150,6 @@ $$
  $$
 """
 
-_DECLARED_HKLOUT_LABEL_MAP: dict[str, str] = {
-    "F-obs": "FP",
-    "SIGF-obs": "SIGFP",
-    "R-free-flags": "FREE",
-}
-_COLUMN_OR_COLSRC_RE = re.compile(
-    r"^(COLUMN\s+|COLSRC\s+)(F-obs|SIGF-obs|R-free-flags)(\s+.*)$"
-)
-
 _FALSE_SCIENTIFIC_ADMISSION_KEYS: tuple[str, ...] = (
     "canonical_eval_qds_eligible",
     "eval_admission_eligible",
@@ -180,46 +170,6 @@ _PROOF_TO_UNPROVEN_REASON_KEYS: tuple[tuple[str, str], ...] = (
 
 def _sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
-
-
-def _rewrite_projected_mtz_labels_for_capture_success(
-    projected_mtz_bytes: bytes,
-) -> tuple[bytes, int]:
-    """Apply only the 6 declared COLUMN/COLSRC label-token edits to projected MTZ bytes.
-
-    Leaves the 80-byte preamble and all reflection data words completely unchanged.
-    """
-    (hdr_loc_words,) = struct.unpack_from("<I", projected_mtz_bytes, 4)
-    hdr_byte_offset = (hdr_loc_words - 1) * 4
-    if hdr_byte_offset < 80 or hdr_byte_offset >= len(projected_mtz_bytes):
-        raise ValueError(f"Invalid MTZ header offset {hdr_byte_offset}")
-
-    prefix = projected_mtz_bytes[:hdr_byte_offset]
-    rewritten_cards: list[bytes] = []
-    edit_count = 0
-    pos = hdr_byte_offset
-    while pos + 80 <= len(projected_mtz_bytes):
-        raw_card = projected_mtz_bytes[pos : pos + 80]
-        card_str = raw_card.decode("ascii")
-        match = _COLUMN_OR_COLSRC_RE.match(card_str)
-        if match is not None:
-            kw_prefix, old_label, suffix = match.groups()
-            new_label = _DECLARED_HKLOUT_LABEL_MAP[old_label]
-            padded_new_label = new_label.ljust(len(old_label))
-            new_card_str = f"{kw_prefix}{padded_new_label}{suffix}"
-            if len(new_card_str) != 80:
-                raise AssertionError(
-                    f"Rewritten MTZ card length {len(new_card_str)} != 80"
-                )
-            rewritten_cards.append(new_card_str.encode("ascii"))
-            edit_count += 1
-        else:
-            rewritten_cards.append(raw_card)
-        pos += 80
-
-    trailer = projected_mtz_bytes[pos:]
-    out_bytes = prefix + b"".join(rewritten_cards) + trailer
-    return out_bytes, edit_count
 
 
 def _build_literal_mtz_bytes(
@@ -285,9 +235,9 @@ _BASELINE_HKLOUT_COLUMNS: list[tuple[str, str, int]] = [
     ("H", "H", 0),
     ("K", "H", 0),
     ("L", "H", 0),
-    ("FP", "F", 1),
-    ("SIGFP", "Q", 1),
-    ("FREE", "I", 1),
+    ("F-obs", "F", 1),
+    ("SIGF-obs", "Q", 1),
+    ("R-free-flags", "I", 1),
     ("FC_ALL_LS", "F", 1),
 ]
 
@@ -573,15 +523,24 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
         log_path: Path,
     ) -> int:
         xyzout_path.write_bytes(xyzin_path.read_bytes())
-        hklout_bytes, edit_count = _rewrite_projected_mtz_labels_for_capture_success(
-            hklin_path.read_bytes()
-        )
-        hklout_path.write_bytes(hklout_bytes)
+        hklout_path.write_bytes(hklin_path.read_bytes())
         log_path.write_text(SYNTHETIC_SINGLE_CYCLE_NCYC0_LOG, encoding="utf-8")
-        return edit_count
+        return 0
 
     def test_actual_archive_complete_capture(self) -> None:
         """Case 1: Actual-archive complete capture, env/secret filtering, and false admission flags."""
+        self.assertEqual(
+            dict(onesar_refmac.HKLOUT_OBSERVATION_ROLE_TO_LABEL),
+            {
+                "FP": "F-obs",
+                "SIGFP": "SIGF-obs",
+                "FREE": "R-free-flags",
+            },
+        )
+        self.assertEqual(
+            onesar_refmac.HKLOUT_OBSERVATION_LABELS,
+            ("F-obs", "SIGF-obs", "R-free-flags"),
+        )
         log_fixture_bytes = SYNTHETIC_SINGLE_CYCLE_NCYC0_LOG.encode("utf-8")
         self.assertEqual(len(log_fixture_bytes), 2054)
         self.assertEqual(
@@ -649,17 +608,16 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
         result = self._run_with_fake_ccp4("case1_complete_capture", runner)
         self.assertEqual(len(captured_calls), 1)
         call = captured_calls[0]
-        self.assertEqual(call["header_edit_count"], 6)
-        # Independently fixed REFMAC5 stdin expectation per committed preregistration
-        # ref/research/1sar_rerun_2026_11_06_preregistration.md:75-81 and the selected
-        # output-label design (scripts/onesar_refmac.py:69-78).
+        self.assertEqual(call["header_edit_count"], 0)
+        # Independently fixed REFMAC5 stdin expectation per supported 7-key LABOUT
+        # and native HKLIN observation label contract (scripts/onesar_refmac.py:70-89).
         expected_stdin_keywords = (
             "LABIN FP=F-obs SIGFP=SIGF-obs FREE=R-free-flags\n"
             "FREE 1\n"
             "REFI BREF MIXED\n"
             "NCYC 0\n"
             "MONI MANY\n"
-            "LABOUT FP=FP SIGFP=SIGFP FREE=FREE FC=FC PHIC=PHIC FWT=FWT PHWT=PHWT DELFWT=DELFWT PHDELWT=PHDELWT FOM=FOM\n"
+            "LABOUT FC=FC PHIC=PHIC FWT=FWT PHWT=PHWT DELFWT=DELFWT PHDELWT=PHDELWT FOM=FOM\n"
             "END\n"
         )
         expected_stdin_lines = expected_stdin_keywords.splitlines()
@@ -3140,9 +3098,9 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 "H": "3f800000",
                 "K": "00000000",
                 "L": "00000000",
-                "FP": "41200000",
-                "SIGFP": "3f800000",
-                "FREE": "00000000",
+                "F-obs": "41200000",
+                "SIGF-obs": "3f800000",
+                "R-free-flags": "00000000",
                 "FC_ALL_LS": "40a00000",
             },
         )
@@ -3152,9 +3110,9 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 "H": 1.0,
                 "K": 0.0,
                 "L": 0.0,
-                "FP": 10.0,
-                "SIGFP": 1.0,
-                "FREE": 0.0,
+                "F-obs": 10.0,
+                "SIGF-obs": 1.0,
+                "R-free-flags": 0.0,
                 "FC_ALL_LS": 5.0,
             },
         )
@@ -3164,9 +3122,9 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 "H": "positive_finite",
                 "K": "zero",
                 "L": "zero",
-                "FP": "positive_finite",
-                "SIGFP": "positive_finite",
-                "FREE": "zero",
+                "F-obs": "positive_finite",
+                "SIGF-obs": "positive_finite",
+                "R-free-flags": "zero",
                 "FC_ALL_LS": "positive_finite",
             },
         )
@@ -3276,29 +3234,29 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
         self.assertEqual(expected_r_free_frac, Fraction(1, 10))
         observed_work_num = sum(
             abs(
-                Fraction(r["column_values"]["FP"])
+                Fraction(r["column_values"]["F-obs"])
                 - Fraction(r["column_values"]["FC_ALL_LS"])
             )
             for r in raw_rows
-            if r["column_values"]["FREE"] == 0.0
+            if r["column_values"]["R-free-flags"] == 0.0
         )
         observed_work_den = sum(
-            Fraction(r["column_values"]["FP"])
+            Fraction(r["column_values"]["F-obs"])
             for r in raw_rows
-            if r["column_values"]["FREE"] == 0.0
+            if r["column_values"]["R-free-flags"] == 0.0
         )
         observed_free_num = sum(
             abs(
-                Fraction(r["column_values"]["FP"])
+                Fraction(r["column_values"]["F-obs"])
                 - Fraction(r["column_values"]["FC_ALL_LS"])
             )
             for r in raw_rows
-            if r["column_values"]["FREE"] == 1.0
+            if r["column_values"]["R-free-flags"] == 1.0
         )
         observed_free_den = sum(
-            Fraction(r["column_values"]["FP"])
+            Fraction(r["column_values"]["F-obs"])
             for r in raw_rows
-            if r["column_values"]["FREE"] == 1.0
+            if r["column_values"]["R-free-flags"] == 1.0
         )
         self.assertEqual(observed_work_num, expected_work_num)
         self.assertEqual(observed_work_den, expected_work_den)
@@ -3515,16 +3473,16 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
         raw_rows = reopened_raw["rows"]
         self.assertEqual(len(raw_rows), 5)
 
-        # Output row 0 (input row 4, HKL [1, 1, 1]): patched NaN payload 7fc12345 in FP, SIGFP, FWT, and FREE == +0.0 (00000000).
-        self.assertEqual(raw_rows[0]["column_words_hex"]["FP"], "7fc12345")
-        self.assertIsNone(raw_rows[0]["column_values"]["FP"])
-        self.assertEqual(raw_rows[0]["column_value_classes"]["FP"], "nan")
-        self.assertEqual(raw_rows[0]["column_words_hex"]["SIGFP"], "7fc12345")
-        self.assertIsNone(raw_rows[0]["column_values"]["SIGFP"])
-        self.assertEqual(raw_rows[0]["column_value_classes"]["SIGFP"], "nan")
-        self.assertEqual(raw_rows[0]["column_words_hex"]["FREE"], "00000000")
-        self.assertEqual(raw_rows[0]["column_values"]["FREE"], 0.0)
-        self.assertEqual(raw_rows[0]["column_value_classes"]["FREE"], "zero")
+        # Output row 0 (input row 4, HKL [1, 1, 1]): patched NaN payload 7fc12345 in F-obs, SIGF-obs, FWT, and R-free-flags == +0.0 (00000000).
+        self.assertEqual(raw_rows[0]["column_words_hex"]["F-obs"], "7fc12345")
+        self.assertIsNone(raw_rows[0]["column_values"]["F-obs"])
+        self.assertEqual(raw_rows[0]["column_value_classes"]["F-obs"], "nan")
+        self.assertEqual(raw_rows[0]["column_words_hex"]["SIGF-obs"], "7fc12345")
+        self.assertIsNone(raw_rows[0]["column_values"]["SIGF-obs"])
+        self.assertEqual(raw_rows[0]["column_value_classes"]["SIGF-obs"], "nan")
+        self.assertEqual(raw_rows[0]["column_words_hex"]["R-free-flags"], "00000000")
+        self.assertEqual(raw_rows[0]["column_values"]["R-free-flags"], 0.0)
+        self.assertEqual(raw_rows[0]["column_value_classes"]["R-free-flags"], "zero")
         self.assertEqual(raw_rows[0]["column_words_hex"]["FC_ALL"], "00000000")
         self.assertEqual(raw_rows[0]["column_values"]["FC_ALL"], 0.0)
         self.assertEqual(raw_rows[0]["column_value_classes"]["FC_ALL"], "zero")
@@ -3543,19 +3501,19 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
         self.assertIsNone(raw_rows[1]["column_values"]["FWT"])
         self.assertEqual(raw_rows[1]["column_value_classes"]["FWT"], "pos_inf")
 
-        # Output row 2 (FP = -4.0 -> "negative_finite"; FWT = -Inf -> ff800000, None, "neg_inf").
-        self.assertEqual(raw_rows[2]["column_values"]["FP"], -4.0)
+        # Output row 2 (F-obs = -4.0 -> "negative_finite"; FWT = -Inf -> ff800000, None, "neg_inf").
+        self.assertEqual(raw_rows[2]["column_values"]["F-obs"], -4.0)
         self.assertEqual(
-            raw_rows[2]["column_value_classes"]["FP"], "negative_finite"
+            raw_rows[2]["column_value_classes"]["F-obs"], "negative_finite"
         )
         self.assertEqual(raw_rows[2]["column_words_hex"]["FWT"], "ff800000")
         self.assertIsNone(raw_rows[2]["column_values"]["FWT"])
         self.assertEqual(raw_rows[2]["column_value_classes"]["FWT"], "neg_inf")
 
-        # Output row 3 (FP = +0.0 -> 00000000/"zero"; FWT = -0.0 -> 80000000/"neg_zero").
-        self.assertEqual(raw_rows[3]["column_words_hex"]["FP"], "00000000")
-        self.assertEqual(raw_rows[3]["column_values"]["FP"], 0.0)
-        self.assertEqual(raw_rows[3]["column_value_classes"]["FP"], "zero")
+        # Output row 3 (F-obs = +0.0 -> 00000000/"zero"; FWT = -0.0 -> 80000000/"neg_zero").
+        self.assertEqual(raw_rows[3]["column_words_hex"]["F-obs"], "00000000")
+        self.assertEqual(raw_rows[3]["column_values"]["F-obs"], 0.0)
+        self.assertEqual(raw_rows[3]["column_value_classes"]["F-obs"], "zero")
         self.assertEqual(raw_rows[3]["column_words_hex"]["FWT"], "80000000")
         self.assertEqual(raw_rows[3]["column_values"]["FWT"], 0.0)
         self.assertEqual(raw_rows[3]["column_value_classes"]["FWT"], "neg_zero")
@@ -3665,24 +3623,24 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
         self.assertEqual(expected_5_r_free_frac, Fraction(1, 10))
         self.assertEqual(
             abs(
-                Fraction(raw_rows[4]["column_values"]["FP"])
+                Fraction(raw_rows[4]["column_values"]["F-obs"])
                 - Fraction(raw_rows[4]["column_values"]["FC_ALL_LS"])
             ),
             expected_5_work_num,
         )
         self.assertEqual(
-            Fraction(raw_rows[4]["column_values"]["FP"]),
+            Fraction(raw_rows[4]["column_values"]["F-obs"]),
             expected_5_work_den,
         )
         self.assertEqual(
             abs(
-                Fraction(raw_rows[1]["column_values"]["FP"])
+                Fraction(raw_rows[1]["column_values"]["F-obs"])
                 - Fraction(raw_rows[1]["column_values"]["FC_ALL_LS"])
             ),
             expected_5_free_num,
         )
         self.assertEqual(
-            Fraction(raw_rows[1]["column_values"]["FP"]),
+            Fraction(raw_rows[1]["column_values"]["F-obs"]),
             expected_5_free_den,
         )
 
@@ -3920,9 +3878,9 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 ("H", "H", 0),
                 ("K", "H", 0),
                 ("L", "H", 0),
-                ("FP", "F", 1),
-                ("SIGFP", "Q", 1),
-                ("FREE", "I", 1),
+                ("F-obs", "F", 1),
+                ("SIGF-obs", "Q", 1),
+                ("R-free-flags", "I", 1),
                 ("FC_ALL", "F", 1),
             ]
             _, no_ls_hklout, _ = self._build_three_row_baseline_mtz_pair(
@@ -3956,6 +3914,234 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
             self.assertIn(
                 "preselected native LS column 'FC_ALL_LS' is absent from HKLOUT",
                 audit["native_residual_reconstruction_unproven_reason"],
+            )
+
+        with self.subTest(
+            "decoy_fp_sigfp_free_coexisting_with_declared_native_observation_columns"
+        ):
+            cols_with_decoy_fp: list[tuple[str, str, int]] = [
+                ("H", "H", 0),
+                ("K", "H", 0),
+                ("L", "H", 0),
+                ("FP", "F", 1),
+                ("SIGFP", "Q", 1),
+                ("FREE", "I", 1),
+                ("F-obs", "F", 1),
+                ("SIGF-obs", "Q", 1),
+                ("R-free-flags", "I", 1),
+                ("FC_ALL_LS", "F", 1),
+            ]
+            # Decoy FP/SIGFP/FREE columns precede F-obs/SIGF-obs/R-free-flags and carry
+            # poisoned/contradictory amplitudes, non-positive sigmas, and flipped flags.
+            # Declared F-obs/SIGF-obs carry 2x-scaled observations and preserved R-free-flags.
+            _, decoy_coexist_hklout, _ = self._build_three_row_baseline_mtz_pair(
+                hklout_columns=cols_with_decoy_fp,
+                hklout_rows=[
+                    (1.0, 0.0, 0.0, -999.0, 0.0, 1.0, 20.0, 2.0, 0.0, 10.0),
+                    (0.0, 1.0, 0.0, 999.0, 99.0, 1.0, 40.0, 4.0, 0.0, 20.0),
+                    (0.0, 0.0, 1.0, 0.0, -1.0, 0.0, 20.0, 2.0, 1.0, 18.0),
+                ],
+            )
+            audit_decoy, _, raw_decoy = self._run_export_and_audit_pair(
+                "group3_decoy_fp_sigfp_free_coexisting",
+                hklin_bytes=hklin_bytes,
+                hklout_bytes=decoy_coexist_hklout,
+                input_ledger=input_ledger,
+            )
+            self.assertEqual(audit_decoy["status"], "valid")
+            self.assertIs(audit_decoy["valid"], True)
+            self.assertEqual(audit_decoy["errors"], [])
+            self.assertEqual(
+                audit_decoy["output_layout_summary"]["col_indices"],
+                {
+                    "H": 0,
+                    "K": 1,
+                    "L": 2,
+                    "F-obs": 6,
+                    "SIGF-obs": 7,
+                    "R-free-flags": 8,
+                },
+            )
+            decoy_row0_vals = raw_decoy["rows"][0]["column_values"]
+            self.assertEqual(decoy_row0_vals["FP"], -999.0)
+            self.assertEqual(decoy_row0_vals["SIGFP"], 0.0)
+            self.assertEqual(decoy_row0_vals["FREE"], 1.0)
+            self.assertEqual(decoy_row0_vals["F-obs"], 20.0)
+            self.assertEqual(decoy_row0_vals["SIGF-obs"], 2.0)
+            self.assertEqual(decoy_row0_vals["R-free-flags"], 0.0)
+            self.assertEqual(decoy_row0_vals["FC_ALL_LS"], 10.0)
+
+            decoy_oto = audit_decoy["one_to_one_hkl_audit"]
+            self.assertEqual(
+                decoy_oto["dropped_or_invalidated_eligible_observations"], []
+            )
+            self.assertEqual(decoy_oto["usable_flag_flips"], [])
+            decoy_scaling = decoy_oto["fp_sigfp_scaling"]
+            self.assertEqual(decoy_scaling["usable_fp_word_unchanged_count"], 0)
+            self.assertEqual(decoy_scaling["usable_fp_rescaled_count"], 3)
+            self.assertEqual(
+                decoy_scaling["usable_sigfp_word_unchanged_count"], 0
+            )
+            self.assertEqual(decoy_scaling["usable_sigfp_rescaled_count"], 3)
+            self.assertEqual(
+                decoy_scaling["usable_free_word_unchanged_count"], 3
+            )
+            self.assertEqual(decoy_scaling["usable_free_word_changed_count"], 0)
+            self.assertEqual(decoy_scaling["fp_ratio_min"], 2.0)
+            self.assertEqual(decoy_scaling["fp_ratio_max"], 2.0)
+            self.assertEqual(decoy_scaling["fp_ratio_mean"], 2.0)
+            self.assertEqual(decoy_scaling["sigfp_ratio_min"], 2.0)
+            self.assertEqual(decoy_scaling["sigfp_ratio_max"], 2.0)
+            self.assertEqual(decoy_scaling["sigfp_ratio_mean"], 2.0)
+
+            decoy_out_pop = audit_decoy["populations"]["output_mtz_population"]
+            self.assertEqual(decoy_out_pop["observed_domain_fp_sigfp_rows"], 3)
+            self.assertEqual(decoy_out_pop["positive_fp_sigfp_rows"], 3)
+            self.assertEqual(decoy_out_pop["work_positive_fp_sigfp_rows"], 2)
+            self.assertEqual(decoy_out_pop["free_positive_fp_sigfp_rows"], 1)
+
+            decoy_fc = audit_decoy["fc_all_ls_audit"]
+            self.assertEqual(decoy_fc["candidate_overall_work_count"], 2)
+            self.assertEqual(decoy_fc["candidate_overall_free_count"], 1)
+            self.assertEqual(decoy_fc["candidate_overall_r_work"], 0.5)
+            self.assertEqual(decoy_fc["candidate_overall_r_free"], 0.1)
+
+        with self.subTest(
+            "decoy_only_fp_sigfp_free_without_declared_native_labels_is_rejected"
+        ):
+            cols_decoy_only: list[tuple[str, str, int]] = [
+                ("H", "H", 0),
+                ("K", "H", 0),
+                ("L", "H", 0),
+                ("FP", "F", 1),
+                ("SIGFP", "Q", 1),
+                ("FREE", "I", 1),
+                ("FC_ALL_LS", "F", 1),
+            ]
+            _, decoy_only_hklout, _ = self._build_three_row_baseline_mtz_pair(
+                hklout_columns=cols_decoy_only,
+                hklout_rows=[
+                    (1.0, 0.0, 0.0, 10.0, 1.0, 0.0, 5.0),
+                    (0.0, 1.0, 0.0, 20.0, 2.0, 0.0, 10.0),
+                    (0.0, 0.0, 1.0, 10.0, 1.0, 1.0, 9.0),
+                ],
+            )
+            audit_decoy_only, _, raw_decoy_only = (
+                self._run_export_and_audit_pair(
+                    "group3_decoy_only_fp_sigfp_free_rejected",
+                    hklin_bytes=hklin_bytes,
+                    hklout_bytes=decoy_only_hklout,
+                    input_ledger=input_ledger,
+                )
+            )
+            self.assertEqual(
+                audit_decoy_only["status"], "rejected_invalid_or_inconsistent"
+            )
+            self.assertIs(audit_decoy_only["valid"], False)
+            self.assertIsNone(audit_decoy_only["output_layout_summary"])
+            self.assertEqual(
+                raw_decoy_only["rows"][0]["column_values"]["FP"], 10.0
+            )
+            for expected_err in (
+                "HKLOUT failed strict MTZ layout/dataset inspection: ValueError: selected MTZ columns must have F/Q/I types",
+                "HKLOUT missing unique required column 'F-obs' (found 0)",
+                "HKLOUT missing unique required column 'SIGF-obs' (found 0)",
+                "HKLOUT missing unique required column 'R-free-flags' (found 0)",
+            ):
+                self.assertIn(expected_err, audit_decoy_only["errors"])
+
+        with self.subTest(
+            "declared_observation_columns_wrong_type_duplicate_and_multi_dataset_rejected"
+        ):
+            cols_wrong_type: list[tuple[str, str, int]] = [
+                ("H", "H", 0),
+                ("K", "H", 0),
+                ("L", "H", 0),
+                ("F-obs", "J", 1),
+                ("SIGF-obs", "Q", 1),
+                ("R-free-flags", "I", 1),
+                ("FC_ALL_LS", "F", 1),
+            ]
+            _, wrong_type_hklout, _ = self._build_three_row_baseline_mtz_pair(
+                hklout_columns=cols_wrong_type,
+            )
+            audit_wrong_type, _, _ = self._run_export_and_audit_pair(
+                "group3_declared_obs_wrong_type",
+                hklin_bytes=hklin_bytes,
+                hklout_bytes=wrong_type_hklout,
+                input_ledger=input_ledger,
+            )
+            self.assertEqual(
+                audit_wrong_type["status"], "rejected_invalid_or_inconsistent"
+            )
+            self.assertIs(audit_wrong_type["valid"], False)
+            self.assertIn(
+                "HKLOUT column 'F-obs' has type 'J', expected 'F'",
+                audit_wrong_type["errors"],
+            )
+
+            cols_dup_fobs: list[tuple[str, str, int]] = [
+                ("H", "H", 0),
+                ("K", "H", 0),
+                ("L", "H", 0),
+                ("F-obs", "F", 1),
+                ("F-obs", "F", 1),
+                ("SIGF-obs", "Q", 1),
+                ("R-free-flags", "I", 1),
+                ("FC_ALL_LS", "F", 1),
+            ]
+            _, dup_fobs_hklout, _ = self._build_three_row_baseline_mtz_pair(
+                hklout_columns=cols_dup_fobs,
+                hklout_rows=[
+                    (1.0, 0.0, 0.0, 10.0, 10.0, 1.0, 0.0, 5.0),
+                    (0.0, 1.0, 0.0, 20.0, 20.0, 2.0, 0.0, 10.0),
+                    (0.0, 0.0, 1.0, 10.0, 10.0, 1.0, 1.0, 9.0),
+                ],
+            )
+            audit_dup_fobs, _, _ = self._run_export_and_audit_pair(
+                "group3_declared_obs_duplicate_fobs",
+                hklin_bytes=hklin_bytes,
+                hklout_bytes=dup_fobs_hklout,
+                input_ledger=input_ledger,
+            )
+            self.assertEqual(
+                audit_dup_fobs["status"], "rejected_invalid_or_inconsistent"
+            )
+            self.assertIs(audit_dup_fobs["valid"], False)
+            self.assertIn(
+                "HKLOUT contains duplicate column label(s): ['F-obs']",
+                audit_dup_fobs["errors"],
+            )
+            self.assertIn(
+                "HKLOUT missing unique required column 'F-obs' (found 2)",
+                audit_dup_fobs["errors"],
+            )
+
+            cols_multi_ds: list[tuple[str, str, int]] = [
+                ("H", "H", 0),
+                ("K", "H", 0),
+                ("L", "H", 0),
+                ("F-obs", "F", 1),
+                ("SIGF-obs", "Q", 1),
+                ("R-free-flags", "I", 0),
+                ("FC_ALL_LS", "F", 1),
+            ]
+            _, multi_ds_hklout, _ = self._build_three_row_baseline_mtz_pair(
+                hklout_columns=cols_multi_ds,
+            )
+            audit_multi_ds, _, _ = self._run_export_and_audit_pair(
+                "group3_declared_obs_multi_dataset",
+                hklin_bytes=hklin_bytes,
+                hklout_bytes=multi_ds_hklout,
+                input_ledger=input_ledger,
+            )
+            self.assertEqual(
+                audit_multi_ds["status"], "rejected_invalid_or_inconsistent"
+            )
+            self.assertIs(audit_multi_ds["valid"], False)
+            self.assertIn(
+                "HKLOUT observation columns ('F-obs', 'SIGF-obs', 'R-free-flags') span multiple dataset IDs: ['0', '1']",
+                audit_multi_ds["errors"],
             )
 
     def test_mtz_cell_context_representations_and_header_metadata(self) -> None:
@@ -4165,9 +4351,9 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                     ("H", "0"),
                     ("K", "0"),
                     ("L", "0"),
-                    ("FP", "1"),
-                    ("SIGFP", "1"),
-                    ("FREE", "1"),
+                    ("F-obs", "1"),
+                    ("SIGF-obs", "1"),
+                    ("R-free-flags", "1"),
                     ("FC_ALL_LS", "1"),
                 ],
             )

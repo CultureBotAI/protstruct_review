@@ -1,0 +1,53 @@
+=== [onesar_phenix_measure] extract_xtal_data.run (df.log) ===
+Input data summary:
+  Miller array info: /Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt02/phenix/inputs/projected_observations.mtz:F-obs,SIGF-obs,systematic_absences_eliminated
+  Observation type: xray.amplitude
+  Type of data: double, size=7217
+  Type of sigmas: double, size=7217
+  Number of Miller indices: 7217
+  Anomalous flag: False
+  Unit cell: (64.897, 78.323, 38.792, 90, 90, 90)
+  Space group: P 21 21 21 (No. 19)
+  Systematic absences: 0
+  Centric reflections: 1273
+  Resolution range: 49.9718 2.50002
+  Completeness in resolution range: 0.993803
+  Completeness with d_max=infinity: 0.993803
+  Wavelength: 1.0000
+
+Free-R flags summary:
+  Miller array info: /Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt02/phenix/inputs/projected_observations.mtz:R-free-flags
+  Observation type: None
+  Type of data: bool, size=7217
+  Type of sigmas: None
+  Number of Miller indices: 7217
+  Anomalous flag: False
+  Unit cell: (64.897, 78.323, 38.792, 90, 90, 90)
+  Space group: P 21 21 21 (No. 19)
+  Systematic absences: 0
+  Centric reflections: 1273
+  Resolution range: 49.9718 2.50002
+  Completeness in resolution range: 0.993803
+  Completeness with d_max=infinity: 0.993803
+  Wavelength: 1.0000
+  Test (R-free) flag value: 1
+  Number of work/free reflections by resolution:
+                                        work free  %free
+    bin  1: 49.9818 -  5.3841 [797/797]  717   80  10.0%
+    bin  2:  5.3841 -  4.2743 [733/742]  660   73  10.0%
+    bin  3:  4.2743 -  3.7342 [715/737]  643   72  10.1%
+    bin  4:  3.7342 -  3.3928 [712/714]  641   71  10.0%
+    bin  5:  3.3928 -  3.1497 [718/720]  646   72  10.0%
+    bin  6:  3.1497 -  2.9640 [715/717]  643   72  10.1%
+    bin  7:  2.9640 -  2.8156 [701/702]  631   70  10.0%
+    bin  8:  2.8156 -  2.6930 [713/715]  641   72  10.1%
+    bin  9:  2.6930 -  2.5894 [697/699]  628   69   9.9%
+    bin 10:  2.5894 -  2.5000 [716/719]  644   72  10.1%
+                                overall 6494  723  10.0%
+=== [onesar_phenix_measure] mmtbx.model.manager ===
+=== [onesar_phenix_measure] fmodel.update_all_scales ===
+                   start: r(all,work,free)=0.2834 0.2698 0.3913 n_refl.: 7217
+       re-set all scales: r(all,work,free)=0.2834 0.2698 0.3913 n_refl.: 7217
+         remove outliers: r(all,work,free)=0.2834 0.2698 0.3913 n_refl.: 7217
+bulk-solvent and scaling: r(all,work,free)=0.1618 0.1564 0.2116 n_refl.: 7217
+         remove outliers: r(all,work,free)=0.1618 0.1564 0.2116 n_refl.: 7217

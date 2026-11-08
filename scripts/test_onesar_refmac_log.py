@@ -896,7 +896,7 @@ $$
             parsed_large["reconciled_final_cycle"]["r_work"], 100.0
         )
 
-        # Non-finite, negative, overflow ('*'), and malformed R tokens are rejected
+        # Non-finite, negative, signed, exponent, underscore, overflow ('*'), and malformed R tokens are rejected
         for bad_token in (
             "NaN",
             "nan",
@@ -904,9 +904,17 @@ $$
             "-inf",
             "****",
             "-0.1912",
+            "+0.1912",
+            "+.1912",
+            "-.1912",
+            "0.1912e0",
+            ".1912e0",
+            "0_0.1912",
+            ".19_12",
             "N/A",
-            ".1912",
             "0.",
+            ".",
+            "1912",
         ):
             with self.subTest(bad_bin_r=bad_token):
                 bad_bin_log = SYNTHETIC_SINGLE_CYCLE_NCYC0_LOG.replace(
@@ -1443,6 +1451,587 @@ $$
             ValueError, "Cycle summary max Ncyc .* contradicts declared NCYC"
         ):
             parse_refmac_log(contradictory_ncyc)
+
+    def test_leading_dot_r_tokens_accepted_and_reconciled(self) -> None:
+        # Leading-dot fixed-point R tokens (.18, .22, .200, .240, .1912) preserve raw
+        # tokens and fractional decimal places while reconciling by exact Decimal equality
+        # against 0.1912 / 0.19120.
+        leading_dot_log = (
+            SYNTHETIC_SINGLE_CYCLE_NCYC0_LOG.replace(
+                "0.18  0.21     160    41.2    39.0  0.22  0.25",
+                " .18  0.21     160    41.2    39.0   .22  0.25",
+            )
+            .replace(
+                "0.20  0.23     184    20.8    19.5  0.24  0.27",
+                ".200  0.23     184    20.8    19.5  .240  0.27",
+            )
+            .replace(
+                "Overall R factor                     =     0.1912",
+                "Overall R factor                     =      .1912",
+            )
+            .replace(
+                "Free R factor                        =     0.2315",
+                "Free R factor                        =     .23150",
+            )
+            .replace(
+                "           R factor    0.1912   0.1912",
+                "           R factor   0.19120    .1912",
+            )
+            .replace(
+                "             R free    0.2315   0.2315",
+                "             R free     .2315  0.23150",
+            )
+        )
+        parsed = parse_refmac_log(leading_dot_log)
+        bins = parsed["final_resolution_bins"]["bins"]
+        self.assertEqual(bins[0]["rf_used_token"], ".18")
+        self.assertAlmostEqual(bins[0]["rf_used"], 0.18)
+        self.assertEqual(bins[0]["rf_used_decimal_places"], 2)
+        self.assertEqual(bins[0]["rf_free_token"], ".22")
+        self.assertAlmostEqual(bins[0]["rf_free"], 0.22)
+        self.assertEqual(bins[0]["rf_free_decimal_places"], 2)
+        self.assertEqual(bins[1]["rf_used_token"], ".200")
+        self.assertAlmostEqual(bins[1]["rf_used"], 0.20)
+        self.assertEqual(bins[1]["rf_used_decimal_places"], 3)
+        self.assertEqual(bins[1]["rf_free_token"], ".240")
+        self.assertAlmostEqual(bins[1]["rf_free"], 0.24)
+        self.assertEqual(bins[1]["rf_free_decimal_places"], 3)
+        self.assertEqual(
+            parsed["final_resolution_bins"]["rf_used_printed_decimal_places"], [2, 3]
+        )
+        self.assertEqual(
+            parsed["final_resolution_bins"]["rf_free_printed_decimal_places"], [2, 3]
+        )
+
+        init_cyc = parsed["reconciled_initial_cycle"]
+        final_cyc = parsed["reconciled_final_cycle"]
+        self.assertEqual(init_cyc["detailed_r_work_token"], ".1912")
+        self.assertEqual(init_cyc["detailed_r_work_decimal_places"], 4)
+        self.assertEqual(init_cyc["summary_r_work_token"], "0.1912")
+        self.assertEqual(init_cyc["summary_r_work_decimal_places"], 4)
+        self.assertEqual(init_cyc["final_results_r_work_token"], "0.19120")
+        self.assertEqual(init_cyc["final_results_r_work_decimal_places"], 5)
+        self.assertEqual(final_cyc["final_results_r_work_token"], ".1912")
+        self.assertEqual(final_cyc["final_results_r_work_decimal_places"], 4)
+        self.assertEqual(final_cyc["detailed_r_free_token"], ".23150")
+        self.assertEqual(final_cyc["detailed_r_free_decimal_places"], 5)
+        self.assertEqual(init_cyc["final_results_r_free_token"], ".2315")
+        self.assertEqual(init_cyc["final_results_r_free_decimal_places"], 4)
+
+    def test_retained_attempt03_current_ccp4_refmac_log_parses_completely(self) -> None:
+        # Provenance: Retained native CCP4 9.0.015 / REFMAC 5.8.0431 NCYC 0 canary
+        # execution on 1SAR (`data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac.log`,
+        # SHA-256 8303f6898c6e9b22f70f6e9f5a51cf275d49775295ac09fb3396b67ff9e20b2c).
+        import hashlib
+        from onesar_refmac_log import (
+            RESOLUTION_FOM_EXTENDED_HEADER_TOKENS,
+            RESOLUTION_RFACTOR_HEADER_TOKENS,
+        )
+
+        repo_root = _SCRIPTS_DIR.parent
+        attempt03_log_path = (
+            repo_root
+            / "data"
+            / "coscientists"
+            / "openscientist"
+            / "retained_1sar_pr1007_R4_rfactors_attempt03"
+            / "refmac"
+            / "refmac"
+            / "refmac.log"
+        )
+        raw_bytes = attempt03_log_path.read_bytes()
+        self.assertEqual(
+            hashlib.sha256(raw_bytes).hexdigest(),
+            "8303f6898c6e9b22f70f6e9f5a51cf275d49775295ac09fb3396b67ff9e20b2c",
+        )
+        log_text = raw_bytes.decode("utf-8")
+        parsed = parse_refmac_log(log_text)
+        roundtrip = json.loads(json.dumps(parsed))
+        self.assertEqual(
+            roundtrip["reconciled_final_cycle"], parsed["reconciled_final_cycle"]
+        )
+
+        # Source metadata (#1108 bare 'Refmac' banner)
+        meta = parsed["source_metadata"]
+        self.assertEqual(meta["line_count"], 506)
+        self.assertEqual(meta["reported_suite"], "CCP4 9.0.015")
+        self.assertEqual(meta["reported_refmac_version"], "5.8.0431")
+        self.assertEqual(meta["reported_run_date_token"], "7/11/2026")
+        self.assertEqual(meta["requested_ncyc"], 0)
+
+        # 3 table blocks: final_resolution_rfactor, final_resolution_fom, cycle_summary
+        table_blocks = parsed["table_blocks"]
+        self.assertEqual(len(table_blocks), 3)
+        self.assertEqual(
+            [tb["id"] for tb in table_blocks],
+            ["final_resolution_rfactor", "final_resolution_fom", "cycle_summary"],
+        )
+        self.assertEqual(
+            [tb["table_kind"] for tb in table_blocks],
+            ["resolution_rfactor", "resolution_fom", "cycle_summary"],
+        )
+
+        rfactor_tb, fom_tb, summary_tb = table_blocks
+        self.assertEqual(rfactor_tb["cycle_number"], 1)
+        self.assertEqual(rfactor_tb["row_count"], 20)
+        self.assertEqual(rfactor_tb["column_count"], 12)
+        self.assertEqual(
+            tuple(rfactor_tb["header_tokens"]), RESOLUTION_RFACTOR_HEADER_TOKENS
+        )
+
+        # 20 FOM bins with 12 columns (#1105)
+        self.assertEqual(fom_tb["cycle_number"], 1)
+        self.assertEqual(fom_tb["row_count"], 20)
+        self.assertEqual(fom_tb["column_count"], 12)
+        self.assertEqual(
+            tuple(fom_tb["header_tokens"]), RESOLUTION_FOM_EXTENDED_HEADER_TOKENS
+        )
+        self.assertEqual(sum(int(r["tokens"][1]) for r in fom_tb["rows"]), 5351)
+        self.assertEqual(sum(int(r["tokens"][3]) for r in fom_tb["rows"]), 1143)
+        self.assertEqual(sum(int(r["tokens"][5]) for r in fom_tb["rows"]), 6494)
+        self.assertEqual(fom_tb["rows"][2]["line"], 438)
+        self.assertEqual(fom_tb["rows"][2]["tokens"][7], "0.931")
+        self.assertEqual(fom_tb["rows"][9]["line"], 445)
+        self.assertEqual(fom_tb["rows"][9]["tokens"][7], "1.051")
+
+        self.assertIsNone(summary_tb["cycle_number"])
+        self.assertEqual(summary_tb["row_count"], 1)
+        self.assertEqual(summary_tb["column_count"], 11)
+
+        # 20 R bins (#1107 leading-dot per-bin Rf_used tokens; Rf_free preserves leading "0.")
+        final_bins = parsed["final_resolution_bins"]
+        self.assertEqual(len(final_bins["bins"]), 20)
+        self.assertEqual(final_bins["nr_used_sum"], 6494)
+        self.assertEqual(final_bins["nr_free_sum"], 723)
+        self.assertEqual(final_bins["combined_reported_count"], 7217)
+        self.assertEqual(final_bins["rf_used_printed_decimal_places"], 2)
+        self.assertEqual(final_bins["rf_free_printed_decimal_places"], 2)
+        self.assertEqual(final_bins["bins"][0]["rf_used_token"], ".17")
+        self.assertEqual(final_bins["bins"][0]["rf_free_token"], "0.10")
+        self.assertEqual(final_bins["bins"][-1]["rf_used_token"], ".20")
+        self.assertEqual(final_bins["bins"][-1]["rf_free_token"], "0.30")
+        self.assertTrue(
+            all(b["rf_used_token"].startswith(".") for b in final_bins["bins"])
+        )
+        self.assertTrue(
+            all(b["rf_free_token"].startswith("0.") for b in final_bins["bins"])
+        )
+
+        # 1 detailed cycle and 1 summary cycle (Cycle 1 <-> Ncyc 0; no CGMAT marker in NCYC 0 log)
+        self.assertEqual(parsed["cgmat_cycle_markers"], [])
+        self.assertEqual(len(parsed["detailed_cycles"]), 1)
+        self.assertEqual(len(parsed["cycle_summary"]["rows"]), 1)
+        detail = parsed["detailed_cycles"][0]
+        self.assertEqual(detail["detailed_cycle"], 1)
+        self.assertEqual(detail["summary_ncyc"], 0)
+        self.assertIsNone(detail["cgmat_cycle_number"])
+        self.assertIsNone(detail["cgmat_cycle_line"])
+        self.assertIsNone(detail["cgmat_cycle_token"])
+        self.assertEqual(detail["number_of_used_reflections"], 6494)
+        self.assertEqual(detail["overall_r_token"], "0.1693")
+        self.assertEqual(detail["overall_r_decimal_places"], 4)
+        self.assertEqual(detail["free_r_token"], "0.2128")
+        self.assertEqual(detail["free_r_decimal_places"], 4)
+
+        # 3 new optional detail fields (#1106)
+        self.assertEqual(detail["average_fourier_shell_correlation_line"], 463)
+        self.assertEqual(detail["average_fourier_shell_correlation_token"], "0.9807")
+        self.assertAlmostEqual(detail["average_fourier_shell_correlation"], 0.9807)
+        self.assertEqual(detail["average_free_fourier_shell_correlation_line"], 464)
+        self.assertEqual(
+            detail["average_free_fourier_shell_correlation_token"], "0.9675"
+        )
+        self.assertAlmostEqual(detail["average_free_fourier_shell_correlation"], 0.9675)
+        self.assertEqual(detail["average_correlation_coefficient_line"], 469)
+        self.assertEqual(detail["average_correlation_coefficient_token"], "0.9245")
+        self.assertAlmostEqual(detail["average_correlation_coefficient"], 0.9245)
+
+        # Reconciled overall R pair 0.1693 / 0.2128 across detail, summary, and Final results
+        for cyc_key in ("reconciled_initial_cycle", "reconciled_final_cycle"):
+            cyc = parsed[cyc_key]
+            self.assertEqual(cyc["summary_ncyc"], 0)
+            self.assertEqual(cyc["detailed_cycle"], 1)
+            self.assertEqual(cyc["resolution_table_cycle"], 1)
+            self.assertEqual(cyc["r_work_token"], "0.1693")
+            self.assertAlmostEqual(cyc["r_work"], 0.1693)
+            self.assertEqual(cyc["r_work_decimal_places"], 4)
+            self.assertEqual(cyc["r_free_token"], "0.2128")
+            self.assertAlmostEqual(cyc["r_free"], 0.2128)
+            self.assertEqual(cyc["r_free_decimal_places"], 4)
+            self.assertEqual(cyc["detailed_r_work_token"], "0.1693")
+            self.assertEqual(cyc["summary_r_work_token"], "0.1693")
+            self.assertEqual(cyc["final_results_r_work_token"], "0.1693")
+            self.assertEqual(cyc["detailed_r_free_token"], "0.2128")
+            self.assertEqual(cyc["summary_r_free_token"], "0.2128")
+            self.assertEqual(cyc["final_results_r_free_token"], "0.2128")
+            self.assertEqual(cyc["nr_used_sum"], 6494)
+            self.assertEqual(cyc["nr_free_sum"], 723)
+            self.assertEqual(cyc["combined_reported_count"], 7217)
+
+        checks = parsed["consistency_checks"]
+        self.assertTrue(
+            checks["initial_detail_summary_and_final_results_initial_values_equal"]
+        )
+        self.assertTrue(
+            checks["final_detail_summary_and_final_results_final_values_equal"]
+        )
+        self.assertEqual(checks["final_nr_used_sum"], 6494)
+        self.assertEqual(checks["final_nr_free_sum"], 723)
+        self.assertEqual(checks["final_combined_reported_count"], 7217)
+        self.assertTrue(checks["final_nr_used_sum_matches_reported_used_reflections"])
+
+    def test_extended_12_column_fom_table_validation_and_malformed_rejection(
+        self,
+    ) -> None:
+        extended_fom_log = SYNTHETIC_SINGLE_CYCLE_NCYC0_LOG.replace(
+            " $TABLE: Cycle    1. Fom(<cos(DelPhi)>-acentric, centric, overall v resln:\n"
+            " $GRAPHS:Cycle    1. M(Fom) v. resln :N:1,3,5,7,8:\n"
+            " $$\n"
+            " <4SSQ/LL> NREFa  FOMa  NREFc FOMc NREFall FOMall  SigmaA_Fc1 $$\n"
+            " $$\n"
+            "  0.0500  3000   0.850   100   0.780  3100   0.848  0.910\n"
+            "  0.1500  3332   0.810   100   0.740  3432   0.808  0.885\n"
+            " $$",
+            " $TABLE: Cycle    1. FSC and Fom(<cos(DelPhi)>-acentric, centric, overall v resln:\n"
+            " $GRAPHS:Cycle    1. M(Fom) v. resln :N:1,3,5,7,8:\n"
+            " :Cycle    1. FSC and Corr v. resln :N:1,9,10,11,12:\n"
+            " $$\n"
+            " <4SSQ/LL> NREFa  FOMa  NREFc FOMc NREFall FOMall  SigmaA_Fc1\n"
+            "   FSCfree   FSCwork CorrFoFcFree CorrFoFcWork $$\n"
+            " $$\n"
+            "  0.0500  3000   0.850   100   0.780  3100   0.848  1.051   0.946   0.985   0.946   0.981\n"
+            "  0.1500  3332   0.810   100   0.740  3432   0.808  0.885   0.912   0.960   0.905   0.952\n"
+            " $$",
+        )
+        parsed = parse_refmac_log(extended_fom_log)
+        fom_tb = parsed["table_blocks"][1]
+        self.assertEqual(fom_tb["id"], "final_resolution_fom")
+        self.assertEqual(fom_tb["table_kind"], "resolution_fom")
+        self.assertEqual(fom_tb["column_count"], 12)
+
+        # 1. Extended title with 8-column header rejected
+        title_12_header_8 = SYNTHETIC_SINGLE_CYCLE_NCYC0_LOG.replace(
+            " $TABLE: Cycle    1. Fom(<cos(DelPhi)>-acentric, centric, overall v resln:",
+            " $TABLE: Cycle    1. FSC and Fom(<cos(DelPhi)>-acentric, centric, overall v resln:",
+        )
+        with self.assertRaisesRegex(
+            ValueError, "Malformed FOM resolution table title/header"
+        ):
+            parse_refmac_log(title_12_header_8)
+
+        # 2. Legacy 8-column title with 12-column header rejected
+        title_8_header_12 = extended_fom_log.replace(
+            " $TABLE: Cycle    1. FSC and Fom(<cos(DelPhi)>-acentric, centric, overall v resln:",
+            " $TABLE: Cycle    1. Fom(<cos(DelPhi)>-acentric, centric, overall v resln:",
+        )
+        with self.assertRaisesRegex(
+            ValueError, "Malformed FOM resolution table title/header"
+        ):
+            parse_refmac_log(title_8_header_12)
+
+        # 3. Known-family 12-column header with corrupted title rejected as FOM (never 'other')
+        corrupted_title_12 = extended_fom_log.replace(
+            " $TABLE: Cycle    1. FSC and Fom(<cos(DelPhi)>-acentric, centric, overall v resln:",
+            " $TABLE: Cycle    1. Unexpected table title :",
+        )
+        with self.assertRaisesRegex(
+            ValueError, "Malformed FOM resolution table title/header"
+        ):
+            parse_refmac_log(corrupted_title_12)
+
+        # 4. Reordered, duplicate, missing, or unknown suffix columns rejected
+        for bad_suffix_header in (
+            "   FSCwork   FSCfree CorrFoFcFree CorrFoFcWork $$",
+            "   FSCfree   FSCfree CorrFoFcFree CorrFoFcWork $$",
+            "   FSCfree   FSCwork CorrFoFcFree $$",
+            "   FSCfree   FSCwork CorrFoFcFree UnknownCol $$",
+        ):
+            with self.subTest(bad_suffix_header=bad_suffix_header):
+                mutated_hdr = extended_fom_log.replace(
+                    "   FSCfree   FSCwork CorrFoFcFree CorrFoFcWork $$",
+                    bad_suffix_header,
+                )
+                with self.assertRaisesRegex(
+                    ValueError,
+                    r"(Malformed FOM resolution table title/header|Row width mismatch)",
+                ):
+                    parse_refmac_log(mutated_hdr)
+
+        # 5. Truncated or extra row fields in 12-column FOM table rejected
+        for bad_row in (
+            "  0.0500  3000   0.850   100   0.780  3100   0.848  1.051   0.946   0.985   0.946",
+            "  0.0500  3000   0.850   100   0.780  3100   0.848  1.051   0.946   0.985   0.946   0.981   0.500",
+        ):
+            with self.subTest(bad_row=bad_row):
+                mutated_row = extended_fom_log.replace(
+                    "  0.0500  3000   0.850   100   0.780  3100   0.848  1.051   0.946   0.985   0.946   0.981",
+                    bad_row,
+                )
+                with self.assertRaisesRegex(ValueError, "Row width mismatch"):
+                    parse_refmac_log(mutated_row)
+
+        # 6. Nonfinite, overflow, or malformed tokens in each of the 4 extended suffix columns rejected
+        base_row = "  0.1500  3332   0.810   100   0.740  3432   0.808  0.885   0.912   0.960   0.905   0.952"
+        for col_name, target_tok in (
+            ("FSCfree", "0.912"),
+            ("FSCwork", "0.960"),
+            ("CorrFoFcFree", "0.905"),
+            ("CorrFoFcWork", "0.952"),
+        ):
+            for bad_tok in ("NaN", "Inf", "-inf", "****", "0_0.912", "bad"):
+                with self.subTest(col_name=col_name, bad_tok=bad_tok):
+                    mutated_ext = extended_fom_log.replace(
+                        base_row, base_row.replace(target_tok, bad_tok, 1)
+                    )
+                    with self.assertRaisesRegex(ValueError, f"FOM table {col_name}"):
+                        parse_refmac_log(mutated_ext)
+
+        # 7. Within-row NREFall != NREFa + NREFc and non-increasing <4SSQ/LL> in 12-col FOM rejected
+        bad_nref_sum_12 = extended_fom_log.replace(
+            "  0.0500  3000   0.850   100   0.780  3100",
+            "  0.0500  3000   0.850   100   0.780  3101",
+        )
+        with self.assertRaisesRegex(
+            ValueError, r"FOM table row NREFall \(3101\) != NREFa \(3000\) \+ NREFc \(100\)"
+        ):
+            parse_refmac_log(bad_nref_sum_12)
+
+        bad_s2_12 = extended_fom_log.replace(
+            "  0.1500  3332",
+            "  0.0500  3332",
+        )
+        with self.assertRaisesRegex(
+            ValueError, "Non-increasing FOM <4SSQ/LL> bin coordinate"
+        ):
+            parse_refmac_log(bad_s2_12)
+
+        # 8. Unrelated valid tables sharing a single column name (Bin NREFall or Ncyc FSCwork),
+        # an FSC-by-resolution title without the FOM family grammar, or the 4 FSC suffix
+        # columns without the ordered <4SSQ/LL>..FOMall core remain classified as 'other',
+        # while malformed known FOM/FSC headers or titles still fail in the FOM validator.
+        unrelated_bin_nrefall = (
+            "$TABLE: Reflection bin summary :\n"
+            "$GRAPHS:Bin counts :N:1,2:\n"
+            "$$\n"
+            "Bin NREFall $$\n"
+            "$$\n"
+            " 1 3100\n"
+            " 2 3432\n"
+            "$$\n"
+        )
+        unrelated_ncyc_fscwork = (
+            "$TABLE: Auxiliary cycle FSC monitor :\n"
+            "$GRAPHS:Auxiliary FSC vs cycle :N:1,2:\n"
+            "$$\n"
+            "Ncyc FSCwork $$\n"
+            "$$\n"
+            " 0 0.9807\n"
+            "$$\n"
+        )
+        parsed_with_unrelated = parse_refmac_log(
+            unrelated_bin_nrefall + extended_fom_log + unrelated_ncyc_fscwork
+        )
+        self.assertEqual(
+            [tb["table_kind"] for tb in parsed_with_unrelated["table_blocks"]],
+            [
+                "other",
+                "resolution_rfactor",
+                "resolution_fom",
+                "cycle_summary",
+                "other",
+            ],
+        )
+        self.assertEqual(
+            parsed_with_unrelated["table_blocks"][0]["header_tokens"],
+            ["Bin", "NREFall"],
+        )
+        self.assertEqual(
+            parsed_with_unrelated["table_blocks"][-1]["header_tokens"],
+            ["Ncyc", "FSCwork"],
+        )
+
+        unrelated_fsc_v_resln = (
+            "$TABLE: Auxiliary FSC v resln :\n"
+            "$GRAPHS:Auxiliary:N:1,2:\n"
+            "$$\n"
+            "Bin FSCwork $$\n"
+            "$$\n"
+            "1 0.91\n"
+            "$$\n"
+        )
+        unrelated_cycle_monitor = (
+            "$TABLE: Auxiliary cycle monitor :\n"
+            "$GRAPHS:Auxiliary:N:1,2,3,4,5:\n"
+            "$$\n"
+            "Ncyc FSCfree FSCwork CorrFoFcFree CorrFoFcWork $$\n"
+            "$$\n"
+            "0 0.90 0.91 0.92 0.93\n"
+            "$$\n"
+        )
+        parsed_ncyc0_with_aux = parse_refmac_log(
+            SYNTHETIC_SINGLE_CYCLE_NCYC0_LOG
+            + unrelated_fsc_v_resln
+            + unrelated_cycle_monitor
+        )
+        self.assertEqual(
+            [tb["table_kind"] for tb in parsed_ncyc0_with_aux["table_blocks"]],
+            [
+                "resolution_rfactor",
+                "resolution_fom",
+                "cycle_summary",
+                "other",
+                "other",
+            ],
+        )
+        self.assertEqual(
+            parsed_ncyc0_with_aux["table_blocks"][3]["header_tokens"],
+            ["Bin", "FSCwork"],
+        )
+        self.assertEqual(
+            parsed_ncyc0_with_aux["table_blocks"][4]["header_tokens"],
+            ["Ncyc", "FSCfree", "FSCwork", "CorrFoFcFree", "CorrFoFcWork"],
+        )
+        self.assertEqual(
+            parsed_ncyc0_with_aux["reconciled_final_cycle"]["r_work_token"],
+            "0.1912",
+        )
+        self.assertEqual(
+            parsed_ncyc0_with_aux["reconciled_final_cycle"]["r_free_token"],
+            "0.2315",
+        )
+        self.assertEqual(
+            parsed_ncyc0_with_aux["reconciled_final_cycle"]["nr_used_sum"],
+            6532,
+        )
+        self.assertEqual(
+            parsed_ncyc0_with_aux["reconciled_final_cycle"]["nr_free_sum"],
+            344,
+        )
+        self.assertEqual(
+            parsed_ncyc0_with_aux["table_blocks"][1]["id"],
+            "final_resolution_fom",
+        )
+
+        # Corrupted known FOM/FSC headers with corrupted titles are still claimed by the FOM
+        # family signature and rejected rather than silently classified as 'other'.
+        for bad_fom_header_block in (
+            " $TABLE: Cycle    1. Unexpected table title :\n"
+            " $GRAPHS:Cycle    1. M(Fom) v. resln :N:1,3,5,7,8:\n"
+            " $$\n"
+            " <4SSQ/LL> NREFa  FOMa  NREFc FOMc NREFall FOMall  BadCol $$\n"
+            " $$\n"
+            "  0.0500  3000   0.850   100   0.780  3100   0.848  0.910\n"
+            "  0.1500  3332   0.810   100   0.740  3432   0.808  0.885\n"
+            " $$",
+            " $TABLE: Cycle    1. Unexpected table title :\n"
+            " $GRAPHS:Cycle    1. M(Fom) v. resln :N:1,3,5,7,8:\n"
+            " $$\n"
+            " <4SSQ/LL> NREFa  FOMa  NREFc FOMc NREFall FOMall  SigmaA_Fc1\n"
+            "   FSCfree   FSCwork CorrFoFcFree BadCol $$\n"
+            " $$\n"
+            "  0.0500  3000   0.850   100   0.780  3100   0.848  1.051   0.946   0.985   0.946   0.981\n"
+            "  0.1500  3332   0.810   100   0.740  3432   0.808  0.885   0.912   0.960   0.905   0.952\n"
+            " $$",
+        ):
+            with self.subTest(bad_fom_header_block=bad_fom_header_block[:80]):
+                mutated_known_fom = SYNTHETIC_SINGLE_CYCLE_NCYC0_LOG.replace(
+                    " $TABLE: Cycle    1. Fom(<cos(DelPhi)>-acentric, centric, overall v resln:\n"
+                    " $GRAPHS:Cycle    1. M(Fom) v. resln :N:1,3,5,7,8:\n"
+                    " $$\n"
+                    " <4SSQ/LL> NREFa  FOMa  NREFc FOMc NREFall FOMall  SigmaA_Fc1 $$\n"
+                    " $$\n"
+                    "  0.0500  3000   0.850   100   0.780  3100   0.848  0.910\n"
+                    "  0.1500  3332   0.810   100   0.740  3432   0.808  0.885\n"
+                    " $$",
+                    bad_fom_header_block,
+                )
+                with self.assertRaisesRegex(
+                    ValueError, "Malformed FOM resolution table title/header"
+                ):
+                    parse_refmac_log(mutated_known_fom)
+
+    def test_new_optional_fsc_and_average_correlation_detail_labels_validated(
+        self,
+    ) -> None:
+        with_fsc_labels = SYNTHETIC_SINGLE_CYCLE_NCYC0_LOG.replace(
+            "Overall figure of merit              =     0.8270",
+            "Average Fourier shell correlation    =     0.9807\n"
+            "AverageFree Fourier shell correlation=     0.9675\n"
+            "Average correlation coefficient      =     0.9245\n"
+            "Overall figure of merit              =     0.8270",
+        )
+        parsed = parse_refmac_log(with_fsc_labels)
+        detail = parsed["detailed_cycles"][0]
+        self.assertEqual(detail["average_fourier_shell_correlation_token"], "0.9807")
+        self.assertAlmostEqual(detail["average_fourier_shell_correlation"], 0.9807)
+        self.assertIsNotNone(detail["average_fourier_shell_correlation_line"])
+        self.assertEqual(
+            detail["average_free_fourier_shell_correlation_token"], "0.9675"
+        )
+        self.assertAlmostEqual(detail["average_free_fourier_shell_correlation"], 0.9675)
+        self.assertIsNotNone(detail["average_free_fourier_shell_correlation_line"])
+        self.assertEqual(detail["average_correlation_coefficient_token"], "0.9245")
+        self.assertAlmostEqual(detail["average_correlation_coefficient"], 0.9245)
+        self.assertIsNotNone(detail["average_correlation_coefficient_line"])
+
+        # Duplicate, empty/multi-token, nonfinite, or underscore values rejected
+        for label, orig_val in (
+            ("Average Fourier shell correlation", "0.9807"),
+            ("AverageFree Fourier shell correlation", "0.9675"),
+            ("Average correlation coefficient", "0.9245"),
+        ):
+            with self.subTest(duplicate=label):
+                dup_log = with_fsc_labels.replace(
+                    "Overall figure of merit              =     0.8270",
+                    f"{label} = {orig_val}\nOverall figure of merit              =     0.8270",
+                )
+                with self.assertRaisesRegex(ValueError, f"Duplicate {label!r}"):
+                    parse_refmac_log(dup_log)
+
+            for bad_rhs in ("NaN", "Inf", "-inf", "****", "0_0.9500", f"{orig_val} {orig_val}", ""):
+                with self.subTest(label=label, bad_rhs=bad_rhs):
+                    mutated = with_fsc_labels.replace(orig_val, bad_rhs, 1)
+                    with self.assertRaises(ValueError):
+                        parse_refmac_log(mutated)
+
+        # Malformed casing or spacing variants rejected immediately
+        for bad_label in (
+            "average fourier shell correlation",
+            "AverageFree fourier shell correlation",
+            "Average Free Fourier shell correlation",
+            "Average Correlation Coefficient",
+            "Unrecognized correlation coefficient",
+        ):
+            with self.subTest(bad_label=bad_label):
+                bad_lbl_log = SYNTHETIC_SINGLE_CYCLE_NCYC0_LOG.replace(
+                    "Overall figure of merit              =     0.8270",
+                    f"{bad_label} = 0.9500\nOverall figure of merit              =     0.8270",
+                )
+                with self.assertRaisesRegex(ValueError, "Malformed detail label"):
+                    parse_refmac_log(bad_lbl_log)
+
+    def test_banner_version_extraction_bare_refmac_and_historical_refmac_underscore(
+        self,
+    ) -> None:
+        bare_banner_log = SYNTHETIC_SINGLE_CYCLE_NCYC0_LOG.replace(
+            " ### CCP4 9.0: Refmac_5.8.0430     version 5.8.0430 : 01/01/24##",
+            " ### CCP4 9.0.015: Refmac         version 5.8.0431 : 08/08/25##",
+        )
+        parsed_bare = parse_refmac_log(bare_banner_log)
+        self.assertEqual(
+            parsed_bare["source_metadata"]["reported_suite"], "CCP4 9.0.015"
+        )
+        self.assertEqual(
+            parsed_bare["source_metadata"]["reported_refmac_version"], "5.8.0431"
+        )
+
+        no_banner_log = SYNTHETIC_SINGLE_CYCLE_NCYC0_LOG.replace(
+            " ### CCP4 9.0: Refmac_5.8.0430     version 5.8.0430 : 01/01/24##",
+            " ### Unrecognized program banner ###",
+        )
+        parsed_none = parse_refmac_log(no_banner_log)
+        self.assertIsNone(parsed_none["source_metadata"]["reported_suite"])
+        self.assertIsNone(parsed_none["source_metadata"]["reported_refmac_version"])
 
 
 if __name__ == "__main__":

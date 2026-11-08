@@ -1,0 +1,5612 @@
+{
+  "artifact_kind": "retained_native_diagnostic_reparse_and_recount",
+  "subject": "R4",
+  "source_native_head": "e7ad32b420718cf6606610db060edb16c585c766",
+  "source_native_parser_sha256": "ddc05ea4e9a4270f7e55e16887acbf8ddb4333ce773b1e59d0c2ca96e925a4ad",
+  "replay_repository_baseline_head": "e7ad32b420718cf6606610db060edb16c585c766",
+  "frozen_candidate": {
+    "sha256": "e92b1b599c20a84a101a4d03b3bbfd9acc0e8634f386e7327f2446b5f9b39820",
+    "size_bytes": 12248,
+    "payload": {
+      "record_kind": "frozen_sources_for_retained_byte_reparse",
+      "observed_at": "2026-11-08T03:43:20.085133+00:00",
+      "head": "e7ad32b420718cf6606610db060edb16c585c766",
+      "branch": "analysis/1sar-rerun-2026-11-06",
+      "files": {
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/parent_attempt_outcome.json": {
+          "sha256": "4dac145b9107c058e7d75dec0c96dbad58f75d95556323d55521a4441d1385a2",
+          "size_bytes": 18984
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/parent_attempt_started.json": {
+          "sha256": "8fe62848809e24688f768d293571a38940ce4ee6fdf34bed116332f5e27a0379",
+          "size_bytes": 1922
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/inputs/input_admission.json": {
+          "sha256": "538b670e67ed29df7675f91df0b32265805b6637788542c2d837a6121738d238",
+          "size_bytes": 5827
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/inputs/input_hkl_ledger.json": {
+          "sha256": "35543c5821665de8f65b5fbd153669556dfef766ac8b156dc001a0c5b667a51e",
+          "size_bytes": 6107091
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/inputs/original_data.mtz": {
+          "sha256": "f36d5fe685a3e524e8809d17d19ce12073acdf339eba2cfd3b0347a818850ab2",
+          "size_bytes": 469312
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/inputs/original_model.pdb": {
+          "sha256": "8cbc1650f8be5a3833f98833fa514ec7d490c2c3bb9aa930413abac05e2a510b",
+          "size_bytes": 135240
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/inputs/projected_observations.mtz": {
+          "sha256": "6edbe54b2ec7b815f30b6bd20a7264a7c978721189670e39e20d876d9b4fece7",
+          "size_bytes": 176592
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/602b556366d727f5440eb28b06ba093f3efccc20b3a3621072b2128ec86dc444/bundle/PHX_OBS_PAIR_ONLY.mtz": {
+          "sha256": "f5a64443f4cac4f6ffa86e80548dc9d3536f370ad092ad0aff5af84c2250bfdc",
+          "size_bytes": 146820
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/602b556366d727f5440eb28b06ba093f3efccc20b3a3621072b2128ec86dc444/bundle/invocation.json": {
+          "sha256": "87b43caa231a863c5f8ac55adc2ac548873b2ad0ce933629fae6b9c0d29b4d77",
+          "size_bytes": 7243
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/602b556366d727f5440eb28b06ba093f3efccc20b3a3621072b2128ec86dc444/bundle/phenix_diagnostics.json": {
+          "sha256": "1004d025a57f13eec23a929275cb15c60a9ca3db5bf944788d86fdc45f95ac4b",
+          "size_bytes": 4456
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/602b556366d727f5440eb28b06ba093f3efccc20b3a3621072b2128ec86dc444/bundle/phenix_rfactors.json": {
+          "sha256": "80f26d721c625fd707c19a60a5f3bb15a6b5a0d56cf9cb831e879b3b40bdc875",
+          "size_bytes": 13264105
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/602b556366d727f5440eb28b06ba093f3efccc20b3a3621072b2128ec86dc444/bundle/phenix_rfactors_partial_evidence.json": {
+          "sha256": "ced8c29228d3497aa9ae17127583585d8b2a1fe7e606b22089ec9f43f88fece8",
+          "size_bytes": 16462581
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/602b556366d727f5440eb28b06ba093f3efccc20b3a3621072b2128ec86dc444/bundle/phx_maps.mtz": {
+          "sha256": "7beeabf1e70efe3260052ed363d8fc85d5e1990acd7e4f20768cffab6e216ddb",
+          "size_bytes": 204876
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/602b556366d727f5440eb28b06ba093f3efccc20b3a3621072b2128ec86dc444/bundle/stdout.log": {
+          "sha256": "7e21a8548074da86625a16a5e44953a612117764114bad4ee3c9e95aa551d199",
+          "size_bytes": 2698
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/602b556366d727f5440eb28b06ba093f3efccc20b3a3621072b2128ec86dc444/bundle/success.json": {
+          "sha256": "bab9de3e0063d8895d2ae2630fc76a426b26ae8238c9f8e5c2df7061ac86b888",
+          "size_bytes": 10998
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/phenix/phenix_operation_parameters.json": {
+          "sha256": "d472e33fbf72d79b20271429c2ecf2a47995120910e27e81dac66e73626ae16e",
+          "size_bytes": 765
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/phenix/phenix_preflight_build_evidence.json": {
+          "sha256": "7a3457ad1a72bcb7bbfdc2a7afcdd5bef865fd0229223cfd83af52bc5a07b7d8",
+          "size_bytes": 2427
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/phenix/phenix_reconciled_manifest.json": {
+          "sha256": "3a84e57ae65c8a82908b367994bdd20b3294a8c8bb5b784f4e4d9e8724a73f55",
+          "size_bytes": 3760063
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/input_admission.json": {
+          "sha256": "b69530219b592ac426b9eecbdec076e1849e1ee18ac6e6a574833eda31a1a43a",
+          "size_bytes": 5827
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/input_hkl_ledger.json": {
+          "sha256": "35543c5821665de8f65b5fbd153669556dfef766ac8b156dc001a0c5b667a51e",
+          "size_bytes": 6107091
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/original_data.mtz": {
+          "sha256": "f36d5fe685a3e524e8809d17d19ce12073acdf339eba2cfd3b0347a818850ab2",
+          "size_bytes": 469312
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/original_model.pdb": {
+          "sha256": "8cbc1650f8be5a3833f98833fa514ec7d490c2c3bb9aa930413abac05e2a510b",
+          "size_bytes": 135240
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/projected_observations.mtz": {
+          "sha256": "6edbe54b2ec7b815f30b6bd20a7264a7c978721189670e39e20d876d9b4fece7",
+          "size_bytes": 176592
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac.log": {
+          "sha256": "8303f6898c6e9b22f70f6e9f5a51cf275d49775295ac09fb3396b67ff9e20b2c",
+          "size_bytes": 23762
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_diagnostics.json": {
+          "sha256": "d3109fbe80ecadc853e494c598cc98ac8170c052fc03c42ec9fad1442e76a152",
+          "size_bytes": 514493
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_hklout.mtz": {
+          "sha256": "8aad5ed89f524af0b8120e9a0bbb32ce81c20ad33bfe22008568765f5d222a5c",
+          "size_bytes": 497664
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_hklout_audit.json": {
+          "sha256": "62bb8fa5ff04c9033ce75d92445db6b3889a636c684aa45833e31cca48e4b29d",
+          "size_bytes": 75251
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_hklout_raw_export.json": {
+          "sha256": "fe228067c691d7df610b05f11c3305846f14fbdf93cdb692df6684d20c011675",
+          "size_bytes": 14256933
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_keywords.txt": {
+          "sha256": "a7b3c3b750470e95377ca3c394000db94e648e24fc6e7e7474858ce35089663f",
+          "size_bytes": 171
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_operation_manifest.json": {
+          "sha256": "0721726299375233b96e806f62ee6cb03eafce16beab76399c988601e737c01a",
+          "size_bytes": 522657
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_post_execution_checkpoint.json": {
+          "sha256": "66abad14d62274849833bc2bf71dbf98942ec6902240761d525d4805939fc293",
+          "size_bytes": 71662
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_pre_execution_checkpoint.json": {
+          "sha256": "f0ff3cf1f0698c457a5839549c781b375c16909a3b406f905f08873a86c3a9d1",
+          "size_bytes": 28050
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_xmlout.xml": {
+          "sha256": "f48854899048a94285fcfacc3e9570cff4b56857ed88749a537896071ae880eb",
+          "size_bytes": 6050
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_xmlout_audit.json": {
+          "sha256": "cf7f127565793dd6a37aceb3d271306b39c5791c17bfdb59ce5773e7e4741989",
+          "size_bytes": 21123
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_xyzout.mmcif": {
+          "sha256": "61e107999e5e35b5c31c70ce079fe0ad1b9b63201363207d3558b74e1024344f",
+          "size_bytes": 440411
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_xyzout.pdb": {
+          "sha256": "7b8b33b6b05baf4069a4130526043b5b3e85ff9e982f99ff541f06891378af34",
+          "size_bytes": 135253
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_xyzout_audit.json": {
+          "sha256": "685bd8c882daa681c8ca551ca906a9ed57386717e506afe6e624fe7895449d03",
+          "size_bytes": 290516
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03_execution/526-r4-hydrogen-policy.json": {
+          "sha256": "3b0cf35c7cd12465527306c4f6691f02980da337a5953ab30293f455494be13f",
+          "size_bytes": 8170
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03_execution/526-r4-native-receipt.json": {
+          "sha256": "e706374778ca40506e1539e69bbf8a6df1f08dab64a8f820b9ab1d45ebbaed09",
+          "size_bytes": 5856
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03_execution/526-r4-native-started.json": {
+          "sha256": "508e78aae848ee61fab22e51e45676f3436d245bba8d15450242ed0c8987e132",
+          "size_bytes": 3314
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03_execution/526-r4-native.stderr.log": {
+          "sha256": "b76b36d3a411b07f19f39bc7f592d2204dc1648b4b385c497d8e5be0cfeb6f63",
+          "size_bytes": 614
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03_execution/526-r4-native.stdout.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "size_bytes": 0
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03_execution/526-run-r4-canary.source.txt": {
+          "sha256": "0e53147a78c0154c9a838ac290112ffc151e3e3aaee0ea82bfeb79d3f3f7676d",
+          "size_bytes": 8544
+        },
+        "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03_execution/index.json": {
+          "sha256": "c6c560563792c86e1d3d725fa75def58a1ab8ff1cf6e9b7f2e4262dcb29176c1",
+          "size_bytes": 4888
+        },
+        "scripts/onesar_refmac.py": {
+          "sha256": "1a968e92b928718a25bd43a67b0600e70b25ca352d205d75fea550caeeed4360",
+          "size_bytes": 520074
+        },
+        "scripts/onesar_refmac_log.py": {
+          "sha256": "31908f40708ce2f8e0abc68b4b9f22b08ef0f63df0a9c7907141b82f1323d458",
+          "size_bytes": 92207
+        }
+      },
+      "note": "Exact executed parser and referenced collector source plus immutable attempt03 and external execution evidence; later docs/tests are not executed inputs."
+    }
+  },
+  "replay_argv": [
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/569-replay-native-diagnostic-v2.py",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/548-source-candidate.json",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03_reparse"
+  ],
+  "source_native_invocation": {
+    "started_at_utc": "2026-11-08T02:45:14.071051+00:00",
+    "finished_at_utc": "2026-11-08T02:45:18.456841+00:00",
+    "returncode": 0,
+    "elapsed_seconds": 4.385742
+  },
+  "source_native_banner": {
+    "identity_line": 11,
+    "identity_text": " ### CCP4 9.0.015: Refmac          version 5.8.0431 : 04/08/25##",
+    "date_time_line": 13,
+    "date_time_text": " User: marcin  Run date:  7/11/2026 Run time: 18:45:14 ",
+    "banner_timezone_unspecified": true
+  },
+  "original_parent_status": {
+    "status": "failed",
+    "failed_stage": "refmac_rfactor_operation:parse_refmac_log",
+    "committed": false,
+    "published": false
+  },
+  "original_parent_declared_run_date": "2026-11-08",
+  "replay_started_at_utc": "2026-11-08T03:46:44.569049+00:00",
+  "replay_code_state": "uncommitted frozen candidate; exact parser blob bound below, not a new native execution",
+  "parser": {
+    "path": "scripts/onesar_refmac_log.py",
+    "sha256": "31908f40708ce2f8e0abc68b4b9f22b08ef0f63df0a9c7907141b82f1323d458",
+    "size_bytes": 92207,
+    "entry_point": "parse_refmac_log",
+    "loading": "compile the exact frozen source bytes; no bytecode cache"
+  },
+  "audit_script_sha256": "42658063216bb7aed1d96a539a9558798e3bf66789810a8b26257458aa48b319",
+  "python": "3.12.11 (main, Oct 10 2026, 16:35:46) [Clang 21.0.0 (clang-2100.3.34.2)]",
+  "gemmi_version": "0.7.5",
+  "sources": {
+    "refmac/refmac/refmac.log": {
+      "path": "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac.log",
+      "sha256": "8303f6898c6e9b22f70f6e9f5a51cf275d49775295ac09fb3396b67ff9e20b2c",
+      "size_bytes": 23762
+    },
+    "refmac/refmac/refmac_post_execution_checkpoint.json": {
+      "path": "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_post_execution_checkpoint.json",
+      "sha256": "66abad14d62274849833bc2bf71dbf98942ec6902240761d525d4805939fc293",
+      "size_bytes": 71662
+    },
+    "parent_attempt_outcome.json": {
+      "path": "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/parent_attempt_outcome.json",
+      "sha256": "4dac145b9107c058e7d75dec0c96dbad58f75d95556323d55521a4441d1385a2",
+      "size_bytes": 18984
+    },
+    "parent_attempt_started.json": {
+      "path": "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/parent_attempt_started.json",
+      "sha256": "8fe62848809e24688f768d293571a38940ce4ee6fdf34bed116332f5e27a0379",
+      "size_bytes": 1922
+    },
+    "external_native_launch_receipt": {
+      "path": "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03_execution/526-r4-native-receipt.json",
+      "sha256": "e706374778ca40506e1539e69bbf8a6df1f08dab64a8f820b9ab1d45ebbaed09",
+      "size_bytes": 5856
+    },
+    "refmac/refmac/refmac_hklout_raw_export.json": {
+      "path": "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_hklout_raw_export.json",
+      "sha256": "fe228067c691d7df610b05f11c3305846f14fbdf93cdb692df6684d20c011675",
+      "size_bytes": 14256933
+    },
+    "refmac/inputs/input_hkl_ledger.json": {
+      "path": "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/input_hkl_ledger.json",
+      "sha256": "35543c5821665de8f65b5fbd153669556dfef766ac8b156dc001a0c5b667a51e",
+      "size_bytes": 6107091
+    },
+    "refmac/refmac/refmac_hklout.mtz": {
+      "path": "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_hklout.mtz",
+      "sha256": "8aad5ed89f524af0b8120e9a0bbb32ce81c20ad33bfe22008568765f5d222a5c",
+      "size_bytes": 497664
+    },
+    "refmac/inputs/original_model.pdb": {
+      "path": "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/original_model.pdb",
+      "sha256": "8cbc1650f8be5a3833f98833fa514ec7d490c2c3bb9aa930413abac05e2a510b",
+      "size_bytes": 135240
+    },
+    "refmac/refmac/refmac_xyzout.pdb": {
+      "path": "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_xyzout.pdb",
+      "sha256": "7b8b33b6b05baf4069a4130526043b5b3e85ff9e982f99ff541f06891378af34",
+      "size_bytes": 135253
+    },
+    "refmac/refmac/refmac_xyzout.mmcif": {
+      "path": "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_xyzout.mmcif",
+      "sha256": "61e107999e5e35b5c31c70ce079fe0ad1b9b63201363207d3558b74e1024344f",
+      "size_bytes": 440411
+    }
+  },
+  "historical_log_interpretation": {
+    "parse_status": "parsed",
+    "parsed_native_log": {
+      "source_metadata": {
+        "line_count": 506,
+        "reported_suite": "CCP4 9.0.015",
+        "reported_refmac_version": "5.8.0431",
+        "reported_run_date_token": "7/11/2026",
+        "requested_ncyc": 0
+      },
+      "table_blocks": [
+        {
+          "id": "final_resolution_rfactor",
+          "table_kind": "resolution_rfactor",
+          "cycle_number": 1,
+          "title": {
+            "line": 399,
+            "text": "$TABLE: Cycle    1. Rfactor analysis, F distribution v resln  :"
+          },
+          "graph_declaration_lines": [
+            {
+              "line": 400,
+              "text": "$GRAPHS:Cycle    1. <Rfactor> v. resln :N:1,6,7,11,12:"
+            },
+            {
+              "line": 401,
+              "text": ":Cycle    1. <Fobs> and <Fc> v. resln :N:1,4,5,9,10:"
+            },
+            {
+              "line": 402,
+              "text": ":Cycle    1. % observed v. resln :N:1,3:"
+            }
+          ],
+          "header_lines": [
+            {
+              "line": 404,
+              "text": "M(4SSQ/LL) NR_used %_obs M(Fo_used) M(Fc_used) Rf_used WR_used"
+            },
+            {
+              "line": 405,
+              "text": "NR_free M(Fo_free) M(Fc_free) Rf_free   WR_free $$"
+            }
+          ],
+          "header_tokens": [
+            "M(4SSQ/LL)",
+            "NR_used",
+            "%_obs",
+            "M(Fo_used)",
+            "M(Fc_used)",
+            "Rf_used",
+            "WR_used",
+            "NR_free",
+            "M(Fo_free)",
+            "M(Fc_free)",
+            "Rf_free",
+            "WR_free"
+          ],
+          "double_dollar_roles": {
+            "header_start_line": 403,
+            "header_end_line": 405,
+            "data_start_line": 406,
+            "data_end_line": 427
+          },
+          "data_line_range_inclusive": [
+            407,
+            426
+          ],
+          "row_count": 20,
+          "column_count": 12,
+          "rows": [
+            {
+              "line": 407,
+              "text": "0.004      96 100.00   410.4   378.9 .17     .19          10   373.2   363.2  0.10  0.17",
+              "tokens": [
+                "0.004",
+                "96",
+                "100.00",
+                "410.4",
+                "378.9",
+                ".17",
+                ".19",
+                "10",
+                "373.2",
+                "363.2",
+                "0.10",
+                "0.17"
+              ]
+            },
+            {
+              "line": 408,
+              "text": "0.012     149 100.00   334.2   340.1 .15     .21          17   369.8   377.6  0.17  0.24",
+              "tokens": [
+                "0.012",
+                "149",
+                "100.00",
+                "334.2",
+                "340.1",
+                ".15",
+                ".21",
+                "17",
+                "369.8",
+                "377.6",
+                "0.17",
+                "0.24"
+              ]
+            },
+            {
+              "line": 409,
+              "text": "0.020     186 100.00   279.8   295.3 .16     .19          21   294.6   331.9  0.20  0.27",
+              "tokens": [
+                "0.020",
+                "186",
+                "100.00",
+                "279.8",
+                "295.3",
+                ".16",
+                ".19",
+                "21",
+                "294.6",
+                "331.9",
+                "0.20",
+                "0.27"
+              ]
+            },
+            {
+              "line": 410,
+              "text": "0.028     218 100.00   288.4   308.2 .16     .18          24   226.3   241.5  0.21  0.22",
+              "tokens": [
+                "0.028",
+                "218",
+                "100.00",
+                "288.4",
+                "308.2",
+                ".16",
+                ".18",
+                "24",
+                "226.3",
+                "241.5",
+                "0.21",
+                "0.22"
+              ]
+            },
+            {
+              "line": 411,
+              "text": "0.036     244 100.00   327.3   343.1 .14     .18          27   332.4   337.7  0.19  0.26",
+              "tokens": [
+                "0.036",
+                "244",
+                "100.00",
+                "327.3",
+                "343.1",
+                ".14",
+                ".18",
+                "27",
+                "332.4",
+                "337.7",
+                "0.19",
+                "0.26"
+              ]
+            },
+            {
+              "line": 412,
+              "text": "0.044     267 100.00   343.7   353.9 .15     .20          30   353.6   355.1  0.14  0.22",
+              "tokens": [
+                "0.044",
+                "267",
+                "100.00",
+                "343.7",
+                "353.9",
+                ".15",
+                ".20",
+                "30",
+                "353.6",
+                "355.1",
+                "0.14",
+                "0.22"
+              ]
+            },
+            {
+              "line": 413,
+              "text": "0.052     264  95.15   355.1   350.3 .12     .15          30   290.0   272.4  0.19  0.24",
+              "tokens": [
+                "0.052",
+                "264",
+                "95.15",
+                "355.1",
+                "350.3",
+                ".12",
+                ".15",
+                "30",
+                "290.0",
+                "272.4",
+                "0.19",
+                "0.24"
+              ]
+            },
+            {
+              "line": 414,
+              "text": "0.060     297  97.63   348.4   335.1 .13     .16          33   285.6   271.9  0.19  0.27",
+              "tokens": [
+                "0.060",
+                "297",
+                "97.63",
+                "348.4",
+                "335.1",
+                ".13",
+                ".16",
+                "33",
+                "285.6",
+                "271.9",
+                "0.19",
+                "0.27"
+              ]
+            },
+            {
+              "line": 415,
+              "text": "0.068     319  97.80   315.7   296.6 .15     .19          36   333.9   319.8  0.19  0.24",
+              "tokens": [
+                "0.068",
+                "319",
+                "97.80",
+                "315.7",
+                "296.6",
+                ".15",
+                ".19",
+                "36",
+                "333.9",
+                "319.8",
+                "0.19",
+                "0.24"
+              ]
+            },
+            {
+              "line": 416,
+              "text": "0.076     328  99.73   308.8   285.5 .16     .18          35   269.6   257.6  0.17  0.19",
+              "tokens": [
+                "0.076",
+                "328",
+                "99.73",
+                "308.8",
+                "285.5",
+                ".16",
+                ".18",
+                "35",
+                "269.6",
+                "257.6",
+                "0.17",
+                "0.19"
+              ]
+            },
+            {
+              "line": 417,
+              "text": "0.084     351  99.49   305.6   274.8 .17     .18          40   320.3   294.8  0.19  0.21",
+              "tokens": [
+                "0.084",
+                "351",
+                "99.49",
+                "305.6",
+                "274.8",
+                ".17",
+                ".18",
+                "40",
+                "320.3",
+                "294.8",
+                "0.19",
+                "0.21"
+              ]
+            },
+            {
+              "line": 418,
+              "text": "0.092     371 100.00   265.7   249.1 .17     .19          41   274.9   251.5  0.23  0.23",
+              "tokens": [
+                "0.092",
+                "371",
+                "100.00",
+                "265.7",
+                "249.1",
+                ".17",
+                ".19",
+                "41",
+                "274.9",
+                "251.5",
+                "0.23",
+                "0.23"
+              ]
+            },
+            {
+              "line": 419,
+              "text": "0.100     381  99.76   259.5   237.7 .18     .20          42   246.8   227.5  0.25  0.27",
+              "tokens": [
+                "0.100",
+                "381",
+                "99.76",
+                "259.5",
+                "237.7",
+                ".18",
+                ".20",
+                "42",
+                "246.8",
+                "227.5",
+                "0.25",
+                "0.27"
+              ]
+            },
+            {
+              "line": 420,
+              "text": "0.108     384  99.53   221.6   209.5 .17     .18          43   238.5   225.7  0.20  0.23",
+              "tokens": [
+                "0.108",
+                "384",
+                "99.53",
+                "221.6",
+                "209.5",
+                ".17",
+                ".18",
+                "43",
+                "238.5",
+                "225.7",
+                "0.20",
+                "0.23"
+              ]
+            },
+            {
+              "line": 421,
+              "text": "0.116     422  99.79   199.2   187.8 .20     .21          47   210.1   199.6  0.25  0.29",
+              "tokens": [
+                "0.116",
+                "422",
+                "99.79",
+                "199.2",
+                "187.8",
+                ".20",
+                ".21",
+                "47",
+                "210.1",
+                "199.6",
+                "0.25",
+                "0.29"
+              ]
+            },
+            {
+              "line": 422,
+              "text": "0.124     407 100.00   185.2   178.1 .19     .21          46   175.1   156.8  0.27  0.29",
+              "tokens": [
+                "0.124",
+                "407",
+                "100.00",
+                "185.2",
+                "178.1",
+                ".19",
+                ".21",
+                "46",
+                "175.1",
+                "156.8",
+                "0.27",
+                "0.29"
+              ]
+            },
+            {
+              "line": 423,
+              "text": "0.132     431  99.58   169.8   168.0 .20     .21          48   178.3   183.0  0.28  0.30",
+              "tokens": [
+                "0.132",
+                "431",
+                "99.58",
+                "169.8",
+                "168.0",
+                ".20",
+                ".21",
+                "48",
+                "178.3",
+                "183.0",
+                "0.28",
+                "0.30"
+              ]
+            },
+            {
+              "line": 424,
+              "text": "0.140     460  99.80   165.8   165.0 .21     .22          50   152.0   159.5  0.26  0.26",
+              "tokens": [
+                "0.140",
+                "460",
+                "99.80",
+                "165.8",
+                "165.0",
+                ".21",
+                ".22",
+                "50",
+                "152.0",
+                "159.5",
+                "0.26",
+                "0.26"
+              ]
+            },
+            {
+              "line": 425,
+              "text": "0.148     449  99.80   155.8   166.0 .22     .23          50   155.6   161.8  0.25  0.25",
+              "tokens": [
+                "0.148",
+                "449",
+                "99.80",
+                "155.8",
+                "166.0",
+                ".22",
+                ".23",
+                "50",
+                "155.6",
+                "161.8",
+                "0.25",
+                "0.25"
+              ]
+            },
+            {
+              "line": 426,
+              "text": "0.156     470  99.43   154.8   161.7 .20     .20          53   138.2   157.5  0.30  0.31",
+              "tokens": [
+                "0.156",
+                "470",
+                "99.43",
+                "154.8",
+                "161.7",
+                ".20",
+                ".20",
+                "53",
+                "138.2",
+                "157.5",
+                "0.30",
+                "0.31"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "final_resolution_fom",
+          "table_kind": "resolution_fom",
+          "cycle_number": 1,
+          "title": {
+            "line": 431,
+            "text": " $TABLE: Cycle    1. FSC and  Fom(<cos(DelPhi)>-acentric, centric, overall v resln:"
+          },
+          "graph_declaration_lines": [
+            {
+              "line": 432,
+              "text": " $GRAPHS:Cycle    1. M(Fom) v. resln :N:1,3,5,7,8,9,10,11,12:"
+            }
+          ],
+          "header_lines": [
+            {
+              "line": 434,
+              "text": " <4SSQ/LL> NREFa  FOMa  NREFc FOMc NREFall FOMall  SigmaA_Fc1 FSCfree  FSCwork CorrFoFcFree CorrFoFcWork$$"
+            }
+          ],
+          "header_tokens": [
+            "<4SSQ/LL>",
+            "NREFa",
+            "FOMa",
+            "NREFc",
+            "FOMc",
+            "NREFall",
+            "FOMall",
+            "SigmaA_Fc1",
+            "FSCfree",
+            "FSCwork",
+            "CorrFoFcFree",
+            "CorrFoFcWork"
+          ],
+          "double_dollar_roles": {
+            "header_start_line": 433,
+            "header_end_line": 434,
+            "data_start_line": 435,
+            "data_end_line": 456
+          },
+          "data_line_range_inclusive": [
+            436,
+            455
+          ],
+          "row_count": 20,
+          "column_count": 12,
+          "rows": [
+            {
+              "line": 436,
+              "text": "  0.0044     44   0.945     52   0.832     96   0.884  0.962  0.9893  0.9818  0.9878  0.9498",
+              "tokens": [
+                "0.0044",
+                "44",
+                "0.945",
+                "52",
+                "0.832",
+                "96",
+                "0.884",
+                "0.962",
+                "0.9893",
+                "0.9818",
+                "0.9878",
+                "0.9498"
+              ]
+            },
+            {
+              "line": 437,
+              "text": "  0.0124     93   0.921     56   0.868    149   0.901  0.942  0.9773  0.9865  0.9114  0.9556",
+              "tokens": [
+                "0.0124",
+                "93",
+                "0.921",
+                "56",
+                "0.868",
+                "149",
+                "0.901",
+                "0.942",
+                "0.9773",
+                "0.9865",
+                "0.9114",
+                "0.9556"
+              ]
+            },
+            {
+              "line": 438,
+              "text": "  0.0204    124   0.898     62   0.851    186   0.882  0.931  0.9803  0.9850  0.9309  0.9521",
+              "tokens": [
+                "0.0204",
+                "124",
+                "0.898",
+                "62",
+                "0.851",
+                "186",
+                "0.882",
+                "0.931",
+                "0.9803",
+                "0.9850",
+                "0.9309",
+                "0.9521"
+              ]
+            },
+            {
+              "line": 439,
+              "text": "  0.0283    161   0.898     57   0.810    218   0.875  0.929  0.9729  0.9885  0.9305  0.9606",
+              "tokens": [
+                "0.0283",
+                "161",
+                "0.898",
+                "57",
+                "0.810",
+                "218",
+                "0.875",
+                "0.929",
+                "0.9729",
+                "0.9885",
+                "0.9305",
+                "0.9606"
+              ]
+            },
+            {
+              "line": 440,
+              "text": "  0.0363    183   0.929     61   0.894    244   0.920  0.943  0.9794  0.9898  0.9193  0.9543",
+              "tokens": [
+                "0.0363",
+                "183",
+                "0.929",
+                "61",
+                "0.894",
+                "244",
+                "0.920",
+                "0.943",
+                "0.9794",
+                "0.9898",
+                "0.9193",
+                "0.9543"
+              ]
+            },
+            {
+              "line": 441,
+              "text": "  0.0443    205   0.933     62   0.791    267   0.900  0.965  0.9892  0.9881  0.9713  0.9558",
+              "tokens": [
+                "0.0443",
+                "205",
+                "0.933",
+                "62",
+                "0.791",
+                "267",
+                "0.900",
+                "0.965",
+                "0.9892",
+                "0.9881",
+                "0.9713",
+                "0.9558"
+              ]
+            },
+            {
+              "line": 442,
+              "text": "  0.0523    218   0.937     46   0.885    264   0.928  0.983  0.9792  0.9900  0.8924  0.9596",
+              "tokens": [
+                "0.0523",
+                "218",
+                "0.937",
+                "46",
+                "0.885",
+                "264",
+                "0.928",
+                "0.983",
+                "0.9792",
+                "0.9900",
+                "0.8924",
+                "0.9596"
+              ]
+            },
+            {
+              "line": 443,
+              "text": "  0.0602    241   0.947     56   0.863    297   0.932  1.005  0.9804  0.9883  0.9340  0.9460",
+              "tokens": [
+                "0.0602",
+                "241",
+                "0.947",
+                "56",
+                "0.863",
+                "297",
+                "0.932",
+                "1.005",
+                "0.9804",
+                "0.9883",
+                "0.9340",
+                "0.9460"
+              ]
+            },
+            {
+              "line": 444,
+              "text": "  0.0682    256   0.897     63   0.785    319   0.875  1.028  0.9799  0.9860  0.8927  0.9472",
+              "tokens": [
+                "0.0682",
+                "256",
+                "0.897",
+                "63",
+                "0.785",
+                "319",
+                "0.875",
+                "1.028",
+                "0.9799",
+                "0.9860",
+                "0.8927",
+                "0.9472"
+              ]
+            },
+            {
+              "line": 445,
+              "text": "  0.0762    273   0.924     55   0.837    328   0.910  1.051  0.9835  0.9869  0.9278  0.9455",
+              "tokens": [
+                "0.0762",
+                "273",
+                "0.924",
+                "55",
+                "0.837",
+                "328",
+                "0.910",
+                "1.051",
+                "0.9835",
+                "0.9869",
+                "0.9278",
+                "0.9455"
+              ]
+            },
+            {
+              "line": 446,
+              "text": "  0.0842    294   0.924     57   0.836    351   0.910  1.050  0.9776  0.9860  0.9163  0.9415",
+              "tokens": [
+                "0.0842",
+                "294",
+                "0.924",
+                "57",
+                "0.836",
+                "351",
+                "0.910",
+                "1.050",
+                "0.9776",
+                "0.9860",
+                "0.9163",
+                "0.9415"
+              ]
+            },
+            {
+              "line": 447,
+              "text": "  0.0922    311   0.887     60   0.831    371   0.878  1.029  0.9631  0.9807  0.8420  0.9217",
+              "tokens": [
+                "0.0922",
+                "311",
+                "0.887",
+                "60",
+                "0.831",
+                "371",
+                "0.878",
+                "1.029",
+                "0.9631",
+                "0.9807",
+                "0.8420",
+                "0.9217"
+              ]
+            },
+            {
+              "line": 448,
+              "text": "  0.1001    330   0.881     51   0.815    381   0.872  1.013  0.9573  0.9784  0.8342  0.9152",
+              "tokens": [
+                "0.1001",
+                "330",
+                "0.881",
+                "51",
+                "0.815",
+                "381",
+                "0.872",
+                "1.013",
+                "0.9573",
+                "0.9784",
+                "0.8342",
+                "0.9152"
+              ]
+            },
+            {
+              "line": 449,
+              "text": "  0.1081    326   0.866     58   0.742    384   0.847  1.000  0.9719  0.9804  0.8826  0.9224",
+              "tokens": [
+                "0.1081",
+                "326",
+                "0.866",
+                "58",
+                "0.742",
+                "384",
+                "0.847",
+                "1.000",
+                "0.9719",
+                "0.9804",
+                "0.8826",
+                "0.9224"
+              ]
+            },
+            {
+              "line": 450,
+              "text": "  0.1161    357   0.832     65   0.744    422   0.818  0.988  0.9620  0.9734  0.8618  0.8998",
+              "tokens": [
+                "0.1161",
+                "357",
+                "0.832",
+                "65",
+                "0.744",
+                "422",
+                "0.818",
+                "0.988",
+                "0.9620",
+                "0.9734",
+                "0.8618",
+                "0.8998"
+              ]
+            },
+            {
+              "line": 451,
+              "text": "  0.1241    355   0.837     52   0.775    407   0.829  0.969  0.9498  0.9758  0.8241  0.8975",
+              "tokens": [
+                "0.1241",
+                "355",
+                "0.837",
+                "52",
+                "0.775",
+                "407",
+                "0.829",
+                "0.969",
+                "0.9498",
+                "0.9758",
+                "0.8241",
+                "0.8975"
+              ]
+            },
+            {
+              "line": 452,
+              "text": "  0.1321    374   0.834     57   0.764    431   0.825  0.949  0.9537  0.9714  0.8404  0.8823",
+              "tokens": [
+                "0.1321",
+                "374",
+                "0.834",
+                "57",
+                "0.764",
+                "431",
+                "0.825",
+                "0.949",
+                "0.9537",
+                "0.9714",
+                "0.8404",
+                "0.8823"
+              ]
+            },
+            {
+              "line": 453,
+              "text": "  0.1400    402   0.832     58   0.760    460   0.823  0.927  0.9568  0.9734  0.8299  0.9022",
+              "tokens": [
+                "0.1400",
+                "402",
+                "0.832",
+                "58",
+                "0.760",
+                "460",
+                "0.823",
+                "0.927",
+                "0.9568",
+                "0.9734",
+                "0.8299",
+                "0.9022"
+              ]
+            },
+            {
+              "line": 454,
+              "text": "  0.1480    390   0.829     59   0.806    449   0.826  0.901  0.9599  0.9735  0.8201  0.8966",
+              "tokens": [
+                "0.1480",
+                "390",
+                "0.829",
+                "59",
+                "0.806",
+                "449",
+                "0.826",
+                "0.901",
+                "0.9599",
+                "0.9735",
+                "0.8201",
+                "0.8966"
+              ]
+            },
+            {
+              "line": 455,
+              "text": "  0.1560    414   0.814     56   0.687    470   0.799  0.875  0.9516  0.9778  0.7962  0.9161",
+              "tokens": [
+                "0.1560",
+                "414",
+                "0.814",
+                "56",
+                "0.687",
+                "470",
+                "0.799",
+                "0.875",
+                "0.9516",
+                "0.9778",
+                "0.7962",
+                "0.9161"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "cycle_summary",
+          "table_kind": "cycle_summary",
+          "cycle_number": null,
+          "title": {
+            "line": 481,
+            "text": "$TABLE: Rfactor analysis, stats vs cycle  :"
+          },
+          "graph_declaration_lines": [
+            {
+              "line": 482,
+              "text": "$GRAPHS:<Rfactor> vs cycle :N:1,2,3:"
+            },
+            {
+              "line": 483,
+              "text": ":FOM vs cycle :N:1,4:"
+            },
+            {
+              "line": 484,
+              "text": ":-LL vs cycle :N:1,5:"
+            },
+            {
+              "line": 485,
+              "text": ":-LLfree vs cycle :N:1,6:"
+            },
+            {
+              "line": 486,
+              "text": ":Geometry vs cycle:N:1,7,8,9,10,11:"
+            }
+          ],
+          "header_lines": [
+            {
+              "line": 488,
+              "text": "    Ncyc    Rfact    Rfree     FOM      -LL     -LLfree  rmsBOND  zBOND rmsANGL  zANGL rmsCHIRAL $$"
+            }
+          ],
+          "header_tokens": [
+            "Ncyc",
+            "Rfact",
+            "Rfree",
+            "FOM",
+            "-LL",
+            "-LLfree",
+            "rmsBOND",
+            "zBOND",
+            "rmsANGL",
+            "zANGL",
+            "rmsCHIRAL"
+          ],
+          "double_dollar_roles": {
+            "header_start_line": 487,
+            "header_end_line": 488,
+            "data_start_line": 489,
+            "data_end_line": 491
+          },
+          "data_line_range_inclusive": [
+            490,
+            490
+          ],
+          "row_count": 1,
+          "column_count": 11,
+          "rows": [
+            {
+              "line": 490,
+              "text": "       0   0.1693   0.2128   0.863       34569.    3959.9   0.0105  0.884   1.496  0.864   0.066",
+              "tokens": [
+                "0",
+                "0.1693",
+                "0.2128",
+                "0.863",
+                "34569.",
+                "3959.9",
+                "0.0105",
+                "0.884",
+                "1.496",
+                "0.864",
+                "0.066"
+              ]
+            }
+          ]
+        }
+      ],
+      "cycle_summary": {
+        "title": {
+          "line": 481,
+          "text": "$TABLE: Rfactor analysis, stats vs cycle  :"
+        },
+        "graph_declaration_lines": [
+          {
+            "line": 482,
+            "text": "$GRAPHS:<Rfactor> vs cycle :N:1,2,3:"
+          },
+          {
+            "line": 483,
+            "text": ":FOM vs cycle :N:1,4:"
+          },
+          {
+            "line": 484,
+            "text": ":-LL vs cycle :N:1,5:"
+          },
+          {
+            "line": 485,
+            "text": ":-LLfree vs cycle :N:1,6:"
+          },
+          {
+            "line": 486,
+            "text": ":Geometry vs cycle:N:1,7,8,9,10,11:"
+          }
+        ],
+        "header_lines": [
+          {
+            "line": 488,
+            "text": "    Ncyc    Rfact    Rfree     FOM      -LL     -LLfree  rmsBOND  zBOND rmsANGL  zANGL rmsCHIRAL $$"
+          }
+        ],
+        "header_tokens": [
+          "Ncyc",
+          "Rfact",
+          "Rfree",
+          "FOM",
+          "-LL",
+          "-LLfree",
+          "rmsBOND",
+          "zBOND",
+          "rmsANGL",
+          "zANGL",
+          "rmsCHIRAL"
+        ],
+        "double_dollar_roles": {
+          "header_start_line": 487,
+          "header_end_line": 488,
+          "data_start_line": 489,
+          "data_end_line": 491
+        },
+        "data_line_range_inclusive": [
+          490,
+          490
+        ],
+        "row_count": 1,
+        "summary_cycle_min": 0,
+        "summary_cycle_max": 0,
+        "rfact_printed_decimal_places": 4,
+        "rfree_printed_decimal_places": 4,
+        "rows": [
+          {
+            "ncyc": 0,
+            "ncyc_token": "0",
+            "line": 490,
+            "text": "       0   0.1693   0.2128   0.863       34569.    3959.9   0.0105  0.884   1.496  0.864   0.066",
+            "tokens": [
+              "0",
+              "0.1693",
+              "0.2128",
+              "0.863",
+              "34569.",
+              "3959.9",
+              "0.0105",
+              "0.884",
+              "1.496",
+              "0.864",
+              "0.066"
+            ],
+            "rfact_token": "0.1693",
+            "rfact": 0.1693,
+            "rfact_decimal_places": 4,
+            "rfree_token": "0.2128",
+            "rfree": 0.2128,
+            "rfree_decimal_places": 4,
+            "fom_token": "0.863",
+            "fom": 0.863,
+            "ll_token": "34569.",
+            "llfree_token": "3959.9",
+            "rmsbond_token": "0.0105",
+            "zbond_token": "0.884",
+            "rmsangl_token": "1.496",
+            "zangl_token": "0.864",
+            "rmschiral_token": "0.066"
+          }
+        ]
+      },
+      "detailed_cycles": [
+        {
+          "cgmat_cycle_line": null,
+          "cgmat_cycle_token": null,
+          "cgmat_cycle_number": null,
+          "overall_r_line": 461,
+          "overall_r_text": "Overall R factor                     =     0.1693",
+          "overall_r_token": "0.1693",
+          "overall_r": 0.1693,
+          "overall_r_decimal_places": 4,
+          "free_r_line": 462,
+          "free_r_text": "Free R factor                        =     0.2128",
+          "free_r_token": "0.2128",
+          "free_r": 0.2128,
+          "free_r_decimal_places": 4,
+          "overall_weighted_r_line": 465,
+          "overall_weighted_r_token": "0.1950",
+          "overall_weighted_r": 0.195,
+          "free_weighted_r_line": 466,
+          "free_weighted_r_token": "0.2522",
+          "free_weighted_r": 0.2522,
+          "overall_weighted_r2_line": 467,
+          "overall_weighted_r2_token": "0.2445",
+          "overall_weighted_r2": 0.2445,
+          "free_weighted_r2_line": 468,
+          "free_weighted_r2_token": "0.3197",
+          "free_weighted_r2": 0.3197,
+          "overall_fom_line": 473,
+          "overall_fom_token": "0.8629",
+          "overall_fom": 0.8629,
+          "average_fourier_shell_correlation_line": 463,
+          "average_fourier_shell_correlation_token": "0.9807",
+          "average_fourier_shell_correlation": 0.9807,
+          "average_free_fourier_shell_correlation_line": 464,
+          "average_free_fourier_shell_correlation_token": "0.9675",
+          "average_free_fourier_shell_correlation": 0.9675,
+          "average_correlation_coefficient_line": 469,
+          "average_correlation_coefficient_token": "0.9245",
+          "average_correlation_coefficient": 0.9245,
+          "overall_correlation_coefficient_line": 470,
+          "overall_correlation_coefficient_token": "0.9447",
+          "overall_correlation_coefficient": 0.9447,
+          "free_correlation_coefficient_line": 471,
+          "free_correlation_coefficient_token": "0.9180",
+          "free_correlation_coefficient": 0.918,
+          "cruickshanks_dpi_line": null,
+          "cruickshanks_dpi_token": null,
+          "cruickshanks_dpi": null,
+          "dpi_free_r_line": 472,
+          "dpi_free_r_token": "0.2776",
+          "dpi_free_r": 0.2776,
+          "ml_su_positional_line": null,
+          "ml_su_positional_token": null,
+          "ml_su_positional": null,
+          "ml_su_thermal_line": null,
+          "ml_su_thermal_token": null,
+          "ml_su_thermal": null,
+          "number_of_used_reflections_line": 458,
+          "number_of_used_reflections_token": "6494",
+          "number_of_used_reflections": 6494,
+          "resolution_limits_line": 457,
+          "resolution_limits_tokens": [
+            "49.972",
+            "2.500"
+          ],
+          "percentage_observed_line": 459,
+          "percentage_observed_token": "99.3803",
+          "percentage_observed": 99.3803,
+          "percentage_observed_decimal_places": 4,
+          "percentage_free_line": 460,
+          "percentage_free_token": "10.0180",
+          "percentage_free": 10.018,
+          "percentage_free_decimal_places": 4,
+          "endpoint_lines": [
+            {
+              "line": 457,
+              "text": "Resolution limits                    =     49.972     2.500"
+            },
+            {
+              "line": 458,
+              "text": "Number of used reflections           =       6494"
+            },
+            {
+              "line": 459,
+              "text": "Percentage observed                  =    99.3803"
+            },
+            {
+              "line": 460,
+              "text": "Percentage of free reflections       =    10.0180"
+            },
+            {
+              "line": 461,
+              "text": "Overall R factor                     =     0.1693"
+            },
+            {
+              "line": 462,
+              "text": "Free R factor                        =     0.2128"
+            }
+          ],
+          "distinct_weighted_metric_lines": [
+            {
+              "line": 465,
+              "text": "Overall weighted R factor            =     0.1950"
+            },
+            {
+              "line": 466,
+              "text": "Free weighted R factor               =     0.2522"
+            },
+            {
+              "line": 467,
+              "text": "Overall weighted R2 factor           =     0.2445"
+            },
+            {
+              "line": 468,
+              "text": "Free weighted R2 factor              =     0.3197"
+            }
+          ],
+          "detailed_cycle": 1,
+          "summary_ncyc": 0
+        }
+      ],
+      "cgmat_cycle_markers": [],
+      "cycle_r_values": {
+        "row_fields": [
+          "summary_Ncyc",
+          "Rfact_token",
+          "Rfree_token",
+          "summary_line",
+          "matching_ordered_overall_detail_line",
+          "matching_ordered_free_detail_line"
+        ],
+        "rows": [
+          [
+            0,
+            "0.1693",
+            "0.2128",
+            490,
+            461,
+            462
+          ]
+        ],
+        "summary_cycle_min": 0,
+        "summary_cycle_max": 0,
+        "summary_row_count": 1,
+        "Rfact_printed_decimal_places": 4,
+        "Rfree_printed_decimal_places": 4,
+        "all_ordered_detail_pairs_equal_summary_values": true,
+        "detail_rfactor_table_cycle_labels": [
+          1
+        ]
+      },
+      "resolution_bin_values": {
+        "row_fields": [
+          "bin_ordinal",
+          "line",
+          "M(4SSQ/LL)_token",
+          "NR_used",
+          "NR_free",
+          "Rf_used_token",
+          "Rf_free_token"
+        ],
+        "tables": [
+          {
+            "phase": "final",
+            "detailed_cycle": 1,
+            "summary_ncyc": 0,
+            "title": {
+              "line": 399,
+              "text": "$TABLE: Cycle    1. Rfactor analysis, F distribution v resln  :"
+            },
+            "graph_declaration_lines": [
+              {
+                "line": 400,
+                "text": "$GRAPHS:Cycle    1. <Rfactor> v. resln :N:1,6,7,11,12:"
+              },
+              {
+                "line": 401,
+                "text": ":Cycle    1. <Fobs> and <Fc> v. resln :N:1,4,5,9,10:"
+              },
+              {
+                "line": 402,
+                "text": ":Cycle    1. % observed v. resln :N:1,3:"
+              }
+            ],
+            "header_lines": [
+              {
+                "line": 404,
+                "text": "M(4SSQ/LL) NR_used %_obs M(Fo_used) M(Fc_used) Rf_used WR_used"
+              },
+              {
+                "line": 405,
+                "text": "NR_free M(Fo_free) M(Fc_free) Rf_free   WR_free $$"
+              }
+            ],
+            "header_tokens": [
+              "M(4SSQ/LL)",
+              "NR_used",
+              "%_obs",
+              "M(Fo_used)",
+              "M(Fc_used)",
+              "Rf_used",
+              "WR_used",
+              "NR_free",
+              "M(Fo_free)",
+              "M(Fc_free)",
+              "Rf_free",
+              "WR_free"
+            ],
+            "double_dollar_roles": {
+              "header_start_line": 403,
+              "header_end_line": 405,
+              "data_start_line": 406,
+              "data_end_line": 427
+            },
+            "data_line_range_inclusive": [
+              407,
+              426
+            ],
+            "bin_count": 20,
+            "nr_used_sum": 6494,
+            "nr_free_sum": 723,
+            "combined_reported_count": 7217,
+            "rf_used_printed_decimal_places": 2,
+            "rf_free_printed_decimal_places": 2,
+            "bins": [
+              {
+                "bin_ordinal": 1,
+                "line": 407,
+                "text": "0.004      96 100.00   410.4   378.9 .17     .19          10   373.2   363.2  0.10  0.17",
+                "tokens": [
+                  "0.004",
+                  "96",
+                  "100.00",
+                  "410.4",
+                  "378.9",
+                  ".17",
+                  ".19",
+                  "10",
+                  "373.2",
+                  "363.2",
+                  "0.10",
+                  "0.17"
+                ],
+                "m_4ssq_ll_token": "0.004",
+                "m_4ssq_ll": 0.004,
+                "nr_used_token": "96",
+                "nr_used": 96,
+                "pct_obs_token": "100.00",
+                "pct_obs": 100.0,
+                "pct_obs_decimal_places": 2,
+                "m_fo_used_token": "410.4",
+                "m_fc_used_token": "378.9",
+                "rf_used_token": ".17",
+                "rf_used": 0.17,
+                "rf_used_decimal_places": 2,
+                "wr_used_token": ".19",
+                "wr_used": 0.19,
+                "nr_free_token": "10",
+                "nr_free": 10,
+                "m_fo_free_token": "373.2",
+                "m_fc_free_token": "363.2",
+                "rf_free_token": "0.10",
+                "rf_free": 0.1,
+                "rf_free_decimal_places": 2,
+                "wr_free_token": "0.17",
+                "wr_free": 0.17
+              },
+              {
+                "bin_ordinal": 2,
+                "line": 408,
+                "text": "0.012     149 100.00   334.2   340.1 .15     .21          17   369.8   377.6  0.17  0.24",
+                "tokens": [
+                  "0.012",
+                  "149",
+                  "100.00",
+                  "334.2",
+                  "340.1",
+                  ".15",
+                  ".21",
+                  "17",
+                  "369.8",
+                  "377.6",
+                  "0.17",
+                  "0.24"
+                ],
+                "m_4ssq_ll_token": "0.012",
+                "m_4ssq_ll": 0.012,
+                "nr_used_token": "149",
+                "nr_used": 149,
+                "pct_obs_token": "100.00",
+                "pct_obs": 100.0,
+                "pct_obs_decimal_places": 2,
+                "m_fo_used_token": "334.2",
+                "m_fc_used_token": "340.1",
+                "rf_used_token": ".15",
+                "rf_used": 0.15,
+                "rf_used_decimal_places": 2,
+                "wr_used_token": ".21",
+                "wr_used": 0.21,
+                "nr_free_token": "17",
+                "nr_free": 17,
+                "m_fo_free_token": "369.8",
+                "m_fc_free_token": "377.6",
+                "rf_free_token": "0.17",
+                "rf_free": 0.17,
+                "rf_free_decimal_places": 2,
+                "wr_free_token": "0.24",
+                "wr_free": 0.24
+              },
+              {
+                "bin_ordinal": 3,
+                "line": 409,
+                "text": "0.020     186 100.00   279.8   295.3 .16     .19          21   294.6   331.9  0.20  0.27",
+                "tokens": [
+                  "0.020",
+                  "186",
+                  "100.00",
+                  "279.8",
+                  "295.3",
+                  ".16",
+                  ".19",
+                  "21",
+                  "294.6",
+                  "331.9",
+                  "0.20",
+                  "0.27"
+                ],
+                "m_4ssq_ll_token": "0.020",
+                "m_4ssq_ll": 0.02,
+                "nr_used_token": "186",
+                "nr_used": 186,
+                "pct_obs_token": "100.00",
+                "pct_obs": 100.0,
+                "pct_obs_decimal_places": 2,
+                "m_fo_used_token": "279.8",
+                "m_fc_used_token": "295.3",
+                "rf_used_token": ".16",
+                "rf_used": 0.16,
+                "rf_used_decimal_places": 2,
+                "wr_used_token": ".19",
+                "wr_used": 0.19,
+                "nr_free_token": "21",
+                "nr_free": 21,
+                "m_fo_free_token": "294.6",
+                "m_fc_free_token": "331.9",
+                "rf_free_token": "0.20",
+                "rf_free": 0.2,
+                "rf_free_decimal_places": 2,
+                "wr_free_token": "0.27",
+                "wr_free": 0.27
+              },
+              {
+                "bin_ordinal": 4,
+                "line": 410,
+                "text": "0.028     218 100.00   288.4   308.2 .16     .18          24   226.3   241.5  0.21  0.22",
+                "tokens": [
+                  "0.028",
+                  "218",
+                  "100.00",
+                  "288.4",
+                  "308.2",
+                  ".16",
+                  ".18",
+                  "24",
+                  "226.3",
+                  "241.5",
+                  "0.21",
+                  "0.22"
+                ],
+                "m_4ssq_ll_token": "0.028",
+                "m_4ssq_ll": 0.028,
+                "nr_used_token": "218",
+                "nr_used": 218,
+                "pct_obs_token": "100.00",
+                "pct_obs": 100.0,
+                "pct_obs_decimal_places": 2,
+                "m_fo_used_token": "288.4",
+                "m_fc_used_token": "308.2",
+                "rf_used_token": ".16",
+                "rf_used": 0.16,
+                "rf_used_decimal_places": 2,
+                "wr_used_token": ".18",
+                "wr_used": 0.18,
+                "nr_free_token": "24",
+                "nr_free": 24,
+                "m_fo_free_token": "226.3",
+                "m_fc_free_token": "241.5",
+                "rf_free_token": "0.21",
+                "rf_free": 0.21,
+                "rf_free_decimal_places": 2,
+                "wr_free_token": "0.22",
+                "wr_free": 0.22
+              },
+              {
+                "bin_ordinal": 5,
+                "line": 411,
+                "text": "0.036     244 100.00   327.3   343.1 .14     .18          27   332.4   337.7  0.19  0.26",
+                "tokens": [
+                  "0.036",
+                  "244",
+                  "100.00",
+                  "327.3",
+                  "343.1",
+                  ".14",
+                  ".18",
+                  "27",
+                  "332.4",
+                  "337.7",
+                  "0.19",
+                  "0.26"
+                ],
+                "m_4ssq_ll_token": "0.036",
+                "m_4ssq_ll": 0.036,
+                "nr_used_token": "244",
+                "nr_used": 244,
+                "pct_obs_token": "100.00",
+                "pct_obs": 100.0,
+                "pct_obs_decimal_places": 2,
+                "m_fo_used_token": "327.3",
+                "m_fc_used_token": "343.1",
+                "rf_used_token": ".14",
+                "rf_used": 0.14,
+                "rf_used_decimal_places": 2,
+                "wr_used_token": ".18",
+                "wr_used": 0.18,
+                "nr_free_token": "27",
+                "nr_free": 27,
+                "m_fo_free_token": "332.4",
+                "m_fc_free_token": "337.7",
+                "rf_free_token": "0.19",
+                "rf_free": 0.19,
+                "rf_free_decimal_places": 2,
+                "wr_free_token": "0.26",
+                "wr_free": 0.26
+              },
+              {
+                "bin_ordinal": 6,
+                "line": 412,
+                "text": "0.044     267 100.00   343.7   353.9 .15     .20          30   353.6   355.1  0.14  0.22",
+                "tokens": [
+                  "0.044",
+                  "267",
+                  "100.00",
+                  "343.7",
+                  "353.9",
+                  ".15",
+                  ".20",
+                  "30",
+                  "353.6",
+                  "355.1",
+                  "0.14",
+                  "0.22"
+                ],
+                "m_4ssq_ll_token": "0.044",
+                "m_4ssq_ll": 0.044,
+                "nr_used_token": "267",
+                "nr_used": 267,
+                "pct_obs_token": "100.00",
+                "pct_obs": 100.0,
+                "pct_obs_decimal_places": 2,
+                "m_fo_used_token": "343.7",
+                "m_fc_used_token": "353.9",
+                "rf_used_token": ".15",
+                "rf_used": 0.15,
+                "rf_used_decimal_places": 2,
+                "wr_used_token": ".20",
+                "wr_used": 0.2,
+                "nr_free_token": "30",
+                "nr_free": 30,
+                "m_fo_free_token": "353.6",
+                "m_fc_free_token": "355.1",
+                "rf_free_token": "0.14",
+                "rf_free": 0.14,
+                "rf_free_decimal_places": 2,
+                "wr_free_token": "0.22",
+                "wr_free": 0.22
+              },
+              {
+                "bin_ordinal": 7,
+                "line": 413,
+                "text": "0.052     264  95.15   355.1   350.3 .12     .15          30   290.0   272.4  0.19  0.24",
+                "tokens": [
+                  "0.052",
+                  "264",
+                  "95.15",
+                  "355.1",
+                  "350.3",
+                  ".12",
+                  ".15",
+                  "30",
+                  "290.0",
+                  "272.4",
+                  "0.19",
+                  "0.24"
+                ],
+                "m_4ssq_ll_token": "0.052",
+                "m_4ssq_ll": 0.052,
+                "nr_used_token": "264",
+                "nr_used": 264,
+                "pct_obs_token": "95.15",
+                "pct_obs": 95.15,
+                "pct_obs_decimal_places": 2,
+                "m_fo_used_token": "355.1",
+                "m_fc_used_token": "350.3",
+                "rf_used_token": ".12",
+                "rf_used": 0.12,
+                "rf_used_decimal_places": 2,
+                "wr_used_token": ".15",
+                "wr_used": 0.15,
+                "nr_free_token": "30",
+                "nr_free": 30,
+                "m_fo_free_token": "290.0",
+                "m_fc_free_token": "272.4",
+                "rf_free_token": "0.19",
+                "rf_free": 0.19,
+                "rf_free_decimal_places": 2,
+                "wr_free_token": "0.24",
+                "wr_free": 0.24
+              },
+              {
+                "bin_ordinal": 8,
+                "line": 414,
+                "text": "0.060     297  97.63   348.4   335.1 .13     .16          33   285.6   271.9  0.19  0.27",
+                "tokens": [
+                  "0.060",
+                  "297",
+                  "97.63",
+                  "348.4",
+                  "335.1",
+                  ".13",
+                  ".16",
+                  "33",
+                  "285.6",
+                  "271.9",
+                  "0.19",
+                  "0.27"
+                ],
+                "m_4ssq_ll_token": "0.060",
+                "m_4ssq_ll": 0.06,
+                "nr_used_token": "297",
+                "nr_used": 297,
+                "pct_obs_token": "97.63",
+                "pct_obs": 97.63,
+                "pct_obs_decimal_places": 2,
+                "m_fo_used_token": "348.4",
+                "m_fc_used_token": "335.1",
+                "rf_used_token": ".13",
+                "rf_used": 0.13,
+                "rf_used_decimal_places": 2,
+                "wr_used_token": ".16",
+                "wr_used": 0.16,
+                "nr_free_token": "33",
+                "nr_free": 33,
+                "m_fo_free_token": "285.6",
+                "m_fc_free_token": "271.9",
+                "rf_free_token": "0.19",
+                "rf_free": 0.19,
+                "rf_free_decimal_places": 2,
+                "wr_free_token": "0.27",
+                "wr_free": 0.27
+              },
+              {
+                "bin_ordinal": 9,
+                "line": 415,
+                "text": "0.068     319  97.80   315.7   296.6 .15     .19          36   333.9   319.8  0.19  0.24",
+                "tokens": [
+                  "0.068",
+                  "319",
+                  "97.80",
+                  "315.7",
+                  "296.6",
+                  ".15",
+                  ".19",
+                  "36",
+                  "333.9",
+                  "319.8",
+                  "0.19",
+                  "0.24"
+                ],
+                "m_4ssq_ll_token": "0.068",
+                "m_4ssq_ll": 0.068,
+                "nr_used_token": "319",
+                "nr_used": 319,
+                "pct_obs_token": "97.80",
+                "pct_obs": 97.8,
+                "pct_obs_decimal_places": 2,
+                "m_fo_used_token": "315.7",
+                "m_fc_used_token": "296.6",
+                "rf_used_token": ".15",
+                "rf_used": 0.15,
+                "rf_used_decimal_places": 2,
+                "wr_used_token": ".19",
+                "wr_used": 0.19,
+                "nr_free_token": "36",
+                "nr_free": 36,
+                "m_fo_free_token": "333.9",
+                "m_fc_free_token": "319.8",
+                "rf_free_token": "0.19",
+                "rf_free": 0.19,
+                "rf_free_decimal_places": 2,
+                "wr_free_token": "0.24",
+                "wr_free": 0.24
+              },
+              {
+                "bin_ordinal": 10,
+                "line": 416,
+                "text": "0.076     328  99.73   308.8   285.5 .16     .18          35   269.6   257.6  0.17  0.19",
+                "tokens": [
+                  "0.076",
+                  "328",
+                  "99.73",
+                  "308.8",
+                  "285.5",
+                  ".16",
+                  ".18",
+                  "35",
+                  "269.6",
+                  "257.6",
+                  "0.17",
+                  "0.19"
+                ],
+                "m_4ssq_ll_token": "0.076",
+                "m_4ssq_ll": 0.076,
+                "nr_used_token": "328",
+                "nr_used": 328,
+                "pct_obs_token": "99.73",
+                "pct_obs": 99.73,
+                "pct_obs_decimal_places": 2,
+                "m_fo_used_token": "308.8",
+                "m_fc_used_token": "285.5",
+                "rf_used_token": ".16",
+                "rf_used": 0.16,
+                "rf_used_decimal_places": 2,
+                "wr_used_token": ".18",
+                "wr_used": 0.18,
+                "nr_free_token": "35",
+                "nr_free": 35,
+                "m_fo_free_token": "269.6",
+                "m_fc_free_token": "257.6",
+                "rf_free_token": "0.17",
+                "rf_free": 0.17,
+                "rf_free_decimal_places": 2,
+                "wr_free_token": "0.19",
+                "wr_free": 0.19
+              },
+              {
+                "bin_ordinal": 11,
+                "line": 417,
+                "text": "0.084     351  99.49   305.6   274.8 .17     .18          40   320.3   294.8  0.19  0.21",
+                "tokens": [
+                  "0.084",
+                  "351",
+                  "99.49",
+                  "305.6",
+                  "274.8",
+                  ".17",
+                  ".18",
+                  "40",
+                  "320.3",
+                  "294.8",
+                  "0.19",
+                  "0.21"
+                ],
+                "m_4ssq_ll_token": "0.084",
+                "m_4ssq_ll": 0.084,
+                "nr_used_token": "351",
+                "nr_used": 351,
+                "pct_obs_token": "99.49",
+                "pct_obs": 99.49,
+                "pct_obs_decimal_places": 2,
+                "m_fo_used_token": "305.6",
+                "m_fc_used_token": "274.8",
+                "rf_used_token": ".17",
+                "rf_used": 0.17,
+                "rf_used_decimal_places": 2,
+                "wr_used_token": ".18",
+                "wr_used": 0.18,
+                "nr_free_token": "40",
+                "nr_free": 40,
+                "m_fo_free_token": "320.3",
+                "m_fc_free_token": "294.8",
+                "rf_free_token": "0.19",
+                "rf_free": 0.19,
+                "rf_free_decimal_places": 2,
+                "wr_free_token": "0.21",
+                "wr_free": 0.21
+              },
+              {
+                "bin_ordinal": 12,
+                "line": 418,
+                "text": "0.092     371 100.00   265.7   249.1 .17     .19          41   274.9   251.5  0.23  0.23",
+                "tokens": [
+                  "0.092",
+                  "371",
+                  "100.00",
+                  "265.7",
+                  "249.1",
+                  ".17",
+                  ".19",
+                  "41",
+                  "274.9",
+                  "251.5",
+                  "0.23",
+                  "0.23"
+                ],
+                "m_4ssq_ll_token": "0.092",
+                "m_4ssq_ll": 0.092,
+                "nr_used_token": "371",
+                "nr_used": 371,
+                "pct_obs_token": "100.00",
+                "pct_obs": 100.0,
+                "pct_obs_decimal_places": 2,
+                "m_fo_used_token": "265.7",
+                "m_fc_used_token": "249.1",
+                "rf_used_token": ".17",
+                "rf_used": 0.17,
+                "rf_used_decimal_places": 2,
+                "wr_used_token": ".19",
+                "wr_used": 0.19,
+                "nr_free_token": "41",
+                "nr_free": 41,
+                "m_fo_free_token": "274.9",
+                "m_fc_free_token": "251.5",
+                "rf_free_token": "0.23",
+                "rf_free": 0.23,
+                "rf_free_decimal_places": 2,
+                "wr_free_token": "0.23",
+                "wr_free": 0.23
+              },
+              {
+                "bin_ordinal": 13,
+                "line": 419,
+                "text": "0.100     381  99.76   259.5   237.7 .18     .20          42   246.8   227.5  0.25  0.27",
+                "tokens": [
+                  "0.100",
+                  "381",
+                  "99.76",
+                  "259.5",
+                  "237.7",
+                  ".18",
+                  ".20",
+                  "42",
+                  "246.8",
+                  "227.5",
+                  "0.25",
+                  "0.27"
+                ],
+                "m_4ssq_ll_token": "0.100",
+                "m_4ssq_ll": 0.1,
+                "nr_used_token": "381",
+                "nr_used": 381,
+                "pct_obs_token": "99.76",
+                "pct_obs": 99.76,
+                "pct_obs_decimal_places": 2,
+                "m_fo_used_token": "259.5",
+                "m_fc_used_token": "237.7",
+                "rf_used_token": ".18",
+                "rf_used": 0.18,
+                "rf_used_decimal_places": 2,
+                "wr_used_token": ".20",
+                "wr_used": 0.2,
+                "nr_free_token": "42",
+                "nr_free": 42,
+                "m_fo_free_token": "246.8",
+                "m_fc_free_token": "227.5",
+                "rf_free_token": "0.25",
+                "rf_free": 0.25,
+                "rf_free_decimal_places": 2,
+                "wr_free_token": "0.27",
+                "wr_free": 0.27
+              },
+              {
+                "bin_ordinal": 14,
+                "line": 420,
+                "text": "0.108     384  99.53   221.6   209.5 .17     .18          43   238.5   225.7  0.20  0.23",
+                "tokens": [
+                  "0.108",
+                  "384",
+                  "99.53",
+                  "221.6",
+                  "209.5",
+                  ".17",
+                  ".18",
+                  "43",
+                  "238.5",
+                  "225.7",
+                  "0.20",
+                  "0.23"
+                ],
+                "m_4ssq_ll_token": "0.108",
+                "m_4ssq_ll": 0.108,
+                "nr_used_token": "384",
+                "nr_used": 384,
+                "pct_obs_token": "99.53",
+                "pct_obs": 99.53,
+                "pct_obs_decimal_places": 2,
+                "m_fo_used_token": "221.6",
+                "m_fc_used_token": "209.5",
+                "rf_used_token": ".17",
+                "rf_used": 0.17,
+                "rf_used_decimal_places": 2,
+                "wr_used_token": ".18",
+                "wr_used": 0.18,
+                "nr_free_token": "43",
+                "nr_free": 43,
+                "m_fo_free_token": "238.5",
+                "m_fc_free_token": "225.7",
+                "rf_free_token": "0.20",
+                "rf_free": 0.2,
+                "rf_free_decimal_places": 2,
+                "wr_free_token": "0.23",
+                "wr_free": 0.23
+              },
+              {
+                "bin_ordinal": 15,
+                "line": 421,
+                "text": "0.116     422  99.79   199.2   187.8 .20     .21          47   210.1   199.6  0.25  0.29",
+                "tokens": [
+                  "0.116",
+                  "422",
+                  "99.79",
+                  "199.2",
+                  "187.8",
+                  ".20",
+                  ".21",
+                  "47",
+                  "210.1",
+                  "199.6",
+                  "0.25",
+                  "0.29"
+                ],
+                "m_4ssq_ll_token": "0.116",
+                "m_4ssq_ll": 0.116,
+                "nr_used_token": "422",
+                "nr_used": 422,
+                "pct_obs_token": "99.79",
+                "pct_obs": 99.79,
+                "pct_obs_decimal_places": 2,
+                "m_fo_used_token": "199.2",
+                "m_fc_used_token": "187.8",
+                "rf_used_token": ".20",
+                "rf_used": 0.2,
+                "rf_used_decimal_places": 2,
+                "wr_used_token": ".21",
+                "wr_used": 0.21,
+                "nr_free_token": "47",
+                "nr_free": 47,
+                "m_fo_free_token": "210.1",
+                "m_fc_free_token": "199.6",
+                "rf_free_token": "0.25",
+                "rf_free": 0.25,
+                "rf_free_decimal_places": 2,
+                "wr_free_token": "0.29",
+                "wr_free": 0.29
+              },
+              {
+                "bin_ordinal": 16,
+                "line": 422,
+                "text": "0.124     407 100.00   185.2   178.1 .19     .21          46   175.1   156.8  0.27  0.29",
+                "tokens": [
+                  "0.124",
+                  "407",
+                  "100.00",
+                  "185.2",
+                  "178.1",
+                  ".19",
+                  ".21",
+                  "46",
+                  "175.1",
+                  "156.8",
+                  "0.27",
+                  "0.29"
+                ],
+                "m_4ssq_ll_token": "0.124",
+                "m_4ssq_ll": 0.124,
+                "nr_used_token": "407",
+                "nr_used": 407,
+                "pct_obs_token": "100.00",
+                "pct_obs": 100.0,
+                "pct_obs_decimal_places": 2,
+                "m_fo_used_token": "185.2",
+                "m_fc_used_token": "178.1",
+                "rf_used_token": ".19",
+                "rf_used": 0.19,
+                "rf_used_decimal_places": 2,
+                "wr_used_token": ".21",
+                "wr_used": 0.21,
+                "nr_free_token": "46",
+                "nr_free": 46,
+                "m_fo_free_token": "175.1",
+                "m_fc_free_token": "156.8",
+                "rf_free_token": "0.27",
+                "rf_free": 0.27,
+                "rf_free_decimal_places": 2,
+                "wr_free_token": "0.29",
+                "wr_free": 0.29
+              },
+              {
+                "bin_ordinal": 17,
+                "line": 423,
+                "text": "0.132     431  99.58   169.8   168.0 .20     .21          48   178.3   183.0  0.28  0.30",
+                "tokens": [
+                  "0.132",
+                  "431",
+                  "99.58",
+                  "169.8",
+                  "168.0",
+                  ".20",
+                  ".21",
+                  "48",
+                  "178.3",
+                  "183.0",
+                  "0.28",
+                  "0.30"
+                ],
+                "m_4ssq_ll_token": "0.132",
+                "m_4ssq_ll": 0.132,
+                "nr_used_token": "431",
+                "nr_used": 431,
+                "pct_obs_token": "99.58",
+                "pct_obs": 99.58,
+                "pct_obs_decimal_places": 2,
+                "m_fo_used_token": "169.8",
+                "m_fc_used_token": "168.0",
+                "rf_used_token": ".20",
+                "rf_used": 0.2,
+                "rf_used_decimal_places": 2,
+                "wr_used_token": ".21",
+                "wr_used": 0.21,
+                "nr_free_token": "48",
+                "nr_free": 48,
+                "m_fo_free_token": "178.3",
+                "m_fc_free_token": "183.0",
+                "rf_free_token": "0.28",
+                "rf_free": 0.28,
+                "rf_free_decimal_places": 2,
+                "wr_free_token": "0.30",
+                "wr_free": 0.3
+              },
+              {
+                "bin_ordinal": 18,
+                "line": 424,
+                "text": "0.140     460  99.80   165.8   165.0 .21     .22          50   152.0   159.5  0.26  0.26",
+                "tokens": [
+                  "0.140",
+                  "460",
+                  "99.80",
+                  "165.8",
+                  "165.0",
+                  ".21",
+                  ".22",
+                  "50",
+                  "152.0",
+                  "159.5",
+                  "0.26",
+                  "0.26"
+                ],
+                "m_4ssq_ll_token": "0.140",
+                "m_4ssq_ll": 0.14,
+                "nr_used_token": "460",
+                "nr_used": 460,
+                "pct_obs_token": "99.80",
+                "pct_obs": 99.8,
+                "pct_obs_decimal_places": 2,
+                "m_fo_used_token": "165.8",
+                "m_fc_used_token": "165.0",
+                "rf_used_token": ".21",
+                "rf_used": 0.21,
+                "rf_used_decimal_places": 2,
+                "wr_used_token": ".22",
+                "wr_used": 0.22,
+                "nr_free_token": "50",
+                "nr_free": 50,
+                "m_fo_free_token": "152.0",
+                "m_fc_free_token": "159.5",
+                "rf_free_token": "0.26",
+                "rf_free": 0.26,
+                "rf_free_decimal_places": 2,
+                "wr_free_token": "0.26",
+                "wr_free": 0.26
+              },
+              {
+                "bin_ordinal": 19,
+                "line": 425,
+                "text": "0.148     449  99.80   155.8   166.0 .22     .23          50   155.6   161.8  0.25  0.25",
+                "tokens": [
+                  "0.148",
+                  "449",
+                  "99.80",
+                  "155.8",
+                  "166.0",
+                  ".22",
+                  ".23",
+                  "50",
+                  "155.6",
+                  "161.8",
+                  "0.25",
+                  "0.25"
+                ],
+                "m_4ssq_ll_token": "0.148",
+                "m_4ssq_ll": 0.148,
+                "nr_used_token": "449",
+                "nr_used": 449,
+                "pct_obs_token": "99.80",
+                "pct_obs": 99.8,
+                "pct_obs_decimal_places": 2,
+                "m_fo_used_token": "155.8",
+                "m_fc_used_token": "166.0",
+                "rf_used_token": ".22",
+                "rf_used": 0.22,
+                "rf_used_decimal_places": 2,
+                "wr_used_token": ".23",
+                "wr_used": 0.23,
+                "nr_free_token": "50",
+                "nr_free": 50,
+                "m_fo_free_token": "155.6",
+                "m_fc_free_token": "161.8",
+                "rf_free_token": "0.25",
+                "rf_free": 0.25,
+                "rf_free_decimal_places": 2,
+                "wr_free_token": "0.25",
+                "wr_free": 0.25
+              },
+              {
+                "bin_ordinal": 20,
+                "line": 426,
+                "text": "0.156     470  99.43   154.8   161.7 .20     .20          53   138.2   157.5  0.30  0.31",
+                "tokens": [
+                  "0.156",
+                  "470",
+                  "99.43",
+                  "154.8",
+                  "161.7",
+                  ".20",
+                  ".20",
+                  "53",
+                  "138.2",
+                  "157.5",
+                  "0.30",
+                  "0.31"
+                ],
+                "m_4ssq_ll_token": "0.156",
+                "m_4ssq_ll": 0.156,
+                "nr_used_token": "470",
+                "nr_used": 470,
+                "pct_obs_token": "99.43",
+                "pct_obs": 99.43,
+                "pct_obs_decimal_places": 2,
+                "m_fo_used_token": "154.8",
+                "m_fc_used_token": "161.7",
+                "rf_used_token": ".20",
+                "rf_used": 0.2,
+                "rf_used_decimal_places": 2,
+                "wr_used_token": ".20",
+                "wr_used": 0.2,
+                "nr_free_token": "53",
+                "nr_free": 53,
+                "m_fo_free_token": "138.2",
+                "m_fc_free_token": "157.5",
+                "rf_free_token": "0.30",
+                "rf_free": 0.3,
+                "rf_free_decimal_places": 2,
+                "wr_free_token": "0.31",
+                "wr_free": 0.31
+              }
+            ],
+            "rows": [
+              [
+                1,
+                407,
+                "0.004",
+                96,
+                10,
+                ".17",
+                "0.10"
+              ],
+              [
+                2,
+                408,
+                "0.012",
+                149,
+                17,
+                ".15",
+                "0.17"
+              ],
+              [
+                3,
+                409,
+                "0.020",
+                186,
+                21,
+                ".16",
+                "0.20"
+              ],
+              [
+                4,
+                410,
+                "0.028",
+                218,
+                24,
+                ".16",
+                "0.21"
+              ],
+              [
+                5,
+                411,
+                "0.036",
+                244,
+                27,
+                ".14",
+                "0.19"
+              ],
+              [
+                6,
+                412,
+                "0.044",
+                267,
+                30,
+                ".15",
+                "0.14"
+              ],
+              [
+                7,
+                413,
+                "0.052",
+                264,
+                30,
+                ".12",
+                "0.19"
+              ],
+              [
+                8,
+                414,
+                "0.060",
+                297,
+                33,
+                ".13",
+                "0.19"
+              ],
+              [
+                9,
+                415,
+                "0.068",
+                319,
+                36,
+                ".15",
+                "0.19"
+              ],
+              [
+                10,
+                416,
+                "0.076",
+                328,
+                35,
+                ".16",
+                "0.17"
+              ],
+              [
+                11,
+                417,
+                "0.084",
+                351,
+                40,
+                ".17",
+                "0.19"
+              ],
+              [
+                12,
+                418,
+                "0.092",
+                371,
+                41,
+                ".17",
+                "0.23"
+              ],
+              [
+                13,
+                419,
+                "0.100",
+                381,
+                42,
+                ".18",
+                "0.25"
+              ],
+              [
+                14,
+                420,
+                "0.108",
+                384,
+                43,
+                ".17",
+                "0.20"
+              ],
+              [
+                15,
+                421,
+                "0.116",
+                422,
+                47,
+                ".20",
+                "0.25"
+              ],
+              [
+                16,
+                422,
+                "0.124",
+                407,
+                46,
+                ".19",
+                "0.27"
+              ],
+              [
+                17,
+                423,
+                "0.132",
+                431,
+                48,
+                ".20",
+                "0.28"
+              ],
+              [
+                18,
+                424,
+                "0.140",
+                460,
+                50,
+                ".21",
+                "0.26"
+              ],
+              [
+                19,
+                425,
+                "0.148",
+                449,
+                50,
+                ".22",
+                "0.25"
+              ],
+              [
+                20,
+                426,
+                "0.156",
+                470,
+                53,
+                ".20",
+                "0.30"
+              ]
+            ]
+          }
+        ],
+        "Rf_used_printed_decimal_places": 2,
+        "Rf_free_printed_decimal_places": 2,
+        "initial_and_final_count_vectors_equal": true
+      },
+      "initial_resolution_bins": {
+        "phase": "initial",
+        "detailed_cycle": 1,
+        "summary_ncyc": 0,
+        "title": {
+          "line": 399,
+          "text": "$TABLE: Cycle    1. Rfactor analysis, F distribution v resln  :"
+        },
+        "graph_declaration_lines": [
+          {
+            "line": 400,
+            "text": "$GRAPHS:Cycle    1. <Rfactor> v. resln :N:1,6,7,11,12:"
+          },
+          {
+            "line": 401,
+            "text": ":Cycle    1. <Fobs> and <Fc> v. resln :N:1,4,5,9,10:"
+          },
+          {
+            "line": 402,
+            "text": ":Cycle    1. % observed v. resln :N:1,3:"
+          }
+        ],
+        "header_lines": [
+          {
+            "line": 404,
+            "text": "M(4SSQ/LL) NR_used %_obs M(Fo_used) M(Fc_used) Rf_used WR_used"
+          },
+          {
+            "line": 405,
+            "text": "NR_free M(Fo_free) M(Fc_free) Rf_free   WR_free $$"
+          }
+        ],
+        "header_tokens": [
+          "M(4SSQ/LL)",
+          "NR_used",
+          "%_obs",
+          "M(Fo_used)",
+          "M(Fc_used)",
+          "Rf_used",
+          "WR_used",
+          "NR_free",
+          "M(Fo_free)",
+          "M(Fc_free)",
+          "Rf_free",
+          "WR_free"
+        ],
+        "double_dollar_roles": {
+          "header_start_line": 403,
+          "header_end_line": 405,
+          "data_start_line": 406,
+          "data_end_line": 427
+        },
+        "data_line_range_inclusive": [
+          407,
+          426
+        ],
+        "bin_count": 20,
+        "nr_used_sum": 6494,
+        "nr_free_sum": 723,
+        "combined_reported_count": 7217,
+        "rf_used_printed_decimal_places": 2,
+        "rf_free_printed_decimal_places": 2,
+        "bins": [
+          {
+            "bin_ordinal": 1,
+            "line": 407,
+            "text": "0.004      96 100.00   410.4   378.9 .17     .19          10   373.2   363.2  0.10  0.17",
+            "tokens": [
+              "0.004",
+              "96",
+              "100.00",
+              "410.4",
+              "378.9",
+              ".17",
+              ".19",
+              "10",
+              "373.2",
+              "363.2",
+              "0.10",
+              "0.17"
+            ],
+            "m_4ssq_ll_token": "0.004",
+            "m_4ssq_ll": 0.004,
+            "nr_used_token": "96",
+            "nr_used": 96,
+            "pct_obs_token": "100.00",
+            "pct_obs": 100.0,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "410.4",
+            "m_fc_used_token": "378.9",
+            "rf_used_token": ".17",
+            "rf_used": 0.17,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".19",
+            "wr_used": 0.19,
+            "nr_free_token": "10",
+            "nr_free": 10,
+            "m_fo_free_token": "373.2",
+            "m_fc_free_token": "363.2",
+            "rf_free_token": "0.10",
+            "rf_free": 0.1,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.17",
+            "wr_free": 0.17
+          },
+          {
+            "bin_ordinal": 2,
+            "line": 408,
+            "text": "0.012     149 100.00   334.2   340.1 .15     .21          17   369.8   377.6  0.17  0.24",
+            "tokens": [
+              "0.012",
+              "149",
+              "100.00",
+              "334.2",
+              "340.1",
+              ".15",
+              ".21",
+              "17",
+              "369.8",
+              "377.6",
+              "0.17",
+              "0.24"
+            ],
+            "m_4ssq_ll_token": "0.012",
+            "m_4ssq_ll": 0.012,
+            "nr_used_token": "149",
+            "nr_used": 149,
+            "pct_obs_token": "100.00",
+            "pct_obs": 100.0,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "334.2",
+            "m_fc_used_token": "340.1",
+            "rf_used_token": ".15",
+            "rf_used": 0.15,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".21",
+            "wr_used": 0.21,
+            "nr_free_token": "17",
+            "nr_free": 17,
+            "m_fo_free_token": "369.8",
+            "m_fc_free_token": "377.6",
+            "rf_free_token": "0.17",
+            "rf_free": 0.17,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.24",
+            "wr_free": 0.24
+          },
+          {
+            "bin_ordinal": 3,
+            "line": 409,
+            "text": "0.020     186 100.00   279.8   295.3 .16     .19          21   294.6   331.9  0.20  0.27",
+            "tokens": [
+              "0.020",
+              "186",
+              "100.00",
+              "279.8",
+              "295.3",
+              ".16",
+              ".19",
+              "21",
+              "294.6",
+              "331.9",
+              "0.20",
+              "0.27"
+            ],
+            "m_4ssq_ll_token": "0.020",
+            "m_4ssq_ll": 0.02,
+            "nr_used_token": "186",
+            "nr_used": 186,
+            "pct_obs_token": "100.00",
+            "pct_obs": 100.0,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "279.8",
+            "m_fc_used_token": "295.3",
+            "rf_used_token": ".16",
+            "rf_used": 0.16,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".19",
+            "wr_used": 0.19,
+            "nr_free_token": "21",
+            "nr_free": 21,
+            "m_fo_free_token": "294.6",
+            "m_fc_free_token": "331.9",
+            "rf_free_token": "0.20",
+            "rf_free": 0.2,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.27",
+            "wr_free": 0.27
+          },
+          {
+            "bin_ordinal": 4,
+            "line": 410,
+            "text": "0.028     218 100.00   288.4   308.2 .16     .18          24   226.3   241.5  0.21  0.22",
+            "tokens": [
+              "0.028",
+              "218",
+              "100.00",
+              "288.4",
+              "308.2",
+              ".16",
+              ".18",
+              "24",
+              "226.3",
+              "241.5",
+              "0.21",
+              "0.22"
+            ],
+            "m_4ssq_ll_token": "0.028",
+            "m_4ssq_ll": 0.028,
+            "nr_used_token": "218",
+            "nr_used": 218,
+            "pct_obs_token": "100.00",
+            "pct_obs": 100.0,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "288.4",
+            "m_fc_used_token": "308.2",
+            "rf_used_token": ".16",
+            "rf_used": 0.16,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".18",
+            "wr_used": 0.18,
+            "nr_free_token": "24",
+            "nr_free": 24,
+            "m_fo_free_token": "226.3",
+            "m_fc_free_token": "241.5",
+            "rf_free_token": "0.21",
+            "rf_free": 0.21,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.22",
+            "wr_free": 0.22
+          },
+          {
+            "bin_ordinal": 5,
+            "line": 411,
+            "text": "0.036     244 100.00   327.3   343.1 .14     .18          27   332.4   337.7  0.19  0.26",
+            "tokens": [
+              "0.036",
+              "244",
+              "100.00",
+              "327.3",
+              "343.1",
+              ".14",
+              ".18",
+              "27",
+              "332.4",
+              "337.7",
+              "0.19",
+              "0.26"
+            ],
+            "m_4ssq_ll_token": "0.036",
+            "m_4ssq_ll": 0.036,
+            "nr_used_token": "244",
+            "nr_used": 244,
+            "pct_obs_token": "100.00",
+            "pct_obs": 100.0,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "327.3",
+            "m_fc_used_token": "343.1",
+            "rf_used_token": ".14",
+            "rf_used": 0.14,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".18",
+            "wr_used": 0.18,
+            "nr_free_token": "27",
+            "nr_free": 27,
+            "m_fo_free_token": "332.4",
+            "m_fc_free_token": "337.7",
+            "rf_free_token": "0.19",
+            "rf_free": 0.19,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.26",
+            "wr_free": 0.26
+          },
+          {
+            "bin_ordinal": 6,
+            "line": 412,
+            "text": "0.044     267 100.00   343.7   353.9 .15     .20          30   353.6   355.1  0.14  0.22",
+            "tokens": [
+              "0.044",
+              "267",
+              "100.00",
+              "343.7",
+              "353.9",
+              ".15",
+              ".20",
+              "30",
+              "353.6",
+              "355.1",
+              "0.14",
+              "0.22"
+            ],
+            "m_4ssq_ll_token": "0.044",
+            "m_4ssq_ll": 0.044,
+            "nr_used_token": "267",
+            "nr_used": 267,
+            "pct_obs_token": "100.00",
+            "pct_obs": 100.0,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "343.7",
+            "m_fc_used_token": "353.9",
+            "rf_used_token": ".15",
+            "rf_used": 0.15,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".20",
+            "wr_used": 0.2,
+            "nr_free_token": "30",
+            "nr_free": 30,
+            "m_fo_free_token": "353.6",
+            "m_fc_free_token": "355.1",
+            "rf_free_token": "0.14",
+            "rf_free": 0.14,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.22",
+            "wr_free": 0.22
+          },
+          {
+            "bin_ordinal": 7,
+            "line": 413,
+            "text": "0.052     264  95.15   355.1   350.3 .12     .15          30   290.0   272.4  0.19  0.24",
+            "tokens": [
+              "0.052",
+              "264",
+              "95.15",
+              "355.1",
+              "350.3",
+              ".12",
+              ".15",
+              "30",
+              "290.0",
+              "272.4",
+              "0.19",
+              "0.24"
+            ],
+            "m_4ssq_ll_token": "0.052",
+            "m_4ssq_ll": 0.052,
+            "nr_used_token": "264",
+            "nr_used": 264,
+            "pct_obs_token": "95.15",
+            "pct_obs": 95.15,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "355.1",
+            "m_fc_used_token": "350.3",
+            "rf_used_token": ".12",
+            "rf_used": 0.12,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".15",
+            "wr_used": 0.15,
+            "nr_free_token": "30",
+            "nr_free": 30,
+            "m_fo_free_token": "290.0",
+            "m_fc_free_token": "272.4",
+            "rf_free_token": "0.19",
+            "rf_free": 0.19,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.24",
+            "wr_free": 0.24
+          },
+          {
+            "bin_ordinal": 8,
+            "line": 414,
+            "text": "0.060     297  97.63   348.4   335.1 .13     .16          33   285.6   271.9  0.19  0.27",
+            "tokens": [
+              "0.060",
+              "297",
+              "97.63",
+              "348.4",
+              "335.1",
+              ".13",
+              ".16",
+              "33",
+              "285.6",
+              "271.9",
+              "0.19",
+              "0.27"
+            ],
+            "m_4ssq_ll_token": "0.060",
+            "m_4ssq_ll": 0.06,
+            "nr_used_token": "297",
+            "nr_used": 297,
+            "pct_obs_token": "97.63",
+            "pct_obs": 97.63,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "348.4",
+            "m_fc_used_token": "335.1",
+            "rf_used_token": ".13",
+            "rf_used": 0.13,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".16",
+            "wr_used": 0.16,
+            "nr_free_token": "33",
+            "nr_free": 33,
+            "m_fo_free_token": "285.6",
+            "m_fc_free_token": "271.9",
+            "rf_free_token": "0.19",
+            "rf_free": 0.19,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.27",
+            "wr_free": 0.27
+          },
+          {
+            "bin_ordinal": 9,
+            "line": 415,
+            "text": "0.068     319  97.80   315.7   296.6 .15     .19          36   333.9   319.8  0.19  0.24",
+            "tokens": [
+              "0.068",
+              "319",
+              "97.80",
+              "315.7",
+              "296.6",
+              ".15",
+              ".19",
+              "36",
+              "333.9",
+              "319.8",
+              "0.19",
+              "0.24"
+            ],
+            "m_4ssq_ll_token": "0.068",
+            "m_4ssq_ll": 0.068,
+            "nr_used_token": "319",
+            "nr_used": 319,
+            "pct_obs_token": "97.80",
+            "pct_obs": 97.8,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "315.7",
+            "m_fc_used_token": "296.6",
+            "rf_used_token": ".15",
+            "rf_used": 0.15,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".19",
+            "wr_used": 0.19,
+            "nr_free_token": "36",
+            "nr_free": 36,
+            "m_fo_free_token": "333.9",
+            "m_fc_free_token": "319.8",
+            "rf_free_token": "0.19",
+            "rf_free": 0.19,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.24",
+            "wr_free": 0.24
+          },
+          {
+            "bin_ordinal": 10,
+            "line": 416,
+            "text": "0.076     328  99.73   308.8   285.5 .16     .18          35   269.6   257.6  0.17  0.19",
+            "tokens": [
+              "0.076",
+              "328",
+              "99.73",
+              "308.8",
+              "285.5",
+              ".16",
+              ".18",
+              "35",
+              "269.6",
+              "257.6",
+              "0.17",
+              "0.19"
+            ],
+            "m_4ssq_ll_token": "0.076",
+            "m_4ssq_ll": 0.076,
+            "nr_used_token": "328",
+            "nr_used": 328,
+            "pct_obs_token": "99.73",
+            "pct_obs": 99.73,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "308.8",
+            "m_fc_used_token": "285.5",
+            "rf_used_token": ".16",
+            "rf_used": 0.16,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".18",
+            "wr_used": 0.18,
+            "nr_free_token": "35",
+            "nr_free": 35,
+            "m_fo_free_token": "269.6",
+            "m_fc_free_token": "257.6",
+            "rf_free_token": "0.17",
+            "rf_free": 0.17,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.19",
+            "wr_free": 0.19
+          },
+          {
+            "bin_ordinal": 11,
+            "line": 417,
+            "text": "0.084     351  99.49   305.6   274.8 .17     .18          40   320.3   294.8  0.19  0.21",
+            "tokens": [
+              "0.084",
+              "351",
+              "99.49",
+              "305.6",
+              "274.8",
+              ".17",
+              ".18",
+              "40",
+              "320.3",
+              "294.8",
+              "0.19",
+              "0.21"
+            ],
+            "m_4ssq_ll_token": "0.084",
+            "m_4ssq_ll": 0.084,
+            "nr_used_token": "351",
+            "nr_used": 351,
+            "pct_obs_token": "99.49",
+            "pct_obs": 99.49,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "305.6",
+            "m_fc_used_token": "274.8",
+            "rf_used_token": ".17",
+            "rf_used": 0.17,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".18",
+            "wr_used": 0.18,
+            "nr_free_token": "40",
+            "nr_free": 40,
+            "m_fo_free_token": "320.3",
+            "m_fc_free_token": "294.8",
+            "rf_free_token": "0.19",
+            "rf_free": 0.19,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.21",
+            "wr_free": 0.21
+          },
+          {
+            "bin_ordinal": 12,
+            "line": 418,
+            "text": "0.092     371 100.00   265.7   249.1 .17     .19          41   274.9   251.5  0.23  0.23",
+            "tokens": [
+              "0.092",
+              "371",
+              "100.00",
+              "265.7",
+              "249.1",
+              ".17",
+              ".19",
+              "41",
+              "274.9",
+              "251.5",
+              "0.23",
+              "0.23"
+            ],
+            "m_4ssq_ll_token": "0.092",
+            "m_4ssq_ll": 0.092,
+            "nr_used_token": "371",
+            "nr_used": 371,
+            "pct_obs_token": "100.00",
+            "pct_obs": 100.0,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "265.7",
+            "m_fc_used_token": "249.1",
+            "rf_used_token": ".17",
+            "rf_used": 0.17,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".19",
+            "wr_used": 0.19,
+            "nr_free_token": "41",
+            "nr_free": 41,
+            "m_fo_free_token": "274.9",
+            "m_fc_free_token": "251.5",
+            "rf_free_token": "0.23",
+            "rf_free": 0.23,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.23",
+            "wr_free": 0.23
+          },
+          {
+            "bin_ordinal": 13,
+            "line": 419,
+            "text": "0.100     381  99.76   259.5   237.7 .18     .20          42   246.8   227.5  0.25  0.27",
+            "tokens": [
+              "0.100",
+              "381",
+              "99.76",
+              "259.5",
+              "237.7",
+              ".18",
+              ".20",
+              "42",
+              "246.8",
+              "227.5",
+              "0.25",
+              "0.27"
+            ],
+            "m_4ssq_ll_token": "0.100",
+            "m_4ssq_ll": 0.1,
+            "nr_used_token": "381",
+            "nr_used": 381,
+            "pct_obs_token": "99.76",
+            "pct_obs": 99.76,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "259.5",
+            "m_fc_used_token": "237.7",
+            "rf_used_token": ".18",
+            "rf_used": 0.18,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".20",
+            "wr_used": 0.2,
+            "nr_free_token": "42",
+            "nr_free": 42,
+            "m_fo_free_token": "246.8",
+            "m_fc_free_token": "227.5",
+            "rf_free_token": "0.25",
+            "rf_free": 0.25,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.27",
+            "wr_free": 0.27
+          },
+          {
+            "bin_ordinal": 14,
+            "line": 420,
+            "text": "0.108     384  99.53   221.6   209.5 .17     .18          43   238.5   225.7  0.20  0.23",
+            "tokens": [
+              "0.108",
+              "384",
+              "99.53",
+              "221.6",
+              "209.5",
+              ".17",
+              ".18",
+              "43",
+              "238.5",
+              "225.7",
+              "0.20",
+              "0.23"
+            ],
+            "m_4ssq_ll_token": "0.108",
+            "m_4ssq_ll": 0.108,
+            "nr_used_token": "384",
+            "nr_used": 384,
+            "pct_obs_token": "99.53",
+            "pct_obs": 99.53,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "221.6",
+            "m_fc_used_token": "209.5",
+            "rf_used_token": ".17",
+            "rf_used": 0.17,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".18",
+            "wr_used": 0.18,
+            "nr_free_token": "43",
+            "nr_free": 43,
+            "m_fo_free_token": "238.5",
+            "m_fc_free_token": "225.7",
+            "rf_free_token": "0.20",
+            "rf_free": 0.2,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.23",
+            "wr_free": 0.23
+          },
+          {
+            "bin_ordinal": 15,
+            "line": 421,
+            "text": "0.116     422  99.79   199.2   187.8 .20     .21          47   210.1   199.6  0.25  0.29",
+            "tokens": [
+              "0.116",
+              "422",
+              "99.79",
+              "199.2",
+              "187.8",
+              ".20",
+              ".21",
+              "47",
+              "210.1",
+              "199.6",
+              "0.25",
+              "0.29"
+            ],
+            "m_4ssq_ll_token": "0.116",
+            "m_4ssq_ll": 0.116,
+            "nr_used_token": "422",
+            "nr_used": 422,
+            "pct_obs_token": "99.79",
+            "pct_obs": 99.79,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "199.2",
+            "m_fc_used_token": "187.8",
+            "rf_used_token": ".20",
+            "rf_used": 0.2,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".21",
+            "wr_used": 0.21,
+            "nr_free_token": "47",
+            "nr_free": 47,
+            "m_fo_free_token": "210.1",
+            "m_fc_free_token": "199.6",
+            "rf_free_token": "0.25",
+            "rf_free": 0.25,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.29",
+            "wr_free": 0.29
+          },
+          {
+            "bin_ordinal": 16,
+            "line": 422,
+            "text": "0.124     407 100.00   185.2   178.1 .19     .21          46   175.1   156.8  0.27  0.29",
+            "tokens": [
+              "0.124",
+              "407",
+              "100.00",
+              "185.2",
+              "178.1",
+              ".19",
+              ".21",
+              "46",
+              "175.1",
+              "156.8",
+              "0.27",
+              "0.29"
+            ],
+            "m_4ssq_ll_token": "0.124",
+            "m_4ssq_ll": 0.124,
+            "nr_used_token": "407",
+            "nr_used": 407,
+            "pct_obs_token": "100.00",
+            "pct_obs": 100.0,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "185.2",
+            "m_fc_used_token": "178.1",
+            "rf_used_token": ".19",
+            "rf_used": 0.19,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".21",
+            "wr_used": 0.21,
+            "nr_free_token": "46",
+            "nr_free": 46,
+            "m_fo_free_token": "175.1",
+            "m_fc_free_token": "156.8",
+            "rf_free_token": "0.27",
+            "rf_free": 0.27,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.29",
+            "wr_free": 0.29
+          },
+          {
+            "bin_ordinal": 17,
+            "line": 423,
+            "text": "0.132     431  99.58   169.8   168.0 .20     .21          48   178.3   183.0  0.28  0.30",
+            "tokens": [
+              "0.132",
+              "431",
+              "99.58",
+              "169.8",
+              "168.0",
+              ".20",
+              ".21",
+              "48",
+              "178.3",
+              "183.0",
+              "0.28",
+              "0.30"
+            ],
+            "m_4ssq_ll_token": "0.132",
+            "m_4ssq_ll": 0.132,
+            "nr_used_token": "431",
+            "nr_used": 431,
+            "pct_obs_token": "99.58",
+            "pct_obs": 99.58,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "169.8",
+            "m_fc_used_token": "168.0",
+            "rf_used_token": ".20",
+            "rf_used": 0.2,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".21",
+            "wr_used": 0.21,
+            "nr_free_token": "48",
+            "nr_free": 48,
+            "m_fo_free_token": "178.3",
+            "m_fc_free_token": "183.0",
+            "rf_free_token": "0.28",
+            "rf_free": 0.28,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.30",
+            "wr_free": 0.3
+          },
+          {
+            "bin_ordinal": 18,
+            "line": 424,
+            "text": "0.140     460  99.80   165.8   165.0 .21     .22          50   152.0   159.5  0.26  0.26",
+            "tokens": [
+              "0.140",
+              "460",
+              "99.80",
+              "165.8",
+              "165.0",
+              ".21",
+              ".22",
+              "50",
+              "152.0",
+              "159.5",
+              "0.26",
+              "0.26"
+            ],
+            "m_4ssq_ll_token": "0.140",
+            "m_4ssq_ll": 0.14,
+            "nr_used_token": "460",
+            "nr_used": 460,
+            "pct_obs_token": "99.80",
+            "pct_obs": 99.8,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "165.8",
+            "m_fc_used_token": "165.0",
+            "rf_used_token": ".21",
+            "rf_used": 0.21,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".22",
+            "wr_used": 0.22,
+            "nr_free_token": "50",
+            "nr_free": 50,
+            "m_fo_free_token": "152.0",
+            "m_fc_free_token": "159.5",
+            "rf_free_token": "0.26",
+            "rf_free": 0.26,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.26",
+            "wr_free": 0.26
+          },
+          {
+            "bin_ordinal": 19,
+            "line": 425,
+            "text": "0.148     449  99.80   155.8   166.0 .22     .23          50   155.6   161.8  0.25  0.25",
+            "tokens": [
+              "0.148",
+              "449",
+              "99.80",
+              "155.8",
+              "166.0",
+              ".22",
+              ".23",
+              "50",
+              "155.6",
+              "161.8",
+              "0.25",
+              "0.25"
+            ],
+            "m_4ssq_ll_token": "0.148",
+            "m_4ssq_ll": 0.148,
+            "nr_used_token": "449",
+            "nr_used": 449,
+            "pct_obs_token": "99.80",
+            "pct_obs": 99.8,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "155.8",
+            "m_fc_used_token": "166.0",
+            "rf_used_token": ".22",
+            "rf_used": 0.22,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".23",
+            "wr_used": 0.23,
+            "nr_free_token": "50",
+            "nr_free": 50,
+            "m_fo_free_token": "155.6",
+            "m_fc_free_token": "161.8",
+            "rf_free_token": "0.25",
+            "rf_free": 0.25,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.25",
+            "wr_free": 0.25
+          },
+          {
+            "bin_ordinal": 20,
+            "line": 426,
+            "text": "0.156     470  99.43   154.8   161.7 .20     .20          53   138.2   157.5  0.30  0.31",
+            "tokens": [
+              "0.156",
+              "470",
+              "99.43",
+              "154.8",
+              "161.7",
+              ".20",
+              ".20",
+              "53",
+              "138.2",
+              "157.5",
+              "0.30",
+              "0.31"
+            ],
+            "m_4ssq_ll_token": "0.156",
+            "m_4ssq_ll": 0.156,
+            "nr_used_token": "470",
+            "nr_used": 470,
+            "pct_obs_token": "99.43",
+            "pct_obs": 99.43,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "154.8",
+            "m_fc_used_token": "161.7",
+            "rf_used_token": ".20",
+            "rf_used": 0.2,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".20",
+            "wr_used": 0.2,
+            "nr_free_token": "53",
+            "nr_free": 53,
+            "m_fo_free_token": "138.2",
+            "m_fc_free_token": "157.5",
+            "rf_free_token": "0.30",
+            "rf_free": 0.3,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.31",
+            "wr_free": 0.31
+          }
+        ],
+        "rows": [
+          [
+            1,
+            407,
+            "0.004",
+            96,
+            10,
+            ".17",
+            "0.10"
+          ],
+          [
+            2,
+            408,
+            "0.012",
+            149,
+            17,
+            ".15",
+            "0.17"
+          ],
+          [
+            3,
+            409,
+            "0.020",
+            186,
+            21,
+            ".16",
+            "0.20"
+          ],
+          [
+            4,
+            410,
+            "0.028",
+            218,
+            24,
+            ".16",
+            "0.21"
+          ],
+          [
+            5,
+            411,
+            "0.036",
+            244,
+            27,
+            ".14",
+            "0.19"
+          ],
+          [
+            6,
+            412,
+            "0.044",
+            267,
+            30,
+            ".15",
+            "0.14"
+          ],
+          [
+            7,
+            413,
+            "0.052",
+            264,
+            30,
+            ".12",
+            "0.19"
+          ],
+          [
+            8,
+            414,
+            "0.060",
+            297,
+            33,
+            ".13",
+            "0.19"
+          ],
+          [
+            9,
+            415,
+            "0.068",
+            319,
+            36,
+            ".15",
+            "0.19"
+          ],
+          [
+            10,
+            416,
+            "0.076",
+            328,
+            35,
+            ".16",
+            "0.17"
+          ],
+          [
+            11,
+            417,
+            "0.084",
+            351,
+            40,
+            ".17",
+            "0.19"
+          ],
+          [
+            12,
+            418,
+            "0.092",
+            371,
+            41,
+            ".17",
+            "0.23"
+          ],
+          [
+            13,
+            419,
+            "0.100",
+            381,
+            42,
+            ".18",
+            "0.25"
+          ],
+          [
+            14,
+            420,
+            "0.108",
+            384,
+            43,
+            ".17",
+            "0.20"
+          ],
+          [
+            15,
+            421,
+            "0.116",
+            422,
+            47,
+            ".20",
+            "0.25"
+          ],
+          [
+            16,
+            422,
+            "0.124",
+            407,
+            46,
+            ".19",
+            "0.27"
+          ],
+          [
+            17,
+            423,
+            "0.132",
+            431,
+            48,
+            ".20",
+            "0.28"
+          ],
+          [
+            18,
+            424,
+            "0.140",
+            460,
+            50,
+            ".21",
+            "0.26"
+          ],
+          [
+            19,
+            425,
+            "0.148",
+            449,
+            50,
+            ".22",
+            "0.25"
+          ],
+          [
+            20,
+            426,
+            "0.156",
+            470,
+            53,
+            ".20",
+            "0.30"
+          ]
+        ]
+      },
+      "final_resolution_bins": {
+        "phase": "final",
+        "detailed_cycle": 1,
+        "summary_ncyc": 0,
+        "title": {
+          "line": 399,
+          "text": "$TABLE: Cycle    1. Rfactor analysis, F distribution v resln  :"
+        },
+        "graph_declaration_lines": [
+          {
+            "line": 400,
+            "text": "$GRAPHS:Cycle    1. <Rfactor> v. resln :N:1,6,7,11,12:"
+          },
+          {
+            "line": 401,
+            "text": ":Cycle    1. <Fobs> and <Fc> v. resln :N:1,4,5,9,10:"
+          },
+          {
+            "line": 402,
+            "text": ":Cycle    1. % observed v. resln :N:1,3:"
+          }
+        ],
+        "header_lines": [
+          {
+            "line": 404,
+            "text": "M(4SSQ/LL) NR_used %_obs M(Fo_used) M(Fc_used) Rf_used WR_used"
+          },
+          {
+            "line": 405,
+            "text": "NR_free M(Fo_free) M(Fc_free) Rf_free   WR_free $$"
+          }
+        ],
+        "header_tokens": [
+          "M(4SSQ/LL)",
+          "NR_used",
+          "%_obs",
+          "M(Fo_used)",
+          "M(Fc_used)",
+          "Rf_used",
+          "WR_used",
+          "NR_free",
+          "M(Fo_free)",
+          "M(Fc_free)",
+          "Rf_free",
+          "WR_free"
+        ],
+        "double_dollar_roles": {
+          "header_start_line": 403,
+          "header_end_line": 405,
+          "data_start_line": 406,
+          "data_end_line": 427
+        },
+        "data_line_range_inclusive": [
+          407,
+          426
+        ],
+        "bin_count": 20,
+        "nr_used_sum": 6494,
+        "nr_free_sum": 723,
+        "combined_reported_count": 7217,
+        "rf_used_printed_decimal_places": 2,
+        "rf_free_printed_decimal_places": 2,
+        "bins": [
+          {
+            "bin_ordinal": 1,
+            "line": 407,
+            "text": "0.004      96 100.00   410.4   378.9 .17     .19          10   373.2   363.2  0.10  0.17",
+            "tokens": [
+              "0.004",
+              "96",
+              "100.00",
+              "410.4",
+              "378.9",
+              ".17",
+              ".19",
+              "10",
+              "373.2",
+              "363.2",
+              "0.10",
+              "0.17"
+            ],
+            "m_4ssq_ll_token": "0.004",
+            "m_4ssq_ll": 0.004,
+            "nr_used_token": "96",
+            "nr_used": 96,
+            "pct_obs_token": "100.00",
+            "pct_obs": 100.0,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "410.4",
+            "m_fc_used_token": "378.9",
+            "rf_used_token": ".17",
+            "rf_used": 0.17,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".19",
+            "wr_used": 0.19,
+            "nr_free_token": "10",
+            "nr_free": 10,
+            "m_fo_free_token": "373.2",
+            "m_fc_free_token": "363.2",
+            "rf_free_token": "0.10",
+            "rf_free": 0.1,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.17",
+            "wr_free": 0.17
+          },
+          {
+            "bin_ordinal": 2,
+            "line": 408,
+            "text": "0.012     149 100.00   334.2   340.1 .15     .21          17   369.8   377.6  0.17  0.24",
+            "tokens": [
+              "0.012",
+              "149",
+              "100.00",
+              "334.2",
+              "340.1",
+              ".15",
+              ".21",
+              "17",
+              "369.8",
+              "377.6",
+              "0.17",
+              "0.24"
+            ],
+            "m_4ssq_ll_token": "0.012",
+            "m_4ssq_ll": 0.012,
+            "nr_used_token": "149",
+            "nr_used": 149,
+            "pct_obs_token": "100.00",
+            "pct_obs": 100.0,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "334.2",
+            "m_fc_used_token": "340.1",
+            "rf_used_token": ".15",
+            "rf_used": 0.15,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".21",
+            "wr_used": 0.21,
+            "nr_free_token": "17",
+            "nr_free": 17,
+            "m_fo_free_token": "369.8",
+            "m_fc_free_token": "377.6",
+            "rf_free_token": "0.17",
+            "rf_free": 0.17,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.24",
+            "wr_free": 0.24
+          },
+          {
+            "bin_ordinal": 3,
+            "line": 409,
+            "text": "0.020     186 100.00   279.8   295.3 .16     .19          21   294.6   331.9  0.20  0.27",
+            "tokens": [
+              "0.020",
+              "186",
+              "100.00",
+              "279.8",
+              "295.3",
+              ".16",
+              ".19",
+              "21",
+              "294.6",
+              "331.9",
+              "0.20",
+              "0.27"
+            ],
+            "m_4ssq_ll_token": "0.020",
+            "m_4ssq_ll": 0.02,
+            "nr_used_token": "186",
+            "nr_used": 186,
+            "pct_obs_token": "100.00",
+            "pct_obs": 100.0,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "279.8",
+            "m_fc_used_token": "295.3",
+            "rf_used_token": ".16",
+            "rf_used": 0.16,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".19",
+            "wr_used": 0.19,
+            "nr_free_token": "21",
+            "nr_free": 21,
+            "m_fo_free_token": "294.6",
+            "m_fc_free_token": "331.9",
+            "rf_free_token": "0.20",
+            "rf_free": 0.2,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.27",
+            "wr_free": 0.27
+          },
+          {
+            "bin_ordinal": 4,
+            "line": 410,
+            "text": "0.028     218 100.00   288.4   308.2 .16     .18          24   226.3   241.5  0.21  0.22",
+            "tokens": [
+              "0.028",
+              "218",
+              "100.00",
+              "288.4",
+              "308.2",
+              ".16",
+              ".18",
+              "24",
+              "226.3",
+              "241.5",
+              "0.21",
+              "0.22"
+            ],
+            "m_4ssq_ll_token": "0.028",
+            "m_4ssq_ll": 0.028,
+            "nr_used_token": "218",
+            "nr_used": 218,
+            "pct_obs_token": "100.00",
+            "pct_obs": 100.0,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "288.4",
+            "m_fc_used_token": "308.2",
+            "rf_used_token": ".16",
+            "rf_used": 0.16,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".18",
+            "wr_used": 0.18,
+            "nr_free_token": "24",
+            "nr_free": 24,
+            "m_fo_free_token": "226.3",
+            "m_fc_free_token": "241.5",
+            "rf_free_token": "0.21",
+            "rf_free": 0.21,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.22",
+            "wr_free": 0.22
+          },
+          {
+            "bin_ordinal": 5,
+            "line": 411,
+            "text": "0.036     244 100.00   327.3   343.1 .14     .18          27   332.4   337.7  0.19  0.26",
+            "tokens": [
+              "0.036",
+              "244",
+              "100.00",
+              "327.3",
+              "343.1",
+              ".14",
+              ".18",
+              "27",
+              "332.4",
+              "337.7",
+              "0.19",
+              "0.26"
+            ],
+            "m_4ssq_ll_token": "0.036",
+            "m_4ssq_ll": 0.036,
+            "nr_used_token": "244",
+            "nr_used": 244,
+            "pct_obs_token": "100.00",
+            "pct_obs": 100.0,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "327.3",
+            "m_fc_used_token": "343.1",
+            "rf_used_token": ".14",
+            "rf_used": 0.14,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".18",
+            "wr_used": 0.18,
+            "nr_free_token": "27",
+            "nr_free": 27,
+            "m_fo_free_token": "332.4",
+            "m_fc_free_token": "337.7",
+            "rf_free_token": "0.19",
+            "rf_free": 0.19,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.26",
+            "wr_free": 0.26
+          },
+          {
+            "bin_ordinal": 6,
+            "line": 412,
+            "text": "0.044     267 100.00   343.7   353.9 .15     .20          30   353.6   355.1  0.14  0.22",
+            "tokens": [
+              "0.044",
+              "267",
+              "100.00",
+              "343.7",
+              "353.9",
+              ".15",
+              ".20",
+              "30",
+              "353.6",
+              "355.1",
+              "0.14",
+              "0.22"
+            ],
+            "m_4ssq_ll_token": "0.044",
+            "m_4ssq_ll": 0.044,
+            "nr_used_token": "267",
+            "nr_used": 267,
+            "pct_obs_token": "100.00",
+            "pct_obs": 100.0,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "343.7",
+            "m_fc_used_token": "353.9",
+            "rf_used_token": ".15",
+            "rf_used": 0.15,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".20",
+            "wr_used": 0.2,
+            "nr_free_token": "30",
+            "nr_free": 30,
+            "m_fo_free_token": "353.6",
+            "m_fc_free_token": "355.1",
+            "rf_free_token": "0.14",
+            "rf_free": 0.14,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.22",
+            "wr_free": 0.22
+          },
+          {
+            "bin_ordinal": 7,
+            "line": 413,
+            "text": "0.052     264  95.15   355.1   350.3 .12     .15          30   290.0   272.4  0.19  0.24",
+            "tokens": [
+              "0.052",
+              "264",
+              "95.15",
+              "355.1",
+              "350.3",
+              ".12",
+              ".15",
+              "30",
+              "290.0",
+              "272.4",
+              "0.19",
+              "0.24"
+            ],
+            "m_4ssq_ll_token": "0.052",
+            "m_4ssq_ll": 0.052,
+            "nr_used_token": "264",
+            "nr_used": 264,
+            "pct_obs_token": "95.15",
+            "pct_obs": 95.15,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "355.1",
+            "m_fc_used_token": "350.3",
+            "rf_used_token": ".12",
+            "rf_used": 0.12,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".15",
+            "wr_used": 0.15,
+            "nr_free_token": "30",
+            "nr_free": 30,
+            "m_fo_free_token": "290.0",
+            "m_fc_free_token": "272.4",
+            "rf_free_token": "0.19",
+            "rf_free": 0.19,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.24",
+            "wr_free": 0.24
+          },
+          {
+            "bin_ordinal": 8,
+            "line": 414,
+            "text": "0.060     297  97.63   348.4   335.1 .13     .16          33   285.6   271.9  0.19  0.27",
+            "tokens": [
+              "0.060",
+              "297",
+              "97.63",
+              "348.4",
+              "335.1",
+              ".13",
+              ".16",
+              "33",
+              "285.6",
+              "271.9",
+              "0.19",
+              "0.27"
+            ],
+            "m_4ssq_ll_token": "0.060",
+            "m_4ssq_ll": 0.06,
+            "nr_used_token": "297",
+            "nr_used": 297,
+            "pct_obs_token": "97.63",
+            "pct_obs": 97.63,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "348.4",
+            "m_fc_used_token": "335.1",
+            "rf_used_token": ".13",
+            "rf_used": 0.13,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".16",
+            "wr_used": 0.16,
+            "nr_free_token": "33",
+            "nr_free": 33,
+            "m_fo_free_token": "285.6",
+            "m_fc_free_token": "271.9",
+            "rf_free_token": "0.19",
+            "rf_free": 0.19,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.27",
+            "wr_free": 0.27
+          },
+          {
+            "bin_ordinal": 9,
+            "line": 415,
+            "text": "0.068     319  97.80   315.7   296.6 .15     .19          36   333.9   319.8  0.19  0.24",
+            "tokens": [
+              "0.068",
+              "319",
+              "97.80",
+              "315.7",
+              "296.6",
+              ".15",
+              ".19",
+              "36",
+              "333.9",
+              "319.8",
+              "0.19",
+              "0.24"
+            ],
+            "m_4ssq_ll_token": "0.068",
+            "m_4ssq_ll": 0.068,
+            "nr_used_token": "319",
+            "nr_used": 319,
+            "pct_obs_token": "97.80",
+            "pct_obs": 97.8,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "315.7",
+            "m_fc_used_token": "296.6",
+            "rf_used_token": ".15",
+            "rf_used": 0.15,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".19",
+            "wr_used": 0.19,
+            "nr_free_token": "36",
+            "nr_free": 36,
+            "m_fo_free_token": "333.9",
+            "m_fc_free_token": "319.8",
+            "rf_free_token": "0.19",
+            "rf_free": 0.19,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.24",
+            "wr_free": 0.24
+          },
+          {
+            "bin_ordinal": 10,
+            "line": 416,
+            "text": "0.076     328  99.73   308.8   285.5 .16     .18          35   269.6   257.6  0.17  0.19",
+            "tokens": [
+              "0.076",
+              "328",
+              "99.73",
+              "308.8",
+              "285.5",
+              ".16",
+              ".18",
+              "35",
+              "269.6",
+              "257.6",
+              "0.17",
+              "0.19"
+            ],
+            "m_4ssq_ll_token": "0.076",
+            "m_4ssq_ll": 0.076,
+            "nr_used_token": "328",
+            "nr_used": 328,
+            "pct_obs_token": "99.73",
+            "pct_obs": 99.73,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "308.8",
+            "m_fc_used_token": "285.5",
+            "rf_used_token": ".16",
+            "rf_used": 0.16,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".18",
+            "wr_used": 0.18,
+            "nr_free_token": "35",
+            "nr_free": 35,
+            "m_fo_free_token": "269.6",
+            "m_fc_free_token": "257.6",
+            "rf_free_token": "0.17",
+            "rf_free": 0.17,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.19",
+            "wr_free": 0.19
+          },
+          {
+            "bin_ordinal": 11,
+            "line": 417,
+            "text": "0.084     351  99.49   305.6   274.8 .17     .18          40   320.3   294.8  0.19  0.21",
+            "tokens": [
+              "0.084",
+              "351",
+              "99.49",
+              "305.6",
+              "274.8",
+              ".17",
+              ".18",
+              "40",
+              "320.3",
+              "294.8",
+              "0.19",
+              "0.21"
+            ],
+            "m_4ssq_ll_token": "0.084",
+            "m_4ssq_ll": 0.084,
+            "nr_used_token": "351",
+            "nr_used": 351,
+            "pct_obs_token": "99.49",
+            "pct_obs": 99.49,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "305.6",
+            "m_fc_used_token": "274.8",
+            "rf_used_token": ".17",
+            "rf_used": 0.17,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".18",
+            "wr_used": 0.18,
+            "nr_free_token": "40",
+            "nr_free": 40,
+            "m_fo_free_token": "320.3",
+            "m_fc_free_token": "294.8",
+            "rf_free_token": "0.19",
+            "rf_free": 0.19,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.21",
+            "wr_free": 0.21
+          },
+          {
+            "bin_ordinal": 12,
+            "line": 418,
+            "text": "0.092     371 100.00   265.7   249.1 .17     .19          41   274.9   251.5  0.23  0.23",
+            "tokens": [
+              "0.092",
+              "371",
+              "100.00",
+              "265.7",
+              "249.1",
+              ".17",
+              ".19",
+              "41",
+              "274.9",
+              "251.5",
+              "0.23",
+              "0.23"
+            ],
+            "m_4ssq_ll_token": "0.092",
+            "m_4ssq_ll": 0.092,
+            "nr_used_token": "371",
+            "nr_used": 371,
+            "pct_obs_token": "100.00",
+            "pct_obs": 100.0,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "265.7",
+            "m_fc_used_token": "249.1",
+            "rf_used_token": ".17",
+            "rf_used": 0.17,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".19",
+            "wr_used": 0.19,
+            "nr_free_token": "41",
+            "nr_free": 41,
+            "m_fo_free_token": "274.9",
+            "m_fc_free_token": "251.5",
+            "rf_free_token": "0.23",
+            "rf_free": 0.23,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.23",
+            "wr_free": 0.23
+          },
+          {
+            "bin_ordinal": 13,
+            "line": 419,
+            "text": "0.100     381  99.76   259.5   237.7 .18     .20          42   246.8   227.5  0.25  0.27",
+            "tokens": [
+              "0.100",
+              "381",
+              "99.76",
+              "259.5",
+              "237.7",
+              ".18",
+              ".20",
+              "42",
+              "246.8",
+              "227.5",
+              "0.25",
+              "0.27"
+            ],
+            "m_4ssq_ll_token": "0.100",
+            "m_4ssq_ll": 0.1,
+            "nr_used_token": "381",
+            "nr_used": 381,
+            "pct_obs_token": "99.76",
+            "pct_obs": 99.76,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "259.5",
+            "m_fc_used_token": "237.7",
+            "rf_used_token": ".18",
+            "rf_used": 0.18,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".20",
+            "wr_used": 0.2,
+            "nr_free_token": "42",
+            "nr_free": 42,
+            "m_fo_free_token": "246.8",
+            "m_fc_free_token": "227.5",
+            "rf_free_token": "0.25",
+            "rf_free": 0.25,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.27",
+            "wr_free": 0.27
+          },
+          {
+            "bin_ordinal": 14,
+            "line": 420,
+            "text": "0.108     384  99.53   221.6   209.5 .17     .18          43   238.5   225.7  0.20  0.23",
+            "tokens": [
+              "0.108",
+              "384",
+              "99.53",
+              "221.6",
+              "209.5",
+              ".17",
+              ".18",
+              "43",
+              "238.5",
+              "225.7",
+              "0.20",
+              "0.23"
+            ],
+            "m_4ssq_ll_token": "0.108",
+            "m_4ssq_ll": 0.108,
+            "nr_used_token": "384",
+            "nr_used": 384,
+            "pct_obs_token": "99.53",
+            "pct_obs": 99.53,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "221.6",
+            "m_fc_used_token": "209.5",
+            "rf_used_token": ".17",
+            "rf_used": 0.17,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".18",
+            "wr_used": 0.18,
+            "nr_free_token": "43",
+            "nr_free": 43,
+            "m_fo_free_token": "238.5",
+            "m_fc_free_token": "225.7",
+            "rf_free_token": "0.20",
+            "rf_free": 0.2,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.23",
+            "wr_free": 0.23
+          },
+          {
+            "bin_ordinal": 15,
+            "line": 421,
+            "text": "0.116     422  99.79   199.2   187.8 .20     .21          47   210.1   199.6  0.25  0.29",
+            "tokens": [
+              "0.116",
+              "422",
+              "99.79",
+              "199.2",
+              "187.8",
+              ".20",
+              ".21",
+              "47",
+              "210.1",
+              "199.6",
+              "0.25",
+              "0.29"
+            ],
+            "m_4ssq_ll_token": "0.116",
+            "m_4ssq_ll": 0.116,
+            "nr_used_token": "422",
+            "nr_used": 422,
+            "pct_obs_token": "99.79",
+            "pct_obs": 99.79,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "199.2",
+            "m_fc_used_token": "187.8",
+            "rf_used_token": ".20",
+            "rf_used": 0.2,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".21",
+            "wr_used": 0.21,
+            "nr_free_token": "47",
+            "nr_free": 47,
+            "m_fo_free_token": "210.1",
+            "m_fc_free_token": "199.6",
+            "rf_free_token": "0.25",
+            "rf_free": 0.25,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.29",
+            "wr_free": 0.29
+          },
+          {
+            "bin_ordinal": 16,
+            "line": 422,
+            "text": "0.124     407 100.00   185.2   178.1 .19     .21          46   175.1   156.8  0.27  0.29",
+            "tokens": [
+              "0.124",
+              "407",
+              "100.00",
+              "185.2",
+              "178.1",
+              ".19",
+              ".21",
+              "46",
+              "175.1",
+              "156.8",
+              "0.27",
+              "0.29"
+            ],
+            "m_4ssq_ll_token": "0.124",
+            "m_4ssq_ll": 0.124,
+            "nr_used_token": "407",
+            "nr_used": 407,
+            "pct_obs_token": "100.00",
+            "pct_obs": 100.0,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "185.2",
+            "m_fc_used_token": "178.1",
+            "rf_used_token": ".19",
+            "rf_used": 0.19,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".21",
+            "wr_used": 0.21,
+            "nr_free_token": "46",
+            "nr_free": 46,
+            "m_fo_free_token": "175.1",
+            "m_fc_free_token": "156.8",
+            "rf_free_token": "0.27",
+            "rf_free": 0.27,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.29",
+            "wr_free": 0.29
+          },
+          {
+            "bin_ordinal": 17,
+            "line": 423,
+            "text": "0.132     431  99.58   169.8   168.0 .20     .21          48   178.3   183.0  0.28  0.30",
+            "tokens": [
+              "0.132",
+              "431",
+              "99.58",
+              "169.8",
+              "168.0",
+              ".20",
+              ".21",
+              "48",
+              "178.3",
+              "183.0",
+              "0.28",
+              "0.30"
+            ],
+            "m_4ssq_ll_token": "0.132",
+            "m_4ssq_ll": 0.132,
+            "nr_used_token": "431",
+            "nr_used": 431,
+            "pct_obs_token": "99.58",
+            "pct_obs": 99.58,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "169.8",
+            "m_fc_used_token": "168.0",
+            "rf_used_token": ".20",
+            "rf_used": 0.2,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".21",
+            "wr_used": 0.21,
+            "nr_free_token": "48",
+            "nr_free": 48,
+            "m_fo_free_token": "178.3",
+            "m_fc_free_token": "183.0",
+            "rf_free_token": "0.28",
+            "rf_free": 0.28,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.30",
+            "wr_free": 0.3
+          },
+          {
+            "bin_ordinal": 18,
+            "line": 424,
+            "text": "0.140     460  99.80   165.8   165.0 .21     .22          50   152.0   159.5  0.26  0.26",
+            "tokens": [
+              "0.140",
+              "460",
+              "99.80",
+              "165.8",
+              "165.0",
+              ".21",
+              ".22",
+              "50",
+              "152.0",
+              "159.5",
+              "0.26",
+              "0.26"
+            ],
+            "m_4ssq_ll_token": "0.140",
+            "m_4ssq_ll": 0.14,
+            "nr_used_token": "460",
+            "nr_used": 460,
+            "pct_obs_token": "99.80",
+            "pct_obs": 99.8,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "165.8",
+            "m_fc_used_token": "165.0",
+            "rf_used_token": ".21",
+            "rf_used": 0.21,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".22",
+            "wr_used": 0.22,
+            "nr_free_token": "50",
+            "nr_free": 50,
+            "m_fo_free_token": "152.0",
+            "m_fc_free_token": "159.5",
+            "rf_free_token": "0.26",
+            "rf_free": 0.26,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.26",
+            "wr_free": 0.26
+          },
+          {
+            "bin_ordinal": 19,
+            "line": 425,
+            "text": "0.148     449  99.80   155.8   166.0 .22     .23          50   155.6   161.8  0.25  0.25",
+            "tokens": [
+              "0.148",
+              "449",
+              "99.80",
+              "155.8",
+              "166.0",
+              ".22",
+              ".23",
+              "50",
+              "155.6",
+              "161.8",
+              "0.25",
+              "0.25"
+            ],
+            "m_4ssq_ll_token": "0.148",
+            "m_4ssq_ll": 0.148,
+            "nr_used_token": "449",
+            "nr_used": 449,
+            "pct_obs_token": "99.80",
+            "pct_obs": 99.8,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "155.8",
+            "m_fc_used_token": "166.0",
+            "rf_used_token": ".22",
+            "rf_used": 0.22,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".23",
+            "wr_used": 0.23,
+            "nr_free_token": "50",
+            "nr_free": 50,
+            "m_fo_free_token": "155.6",
+            "m_fc_free_token": "161.8",
+            "rf_free_token": "0.25",
+            "rf_free": 0.25,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.25",
+            "wr_free": 0.25
+          },
+          {
+            "bin_ordinal": 20,
+            "line": 426,
+            "text": "0.156     470  99.43   154.8   161.7 .20     .20          53   138.2   157.5  0.30  0.31",
+            "tokens": [
+              "0.156",
+              "470",
+              "99.43",
+              "154.8",
+              "161.7",
+              ".20",
+              ".20",
+              "53",
+              "138.2",
+              "157.5",
+              "0.30",
+              "0.31"
+            ],
+            "m_4ssq_ll_token": "0.156",
+            "m_4ssq_ll": 0.156,
+            "nr_used_token": "470",
+            "nr_used": 470,
+            "pct_obs_token": "99.43",
+            "pct_obs": 99.43,
+            "pct_obs_decimal_places": 2,
+            "m_fo_used_token": "154.8",
+            "m_fc_used_token": "161.7",
+            "rf_used_token": ".20",
+            "rf_used": 0.2,
+            "rf_used_decimal_places": 2,
+            "wr_used_token": ".20",
+            "wr_used": 0.2,
+            "nr_free_token": "53",
+            "nr_free": 53,
+            "m_fo_free_token": "138.2",
+            "m_fc_free_token": "157.5",
+            "rf_free_token": "0.30",
+            "rf_free": 0.3,
+            "rf_free_decimal_places": 2,
+            "wr_free_token": "0.31",
+            "wr_free": 0.31
+          }
+        ],
+        "rows": [
+          [
+            1,
+            407,
+            "0.004",
+            96,
+            10,
+            ".17",
+            "0.10"
+          ],
+          [
+            2,
+            408,
+            "0.012",
+            149,
+            17,
+            ".15",
+            "0.17"
+          ],
+          [
+            3,
+            409,
+            "0.020",
+            186,
+            21,
+            ".16",
+            "0.20"
+          ],
+          [
+            4,
+            410,
+            "0.028",
+            218,
+            24,
+            ".16",
+            "0.21"
+          ],
+          [
+            5,
+            411,
+            "0.036",
+            244,
+            27,
+            ".14",
+            "0.19"
+          ],
+          [
+            6,
+            412,
+            "0.044",
+            267,
+            30,
+            ".15",
+            "0.14"
+          ],
+          [
+            7,
+            413,
+            "0.052",
+            264,
+            30,
+            ".12",
+            "0.19"
+          ],
+          [
+            8,
+            414,
+            "0.060",
+            297,
+            33,
+            ".13",
+            "0.19"
+          ],
+          [
+            9,
+            415,
+            "0.068",
+            319,
+            36,
+            ".15",
+            "0.19"
+          ],
+          [
+            10,
+            416,
+            "0.076",
+            328,
+            35,
+            ".16",
+            "0.17"
+          ],
+          [
+            11,
+            417,
+            "0.084",
+            351,
+            40,
+            ".17",
+            "0.19"
+          ],
+          [
+            12,
+            418,
+            "0.092",
+            371,
+            41,
+            ".17",
+            "0.23"
+          ],
+          [
+            13,
+            419,
+            "0.100",
+            381,
+            42,
+            ".18",
+            "0.25"
+          ],
+          [
+            14,
+            420,
+            "0.108",
+            384,
+            43,
+            ".17",
+            "0.20"
+          ],
+          [
+            15,
+            421,
+            "0.116",
+            422,
+            47,
+            ".20",
+            "0.25"
+          ],
+          [
+            16,
+            422,
+            "0.124",
+            407,
+            46,
+            ".19",
+            "0.27"
+          ],
+          [
+            17,
+            423,
+            "0.132",
+            431,
+            48,
+            ".20",
+            "0.28"
+          ],
+          [
+            18,
+            424,
+            "0.140",
+            460,
+            50,
+            ".21",
+            "0.26"
+          ],
+          [
+            19,
+            425,
+            "0.148",
+            449,
+            50,
+            ".22",
+            "0.25"
+          ],
+          [
+            20,
+            426,
+            "0.156",
+            470,
+            53,
+            ".20",
+            "0.30"
+          ]
+        ]
+      },
+      "endpoint_detail": {
+        "initial": [
+          {
+            "line": 457,
+            "text": "Resolution limits                    =     49.972     2.500"
+          },
+          {
+            "line": 458,
+            "text": "Number of used reflections           =       6494"
+          },
+          {
+            "line": 459,
+            "text": "Percentage observed                  =    99.3803"
+          },
+          {
+            "line": 460,
+            "text": "Percentage of free reflections       =    10.0180"
+          },
+          {
+            "line": 461,
+            "text": "Overall R factor                     =     0.1693"
+          },
+          {
+            "line": 462,
+            "text": "Free R factor                        =     0.2128"
+          }
+        ],
+        "final": [
+          {
+            "line": 457,
+            "text": "Resolution limits                    =     49.972     2.500"
+          },
+          {
+            "line": 458,
+            "text": "Number of used reflections           =       6494"
+          },
+          {
+            "line": 459,
+            "text": "Percentage observed                  =    99.3803"
+          },
+          {
+            "line": 460,
+            "text": "Percentage of free reflections       =    10.0180"
+          },
+          {
+            "line": 461,
+            "text": "Overall R factor                     =     0.1693"
+          },
+          {
+            "line": 462,
+            "text": "Free R factor                        =     0.2128"
+          }
+        ],
+        "final_distinct_weighted_metrics": [
+          {
+            "line": 465,
+            "text": "Overall weighted R factor            =     0.1950"
+          },
+          {
+            "line": 466,
+            "text": "Free weighted R factor               =     0.2522"
+          },
+          {
+            "line": 467,
+            "text": "Overall weighted R2 factor           =     0.2445"
+          },
+          {
+            "line": 468,
+            "text": "Free weighted R2 factor              =     0.3197"
+          }
+        ],
+        "Rwork_label": "Overall R factor",
+        "Rfree_label": "Free R factor",
+        "Rwork_final_token": "0.1693",
+        "Rfree_final_token": "0.2128",
+        "Rwork_printed_decimal_places": 4,
+        "Rfree_printed_decimal_places": 4
+      },
+      "final_results_block": {
+        "title": {
+          "line": 492,
+          "text": " $TEXT:Result: $$ Final results $$"
+        },
+        "header": {
+          "line": 493,
+          "text": "                      Initial    Final",
+          "tokens": [
+            "Initial",
+            "Final"
+          ]
+        },
+        "rows": [
+          {
+            "line": 494,
+            "text": "           R factor    0.1693   0.1693",
+            "label": "R factor",
+            "initial_token": "0.1693",
+            "final_token": "0.1693"
+          },
+          {
+            "line": 495,
+            "text": "             R free    0.2128   0.2128",
+            "label": "R free",
+            "initial_token": "0.2128",
+            "final_token": "0.2128"
+          },
+          {
+            "line": 496,
+            "text": "     Rms BondLength    0.0105   0.0105",
+            "label": "Rms BondLength",
+            "initial_token": "0.0105",
+            "final_token": "0.0105"
+          },
+          {
+            "line": 497,
+            "text": "      Rms BondAngle    1.4957   1.4957",
+            "label": "Rms BondAngle",
+            "initial_token": "1.4957",
+            "final_token": "1.4957"
+          },
+          {
+            "line": 498,
+            "text": "     Rms ChirVolume    0.0664   0.0664",
+            "label": "Rms ChirVolume",
+            "initial_token": "0.0664",
+            "final_token": "0.0664"
+          }
+        ],
+        "end_delimiter": {
+          "line": 499,
+          "text": " $$"
+        },
+        "r_factor_line": 494,
+        "r_free_line": 495,
+        "Rfactor_initial_token": "0.1693",
+        "Rfactor_final_token": "0.1693",
+        "Rfree_initial_token": "0.2128",
+        "Rfree_final_token": "0.2128",
+        "Rfactor_printed_decimal_places": 4,
+        "Rfree_printed_decimal_places": 4,
+        "rfactor_initial_token": "0.1693",
+        "rfactor_initial": 0.1693,
+        "rfactor_initial_decimal_places": 4,
+        "rfactor_final_token": "0.1693",
+        "rfactor_final": 0.1693,
+        "rfactor_final_decimal_places": 4,
+        "rfree_initial_token": "0.2128",
+        "rfree_initial": 0.2128,
+        "rfree_initial_decimal_places": 4,
+        "rfree_final_token": "0.2128",
+        "rfree_final": 0.2128,
+        "rfree_final_decimal_places": 4
+      },
+      "reconciled_initial_cycle": {
+        "summary_ncyc": 0,
+        "detailed_cycle": 1,
+        "resolution_table_cycle": 1,
+        "r_work_token": "0.1693",
+        "r_work": 0.1693,
+        "r_work_decimal_places": 4,
+        "r_free_token": "0.2128",
+        "r_free": 0.2128,
+        "r_free_decimal_places": 4,
+        "detailed_r_work_token": "0.1693",
+        "detailed_r_work_decimal_places": 4,
+        "detailed_r_free_token": "0.2128",
+        "detailed_r_free_decimal_places": 4,
+        "summary_r_work_token": "0.1693",
+        "summary_r_work_decimal_places": 4,
+        "summary_r_free_token": "0.2128",
+        "summary_r_free_decimal_places": 4,
+        "final_results_r_work_token": "0.1693",
+        "final_results_r_work_decimal_places": 4,
+        "final_results_r_free_token": "0.2128",
+        "final_results_r_free_decimal_places": 4,
+        "nr_used_sum": 6494,
+        "nr_free_sum": 723,
+        "combined_reported_count": 7217,
+        "sources": {
+          "detailed_overall_line": 461,
+          "detailed_free_line": 462,
+          "cycle_summary_line": 490,
+          "final_results_r_factor_line": 494,
+          "final_results_r_free_line": 495,
+          "resolution_rfactor_title_line": 399
+        }
+      },
+      "reconciled_final_cycle": {
+        "summary_ncyc": 0,
+        "detailed_cycle": 1,
+        "resolution_table_cycle": 1,
+        "r_work_token": "0.1693",
+        "r_work": 0.1693,
+        "r_work_decimal_places": 4,
+        "r_free_token": "0.2128",
+        "r_free": 0.2128,
+        "r_free_decimal_places": 4,
+        "detailed_r_work_token": "0.1693",
+        "detailed_r_work_decimal_places": 4,
+        "detailed_r_free_token": "0.2128",
+        "detailed_r_free_decimal_places": 4,
+        "summary_r_work_token": "0.1693",
+        "summary_r_work_decimal_places": 4,
+        "summary_r_free_token": "0.2128",
+        "summary_r_free_decimal_places": 4,
+        "final_results_r_work_token": "0.1693",
+        "final_results_r_work_decimal_places": 4,
+        "final_results_r_free_token": "0.2128",
+        "final_results_r_free_decimal_places": 4,
+        "nr_used_sum": 6494,
+        "nr_free_sum": 723,
+        "combined_reported_count": 7217,
+        "sources": {
+          "detailed_overall_line": 461,
+          "detailed_free_line": 462,
+          "cycle_summary_line": 490,
+          "final_results_r_factor_line": 494,
+          "final_results_r_free_line": 495,
+          "resolution_rfactor_title_line": 399
+        }
+      },
+      "consistency_checks": {
+        "initial_detail_summary_and_final_results_initial_values_equal": true,
+        "final_detail_summary_and_final_results_final_values_equal": true,
+        "final_nr_used_sum": 6494,
+        "final_nr_free_sum": 723,
+        "final_combined_reported_count": 7217,
+        "final_nr_used_sum_matches_reported_used_reflections": true
+      }
+    },
+    "meaning": "corrected interpretation of the unchanged historical native log; not a new execution"
+  },
+  "fresh_retained_output_recount_context": {
+    "performed_at_utc": "2026-11-08T03:46:44.806050+00:00",
+    "meaning": "new derived coordinate/MTZ audit of retained output bytes; not a new native REFMAC observation"
+  },
+  "mtz_word_audit": {
+    "word_count": 123216,
+    "all_export_words_equal_raw_little_endian_binary32": true,
+    "column_datasets": {
+      "H": 0,
+      "K": 0,
+      "L": 0,
+      "R-free-flags": 0,
+      "F-obs": 1,
+      "SIGF-obs": 1,
+      "FC": 1,
+      "PHIC": 1,
+      "FC_ALL": 1,
+      "PHIC_ALL": 1,
+      "FWT": 1,
+      "PHWT": 1,
+      "DELFWT": 1,
+      "PHDELWT": 1,
+      "FOM": 1,
+      "FC_ALL_LS": 1,
+      "PHIC_ALL_LS": 1
+    }
+  },
+  "diagnostic_residual_candidate": {
+    "column": "FC_ALL_LS",
+    "selection": "positive finite output F-obs and SIGF-obs; positive original eligible F; finite FC_ALL_LS; output FREE unchanged from original eligible-by-HKL partition; NOT proven native membership",
+    "formula": "sum(abs(F-obs - FC_ALL_LS)) / sum(F-obs), exact rational from retained binary32 words; no fitted scale",
+    "half_ulp_role": "closed diagnostic interval from printed precision, not the collector strict-interior gate, a proven native rounding rule, or a scientific pass threshold",
+    "results": {
+      "work": {
+        "candidate_n": 6494,
+        "numerator_exact": "573914156947/2097152",
+        "denominator_exact": "6771678021525/4194304",
+        "ratio_exact": "1147828313894/6771678021525",
+        "ratio_float": 0.16950426618711353,
+        "native_token": "0.1693",
+        "half_ulp_lower_exact": "677/4000",
+        "half_ulp_upper_exact": "3387/20000",
+        "outside_half_ulp_diagnostic_interval": true
+      },
+      "free": {
+        "candidate_n": 723,
+        "numerator_exact": "38960352489/1048576",
+        "denominator_exact": "91401113563/524288",
+        "ratio_exact": "38960352489/182802227126",
+        "ratio_float": 0.21312843449191576,
+        "native_token": "0.2128",
+        "half_ulp_lower_exact": "851/4000",
+        "half_ulp_upper_exact": "4257/20000",
+        "outside_half_ulp_diagnostic_interval": true
+      }
+    }
+  },
+  "diagnostic_midpoint_bin_candidate": {
+    "reference_code_path": "scripts/onesar_refmac.py",
+    "reference_code_sha256": "1a968e92b928718a25bd43a67b0600e70b25ca352d205d75fea550caeeed4360",
+    "method": "existing diagnostic midpoint interpolation; lower-exclusive/upper-inclusive; independent orthorhombic 1/d^2 = sum((h_i/a_i)^2)",
+    "cell_from_output_MTZ_header": [
+      64.897,
+      78.323,
+      38.792,
+      90.0,
+      90.0,
+      90.0
+    ],
+    "selection": "same positive-F candidate as residual diagnostic",
+    "rows": [
+      {
+        "bin_ordinal": 1,
+        "source_line": 407,
+        "printed_midpoint_token": "0.004",
+        "candidate_low_edge": null,
+        "candidate_high_edge": 0.008,
+        "candidate_work": 91,
+        "candidate_free": 10,
+        "native_reported_work_count": 96,
+        "native_reported_free_count": 10,
+        "counts_differ": true
+      },
+      {
+        "bin_ordinal": 2,
+        "source_line": 408,
+        "printed_midpoint_token": "0.012",
+        "candidate_low_edge": 0.008,
+        "candidate_high_edge": 0.016,
+        "candidate_work": 149,
+        "candidate_free": 17,
+        "native_reported_work_count": 149,
+        "native_reported_free_count": 17,
+        "counts_differ": false
+      },
+      {
+        "bin_ordinal": 3,
+        "source_line": 409,
+        "printed_midpoint_token": "0.020",
+        "candidate_low_edge": 0.016,
+        "candidate_high_edge": 0.024,
+        "candidate_work": 185,
+        "candidate_free": 20,
+        "native_reported_work_count": 186,
+        "native_reported_free_count": 21,
+        "counts_differ": true
+      },
+      {
+        "bin_ordinal": 4,
+        "source_line": 410,
+        "printed_midpoint_token": "0.028",
+        "candidate_low_edge": 0.024,
+        "candidate_high_edge": 0.032,
+        "candidate_work": 215,
+        "candidate_free": 24,
+        "native_reported_work_count": 218,
+        "native_reported_free_count": 24,
+        "counts_differ": true
+      },
+      {
+        "bin_ordinal": 5,
+        "source_line": 411,
+        "printed_midpoint_token": "0.036",
+        "candidate_low_edge": 0.032,
+        "candidate_high_edge": 0.039999999999999994,
+        "candidate_work": 239,
+        "candidate_free": 27,
+        "native_reported_work_count": 244,
+        "native_reported_free_count": 27,
+        "counts_differ": true
+      },
+      {
+        "bin_ordinal": 6,
+        "source_line": 412,
+        "printed_midpoint_token": "0.044",
+        "candidate_low_edge": 0.039999999999999994,
+        "candidate_high_edge": 0.048,
+        "candidate_work": 272,
+        "candidate_free": 30,
+        "native_reported_work_count": 267,
+        "native_reported_free_count": 30,
+        "counts_differ": true
+      },
+      {
+        "bin_ordinal": 7,
+        "source_line": 413,
+        "printed_midpoint_token": "0.052",
+        "candidate_low_edge": 0.048,
+        "candidate_high_edge": 0.055999999999999994,
+        "candidate_work": 265,
+        "candidate_free": 30,
+        "native_reported_work_count": 264,
+        "native_reported_free_count": 30,
+        "counts_differ": true
+      },
+      {
+        "bin_ordinal": 8,
+        "source_line": 414,
+        "printed_midpoint_token": "0.060",
+        "candidate_low_edge": 0.055999999999999994,
+        "candidate_high_edge": 0.064,
+        "candidate_work": 296,
+        "candidate_free": 33,
+        "native_reported_work_count": 297,
+        "native_reported_free_count": 33,
+        "counts_differ": true
+      },
+      {
+        "bin_ordinal": 9,
+        "source_line": 415,
+        "printed_midpoint_token": "0.068",
+        "candidate_low_edge": 0.064,
+        "candidate_high_edge": 0.07200000000000001,
+        "candidate_work": 319,
+        "candidate_free": 35,
+        "native_reported_work_count": 319,
+        "native_reported_free_count": 36,
+        "counts_differ": true
+      },
+      {
+        "bin_ordinal": 10,
+        "source_line": 416,
+        "printed_midpoint_token": "0.076",
+        "candidate_low_edge": 0.07200000000000001,
+        "candidate_high_edge": 0.08,
+        "candidate_work": 331,
+        "candidate_free": 37,
+        "native_reported_work_count": 328,
+        "native_reported_free_count": 35,
+        "counts_differ": true
+      },
+      {
+        "bin_ordinal": 11,
+        "source_line": 417,
+        "printed_midpoint_token": "0.084",
+        "candidate_low_edge": 0.08,
+        "candidate_high_edge": 0.088,
+        "candidate_work": 352,
+        "candidate_free": 39,
+        "native_reported_work_count": 351,
+        "native_reported_free_count": 40,
+        "counts_differ": true
+      },
+      {
+        "bin_ordinal": 12,
+        "source_line": 418,
+        "printed_midpoint_token": "0.092",
+        "candidate_low_edge": 0.088,
+        "candidate_high_edge": 0.096,
+        "candidate_work": 362,
+        "candidate_free": 40,
+        "native_reported_work_count": 371,
+        "native_reported_free_count": 41,
+        "counts_differ": true
+      },
+      {
+        "bin_ordinal": 13,
+        "source_line": 419,
+        "printed_midpoint_token": "0.100",
+        "candidate_low_edge": 0.096,
+        "candidate_high_edge": 0.10400000000000001,
+        "candidate_work": 388,
+        "candidate_free": 44,
+        "native_reported_work_count": 381,
+        "native_reported_free_count": 42,
+        "counts_differ": true
+      },
+      {
+        "bin_ordinal": 14,
+        "source_line": 420,
+        "printed_midpoint_token": "0.108",
+        "candidate_low_edge": 0.10400000000000001,
+        "candidate_high_edge": 0.112,
+        "candidate_work": 386,
+        "candidate_free": 43,
+        "native_reported_work_count": 384,
+        "native_reported_free_count": 43,
+        "counts_differ": true
+      },
+      {
+        "bin_ordinal": 15,
+        "source_line": 421,
+        "printed_midpoint_token": "0.116",
+        "candidate_low_edge": 0.112,
+        "candidate_high_edge": 0.12,
+        "candidate_work": 422,
+        "candidate_free": 46,
+        "native_reported_work_count": 422,
+        "native_reported_free_count": 47,
+        "counts_differ": true
+      },
+      {
+        "bin_ordinal": 16,
+        "source_line": 422,
+        "printed_midpoint_token": "0.124",
+        "candidate_low_edge": 0.12,
+        "candidate_high_edge": 0.128,
+        "candidate_work": 407,
+        "candidate_free": 46,
+        "native_reported_work_count": 407,
+        "native_reported_free_count": 46,
+        "counts_differ": false
+      },
+      {
+        "bin_ordinal": 17,
+        "source_line": 423,
+        "printed_midpoint_token": "0.132",
+        "candidate_low_edge": 0.128,
+        "candidate_high_edge": 0.136,
+        "candidate_work": 433,
+        "candidate_free": 48,
+        "native_reported_work_count": 431,
+        "native_reported_free_count": 48,
+        "counts_differ": true
+      },
+      {
+        "bin_ordinal": 18,
+        "source_line": 424,
+        "printed_midpoint_token": "0.140",
+        "candidate_low_edge": 0.136,
+        "candidate_high_edge": 0.14400000000000002,
+        "candidate_work": 458,
+        "candidate_free": 51,
+        "native_reported_work_count": 460,
+        "native_reported_free_count": 50,
+        "counts_differ": true
+      },
+      {
+        "bin_ordinal": 19,
+        "source_line": 425,
+        "printed_midpoint_token": "0.148",
+        "candidate_low_edge": 0.14400000000000002,
+        "candidate_high_edge": 0.152,
+        "candidate_work": 452,
+        "candidate_free": 50,
+        "native_reported_work_count": 449,
+        "native_reported_free_count": 50,
+        "counts_differ": true
+      },
+      {
+        "bin_ordinal": 20,
+        "source_line": 426,
+        "printed_midpoint_token": "0.156",
+        "candidate_low_edge": 0.152,
+        "candidate_high_edge": null,
+        "candidate_work": 472,
+        "candidate_free": 53,
+        "native_reported_work_count": 470,
+        "native_reported_free_count": 53,
+        "counts_differ": true
+      }
+    ],
+    "differing_bin_count": 18,
+    "limitation": "These are candidate assignments, not inferred or established native fields. No edge or mask was fitted to native counts."
+  },
+  "original_ledger_reported_counts": {
+    "eligible_free": 723,
+    "eligible_negative_f": 0,
+    "eligible_total": 7228,
+    "eligible_work": 6505,
+    "eligible_zero_f": 11,
+    "ineligible_nonfinite_f": 20,
+    "ineligible_nonpositive_or_nonfinite_sigf": 0,
+    "ineligible_total": 20,
+    "ineligible_unassigned_flag": 20,
+    "raw_free": 723,
+    "raw_total": 7248,
+    "raw_unassigned": 20,
+    "raw_work": 6505
+  },
+  "original_zero_work_hkls_with_output_F_SIGF_nan": [
+    [
+      0,
+      20,
+      10
+    ],
+    [
+      0,
+      22,
+      11
+    ],
+    [
+      0,
+      24,
+      2
+    ],
+    [
+      1,
+      31,
+      0
+    ],
+    [
+      7,
+      23,
+      5
+    ],
+    [
+      10,
+      27,
+      0
+    ],
+    [
+      12,
+      11,
+      0
+    ],
+    [
+      15,
+      3,
+      0
+    ],
+    [
+      15,
+      22,
+      0
+    ],
+    [
+      16,
+      10,
+      7
+    ],
+    [
+      21,
+      8,
+      7
+    ]
+  ],
+  "pdb": {
+    "input": {
+      "atom_rows": 1641,
+      "heavy": 1641,
+      "H": 0,
+      "D": 0,
+      "element_counts": {
+        "N": 244,
+        "C": 930,
+        "O": 458,
+        "S": 7,
+        "CA": 1,
+        "NA": 1
+      }
+    },
+    "output": {
+      "atom_rows": 1641,
+      "heavy": 1641,
+      "H": 0,
+      "D": 0,
+      "element_counts": {
+        "N": 244,
+        "C": 930,
+        "O": 458,
+        "S": 7,
+        "CA": 1,
+        "NA": 1
+      }
+    },
+    "keyed_xyz_occupancy_b_text_equal": true,
+    "ordered_keys_equal": false,
+    "representation_differences": [
+      {
+        "key": [
+          "A",
+          "  97",
+          " ",
+          "SO4",
+          " O1 ",
+          " "
+        ],
+        "input": {
+          "record_type": "ATOM",
+          "element_text": "O"
+        },
+        "output": {
+          "record_type": "HETATM",
+          "element_text": "O"
+        }
+      },
+      {
+        "key": [
+          "A",
+          "  97",
+          " ",
+          "SO4",
+          " O2 ",
+          " "
+        ],
+        "input": {
+          "record_type": "ATOM",
+          "element_text": "O"
+        },
+        "output": {
+          "record_type": "HETATM",
+          "element_text": "O"
+        }
+      },
+      {
+        "key": [
+          "A",
+          "  97",
+          " ",
+          "SO4",
+          " O3 ",
+          " "
+        ],
+        "input": {
+          "record_type": "ATOM",
+          "element_text": "O"
+        },
+        "output": {
+          "record_type": "HETATM",
+          "element_text": "O"
+        }
+      },
+      {
+        "key": [
+          "A",
+          "  97",
+          " ",
+          "SO4",
+          " O4 ",
+          " "
+        ],
+        "input": {
+          "record_type": "ATOM",
+          "element_text": "O"
+        },
+        "output": {
+          "record_type": "HETATM",
+          "element_text": "O"
+        }
+      },
+      {
+        "key": [
+          "A",
+          "  97",
+          " ",
+          "SO4",
+          " S  ",
+          " "
+        ],
+        "input": {
+          "record_type": "ATOM",
+          "element_text": "S"
+        },
+        "output": {
+          "record_type": "HETATM",
+          "element_text": "S"
+        }
+      },
+      {
+        "key": [
+          "A",
+          "  98",
+          " ",
+          "CA ",
+          "CA  ",
+          " "
+        ],
+        "input": {
+          "record_type": "HETATM",
+          "element_text": "Ca"
+        },
+        "output": {
+          "record_type": "HETATM",
+          "element_text": "CA"
+        }
+      },
+      {
+        "key": [
+          "B",
+          "  98",
+          " ",
+          "NA ",
+          "NA  ",
+          " "
+        ],
+        "input": {
+          "record_type": "HETATM",
+          "element_text": "Na"
+        },
+        "output": {
+          "record_type": "HETATM",
+          "element_text": "NA"
+        }
+      }
+    ],
+    "comparison_key": [
+      "chain",
+      "resseq",
+      "icode",
+      "resname",
+      "atom_name",
+      "altloc"
+    ],
+    "comparison_limit": "does not waive record-class, atom-order or element-case checks"
+  },
+  "companion_mmcif": {
+    "data_block_count": 3,
+    "atom_site_block_name": "xxxx",
+    "atom_site_rows": 3035,
+    "element_counts": {
+      "N": 244,
+      "C": 930,
+      "O": 458,
+      "H": 1394,
+      "S": 7,
+      "CA": 1,
+      "NA": 1
+    },
+    "heavy": 1641,
+    "H": 1394,
+    "D": 0,
+    "H_occupancy_tokens": {
+      "1.000": 1326,
+      "0.000": 68
+    },
+    "method": "direct _atom_site.type_symbol and occupancy counts; not subtraction from a log total"
+  },
+  "boundary": {
+    "native_tools_executed": false,
+    "native_observation_time_refreshed": false,
+    "original_artifacts_mutated": false,
+    "scientific_acceptance": false,
+    "EVAL_or_QDS_authored": false,
+    "native_effective_membership_proven": false,
+    "native_residual_reconstruction_proven": false,
+    "native_bin_membership_proven": false,
+    "internal_active_scattering_population_proven": false,
+    "model_preservation_proven": false,
+    "xml_reconciliation_performed": false,
+    "note": "Parser consistency and direct output counts do not supply missing native scientific proofs or authorize a batch."
+  },
+  "unchanged_native_file_sha256": {
+    "parent_attempt_outcome.json": "4dac145b9107c058e7d75dec0c96dbad58f75d95556323d55521a4441d1385a2",
+    "parent_attempt_started.json": "8fe62848809e24688f768d293571a38940ce4ee6fdf34bed116332f5e27a0379",
+    "phenix/phenix/phenix_preflight_build_evidence.json": "7a3457ad1a72bcb7bbfdc2a7afcdd5bef865fd0229223cfd83af52bc5a07b7d8",
+    "phenix/phenix/phenix_reconciled_manifest.json": "3a84e57ae65c8a82908b367994bdd20b3294a8c8bb5b784f4e4d9e8724a73f55",
+    "phenix/phenix/phenix_operation_parameters.json": "d472e33fbf72d79b20271429c2ecf2a47995120910e27e81dac66e73626ae16e",
+    "phenix/inputs/projected_observations.mtz": "6edbe54b2ec7b815f30b6bd20a7264a7c978721189670e39e20d876d9b4fece7",
+    "phenix/inputs/original_model.pdb": "8cbc1650f8be5a3833f98833fa514ec7d490c2c3bb9aa930413abac05e2a510b",
+    "phenix/inputs/input_admission.json": "538b670e67ed29df7675f91df0b32265805b6637788542c2d837a6121738d238",
+    "phenix/inputs/original_data.mtz": "f36d5fe685a3e524e8809d17d19ce12073acdf339eba2cfd3b0347a818850ab2",
+    "phenix/inputs/input_hkl_ledger.json": "35543c5821665de8f65b5fbd153669556dfef766ac8b156dc001a0c5b667a51e",
+    "phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/602b556366d727f5440eb28b06ba093f3efccc20b3a3621072b2128ec86dc444/bundle/phx_maps.mtz": "7beeabf1e70efe3260052ed363d8fc85d5e1990acd7e4f20768cffab6e216ddb",
+    "phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/602b556366d727f5440eb28b06ba093f3efccc20b3a3621072b2128ec86dc444/bundle/success.json": "bab9de3e0063d8895d2ae2630fc76a426b26ae8238c9f8e5c2df7061ac86b888",
+    "phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/602b556366d727f5440eb28b06ba093f3efccc20b3a3621072b2128ec86dc444/bundle/stdout.log": "7e21a8548074da86625a16a5e44953a612117764114bad4ee3c9e95aa551d199",
+    "phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/602b556366d727f5440eb28b06ba093f3efccc20b3a3621072b2128ec86dc444/bundle/PHX_OBS_PAIR_ONLY.mtz": "f5a64443f4cac4f6ffa86e80548dc9d3536f370ad092ad0aff5af84c2250bfdc",
+    "phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/602b556366d727f5440eb28b06ba093f3efccc20b3a3621072b2128ec86dc444/bundle/phenix_rfactors_partial_evidence.json": "ced8c29228d3497aa9ae17127583585d8b2a1fe7e606b22089ec9f43f88fece8",
+    "phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/602b556366d727f5440eb28b06ba093f3efccc20b3a3621072b2128ec86dc444/bundle/invocation.json": "87b43caa231a863c5f8ac55adc2ac548873b2ad0ce933629fae6b9c0d29b4d77",
+    "phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/602b556366d727f5440eb28b06ba093f3efccc20b3a3621072b2128ec86dc444/bundle/phenix_rfactors.json": "80f26d721c625fd707c19a60a5f3bb15a6b5a0d56cf9cb831e879b3b40bdc875",
+    "phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/602b556366d727f5440eb28b06ba093f3efccc20b3a3621072b2128ec86dc444/bundle/phenix_diagnostics.json": "1004d025a57f13eec23a929275cb15c60a9ca3db5bf944788d86fdc45f95ac4b",
+    "refmac/refmac/refmac_xyzout.mmcif": "61e107999e5e35b5c31c70ce079fe0ad1b9b63201363207d3558b74e1024344f",
+    "refmac/refmac/refmac_xyzout_audit.json": "685bd8c882daa681c8ca551ca906a9ed57386717e506afe6e624fe7895449d03",
+    "refmac/refmac/refmac_xmlout.xml": "f48854899048a94285fcfacc3e9570cff4b56857ed88749a537896071ae880eb",
+    "refmac/refmac/refmac_hklout_audit.json": "62bb8fa5ff04c9033ce75d92445db6b3889a636c684aa45833e31cca48e4b29d",
+    "refmac/refmac/refmac_pre_execution_checkpoint.json": "f0ff3cf1f0698c457a5839549c781b375c16909a3b406f905f08873a86c3a9d1",
+    "refmac/refmac/refmac.log": "8303f6898c6e9b22f70f6e9f5a51cf275d49775295ac09fb3396b67ff9e20b2c",
+    "refmac/refmac/refmac_hklout.mtz": "8aad5ed89f524af0b8120e9a0bbb32ce81c20ad33bfe22008568765f5d222a5c",
+    "refmac/refmac/refmac_post_execution_checkpoint.json": "66abad14d62274849833bc2bf71dbf98942ec6902240761d525d4805939fc293",
+    "refmac/refmac/refmac_xyzout.pdb": "7b8b33b6b05baf4069a4130526043b5b3e85ff9e982f99ff541f06891378af34",
+    "refmac/refmac/refmac_hklout_raw_export.json": "fe228067c691d7df610b05f11c3305846f14fbdf93cdb692df6684d20c011675",
+    "refmac/refmac/refmac_diagnostics.json": "d3109fbe80ecadc853e494c598cc98ac8170c052fc03c42ec9fad1442e76a152",
+    "refmac/refmac/refmac_operation_manifest.json": "0721726299375233b96e806f62ee6cb03eafce16beab76399c988601e737c01a",
+    "refmac/refmac/refmac_keywords.txt": "a7b3c3b750470e95377ca3c394000db94e648e24fc6e7e7474858ce35089663f",
+    "refmac/refmac/refmac_xmlout_audit.json": "cf7f127565793dd6a37aceb3d271306b39c5791c17bfdb59ce5773e7e4741989",
+    "refmac/inputs/projected_observations.mtz": "6edbe54b2ec7b815f30b6bd20a7264a7c978721189670e39e20d876d9b4fece7",
+    "refmac/inputs/original_model.pdb": "8cbc1650f8be5a3833f98833fa514ec7d490c2c3bb9aa930413abac05e2a510b",
+    "refmac/inputs/input_admission.json": "b69530219b592ac426b9eecbdec076e1849e1ee18ac6e6a574833eda31a1a43a",
+    "refmac/inputs/original_data.mtz": "f36d5fe685a3e524e8809d17d19ce12073acdf339eba2cfd3b0347a818850ab2",
+    "refmac/inputs/input_hkl_ledger.json": "35543c5821665de8f65b5fbd153669556dfef766ac8b156dc001a0c5b667a51e"
+  },
+  "replay_completed_at_utc": "2026-11-08T03:46:44.855680+00:00"
+}

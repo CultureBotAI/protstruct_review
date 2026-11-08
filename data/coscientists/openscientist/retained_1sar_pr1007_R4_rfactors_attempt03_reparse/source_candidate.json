@@ -1,0 +1,193 @@
+{
+  "record_kind": "frozen_sources_for_retained_byte_reparse",
+  "observed_at": "2026-11-08T03:43:20.085133+00:00",
+  "head": "e7ad32b420718cf6606610db060edb16c585c766",
+  "branch": "analysis/1sar-rerun-2026-11-06",
+  "files": {
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/parent_attempt_outcome.json": {
+      "sha256": "4dac145b9107c058e7d75dec0c96dbad58f75d95556323d55521a4441d1385a2",
+      "size_bytes": 18984
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/parent_attempt_started.json": {
+      "sha256": "8fe62848809e24688f768d293571a38940ce4ee6fdf34bed116332f5e27a0379",
+      "size_bytes": 1922
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/inputs/input_admission.json": {
+      "sha256": "538b670e67ed29df7675f91df0b32265805b6637788542c2d837a6121738d238",
+      "size_bytes": 5827
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/inputs/input_hkl_ledger.json": {
+      "sha256": "35543c5821665de8f65b5fbd153669556dfef766ac8b156dc001a0c5b667a51e",
+      "size_bytes": 6107091
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/inputs/original_data.mtz": {
+      "sha256": "f36d5fe685a3e524e8809d17d19ce12073acdf339eba2cfd3b0347a818850ab2",
+      "size_bytes": 469312
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/inputs/original_model.pdb": {
+      "sha256": "8cbc1650f8be5a3833f98833fa514ec7d490c2c3bb9aa930413abac05e2a510b",
+      "size_bytes": 135240
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/inputs/projected_observations.mtz": {
+      "sha256": "6edbe54b2ec7b815f30b6bd20a7264a7c978721189670e39e20d876d9b4fece7",
+      "size_bytes": 176592
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/602b556366d727f5440eb28b06ba093f3efccc20b3a3621072b2128ec86dc444/bundle/PHX_OBS_PAIR_ONLY.mtz": {
+      "sha256": "f5a64443f4cac4f6ffa86e80548dc9d3536f370ad092ad0aff5af84c2250bfdc",
+      "size_bytes": 146820
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/602b556366d727f5440eb28b06ba093f3efccc20b3a3621072b2128ec86dc444/bundle/invocation.json": {
+      "sha256": "87b43caa231a863c5f8ac55adc2ac548873b2ad0ce933629fae6b9c0d29b4d77",
+      "size_bytes": 7243
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/602b556366d727f5440eb28b06ba093f3efccc20b3a3621072b2128ec86dc444/bundle/phenix_diagnostics.json": {
+      "sha256": "1004d025a57f13eec23a929275cb15c60a9ca3db5bf944788d86fdc45f95ac4b",
+      "size_bytes": 4456
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/602b556366d727f5440eb28b06ba093f3efccc20b3a3621072b2128ec86dc444/bundle/phenix_rfactors.json": {
+      "sha256": "80f26d721c625fd707c19a60a5f3bb15a6b5a0d56cf9cb831e879b3b40bdc875",
+      "size_bytes": 13264105
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/602b556366d727f5440eb28b06ba093f3efccc20b3a3621072b2128ec86dc444/bundle/phenix_rfactors_partial_evidence.json": {
+      "sha256": "ced8c29228d3497aa9ae17127583585d8b2a1fe7e606b22089ec9f43f88fece8",
+      "size_bytes": 16462581
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/602b556366d727f5440eb28b06ba093f3efccc20b3a3621072b2128ec86dc444/bundle/phx_maps.mtz": {
+      "sha256": "7beeabf1e70efe3260052ed363d8fc85d5e1990acd7e4f20768cffab6e216ddb",
+      "size_bytes": 204876
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/602b556366d727f5440eb28b06ba093f3efccc20b3a3621072b2128ec86dc444/bundle/stdout.log": {
+      "sha256": "7e21a8548074da86625a16a5e44953a612117764114bad4ee3c9e95aa551d199",
+      "size_bytes": 2698
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/602b556366d727f5440eb28b06ba093f3efccc20b3a3621072b2128ec86dc444/bundle/success.json": {
+      "sha256": "bab9de3e0063d8895d2ae2630fc76a426b26ae8238c9f8e5c2df7061ac86b888",
+      "size_bytes": 10998
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/phenix/phenix_operation_parameters.json": {
+      "sha256": "d472e33fbf72d79b20271429c2ecf2a47995120910e27e81dac66e73626ae16e",
+      "size_bytes": 765
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/phenix/phenix_preflight_build_evidence.json": {
+      "sha256": "7a3457ad1a72bcb7bbfdc2a7afcdd5bef865fd0229223cfd83af52bc5a07b7d8",
+      "size_bytes": 2427
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/phenix/phenix_reconciled_manifest.json": {
+      "sha256": "3a84e57ae65c8a82908b367994bdd20b3294a8c8bb5b784f4e4d9e8724a73f55",
+      "size_bytes": 3760063
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/input_admission.json": {
+      "sha256": "b69530219b592ac426b9eecbdec076e1849e1ee18ac6e6a574833eda31a1a43a",
+      "size_bytes": 5827
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/input_hkl_ledger.json": {
+      "sha256": "35543c5821665de8f65b5fbd153669556dfef766ac8b156dc001a0c5b667a51e",
+      "size_bytes": 6107091
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/original_data.mtz": {
+      "sha256": "f36d5fe685a3e524e8809d17d19ce12073acdf339eba2cfd3b0347a818850ab2",
+      "size_bytes": 469312
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/original_model.pdb": {
+      "sha256": "8cbc1650f8be5a3833f98833fa514ec7d490c2c3bb9aa930413abac05e2a510b",
+      "size_bytes": 135240
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/projected_observations.mtz": {
+      "sha256": "6edbe54b2ec7b815f30b6bd20a7264a7c978721189670e39e20d876d9b4fece7",
+      "size_bytes": 176592
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac.log": {
+      "sha256": "8303f6898c6e9b22f70f6e9f5a51cf275d49775295ac09fb3396b67ff9e20b2c",
+      "size_bytes": 23762
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_diagnostics.json": {
+      "sha256": "d3109fbe80ecadc853e494c598cc98ac8170c052fc03c42ec9fad1442e76a152",
+      "size_bytes": 514493
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_hklout.mtz": {
+      "sha256": "8aad5ed89f524af0b8120e9a0bbb32ce81c20ad33bfe22008568765f5d222a5c",
+      "size_bytes": 497664
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_hklout_audit.json": {
+      "sha256": "62bb8fa5ff04c9033ce75d92445db6b3889a636c684aa45833e31cca48e4b29d",
+      "size_bytes": 75251
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_hklout_raw_export.json": {
+      "sha256": "fe228067c691d7df610b05f11c3305846f14fbdf93cdb692df6684d20c011675",
+      "size_bytes": 14256933
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_keywords.txt": {
+      "sha256": "a7b3c3b750470e95377ca3c394000db94e648e24fc6e7e7474858ce35089663f",
+      "size_bytes": 171
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_operation_manifest.json": {
+      "sha256": "0721726299375233b96e806f62ee6cb03eafce16beab76399c988601e737c01a",
+      "size_bytes": 522657
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_post_execution_checkpoint.json": {
+      "sha256": "66abad14d62274849833bc2bf71dbf98942ec6902240761d525d4805939fc293",
+      "size_bytes": 71662
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_pre_execution_checkpoint.json": {
+      "sha256": "f0ff3cf1f0698c457a5839549c781b375c16909a3b406f905f08873a86c3a9d1",
+      "size_bytes": 28050
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_xmlout.xml": {
+      "sha256": "f48854899048a94285fcfacc3e9570cff4b56857ed88749a537896071ae880eb",
+      "size_bytes": 6050
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_xmlout_audit.json": {
+      "sha256": "cf7f127565793dd6a37aceb3d271306b39c5791c17bfdb59ce5773e7e4741989",
+      "size_bytes": 21123
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_xyzout.mmcif": {
+      "sha256": "61e107999e5e35b5c31c70ce079fe0ad1b9b63201363207d3558b74e1024344f",
+      "size_bytes": 440411
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_xyzout.pdb": {
+      "sha256": "7b8b33b6b05baf4069a4130526043b5b3e85ff9e982f99ff541f06891378af34",
+      "size_bytes": 135253
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_xyzout_audit.json": {
+      "sha256": "685bd8c882daa681c8ca551ca906a9ed57386717e506afe6e624fe7895449d03",
+      "size_bytes": 290516
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03_execution/526-r4-hydrogen-policy.json": {
+      "sha256": "3b0cf35c7cd12465527306c4f6691f02980da337a5953ab30293f455494be13f",
+      "size_bytes": 8170
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03_execution/526-r4-native-receipt.json": {
+      "sha256": "e706374778ca40506e1539e69bbf8a6df1f08dab64a8f820b9ab1d45ebbaed09",
+      "size_bytes": 5856
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03_execution/526-r4-native-started.json": {
+      "sha256": "508e78aae848ee61fab22e51e45676f3436d245bba8d15450242ed0c8987e132",
+      "size_bytes": 3314
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03_execution/526-r4-native.stderr.log": {
+      "sha256": "b76b36d3a411b07f19f39bc7f592d2204dc1648b4b385c497d8e5be0cfeb6f63",
+      "size_bytes": 614
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03_execution/526-r4-native.stdout.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03_execution/526-run-r4-canary.source.txt": {
+      "sha256": "0e53147a78c0154c9a838ac290112ffc151e3e3aaee0ea82bfeb79d3f3f7676d",
+      "size_bytes": 8544
+    },
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03_execution/index.json": {
+      "sha256": "c6c560563792c86e1d3d725fa75def58a1ab8ff1cf6e9b7f2e4262dcb29176c1",
+      "size_bytes": 4888
+    },
+    "scripts/onesar_refmac.py": {
+      "sha256": "1a968e92b928718a25bd43a67b0600e70b25ca352d205d75fea550caeeed4360",
+      "size_bytes": 520074
+    },
+    "scripts/onesar_refmac_log.py": {
+      "sha256": "31908f40708ce2f8e0abc68b4b9f22b08ef0f63df0a9c7907141b82f1323d458",
+      "size_bytes": 92207
+    }
+  },
+  "note": "Exact executed parser and referenced collector source plus immutable attempt03 and external execution evidence; later docs/tests are not executed inputs."
+}

@@ -1,0 +1,161 @@
+{
+  "policy_id": "1SAR_REFMAC_H_POLICY_2026_11_07",
+  "policy_version": 1,
+  "issue": 1104,
+  "decision": "keep_defaults_disclose",
+  "user_decision_text": "Keep defaults, disclose",
+  "user_decision_date": "2026-11-07",
+  "recorded_at_utc": "2026-11-08T02:29:17.529751+00:00",
+  "subject_id": "R4",
+  "family": "rfactors",
+  "intended_evidence_destination": "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03",
+  "accepted_measurement_code_head": "9b6d923dd107bc300e00801b33ddefa197153457",
+  "record_status": {
+    "record_kind": "prospective_pre_execution_policy",
+    "contains_execution_results": false,
+    "attempt03_executed": false,
+    "eval_or_qds_emitted": false,
+    "issue_1104_status": "open_until_work_lands",
+    "binding_mechanism": "external_pre_execution_policy_outside_fresh_attempt_root_and_existing_manifest_schemas"
+  },
+  "preregistration_pin": {
+    "path": "ref/research/1sar_rerun_2026_11_06_preregistration.md",
+    "sha256": "b1e6a85c97153748cd78c087e4a1faa7156dd3af13563cca0af33ecc9aa03bc7"
+  },
+  "pinned_input_identities": {
+    "archive_container": {
+      "path": "data/coscientists/openscientist/cdba2c07-daff-4f60-ae96-12452b3a5fbb_artifacts.zip",
+      "sha256": "9fc5352284b7ffa7763c633a3eb4d3d0db96b8c25a1be9bcea361722d2c53054"
+    },
+    "subject_model": {
+      "subject_id": "R4",
+      "stage": "final",
+      "archive_member": "data/1sar_final.pdb",
+      "archive_notation": "archive#data/1sar_final.pdb",
+      "subject_ref": "artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb",
+      "sha256": "8cbc1650f8be5a3833f98833fa514ec7d490c2c3bb9aa930413abac05e2a510b",
+      "pre_execution_input_composition": {
+        "heavy_atoms": 1641,
+        "protein_atoms": 1488,
+        "hoh_waters": 146,
+        "so4_residues": {
+          "A:97:SO4": 5
+        },
+        "ca_ion_atoms": {
+          "CA A 98": 1
+        },
+        "na_ion_atoms": {
+          "NA B 98": 1
+        },
+        "hydrogen_or_deuterium_atoms": 0,
+        "altloc_indicators": 0,
+        "anisou_records": 0
+      }
+    },
+    "shared_reflection_dataset": {
+      "archive_member": "data/1sar.mtz",
+      "archive_notation": "archive#data/1sar.mtz",
+      "retained_copy_path": "data/coscientists/openscientist/retained_evidence_2026-09-23/data/1sar.mtz",
+      "subject_ref": "mtz:sha256:f36d5fe685a3e524e8809d17d19ce12073acdf339eba2cfd3b0347a818850ab2",
+      "sha256": "f36d5fe685a3e524e8809d17d19ce12073acdf339eba2cfd3b0347a818850ab2",
+      "observed_columns": [
+        "F-obs",
+        "SIGF-obs",
+        "R-free-flags"
+      ],
+      "free_r_test_flag_value": 1,
+      "space_group": "P 21 21 21",
+      "cell": [
+        64.897,
+        78.323,
+        38.792,
+        90.0,
+        90.0,
+        90.0
+      ],
+      "resolution_range_angstrom": [
+        49.972,
+        2.5
+      ]
+    }
+  },
+  "native_hydrogen_premise": {
+    "selected_native_defaults": {
+      "make_hydr": "MAKE HYDR All",
+      "make_hout": "MAKE HOUT No"
+    },
+    "native_invocation_byte_for_byte_unchanged": true,
+    "newly_passed_make_keywords": [],
+    "keyword_source_note": "MAKE HYDR All and MAKE HOUT No are native REFMAC5 defaults, not keywords newly passed by scripts/onesar_refmac.py.",
+    "internal_scattering_behavior": "Under default MAKE HYDR All, REFMAC restores hydrogens in their riding positions and uses them for geometry and structure-factor calculations (and the gradient and second-derivative matrix of the geometry residual).",
+    "output_coordinate_behavior": "Under default MAKE HOUT No, REFMAC does not write generated riding hydrogens to the output coordinate file (XYZOUT).",
+    "pdb_atom_audit_boundary": "An output PDB (XYZOUT) atom audit inspects written coordinate records only and cannot establish identical internal scattering populations across tools (such as PHENIX versus REFMAC5).",
+    "unobserved_attempt03_quantities": {
+      "attempt03_h_d_counts": "unobserved",
+      "attempt03_internal_scattering_populations": "unobserved",
+      "attempt03_xyzout_model_preservation": "unobserved"
+    },
+    "downstream_reporting_requirement": "Later result slides and reports must disclose this native REFMAC hydrogen treatment (MAKE HYDR All / MAKE HOUT No) and explicitly distinguish written output coordinates from internal structure-factor scattering populations."
+  },
+  "source_provenance": {
+    "ccp4_vendor_documentation": {
+      "ccp4_prefix_relative_path": "html/refmac5/keywords/restraints.html",
+      "sha256": "e05554820638744d94e659697f7d90d20d55880efbc1161b3f14084b49c8d2d7",
+      "line_anchors": [
+        "70-74",
+        "90-103"
+      ],
+      "excerpts": {
+        "lines_70_74": "<p>Defaults:</p>\n\n<blockquote><pre>MAKE <a href=\"#make_hydr\">HYDR</a> All\nMAKE <a href=\"#make_hout\">HOUT</a> No\nMAKE <a href=\"#make_chec\">CHEC</a> No",
+        "lines_90_98_make_hydr": "<dl><dt><a name=\"make_hydr\" id=\"make_hydr\"></a>HYDR [ Yes | No | All ] (Default HYDRogens All)</dt>\n<dd>How to deal with the hydrogen atoms.</dd>\n<dd>Y - if hydrogens are present in the input file, use them,</dd>\n<dd>N - ignore hydrogens even if they are present in the input coordinate file,</dd>\n<dd>A - add all hydrogens in their riding positions and use them for geometry and structure\nfactor calculations. They also contribute to the gradient and second derivative matrix of\ngeometry residual.</dd>\n<dd>For low resolution and early stages it is better to use MAKE HYDR N,\n<em>i.e.</em> do not use hydrogens even if they are present in the input file.</dd></dl>",
+        "lines_100_103_make_hout": "<dl><dt><a name=\"make_hout\" id=\"make_hout\"></a>HOUT [ Yes | No ] (Default HOUT N)</dt>\n<dd>Whether to write hydrogens to the output coordinate file or not.</dd>\n<dd>Y - write hydrogens to the output file,</dd>\n<dd>N - do not write hydrogens to the output file.</dd></dl>"
+      }
+    },
+    "retained_attempt02_log_distinction": {
+      "retained_log_path": "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt02/refmac/refmac/refmac.log",
+      "line_anchors": [
+        "88",
+        "206",
+        "243-245",
+        "351-356"
+      ],
+      "observed_log_statements": {
+        "line_88": "Hydrogens will be restored in their riding positions",
+        "line_206": "Number of atoms    :    1641",
+        "lines_243_245": [
+          "Number of atoms                   :    3329",
+          "Number of missing atoms           :       2",
+          "Number of rebuilt atoms           :    1394"
+        ],
+        "lines_351_356": [
+          "LABOUT FP=FP SIGFP=SIGFP FREE=FREE FC=FC PHIC=PHIC FWT=FWT PHWT=PHWT DELFWT=DELFWT PHDELWT=PHDELWT FOM=FOM",
+          "MtzParseLabin: neither label recognised: FP FP",
+          "MtzParseLabin: neither label recognised: SIGFP SIGFP",
+          "MtzParseLabin: neither label recognised: FREE FREE",
+          "Refmac:  Error in label assignments in LABOUT"
+        ]
+      },
+      "non_inference_rule": "Vendor documentation (html/refmac5/keywords/restraints.html:70-74,90-103) defines the keyword defaults and semantics; retained attempt02 refmac.log is an aborted pre-HKLOUT/pre-XYZOUT diagnostic log. Do not infer an exact hydrogen count by subtracting 1641 input atoms from 3329 total atoms (and note 1394 rebuilt atoms does not equal 3329 - 1641 = 1688)."
+    }
+  },
+  "preserved_gates_and_retained_attempts": {
+    "effective_hkl_selection_gate_intact": true,
+    "native_bin_reconciliation_gate_intact": true,
+    "fixed_fc_all_ls_residual_gate_intact": true,
+    "xyzout_model_preservation_gate_intact": true,
+    "publication_gates_intact": true,
+    "unknown_premises_remain_unaccepted": true,
+    "immutable_retained_failed_attempts": [
+      {
+        "attempt_id": "attempt01",
+        "evidence_root": "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt01",
+        "code_head": "4844cdc4c8514d31c465d26cd24cb8a104c5c549"
+      },
+      {
+        "attempt_id": "attempt02",
+        "evidence_root": "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt02",
+        "code_head": "b3879d6d58e39874b53a356acffd1c87936525e8"
+      }
+    ]
+  }
+}

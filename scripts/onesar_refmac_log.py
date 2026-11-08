@@ -65,6 +65,20 @@ RESOLUTION_FOM_HEADER_TOKENS: tuple[str, ...] = (
     "SigmaA_Fc1",
 )
 
+RESOLUTION_FOM_LEGACY_HEADER_TOKENS: tuple[str, ...] = RESOLUTION_FOM_HEADER_TOKENS
+
+RESOLUTION_FOM_EXTENDED_SUFFIX_TOKENS: tuple[str, ...] = (
+    "FSCfree",
+    "FSCwork",
+    "CorrFoFcFree",
+    "CorrFoFcWork",
+)
+
+RESOLUTION_FOM_EXTENDED_HEADER_TOKENS: tuple[str, ...] = (
+    *RESOLUTION_FOM_HEADER_TOKENS,
+    *RESOLUTION_FOM_EXTENDED_SUFFIX_TOKENS,
+)
+
 CYCLE_SUMMARY_HEADER_TOKENS: tuple[str, ...] = (
     "Ncyc",
     "Rfact",
@@ -87,8 +101,12 @@ _TEXT_REF_DIRECTIVE_RE = re.compile(r"^\s*:TEXT:[^:]+:\s*\$\$\s*$")
 _RESLN_RFACTOR_TITLE_RE = re.compile(
     r"^\s*Cycle\s+(\S+)\.\s*Rfactor analysis,\s*F distribution v(?:s\.?)?\s+resln\s*:?\s*$"
 )
-_RESLN_FOM_TITLE_RE = re.compile(
+_RESLN_FOM_LEGACY_TITLE_RE = re.compile(
     r"^\s*Cycle\s+(\S+)\.\s*Fom\(<cos\(DelPhi\)>-acentric,\s*centric,\s*overall v(?:s\.?)?\s+resln\s*:?\s*$"
+)
+_RESLN_FOM_TITLE_RE = _RESLN_FOM_LEGACY_TITLE_RE
+_RESLN_FOM_EXTENDED_TITLE_RE = re.compile(
+    r"^\s*Cycle\s+(\S+)\.\s*FSC\s+and\s+Fom\(<cos\(DelPhi\)>-acentric,\s*centric,\s*overall v(?:s\.?)?\s+resln\s*:?\s*$"
 )
 _CYCLE_SUMMARY_TITLE_RE = re.compile(
     r"^\s*Rfactor analysis,\s*stats vs\.?\s+cycle\s*:?\s*$"
@@ -98,13 +116,13 @@ _GRAPH_VS_CYCLE_RE = re.compile(r"\bvs\.?\s+cycle\b", re.IGNORECASE)
 _GRAPH_ANY_CYCLE_WORD_RE = re.compile(r"\bcycle\b", re.IGNORECASE)
 
 _NONNEGATIVE_INT_RE = re.compile(r"^[0-9]+$")
-_R_TOKEN_RE = re.compile(r"^[0-9]+\.[0-9]+$")
+_R_TOKEN_RE = re.compile(r"^[0-9]*\.[0-9]+$")
 _FINITE_FLOAT_TOKEN_RE = re.compile(
     r"^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$"
 )
 
 _BANNER_VERSION_RE = re.compile(
-    r"###\s*(CCP4\s+\S+)\s*:\s*Refmac_\S+\s+version\s+(\S+)\s*:"
+    r"###\s*(CCP4\s+\S+)\s*:\s*Refmac(?:_\S+)?\s+version\s+(\S+)\s*:"
 )
 _RUN_DATE_RE = re.compile(r"Run date:\s*(\d{1,2}/\s*\d{1,2}/\d{4})")
 _DATA_NCYC_RE = re.compile(r"^\s*Data line---\s+NCYC\s+(\S+)(?:\s+(.*))?$")
@@ -490,7 +508,8 @@ def _classify_and_validate_table(table_block: dict[str, Any]) -> str:
     header_tokens = tuple(table_block["header_tokens"])
 
     rfactor_title_match = _RESLN_RFACTOR_TITLE_RE.match(title_body)
-    fom_title_match = _RESLN_FOM_TITLE_RE.match(title_body)
+    fom_legacy_title_match = _RESLN_FOM_LEGACY_TITLE_RE.match(title_body)
+    fom_extended_title_match = _RESLN_FOM_EXTENDED_TITLE_RE.match(title_body)
     summary_title_match = _CYCLE_SUMMARY_TITLE_RE.match(title_body)
 
     looks_like_resln_rfactor_title = (
@@ -554,18 +573,41 @@ def _classify_and_validate_table(table_block: dict[str, Any]) -> str:
         table_block["cycle_number"] = None
         return "cycle_summary"
 
+    title_lower = title_body.lower()
     looks_like_resln_fom_title = (
-        "fom(" in title_body.lower() or "delphi" in title_body.lower()
+        "fom(" in title_lower
+        or "delphi" in title_lower
+        or bool(re.search(r"\bfsc\s+and\s+fom\b", title_lower))
+    )
+    looks_like_resln_fom_header = (
+        header_tokens
+        in (RESOLUTION_FOM_HEADER_TOKENS, RESOLUTION_FOM_EXTENDED_HEADER_TOKENS)
+        or header_tokens[:7] == RESOLUTION_FOM_HEADER_TOKENS[:7]
     )
     if (
-        fom_title_match
+        fom_legacy_title_match
+        or fom_extended_title_match
         or looks_like_resln_fom_title
-        or header_tokens == RESOLUTION_FOM_HEADER_TOKENS
+        or looks_like_resln_fom_header
     ):
-        if not fom_title_match or header_tokens != RESOLUTION_FOM_HEADER_TOKENS:
+        is_legacy_fom = (
+            fom_legacy_title_match is not None
+            and header_tokens == RESOLUTION_FOM_HEADER_TOKENS
+        )
+        is_extended_fom = (
+            fom_extended_title_match is not None
+            and header_tokens == RESOLUTION_FOM_EXTENDED_HEADER_TOKENS
+        )
+        if not (is_legacy_fom or is_extended_fom):
             raise ValueError(
                 f"Malformed FOM resolution table title/header at line {title_line_no}"
             )
+        fom_title_match = (
+            fom_legacy_title_match
+            if fom_legacy_title_match is not None
+            else fom_extended_title_match
+        )
+        assert fom_title_match is not None
         cycle_token = fom_title_match.group(1)
         cycle_number = _parse_positive_int_token(
             cycle_token,
@@ -580,6 +622,7 @@ def _classify_and_validate_table(table_block: dict[str, Any]) -> str:
         prev_fom_s2: float | None = None
         for row in table_block["rows"]:
             row_line = row["line"]
+            row_tokens = row["tokens"]
             (
                 s2_tok,
                 nref_a_tok,
@@ -589,7 +632,7 @@ def _classify_and_validate_table(table_block: dict[str, Any]) -> str:
                 nref_all_tok,
                 fom_all_tok,
                 sigmaa_tok,
-            ) = row["tokens"]
+            ) = row_tokens[:8]
             s2_val = _parse_finite_float_token(
                 s2_tok,
                 context="FOM table <4SSQ/LL>",
@@ -627,6 +670,15 @@ def _classify_and_validate_table(table_block: dict[str, Any]) -> str:
                     f"FOM table row NREFall ({nref_all}) != NREFa ({nref_a}) + NREFc ({nref_c}) "
                     f"at line {row_line}"
                 )
+            if is_extended_fom:
+                for col_name, ext_tok in zip(
+                    RESOLUTION_FOM_EXTENDED_SUFFIX_TOKENS, row_tokens[8:], strict=True
+                ):
+                    _parse_finite_float_token(
+                        ext_tok,
+                        context=f"FOM table {col_name}",
+                        line_no=row_line,
+                    )
         table_block["table_kind"] = "resolution_fom"
         table_block["cycle_number"] = cycle_number
         return "resolution_fom"
@@ -1169,6 +1221,9 @@ _KNOWN_DETAIL_LABELS: frozenset[str] = frozenset(
         "Free weighted R factor",
         "Overall weighted R2 factor",
         "Free weighted R2 factor",
+        "Average Fourier shell correlation",
+        "AverageFree Fourier shell correlation",
+        "Average correlation coefficient",
         "Overall correlation coefficient",
         "Free correlation coefficient",
         "Cruickshanks DPI for coordinate error",
@@ -1259,6 +1314,15 @@ def _finalize_detail_group(
         "overall_fom_line": None,
         "overall_fom_token": None,
         "overall_fom": None,
+        "average_fourier_shell_correlation_line": None,
+        "average_fourier_shell_correlation_token": None,
+        "average_fourier_shell_correlation": None,
+        "average_free_fourier_shell_correlation_line": None,
+        "average_free_fourier_shell_correlation_token": None,
+        "average_free_fourier_shell_correlation": None,
+        "average_correlation_coefficient_line": None,
+        "average_correlation_coefficient_token": None,
+        "average_correlation_coefficient": None,
         "overall_correlation_coefficient_line": None,
         "overall_correlation_coefficient_token": None,
         "overall_correlation_coefficient": None,
@@ -1366,6 +1430,24 @@ def _finalize_detail_group(
             detail[val_key] = m_val
 
     for opt_label, line_key, tok_key, val_key in (
+        (
+            "Average Fourier shell correlation",
+            "average_fourier_shell_correlation_line",
+            "average_fourier_shell_correlation_token",
+            "average_fourier_shell_correlation",
+        ),
+        (
+            "AverageFree Fourier shell correlation",
+            "average_free_fourier_shell_correlation_line",
+            "average_free_fourier_shell_correlation_token",
+            "average_free_fourier_shell_correlation",
+        ),
+        (
+            "Average correlation coefficient",
+            "average_correlation_coefficient_line",
+            "average_correlation_coefficient_token",
+            "average_correlation_coefficient",
+        ),
         (
             "Overall correlation coefficient",
             "overall_correlation_coefficient_line",
@@ -1676,6 +1758,13 @@ def parse_refmac_log(text: str) -> dict[str, Any]:
                 idx += 1
                 continue
             if label.lower() in {k.lower() for k in _KNOWN_DETAIL_LABELS}:
+                raise ValueError(
+                    f"Malformed detail label {label!r} at line {line_no}"
+                )
+            if (
+                "fourier shell correlation" in label.lower()
+                or "correlation coefficient" in label.lower()
+            ):
                 raise ValueError(
                     f"Malformed detail label {label!r} at line {line_no}"
                 )

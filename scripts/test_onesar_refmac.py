@@ -5482,13 +5482,106 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
             self.assertIs(audit["model_preservation_proven"], False)
             self.assertEqual(
                 audit["model_preservation_unproven_reason"],
-                "XYZOUT changed element symbol on 1 heavy atom(s)",
+                "XYZOUT differs in element symbol or element-field representation on 1 heavy atom(s)",
             )
             comp = audit["comparison"]
             self.assertEqual(comp["element_difference_count"], 1)
             self.assertEqual(
                 comp["element_differences"],
-                [{"key": k_n, "xyzin_element": "N", "xyzout_element": "O"}],
+                [
+                    {
+                        "key": k_n,
+                        "xyzin_element": "N",
+                        "xyzout_element": "O",
+                        "xyzin_pdb_atoms_element": "N",
+                        "xyzout_pdb_atoms_element": "O",
+                    }
+                ],
+            )
+            self.assertEqual(comp["record_type_difference_count"], 0)
+            self.assertEqual(comp["coordinate_difference_count"], 0)
+            self.assertEqual(comp["occupancy_difference_count"], 0)
+            self.assertEqual(comp["b_factor_difference_count"], 0)
+            self.assertEqual(comp["serial_or_segment_difference_count"], 0)
+
+        with self.subTest("element_case_only_ca_and_different_element_sibling"):
+            pdb_ca_ion_in = (
+                "HETATM   98 "
+                "CA  "
+                " "
+                " CA"
+                " A"
+                "  98"
+                "    "
+                "  20.233"
+                "  13.226"
+                "  19.015"
+                "  1.00"
+                " 50.00"
+                "          "
+                "Ca"
+            )
+            pdb_ca_ion_out = (
+                "HETATM   98 "
+                "CA  "
+                " "
+                " CA"
+                " A"
+                "  98"
+                "    "
+                "  20.233"
+                "  13.226"
+                "  19.015"
+                "  1.00"
+                " 50.00"
+                "          "
+                "CA"
+            )
+            k_ca_ion = ["A", 98, "", "CA", "CA", ""]
+            xyzin_ca_sibling = pdb_n + "\n" + pdb_ca_ion_in + "\nEND\n"
+            xyzout_ca_sibling = pdb_n_element + "\n" + pdb_ca_ion_out + "\nEND\n"
+            self.assertEqual(
+                [a["element"] for a in audit_1sar_retained_evidence.pdb_atoms(xyzin_ca_sibling)],
+                ["N", "Ca"],
+            )
+            self.assertEqual(
+                [a["element"] for a in audit_1sar_retained_evidence.pdb_atoms(xyzout_ca_sibling)],
+                ["O", "CA"],
+            )
+            audit = self._run_pdb_audit_pair(
+                "group4_pdb_elem_case_ca_and_sibling",
+                xyzin_text=xyzin_ca_sibling,
+                xyzout_text=xyzout_ca_sibling,
+            )
+            self.assertIs(audit["byte_for_byte_identical"], False)
+            self.assertIs(audit["valid"], True)
+            self.assertEqual(audit["errors"], [])
+            self.assertEqual(audit["status"], "valid_with_model_differences")
+            self.assertIs(audit["model_preservation_proven"], False)
+            self.assertEqual(
+                audit["model_preservation_unproven_reason"],
+                "XYZOUT differs in element symbol or element-field representation on 2 heavy atom(s)",
+            )
+            comp = audit["comparison"]
+            self.assertEqual(comp["element_difference_count"], 2)
+            self.assertEqual(
+                comp["element_differences"],
+                [
+                    {
+                        "key": k_n,
+                        "xyzin_element": "N",
+                        "xyzout_element": "O",
+                        "xyzin_pdb_atoms_element": "N",
+                        "xyzout_pdb_atoms_element": "O",
+                    },
+                    {
+                        "key": k_ca_ion,
+                        "xyzin_element": "CA",
+                        "xyzout_element": "CA",
+                        "xyzin_pdb_atoms_element": "Ca",
+                        "xyzout_pdb_atoms_element": "CA",
+                    },
+                ],
             )
             self.assertEqual(comp["record_type_difference_count"], 0)
             self.assertEqual(comp["coordinate_difference_count"], 0)
@@ -11374,6 +11467,176 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                     self.assertIsNone(
                         payload_f9["actual_parent_retention_anchor_dir"]
                     )
+
+    def test_native_log_banner_and_end_of_refmac_markers_including_attempt03_canary_log(
+        self,
+    ) -> None:
+        # 1. Retained attempt03 current native CCP4 9.0.015 / REFMAC 5.8.0431 log (#1108)
+        attempt03_log_path = (
+            REPO_ROOT
+            / "data"
+            / "coscientists"
+            / "openscientist"
+            / "retained_1sar_pr1007_R4_rfactors_attempt03"
+            / "refmac"
+            / "refmac"
+            / "refmac.log"
+        )
+        raw_bytes = attempt03_log_path.read_bytes()
+        self.assertEqual(
+            _sha256_bytes(raw_bytes),
+            "8303f6898c6e9b22f70f6e9f5a51cf275d49775295ac09fb3396b67ff9e20b2c",
+        )
+        attempt03_text = raw_bytes.decode("utf-8")
+        diag = onesar_refmac._extract_native_log_diagnostics(attempt03_text)
+        self.assertNotIn("banner_line", diag)
+        self.assertEqual(diag["line_count"], 506)
+        self.assertEqual(diag["reported_suite"], "CCP4 9.0.015")
+        self.assertEqual(diag["reported_program"], "Refmac")
+        self.assertEqual(diag["reported_version"], "5.8.0431")
+        self.assertEqual(diag["reported_run_date"], "7/11/2026")
+        self.assertEqual(diag["reported_run_time"], "18:45:14")
+        completion = diag["completion_markers"]
+        self.assertIs(completion["has_end_of_refmac_marker"], True)
+        self.assertEqual(
+            completion["end_of_refmac_lines"],
+            [{"line": 502, "text": " Refmac:  End of Refmac_5.8.0431   "}],
+        )
+        self.assertIs(completion["has_times_summary"], True)
+        self.assertEqual(
+            completion["times_lines"],
+            [
+                {
+                    "line": 503,
+                    "text": "Times: User:       4.2s System:    0.0s Elapsed:     0:04  ",
+                }
+            ],
+        )
+
+        # 2. Historical Refmac_<ver> banner and uppercase REFMAC5:/REFMAC: end markers
+        hist_diag_5 = onesar_refmac._extract_native_log_diagnostics(
+            SYNTHETIC_SINGLE_CYCLE_NCYC0_LOG
+            + " REFMAC5:   End of Refmac_5.8.0430     \n"
+        )
+        self.assertEqual(hist_diag_5["reported_suite"], "CCP4 9.0")
+        self.assertEqual(hist_diag_5["reported_program"], "Refmac_5.8.0430")
+        self.assertEqual(hist_diag_5["reported_version"], "5.8.0430")
+        self.assertIs(
+            hist_diag_5["completion_markers"]["has_end_of_refmac_marker"], True
+        )
+        self.assertEqual(
+            hist_diag_5["completion_markers"]["end_of_refmac_lines"],
+            [{"line": 51, "text": " REFMAC5:   End of Refmac_5.8.0430     "}],
+        )
+
+        hist_diag_plain = onesar_refmac._extract_native_log_diagnostics(
+            SYNTHETIC_SINGLE_CYCLE_NCYC0_LOG
+            + " REFMAC:   End of Refmac_5.8.0430     \n"
+        )
+        self.assertIs(
+            hist_diag_plain["completion_markers"]["has_end_of_refmac_marker"],
+            True,
+        )
+        self.assertEqual(
+            hist_diag_plain["completion_markers"]["end_of_refmac_lines"],
+            [{"line": 51, "text": " REFMAC:   End of Refmac_5.8.0430     "}],
+        )
+
+        # 3. Malformed banner and end-of-refmac lines do not match
+        for bad_end_line in (
+            " refmac:  End of Refmac_5.8.0431   ",
+            " Refmac5:  End of Refmac_5.8.0431   ",
+            " Refmac:  End of Refmac   ",
+            " Refmac:  End of Refmac_5.8.0431 trailing",
+        ):
+            with self.subTest(bad_end_line=bad_end_line):
+                bad_diag = onesar_refmac._extract_native_log_diagnostics(
+                    " ### Unrecognized banner ###\n" + bad_end_line + "\n"
+                )
+                self.assertIsNone(bad_diag["reported_suite"])
+                self.assertIsNone(bad_diag["reported_program"])
+                self.assertIsNone(bad_diag["reported_version"])
+                bad_comp = bad_diag["completion_markers"]
+                self.assertIs(bad_comp["has_end_of_refmac_marker"], False)
+                self.assertEqual(bad_comp["end_of_refmac_lines"], [])
+                self.assertIs(bad_comp["has_times_summary"], False)
+                self.assertEqual(bad_comp["times_lines"], [])
+
+        # 4. Log markers remain diagnostic only and never establish process success on nonzero exit
+        current_marker_log = (
+            SYNTHETIC_SINGLE_CYCLE_NCYC0_LOG.replace(
+                " ### CCP4 9.0: Refmac_5.8.0430     version 5.8.0430 : 01/01/24##",
+                " ### CCP4 9.0.015: Refmac         version 5.8.0431 : 08/08/25##",
+            )
+            + " Refmac:  End of Refmac_5.8.0431   \n"
+        )
+
+        def runner(
+            xyzin: Path,
+            hklin: Path,
+            xyzout: Path,
+            hklout: Path,
+            log_path: Path,
+            keywords: str,
+            *,
+            cwd: Path,
+            timeout: float,
+            xml_output: Path,
+            executable: Path,
+            env: Mapping[str, str],
+            ccp4: bool,
+        ) -> subprocess.CompletedProcess[str]:
+            self._write_capture_success_outputs(
+                xyzin, hklin, xyzout, hklout, log_path
+            )
+            log_path.write_text(current_marker_log, encoding="utf-8")
+            argv = [
+                str(executable),
+                "XYZIN",
+                str(xyzin),
+                "HKLIN",
+                str(hklin),
+                "XYZOUT",
+                str(xyzout),
+                "HKLOUT",
+                str(hklout),
+                "XMLOUT",
+                str(xml_output),
+            ]
+            return subprocess.CompletedProcess(
+                args=argv,
+                returncode=1,
+                stdout=current_marker_log,
+                stderr="nonzero exit despite end marker",
+            )
+
+        with self.assertRaises(onesar_refmac.RefmacCollectorError) as ctx:
+            self._run_with_fake_ccp4(
+                "case_current_banner_end_marker_nonzero", runner
+            )
+        err = ctx.exception
+        self.assertEqual(err.failed_stage, "refmac_returncode")
+        self.assertEqual(err.returncode, 1)
+        assert isinstance(err.diagnostics_payload, Mapping)
+        assert isinstance(err.manifest_payload, Mapping)
+        self.assertEqual(err.diagnostics_payload["invocation"]["returncode"], 1)
+        self.assertIs(
+            err.diagnostics_payload["operation_checks"]["process_returncode_zero"],
+            False,
+        )
+        native_diag = err.diagnostics_payload["native_log_diagnostics"]
+        self.assertEqual(native_diag["reported_suite"], "CCP4 9.0.015")
+        self.assertEqual(native_diag["reported_program"], "Refmac")
+        self.assertEqual(native_diag["reported_version"], "5.8.0431")
+        self.assertIs(
+            native_diag["completion_markers"]["has_end_of_refmac_marker"], True
+        )
+        self.assertEqual(
+            native_diag["completion_markers"]["end_of_refmac_lines"],
+            [{"line": 51, "text": " Refmac:  End of Refmac_5.8.0431   "}],
+        )
+        self._assert_all_scientific_admission_flags_false(err.diagnostics_payload)
+        self._assert_all_scientific_admission_flags_false(err.manifest_payload)
 
 
 if __name__ == "__main__":

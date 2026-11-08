@@ -132,7 +132,7 @@ UNPROVEN_GATE_REASONS: dict[str, str] = {
 }
 
 _LOG_BANNER_RE = re.compile(
-    r"###\s*(CCP4\s+\S+)\s*:\s*(Refmac_\S+)\s+version\s+(\S+)\s*:"
+    r"###\s*(CCP4\s+\S+)\s*:\s*(Refmac(?:_\S+)?)\s+version\s+(\S+)\s*:"
 )
 _LOG_RUN_DATE_RE = re.compile(
     r"Run date:\s*(\d{1,2}/\s*\d{1,2}/\d{4})(?:\s+Run time:\s*(\S+))?"
@@ -142,7 +142,9 @@ _LOG_DATA_NCYC_RE = re.compile(r"^\s*Data line---\s+NCYC\s+(\S+)(?:\s+(.*))?$")
 _LOG_REFINEMENT_CYCLES_RE = re.compile(
     r"^\s*Refinement cycles\s*:\s*(\S+)(?:\s+(.*))?$"
 )
-_LOG_END_OF_REFMAC_RE = re.compile(r"^\s*REFMAC5?\s*:\s*End of Refmac_\S+\s*.*$")
+_LOG_END_OF_REFMAC_RE = re.compile(
+    r"^\s*(?:REFMAC5?|Refmac)\s*:\s*End of Refmac_\S+\s*$"
+)
 _LOG_NORMAL_TERMINATION_RE = re.compile(
     r"^\s*(?:Refmac_\S+:\s*Normal termination|Normal termination)\b.*$",
     re.IGNORECASE,
@@ -8285,6 +8287,8 @@ def _audit_refmac_xyzout(
                     "key": list(key),
                     "xyzin_element": in_rec["element"],
                     "xyzout_element": out_rec["element"],
+                    "xyzin_pdb_atoms_element": in_pa["element"],
+                    "xyzout_pdb_atoms_element": out_pa["element"],
                 }
             )
 
@@ -8390,7 +8394,7 @@ def _audit_refmac_xyzout(
         )
     if element_differences:
         unproven_reasons.append(
-            f"XYZOUT changed element symbol on {len(element_differences)} heavy atom(s)"
+            f"XYZOUT differs in element symbol or element-field representation on {len(element_differences)} heavy atom(s)"
         )
     if coordinate_differences:
         unproven_reasons.append(

@@ -21,14 +21,23 @@ a sanity check against a deposited comparator.
 
 The agent is handed a single model (PDB/mmCIF) and asked to validate its stereochemistry: report
 clashscore, Ramachandran favored/outlier %, rotamer outlier %, Cβ deviations, and bond/angle RMSDs.
-The harness independently re-runs MolProbity on the same model and checks the two agree.
+The harness cross-checks the reported metrics against metric-specific reference producers on the same
+model — standalone `reduce` + `probe` for hydrogen preparation and contact-based clash evidence,
+`gemmi rmsz` for bond/angle restraint deviations, and same-subject wwPDB validation-report comparisons
+where applicable — while recording explicit independent-classifier gaps where no non-`cctbx`
+classifier is available.
 
 ## Dataset — concrete IDs
 
 - **Primary:** PDB `3NIR` (crambin, 0.48 Å) — a clean ultra-high-resolution baseline where outlier
   counts should be near zero, so a spuriously high outlier count exposes a pipeline bug.
-- **Stress model:** any moderate-resolution entry with known outliers, e.g. PDB `1SAR` (1.20 Å,
-  the harness's standing test artifact), to confirm the tools agree on a model that *has* outliers.
+- **Stress model:** any moderate-resolution entry with known outliers, e.g. the deposited reference
+  model `data/pdb_mtz/1sar_deposited.pdb` for PDB `1SAR` (`1.80 Å` per `REMARK 2 RESOLUTION. 1.80 ANGSTROMS.`
+  and `REMARK 3 RESOLUTION RANGE HIGH (ANGSTROMS) : 1.80` at `data/pdb_mtz/1sar_deposited.pdb:30,37`),
+  to confirm the tools agree on a model that *has* outliers. Keep that `1.80 Å` deposited reference
+  distinct from the archived `1SAR` co-scientist trajectory (`ref/research/1sar_rerun_2026_11_06_preregistration.md` §2),
+  whose actual starting model is `archive#data/1sar.pdb` paired with the shared `49.972–2.500 Å` (`2.50 Å`)
+  reflection dataset `data/1sar.mtz`; do not treat `data/pdb_mtz/1sar_deposited.pdb` as the agent starting model.
 
 ## What the agent must do
 
@@ -42,9 +51,14 @@ The harness independently re-runs MolProbity on the same model and checks the tw
 
 ## Independent cross-checks (harness, not agent)
 
-- **MolProbity standalone** — the Richardson-lab `probe` + `reduce` pipeline (installed; see
-  `ref/oracle_tools.md`), or `molprobity.molprobity`. Re-derives clashscore, Ramachandran, rotamer,
-  and Cβ independently of cctbx's own reduce build.
+- **MolProbity standalone (`reduce` + `probe`)** — the Richardson-lab `probe` + `reduce` pipeline
+  (installed; see `ref/oracle_tools.md`). Covers hydrogen preparation (`reduce`) and contact-based
+  clash evidence (`probe`) outside `cctbx`'s own `reduce` build. Those standalone binaries do **not**
+  compute Ramachandran, rotamer, or Cβ-deviation classifications or the MolProbity composite score —
+  that is an explicit independent-classifier gap (`.agents/skills/protstruct-eval/SKILL.md:48-49,572`).
+  A separately installed `molprobity.molprobity` driver or wrapper is not automatically a
+  method-independent oracle. Identify its classifier implementation separately from its reference
+  distributions, including any shared `cctbx` code or Top8000 data.
 - **`gemmi rmsz`** — independent bond/angle restraint deviations against the CCP4 monomer library
   (its `rmsD` fields: bond lengths in Å, bond angles in degrees; `rmsZ` is dimensionless).
   `gemmi validate` does not report geometry RMSDs (`ref/oracle_tools.md`).

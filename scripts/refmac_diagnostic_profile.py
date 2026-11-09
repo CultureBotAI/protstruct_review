@@ -41,8 +41,12 @@ Bounded slices (Tasks 653, 657, 663, 658, 668, 673, 677, 681, 685, 661, 734, 739
   with aligned ``mutation_causes_out`` retention.
 
 Scope note:
-- Collector wiring remains deliberately absent in this slice; no collector
-  imports this module yet.
+- ``scripts/onesar_refmac.py`` imports this module (line 62) for diagnostic-mode
+  preflight environment/profile admission (:func:`reject_conflicting_environment`,
+  :func:`validate_profile` at line 9221) and postflight profile recheck
+  (:func:`recheck_profile` at line 9705); profile validation establishes bounded
+  diagnostic provenance only and does not imply stock-producer equivalence or
+  scientific canary acceptance.
 """
 
 from __future__ import annotations

@@ -59,6 +59,8 @@ if str(_SCRIPTS_DIR) not in sys.path:
 import audit_1sar_retained_evidence  # noqa: E402
 import onesar_refmac_log  # noqa: E402
 import onesar_rerun  # noqa: E402
+import refmac_diagnostic_profile  # noqa: E402
+import refmac_diagnostic_trace  # noqa: E402
 import t03_reflection_retention  # noqa: E402
 import toolchain  # noqa: E402
 
@@ -66,6 +68,20 @@ import toolchain  # noqa: E402
 REPO_ROOT = _SCRIPTS_DIR.parent
 
 COLLECTOR_STAGE = "stage2_invocation_raw_retention_log_parse_and_output_audits"
+DIAGNOSTIC_COLLECTOR_STAGE = "instrumented_native_trace_capture_v1"
+DIAGNOSTIC_ENVELOPE_SCHEMA_VERSION = 2
+DIAGNOSTIC_NATIVE_TRACE_MAX_PATH_LEN = 4096
+
+DIAGNOSTIC_HELPER_ROLE_MAPPING: tuple[tuple[str, str], ...] = (
+    ("audit_1sar_retained_evidence.py", "audit_1sar_retained_evidence_py"),
+    ("onesar_refmac.py", "onesar_refmac_py"),
+    ("onesar_refmac_log.py", "onesar_refmac_log_py"),
+    ("onesar_rerun.py", "onesar_rerun_py"),
+    ("t03_reflection_retention.py", "t03_reflection_retention_py"),
+    ("toolchain.py", "toolchain_py"),
+    ("refmac_diagnostic_profile.py", "refmac_diagnostic_profile_py"),
+    ("refmac_diagnostic_trace.py", "refmac_diagnostic_trace_py"),
+)
 
 REFMAC_KEYWORDS_LINES: tuple[str, ...] = (
     "LABIN FP=F-obs SIGFP=SIGF-obs FREE=R-free-flags",
@@ -2450,7 +2466,10 @@ def _inspect_output_artifact(
     }
 
 
-def _build_helper_source_baseline() -> dict[str, dict[str, Any]]:
+def _build_helper_source_baseline(
+    *,
+    include_diagnostic_helpers: bool = False,
+) -> dict[str, dict[str, Any]]:
     """Hash this collector and its imported repository helper modules."""
     module_candidates = {
         "audit_1sar_retained_evidence_py": Path(
@@ -2462,6 +2481,13 @@ def _build_helper_source_baseline() -> dict[str, dict[str, Any]]:
         "t03_reflection_retention_py": Path(t03_reflection_retention.__file__),
         "toolchain_py": Path(toolchain.__file__),
     }
+    if include_diagnostic_helpers:
+        module_candidates["refmac_diagnostic_profile_py"] = Path(
+            refmac_diagnostic_profile.__file__
+        )
+        module_candidates["refmac_diagnostic_trace_py"] = Path(
+            refmac_diagnostic_trace.__file__
+        )
     baseline: dict[str, dict[str, Any]] = {}
     for label, mod_path in sorted(module_candidates.items()):
         resolved_path = mod_path.resolve(strict=True)
@@ -2473,6 +2499,485 @@ def _build_helper_source_baseline() -> dict[str, dict[str, Any]]:
             "size_bytes": int(size_bytes),
         }
     return baseline
+
+
+def _serialize_requested_diagnostic_pins(
+    diagnostic_profile: refmac_diagnostic_profile.RefmacDiagnosticProfile,
+    *,
+    subject_id: str,
+) -> dict[str, Any]:
+    """Serialize caller-supplied independent manifest and executable pins without parsing files."""
+    return {
+        "profile_id": diagnostic_profile.profile_id,
+        "subject_id": subject_id,
+        "requested": {
+            "manifest": {
+                "path": diagnostic_profile.manifest.path,
+                "sha256": diagnostic_profile.manifest.sha256,
+                "size_bytes": diagnostic_profile.manifest.size_bytes,
+            },
+            "executable": {
+                "path": diagnostic_profile.executable.path,
+                "sha256": diagnostic_profile.executable.sha256,
+                "size_bytes": diagnostic_profile.executable.size_bytes,
+            },
+        },
+    }
+
+
+def _validate_diagnostic_native_trace_path(
+    native_trace_path: Path,
+    *,
+    refmac_dir: Path,
+) -> str:
+    """Validate that the derived native trace path is writer-compatible and inside ``refmac_dir``."""
+    _ensure_no_symlink_components_under_root(native_trace_path, refmac_dir)
+    path_str = str(native_trace_path)
+    if not Path(path_str).is_absolute():
+        raise ValueError(
+            f"Native diagnostic trace path must be absolute: {path_str!r}"
+        )
+    if (
+        not path_str
+        or len(path_str) > DIAGNOSTIC_NATIVE_TRACE_MAX_PATH_LEN
+    ):
+        raise ValueError(
+            f"Native diagnostic trace path length {len(path_str)} exceeds writer bound "
+            f"1..{DIAGNOSTIC_NATIVE_TRACE_MAX_PATH_LEN}: {path_str!r}"
+        )
+    if path_str.endswith(" "):
+        raise ValueError(
+            f"Native diagnostic trace path must not end with a trailing space: {path_str!r}"
+        )
+    if not all(0x20 <= ord(ch) <= 0x7E for ch in path_str):
+        raise ValueError(
+            f"Native diagnostic trace path must contain only printable ASCII characters: {path_str!r}"
+        )
+    return path_str
+
+
+def _verify_diagnostic_collector_helper_role_join(
+    profile_provenance: Mapping[str, Any],
+    helper_source_baseline: Mapping[str, Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Compare the 8 actual imported helper modules against the ordered ``collector_helpers`` role."""
+    roles_obj = profile_provenance.get("roles")
+    files_obj = profile_provenance.get("files")
+    role_ids = (
+        roles_obj.get("collector_helpers")
+        if isinstance(roles_obj, Mapping)
+        else None
+    )
+    entries: list[dict[str, Any]] = []
+    mismatches: list[dict[str, Any]] = []
+
+    if (
+        not isinstance(role_ids, list)
+        or len(role_ids) != len(DIAGNOSTIC_HELPER_ROLE_MAPPING)
+        or not isinstance(files_obj, Mapping)
+    ):
+        mismatch_item = {
+            "index": 0,
+            "expected_module_name": DIAGNOSTIC_HELPER_ROLE_MAPPING[0][0],
+            "helper_baseline_key": DIAGNOSTIC_HELPER_ROLE_MAPPING[0][1],
+            "role_file_id": None,
+            "actual_helper": None,
+            "profile_role_observation": None,
+            "resolved_path_matches": False,
+            "sha256_matches": False,
+            "size_bytes_matches": False,
+            "matches": False,
+            "reason": (
+                f"collector_helpers role must contain exactly "
+                f"{len(DIAGNOSTIC_HELPER_ROLE_MAPPING)} file IDs"
+            ),
+        }
+        return {
+            "verified": False,
+            "expected_count": len(DIAGNOSTIC_HELPER_ROLE_MAPPING),
+            "entries": [],
+            "mismatches": [mismatch_item],
+            "helper_source_baseline": copy.deepcopy(
+                {k: dict(v) for k, v in helper_source_baseline.items()}
+            ),
+            "profile_collector_helpers": [],
+        }
+
+    for index, (expected_module_name, baseline_key) in enumerate(
+        DIAGNOSTIC_HELPER_ROLE_MAPPING
+    ):
+        role_file_id = str(role_ids[index])
+        actual_raw = helper_source_baseline.get(baseline_key)
+        actual_helper: dict[str, Any] | None = (
+            copy.deepcopy(dict(actual_raw))
+            if isinstance(actual_raw, Mapping)
+            else None
+        )
+        profile_raw = files_obj.get(role_file_id)
+        profile_obs: dict[str, Any] | None = (
+            {
+                "file_id": role_file_id,
+                "path": profile_raw.get("path"),
+                "resolved_path": profile_raw.get("resolved_path"),
+                "sha256": profile_raw.get("sha256"),
+                "size_bytes": profile_raw.get("size_bytes"),
+            }
+            if isinstance(profile_raw, Mapping)
+            else None
+        )
+        resolved_path_matches = bool(
+            actual_helper is not None
+            and profile_obs is not None
+            and actual_helper.get("path") == profile_obs.get("resolved_path")
+        )
+        sha256_matches = bool(
+            actual_helper is not None
+            and profile_obs is not None
+            and actual_helper.get("sha256") == profile_obs.get("sha256")
+        )
+        size_bytes_matches = bool(
+            actual_helper is not None
+            and profile_obs is not None
+            and actual_helper.get("size_bytes") == profile_obs.get("size_bytes")
+        )
+        matches = bool(
+            resolved_path_matches and sha256_matches and size_bytes_matches
+        )
+        reason: str | None = None
+        if not matches:
+            diffs: list[str] = []
+            if not resolved_path_matches:
+                diffs.append(
+                    f"resolved_path {actual_helper.get('path') if actual_helper else None!r} "
+                    f"!= {profile_obs.get('resolved_path') if profile_obs else None!r}"
+                )
+            if not sha256_matches:
+                diffs.append(
+                    f"sha256 {actual_helper.get('sha256') if actual_helper else None!r} "
+                    f"!= {profile_obs.get('sha256') if profile_obs else None!r}"
+                )
+            if not size_bytes_matches:
+                diffs.append(
+                    f"size_bytes {actual_helper.get('size_bytes') if actual_helper else None!r} "
+                    f"!= {profile_obs.get('size_bytes') if profile_obs else None!r}"
+                )
+            reason = "; ".join(diffs)
+        entry = {
+            "index": index,
+            "expected_module_name": expected_module_name,
+            "helper_baseline_key": baseline_key,
+            "role_file_id": role_file_id,
+            "actual_helper": actual_helper,
+            "profile_role_observation": profile_obs,
+            "resolved_path_matches": resolved_path_matches,
+            "sha256_matches": sha256_matches,
+            "size_bytes_matches": size_bytes_matches,
+            "matches": matches,
+            "reason": reason,
+        }
+        entries.append(entry)
+        if not matches:
+            mismatches.append(copy.deepcopy(entry))
+
+    return {
+        "verified": len(mismatches) == 0,
+        "expected_count": len(DIAGNOSTIC_HELPER_ROLE_MAPPING),
+        "entries": entries,
+        "mismatches": mismatches,
+        "helper_source_baseline": copy.deepcopy(
+            {k: dict(v) for k, v in helper_source_baseline.items()}
+        ),
+        "profile_collector_helpers": [
+            copy.deepcopy(e["profile_role_observation"]) for e in entries
+        ],
+    }
+
+
+def _build_unvalidated_diagnostic_profile_provenance(
+    diagnostic_profile: refmac_diagnostic_profile.RefmacDiagnosticProfile,
+    *,
+    subject_id: str,
+    requested_profile: Mapping[str, Any],
+    toolchain_record: Mapping[str, Any] | None,
+    evidence_root: Path,
+    failed_check: str | None = None,
+    exc: Exception | None = None,
+) -> dict[str, Any]:
+    """Construct failure provenance when preflight stops before or outside ``validate_profile``."""
+    installed_ref: dict[str, Any] | None = None
+    if isinstance(toolchain_record, Mapping):
+        ref_bin = toolchain_record.get("refmac5_binary")
+        if isinstance(ref_bin, Mapping):
+            installed_ref = {
+                "path": str(
+                    ref_bin.get("resolved_path")
+                    or ref_bin.get("discovered_path")
+                    or ""
+                ),
+                "sha256": str(ref_bin.get("sha256") or ""),
+                "size_bytes": int(ref_bin.get("size_bytes") or 0),
+            }
+    result: dict[str, Any] = {
+        "profile_id": diagnostic_profile.profile_id,
+        "subject_id": subject_id,
+        "requested": copy.deepcopy(requested_profile["requested"]),
+        "profile_files_verified": False,
+        "runtime_image_coverage": "not_assessed",
+        "selected_executable": None,
+        "installed_reference": installed_ref,
+        "installed_record": (
+            copy.deepcopy(dict(toolchain_record))
+            if isinstance(toolchain_record, Mapping)
+            else None
+        ),
+        "evidence_root": str(evidence_root),
+        "manifest": None,
+        "files": {},
+        "roots": {},
+        "roles": {},
+        "expected_environment": {},
+        "requested_absences": [],
+    }
+    if failed_check is not None:
+        result["failed_check"] = failed_check
+    if exc is not None:
+        result["error"] = {
+            "type": type(exc).__name__,
+            "message": str(exc),
+            "errno": getattr(exc, "errno", None),
+        }
+    return result
+
+
+def _build_diagnostic_producer_record(
+    *,
+    requested_profile: Mapping[str, Any],
+    profile_provenance: Mapping[str, Any],
+    toolchain_record: Mapping[str, Any] | None,
+    diagnostic_activation: Mapping[str, str],
+    native_trace_path: Path,
+) -> dict[str, Any]:
+    """Build the separate diagnostic producer record distinct from stock ``toolchain``."""
+    selected_exec = profile_provenance.get("selected_executable")
+    installed_ref = profile_provenance.get("installed_reference")
+    if installed_ref is None and isinstance(toolchain_record, Mapping):
+        ref_bin = toolchain_record.get("refmac5_binary")
+        if isinstance(ref_bin, Mapping):
+            installed_ref = {
+                "path": str(
+                    ref_bin.get("resolved_path")
+                    or ref_bin.get("discovered_path")
+                    or ""
+                ),
+                "sha256": str(ref_bin.get("sha256") or ""),
+                "size_bytes": int(ref_bin.get("size_bytes") or 0),
+            }
+    distinct_from_installed = bool(
+        isinstance(selected_exec, Mapping)
+        and isinstance(installed_ref, Mapping)
+        and selected_exec.get("path") != installed_ref.get("path")
+        and selected_exec.get("sha256") != installed_ref.get("sha256")
+    )
+    return {
+        "profile_id": requested_profile["profile_id"],
+        "subject_id": requested_profile["subject_id"],
+        "requested": copy.deepcopy(requested_profile["requested"]),
+        "profile_files_verified": bool(
+            profile_provenance.get("profile_files_verified", False)
+        ),
+        "helper_role_join_verified": bool(
+            isinstance(
+                profile_provenance.get("collector_helper_role_join"), Mapping
+            )
+            and profile_provenance["collector_helper_role_join"].get(
+                "verified", False
+            )
+        ),
+        "runtime_image_coverage": "not_assessed",
+        "selected_executable": (
+            copy.deepcopy(dict(selected_exec))
+            if isinstance(selected_exec, Mapping)
+            else None
+        ),
+        "installed_reference": (
+            copy.deepcopy(dict(installed_ref))
+            if isinstance(installed_ref, Mapping)
+            else None
+        ),
+        "distinct_from_installed_reference": distinct_from_installed,
+        "activation_environment": copy.deepcopy(dict(diagnostic_activation)),
+        "native_trace_path": str(native_trace_path),
+    }
+
+
+def _build_diagnostic_invocation_fields(
+    *,
+    requested_profile: Mapping[str, Any],
+    profile_provenance: Mapping[str, Any],
+    profile_post_run: Mapping[str, Any] | None,
+    diagnostic_producer: Mapping[str, Any],
+    diagnostic_activation: Mapping[str, str],
+    native_trace_path: Path,
+) -> dict[str, Any]:
+    """Build shared diagnostic invocation metadata for pre- and post-execution invocation records."""
+    return {
+        "diagnostic_profile_id": requested_profile["profile_id"],
+        "diagnostic_requested_pins": copy.deepcopy(
+            requested_profile["requested"]
+        ),
+        "installed_reference_executable": copy.deepcopy(
+            diagnostic_producer.get("installed_reference")
+        ),
+        "selected_diagnostic_executable": copy.deepcopy(
+            diagnostic_producer.get("selected_executable")
+        ),
+        "diagnostic_producer": copy.deepcopy(dict(diagnostic_producer)),
+        "diagnostic_activation_environment": copy.deepcopy(
+            dict(diagnostic_activation)
+        ),
+        "native_trace_path": str(native_trace_path),
+        "diagnostic_profile_baseline": copy.deepcopy(dict(profile_provenance)),
+        "diagnostic_profile_post_run": (
+            copy.deepcopy(dict(profile_post_run))
+            if isinstance(profile_post_run, Mapping)
+            else None
+        ),
+    }
+
+
+def _inspect_retained_native_trace_envelope(
+    native_trace_path: Path,
+    *,
+    trace_info: Mapping[str, Any],
+    caught_exceptions: list[Exception],
+) -> tuple[dict[str, Any], Exception | None]:
+    """Inspect a safely retained native trace file with bounded streaming envelope checks."""
+    raw_observation: dict[str, Any] = copy.deepcopy(dict(trace_info))
+    if (
+        bool(trace_info.get("exists"))
+        and bool(trace_info.get("is_regular_file"))
+        and not bool(trace_info.get("is_symlink"))
+        and bool(trace_info.get("within_refmac_dir"))
+        and trace_info.get("error") is None
+        and isinstance(trace_info.get("size_bytes"), int)
+        and int(trace_info["size_bytes"]) > 0
+        and isinstance(trace_info.get("sha256"), str)
+    ):
+        try:
+            envelope = refmac_diagnostic_trace.inspect_native_trace_envelope(
+                native_trace_path,
+                expected_sha256=str(trace_info["sha256"]),
+                expected_size_bytes=int(trace_info["size_bytes"]),
+            )
+            envelope = dict(envelope)
+            envelope["raw_observation"] = raw_observation
+            envelope["scientific_coverage_proven"] = False
+            if not bool(envelope.get("valid")) or not bool(
+                envelope.get("closed")
+            ):
+                envelope["scientific_coverage_unproven_reason"] = (
+                    "Native diagnostic trace envelope is invalid or unclosed; "
+                    "no scientific coverage is proven."
+                )
+            elif not bool(envelope.get("has_events")):
+                envelope["scientific_coverage_unproven_reason"] = (
+                    "Native diagnostic trace envelope is structurally closed with zero "
+                    "event records (event_count == 0); an empty closed trace proves no "
+                    "scientific coverage."
+                )
+            else:
+                envelope["scientific_coverage_unproven_reason"] = (
+                    "Native diagnostic trace envelope is structurally closed, but envelope "
+                    "closure alone does not audit event semantics or establish scientific "
+                    "coverage or admission."
+                )
+            return envelope, None
+        except Exception as exc:
+            caught_exceptions.append(exc)
+            err_obj = {
+                "code": "envelope_inspection_exception",
+                "message": f"{type(exc).__name__}: {exc}",
+            }
+            return (
+                {
+                    "schema_id": refmac_diagnostic_trace.TRACE_SCHEMA_ID,
+                    "path": str(native_trace_path),
+                    "valid": False,
+                    "closed": False,
+                    "read_complete": False,
+                    "has_events": False,
+                    "event_count": None,
+                    "record_count": None,
+                    "footer_record_count": None,
+                    "expected_sha256": trace_info.get("sha256"),
+                    "observed_sha256": None,
+                    "sha256_match": False,
+                    "expected_size_bytes": trace_info.get("size_bytes"),
+                    "observed_size_bytes": None,
+                    "size_bytes_match": False,
+                    "bytes_read": None,
+                    "partial_sha256": None,
+                    "partial_size_bytes": None,
+                    "raw_observation": raw_observation,
+                    "representation_header": None,
+                    "header": None,
+                    "first_failure": err_obj,
+                    "errors": [dict(err_obj)],
+                    "scientific_coverage_proven": False,
+                    "scientific_coverage_unproven_reason": (
+                        f"Native diagnostic trace envelope inspection raised "
+                        f"{type(exc).__name__}: {exc}"
+                    ),
+                },
+                exc,
+            )
+
+    missing_msg = str(
+        trace_info.get("error")
+        or (
+            "empty_output_file"
+            if bool(trace_info.get("exists"))
+            and trace_info.get("size_bytes") == 0
+            else "missing_output_file"
+        )
+    )
+    failure_obj = {
+        "code": "raw_trace_missing_or_invalid",
+        "message": missing_msg,
+    }
+    return (
+        {
+            "schema_id": refmac_diagnostic_trace.TRACE_SCHEMA_ID,
+            "path": str(native_trace_path),
+            "valid": False,
+            "closed": False,
+            "read_complete": False,
+            "has_events": False,
+            "event_count": 0,
+            "record_count": 0,
+            "footer_record_count": None,
+            "expected_sha256": None,
+            "observed_sha256": None,
+            "sha256_match": False,
+            "expected_size_bytes": None,
+            "observed_size_bytes": None,
+            "size_bytes_match": False,
+            "bytes_read": 0,
+            "partial_sha256": None,
+            "partial_size_bytes": None,
+            "raw_observation": raw_observation,
+            "representation_header": None,
+            "header": None,
+            "first_failure": failure_obj,
+            "errors": [dict(failure_obj)],
+            "scientific_coverage_proven": False,
+            "scientific_coverage_unproven_reason": (
+                f"Native diagnostic trace raw output is missing, empty, or invalid ({missing_msg}); "
+                "no scientific coverage is proven."
+            ),
+        },
+        None,
+    )
 
 
 def _build_staged_input_baseline(staged: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
@@ -8528,6 +9033,7 @@ def run_refmac_rfactor_operation(
     timeout: float = 900.0,
     require_no_protstruct_overrides: bool = True,
     runner: Callable[..., subprocess.CompletedProcess[str]] | None = None,
+    diagnostic_profile: refmac_diagnostic_profile.RefmacDiagnosticProfile | None = None,
 ) -> dict[str, Any]:
     """Stage ``subject_id`` inputs and execute the REFMAC5 ``NCYC 0`` collector and output audits.
 
@@ -8552,6 +9058,32 @@ def run_refmac_rfactor_operation(
     ):
         raise ValueError(f"timeout must be a finite positive number, got {timeout!r}")
     timeout_seconds = float(timeout)
+
+    diagnostic_mode = diagnostic_profile is not None
+    if diagnostic_mode:
+        if (
+            type(diagnostic_profile)
+            is not refmac_diagnostic_profile.RefmacDiagnosticProfile
+            or type(diagnostic_profile.manifest)
+            is not refmac_diagnostic_profile.FilePin
+            or type(diagnostic_profile.executable)
+            is not refmac_diagnostic_profile.FilePin
+        ):
+            raise ValueError(
+                "diagnostic_profile must be a RefmacDiagnosticProfile with FilePin manifest and executable"
+            )
+        if subject_id != refmac_diagnostic_profile.PROFILE_SUBJECT_ID:
+            raise ValueError(
+                f"diagnostic_profile requires subject_id "
+                f"{refmac_diagnostic_profile.PROFILE_SUBJECT_ID!r}, got {subject_id!r}"
+            )
+
+    envelope_schema_version = (
+        DIAGNOSTIC_ENVELOPE_SCHEMA_VERSION if diagnostic_mode else 1
+    )
+    active_collector_stage = (
+        DIAGNOSTIC_COLLECTOR_STAGE if diagnostic_mode else COLLECTOR_STAGE
+    )
 
     if require_no_protstruct_overrides:
         onesar_rerun._verify_no_protstruct_overrides()
@@ -8612,6 +9144,9 @@ def run_refmac_rfactor_operation(
     xyzout_path = refmac_dir / "refmac_xyzout.pdb"
     hklout_path = refmac_dir / "refmac_hklout.mtz"
     xmlout_path = refmac_dir / "refmac_xmlout.xml"
+    native_trace_path: Path | None = (
+        refmac_dir / "refmac_native_trace.jsonl" if diagnostic_mode else None
+    )
     parsed_log_json_path = refmac_dir / "refmac_parsed_log.json"
     xmlout_audit_json_path = refmac_dir / "refmac_xmlout_audit.json"
     hklout_raw_export_json_path = refmac_dir / "refmac_hklout_raw_export.json"
@@ -8621,7 +9156,9 @@ def run_refmac_rfactor_operation(
     manifest_json_path = refmac_dir / "refmac_operation_manifest.json"
 
     staged_input_baseline = _build_staged_input_baseline(staged)
-    helper_source_baseline = _build_helper_source_baseline()
+    helper_source_baseline = _build_helper_source_baseline(
+        include_diagnostic_helpers=diagnostic_mode
+    )
     keywords_baseline = _write_new_regular_file_text(
         keywords_path, REFMAC_KEYWORDS, root=refmac_dir
     )
@@ -8637,17 +9174,164 @@ def run_refmac_rfactor_operation(
     preflight_error: dict[str, Any] | None = None
     preflight_exception: Exception | None = None
 
-    try:
-        toolchain_record, ccp4_env, resolved_refmac_path = (
-            _resolve_ccp4_refmac_toolchain()
+    requested_diagnostic_profile: dict[str, Any] | None = None
+    validated_profile: refmac_diagnostic_profile.ValidatedProfile | None = None
+    diagnostic_profile_baseline_provenance: dict[str, Any] | None = None
+    collector_helper_role_join: dict[str, Any] | None = None
+    diagnostic_activation: dict[str, str] | None = None
+    diagnostic_producer_record: dict[str, Any] | None = None
+
+    if diagnostic_mode:
+        assert diagnostic_profile is not None
+        assert native_trace_path is not None
+        requested_diagnostic_profile = _serialize_requested_diagnostic_pins(
+            diagnostic_profile,
+            subject_id=subject_id,
         )
-    except Exception as exc:
-        preflight_exception = exc
-        preflight_error = {
-            "failed_stage": "resolve_ccp4_refmac_toolchain",
-            "exception_type": type(exc).__name__,
-            "exception_message": str(exc),
+        diagnostic_activation = {
+            "REFMAC_DIAGNOSTIC_TRACE": str(native_trace_path),
+            "DYLD_PRINT_LIBRARIES": "1",
         }
+        current_preflight_stage = "validate_native_trace_path"
+        try:
+            if (
+                type(diagnostic_profile.profile_id) is not str
+                or diagnostic_profile.profile_id
+                != refmac_diagnostic_profile.SUPPORTED_PROFILE_ID
+            ):
+                current_preflight_stage = "validate_diagnostic_profile"
+                raise ValueError(
+                    f"Unsupported diagnostic profile_id: {diagnostic_profile.profile_id!r}"
+                )
+            native_trace_path_str = _validate_diagnostic_native_trace_path(
+                native_trace_path,
+                refmac_dir=refmac_dir,
+            )
+            diagnostic_activation = {
+                "REFMAC_DIAGNOSTIC_TRACE": native_trace_path_str,
+                "DYLD_PRINT_LIBRARIES": "1",
+            }
+            current_preflight_stage = "reject_conflicting_environment"
+            refmac_diagnostic_profile.reject_conflicting_environment(os.environ)
+            current_preflight_stage = "resolve_ccp4_refmac_toolchain"
+            toolchain_record, ccp4_env, _installed_refmac_path = (
+                _resolve_ccp4_refmac_toolchain()
+            )
+            current_preflight_stage = "validate_diagnostic_profile"
+            validated_profile = refmac_diagnostic_profile.validate_profile(
+                diagnostic_profile,
+                toolchain_record,
+                ccp4_env,
+                fresh_root,
+            )
+            diagnostic_profile_baseline_provenance = (
+                validated_profile.to_provenance()
+            )
+            current_preflight_stage = "verify_diagnostic_helper_role_join"
+            collector_helper_role_join = (
+                _verify_diagnostic_collector_helper_role_join(
+                    diagnostic_profile_baseline_provenance,
+                    helper_source_baseline,
+                )
+            )
+            diagnostic_profile_baseline_provenance[
+                "collector_helper_role_join"
+            ] = copy.deepcopy(collector_helper_role_join)
+            if not bool(collector_helper_role_join["verified"]):
+                first_mismatch = collector_helper_role_join["mismatches"][0]
+                raise ValueError(
+                    "Diagnostic collector_helpers role join mismatch at "
+                    f"index {first_mismatch['index']} "
+                    f"({first_mismatch['expected_module_name']} / "
+                    f"{first_mismatch['helper_baseline_key']} vs role file_id "
+                    f"{first_mismatch['role_file_id']}): "
+                    f"{first_mismatch['reason']}"
+                )
+            resolved_refmac_path = Path(
+                validated_profile.selected_executable.path
+            )
+            ccp4_env = dict(ccp4_env)
+            ccp4_env.update(diagnostic_activation)
+        except refmac_diagnostic_profile.ProfileValidationError as exc:
+            validated_profile = None
+            resolved_refmac_path = None
+            preflight_exception = exc
+            diagnostic_profile_baseline_provenance = exc.to_provenance()
+            diagnostic_profile_baseline_provenance[
+                "collector_helper_role_join"
+            ] = copy.deepcopy(collector_helper_role_join)
+            preflight_error = {
+                "failed_stage": current_preflight_stage,
+                "failed_check": exc.failed_check,
+                "exception_type": type(exc).__name__,
+                "exception_message": str(exc),
+                "requested_profile": copy.deepcopy(requested_diagnostic_profile),
+                "diagnostic_profile_provenance": copy.deepcopy(
+                    diagnostic_profile_baseline_provenance
+                ),
+            }
+        except Exception as exc:
+            validated_profile = None
+            resolved_refmac_path = None
+            preflight_exception = exc
+            if diagnostic_profile_baseline_provenance is None:
+                diagnostic_profile_baseline_provenance = (
+                    _build_unvalidated_diagnostic_profile_provenance(
+                        diagnostic_profile,
+                        subject_id=subject_id,
+                        requested_profile=requested_diagnostic_profile,
+                        toolchain_record=toolchain_record,
+                        evidence_root=fresh_root,
+                        failed_check=current_preflight_stage,
+                        exc=exc,
+                    )
+                )
+            else:
+                diagnostic_profile_baseline_provenance = dict(
+                    diagnostic_profile_baseline_provenance
+                )
+                diagnostic_profile_baseline_provenance[
+                    "profile_files_verified"
+                ] = False
+                diagnostic_profile_baseline_provenance[
+                    "selected_executable"
+                ] = None
+                diagnostic_profile_baseline_provenance[
+                    "failed_check"
+                ] = current_preflight_stage
+                diagnostic_profile_baseline_provenance["error"] = {
+                    "type": type(exc).__name__,
+                    "message": str(exc),
+                    "errno": getattr(exc, "errno", None),
+                }
+            diagnostic_profile_baseline_provenance[
+                "collector_helper_role_join"
+            ] = copy.deepcopy(collector_helper_role_join)
+            preflight_error = {
+                "failed_stage": current_preflight_stage,
+                "exception_type": type(exc).__name__,
+                "exception_message": str(exc),
+                "requested_profile": copy.deepcopy(requested_diagnostic_profile),
+                "diagnostic_profile_provenance": copy.deepcopy(
+                    diagnostic_profile_baseline_provenance
+                ),
+            }
+            if collector_helper_role_join is not None:
+                preflight_error["collector_helper_role_join"] = copy.deepcopy(
+                    collector_helper_role_join
+                )
+    else:
+        try:
+            toolchain_record, ccp4_env, resolved_refmac_path = (
+                _resolve_ccp4_refmac_toolchain()
+            )
+        except Exception as exc:
+            preflight_exception = exc
+            preflight_error = {
+                "failed_stage": "resolve_ccp4_refmac_toolchain",
+                "exception_type": type(exc).__name__,
+                "exception_message": str(exc),
+            }
 
     worker_launched = False
     started_at_utc: str | None = None
@@ -8676,13 +9360,31 @@ def run_refmac_rfactor_operation(
             "XMLOUT",
             str(xmlout_path),
         ]
-        for out_candidate in (log_path, xyzout_path, hklout_path, xmlout_path):
+        fresh_output_candidates: tuple[Path, ...] = (
+            (log_path, xyzout_path, hklout_path, xmlout_path, native_trace_path)
+            if native_trace_path is not None
+            else (log_path, xyzout_path, hklout_path, xmlout_path)
+        )
+        for out_candidate in fresh_output_candidates:
             _ensure_no_symlink_components_under_root(out_candidate, refmac_dir)
             try:
                 os.lstat(out_candidate)
             except FileNotFoundError:
                 pass
             else:
+                if diagnostic_mode and diagnostic_profile_baseline_provenance is not None:
+                    validated_profile = None
+                    resolved_refmac_path = None
+                    expected_argv = None
+                    diagnostic_profile_baseline_provenance = dict(
+                        diagnostic_profile_baseline_provenance
+                    )
+                    diagnostic_profile_baseline_provenance[
+                        "selected_executable"
+                    ] = None
+                    diagnostic_profile_baseline_provenance[
+                        "failed_check"
+                    ] = "verify_fresh_output_paths"
                 preflight_error = {
                     "failed_stage": "verify_fresh_output_paths",
                     "exception_type": "FileExistsError",
@@ -8690,12 +9392,73 @@ def run_refmac_rfactor_operation(
                         f"Output path already exists before REFMAC launch: {out_candidate}"
                     ),
                 }
+                if diagnostic_mode and requested_diagnostic_profile is not None:
+                    preflight_error["requested_profile"] = copy.deepcopy(
+                        requested_diagnostic_profile
+                    )
+                    preflight_error["diagnostic_profile_provenance"] = (
+                        copy.deepcopy(diagnostic_profile_baseline_provenance)
+                    )
                 break
 
+    if diagnostic_mode:
+        assert requested_diagnostic_profile is not None
+        assert diagnostic_profile_baseline_provenance is not None
+        assert diagnostic_activation is not None
+        assert native_trace_path is not None
+        diagnostic_producer_record = _build_diagnostic_producer_record(
+            requested_profile=requested_diagnostic_profile,
+            profile_provenance=diagnostic_profile_baseline_provenance,
+            toolchain_record=toolchain_record,
+            diagnostic_activation=diagnostic_activation,
+            native_trace_path=native_trace_path,
+        )
+
+    pre_invocation_record: dict[str, Any] = {
+        "wrapper": "toolchain.run_refmac",
+        "custom_runner_injected": runner is not None,
+        "executable": (
+            str(resolved_refmac_path)
+            if resolved_refmac_path is not None
+            else None
+        ),
+        "expected_argv": expected_argv,
+        "cwd": str(refmac_dir),
+        "stdin_keywords": REFMAC_KEYWORDS,
+        "stdin_keywords_lines": list(REFMAC_KEYWORDS_LINES),
+        "stdin_keywords_sha256": keywords_baseline["sha256"],
+        "keywords_file_path": str(keywords_path),
+        "xyzin_path": str(original_pdb_path),
+        "hklin_path": str(projected_mtz_path),
+        "xyzout_path": str(xyzout_path),
+        "hklout_path": str(hklout_path),
+        "xmlout_path": str(xmlout_path),
+        "log_path": str(log_path),
+        "ccp4_flag_passed_to_run_refmac": False,
+        "explicit_env_passed": ccp4_env is not None,
+        "timeout_seconds": timeout_seconds,
+    }
+    if diagnostic_mode:
+        assert requested_diagnostic_profile is not None
+        assert diagnostic_profile_baseline_provenance is not None
+        assert diagnostic_producer_record is not None
+        assert diagnostic_activation is not None
+        assert native_trace_path is not None
+        pre_invocation_record.update(
+            _build_diagnostic_invocation_fields(
+                requested_profile=requested_diagnostic_profile,
+                profile_provenance=diagnostic_profile_baseline_provenance,
+                profile_post_run=None,
+                diagnostic_producer=diagnostic_producer_record,
+                diagnostic_activation=diagnostic_activation,
+                native_trace_path=native_trace_path,
+            )
+        )
+
     pre_execution_checkpoint_payload: dict[str, Any] = {
-        "schema_version": 1,
+        "schema_version": envelope_schema_version,
         "checkpoint_stage": "pre_execution",
-        "collector_stage": COLLECTOR_STAGE,
+        "collector_stage": active_collector_stage,
         "status": (
             "pre_execution_checkpointed"
             if preflight_error is None
@@ -8728,31 +9491,18 @@ def run_refmac_rfactor_operation(
         "keywords_file_baseline": copy.deepcopy(keywords_baseline),
         "toolchain": toolchain_record,
         "preflight_error": preflight_error,
-        "invocation": {
-            "wrapper": "toolchain.run_refmac",
-            "custom_runner_injected": runner is not None,
-            "executable": (
-                str(resolved_refmac_path)
-                if resolved_refmac_path is not None
-                else None
-            ),
-            "expected_argv": expected_argv,
-            "cwd": str(refmac_dir),
-            "stdin_keywords": REFMAC_KEYWORDS,
-            "stdin_keywords_lines": list(REFMAC_KEYWORDS_LINES),
-            "stdin_keywords_sha256": keywords_baseline["sha256"],
-            "keywords_file_path": str(keywords_path),
-            "xyzin_path": str(original_pdb_path),
-            "hklin_path": str(projected_mtz_path),
-            "xyzout_path": str(xyzout_path),
-            "hklout_path": str(hklout_path),
-            "xmlout_path": str(xmlout_path),
-            "log_path": str(log_path),
-            "ccp4_flag_passed_to_run_refmac": False,
-            "explicit_env_passed": ccp4_env is not None,
-            "timeout_seconds": timeout_seconds,
-        },
+        "invocation": pre_invocation_record,
     }
+    if diagnostic_mode:
+        pre_execution_checkpoint_payload["diagnostic_profile"] = copy.deepcopy(
+            diagnostic_profile_baseline_provenance
+        )
+        pre_execution_checkpoint_payload["diagnostic_producer"] = copy.deepcopy(
+            diagnostic_producer_record
+        )
+        pre_execution_checkpoint_payload[
+            "diagnostic_activation_environment"
+        ] = copy.deepcopy(diagnostic_activation)
     pre_execution_checkpoint_initial_artifact = _persist_collector_json_with_fallback(
         pre_execution_checkpoint_payload,
         pre_execution_checkpoint_json_path,
@@ -8884,6 +9634,7 @@ def run_refmac_rfactor_operation(
     pre_checkpoint_cause: Exception | None = (
         pre_checkpoint_causes[0] if pre_checkpoint_causes else None
     )
+
     immutability_report["refmac_directory_baseline"] = copy.deepcopy(
         refmac_dir_baseline
     )
@@ -8910,6 +9661,8 @@ def run_refmac_rfactor_operation(
         "hklout": hklout_path,
         "xmlout": xmlout_path,
     }
+    if native_trace_path is not None:
+        raw_output_paths["native_trace"] = native_trace_path
     raw_outputs: dict[str, dict[str, Any]] = {}
     per_raw_output_causes: dict[str, Exception | None] = {}
     for key, path in raw_output_paths.items():
@@ -8942,15 +9695,93 @@ def run_refmac_rfactor_operation(
         additional_file_causes_out=additional_file_causes,
     )
 
+    diagnostic_profile_post_run: dict[str, Any] | None = None
+    if diagnostic_mode:
+        assert diagnostic_profile is not None
+        if validated_profile is not None:
+            profile_causes: list[Exception | None] = []
+            try:
+                diagnostic_profile_post_run = (
+                    refmac_diagnostic_profile.recheck_profile(
+                        validated_profile,
+                        mutation_causes_out=profile_causes,
+                    )
+                )
+            except Exception as exc:
+                caught_inspection_exceptions.append(exc)
+                diagnostic_profile_post_run = {
+                    "profile_id": diagnostic_profile.profile_id,
+                    "verified": False,
+                    "runtime_image_coverage": "not_assessed",
+                    "manifest": None,
+                    "files": {},
+                    "roots": {},
+                    "mutations": [
+                        {
+                            "category": "diagnostic_profile_recheck",
+                            "key": "profile:recheck",
+                            "path": diagnostic_profile.manifest.path,
+                            "reason": (
+                                f"Diagnostic profile postflight recheck raised "
+                                f"{type(exc).__name__}: {exc}"
+                            ),
+                            "expected": None,
+                            "observed": None,
+                            "error": {
+                                "type": type(exc).__name__,
+                                "message": str(exc),
+                                "errno": getattr(exc, "errno", None),
+                            },
+                        }
+                    ],
+                    "errors": [
+                        {
+                            "key": "profile:recheck",
+                            "type": type(exc).__name__,
+                            "message": str(exc),
+                            "errno": getattr(exc, "errno", None),
+                        }
+                    ],
+                }
+                profile_causes = [exc]
+            else:
+                for p_cause in profile_causes:
+                    if isinstance(p_cause, Exception):
+                        caught_inspection_exceptions.append(p_cause)
+            immutability_report["diagnostic_profile"] = diagnostic_profile_post_run
+            immutability_report["mutations"].extend(
+                diagnostic_profile_post_run["mutations"]
+            )
+            immutability_mutation_causes.extend(profile_causes)
+            immutability_report["verified"] = bool(
+                immutability_report["verified"]
+                and diagnostic_profile_post_run["verified"]
+            )
+        else:
+            immutability_report["diagnostic_profile"] = None
+
     pre_execution_checkpoint_recovery_artifact: dict[str, Any] | None = None
     if not pre_execution_checkpoint_verified:
         recovery_target_path = (
             refmac_dir
             / f"refmac_pre_execution_checkpoint.parent_recovery.{os.getpid()}.json"
         )
+        recovery_checkpoint_payload: dict[str, Any] = copy.deepcopy(
+            pre_execution_checkpoint_payload
+        )
+        if diagnostic_mode:
+            recovery_checkpoint_payload["diagnostic_profile_post_run"] = (
+                copy.deepcopy(diagnostic_profile_post_run)
+            )
+            if isinstance(recovery_checkpoint_payload.get("invocation"), Mapping):
+                recovery_inv = dict(recovery_checkpoint_payload["invocation"])
+                recovery_inv["diagnostic_profile_post_run"] = copy.deepcopy(
+                    diagnostic_profile_post_run
+                )
+                recovery_checkpoint_payload["invocation"] = recovery_inv
         pre_execution_checkpoint_recovery_artifact = (
             _persist_collector_json_with_fallback(
-                pre_execution_checkpoint_payload,
+                recovery_checkpoint_payload,
                 recovery_target_path,
                 root=refmac_dir,
                 parent_retention_dir=parent_retention_dir,
@@ -9047,7 +9878,12 @@ def run_refmac_rfactor_operation(
                 additional_file_causes.get(reserved_path.name)
             )
 
-    for key in REQUIRED_RAW_OUTPUT_KEYS:
+    required_raw_output_keys: tuple[str, ...] = (
+        (*REQUIRED_RAW_OUTPUT_KEYS, "native_trace")
+        if diagnostic_mode
+        else REQUIRED_RAW_OUTPUT_KEYS
+    )
+    for key in required_raw_output_keys:
         info = raw_outputs[key]
         if (
             not info["exists"]
@@ -9079,6 +9915,46 @@ def run_refmac_rfactor_operation(
                 raw_item["errno"] = info.get("errno")
             missing_or_invalid_outputs.append(raw_item)
             missing_or_invalid_output_causes.append(per_raw_output_causes.get(key))
+
+    native_trace_envelope: dict[str, Any] | None = None
+    if diagnostic_mode:
+        assert native_trace_path is not None
+        trace_raw_info = raw_outputs["native_trace"]
+        native_trace_envelope, trace_env_exc = (
+            _inspect_retained_native_trace_envelope(
+                native_trace_path,
+                trace_info=trace_raw_info,
+                caught_exceptions=caught_inspection_exceptions,
+            )
+        )
+        if not any(
+            item.get("output_key") == "native_trace"
+            for item in missing_or_invalid_outputs
+        ) and not bool(native_trace_envelope.get("valid", False)):
+            first_trace_err = native_trace_envelope.get("first_failure")
+            trace_err_detail = (
+                f"{first_trace_err.get('code')}: {first_trace_err.get('message')}"
+                if isinstance(first_trace_err, Mapping)
+                else "invalid_or_unclosed_native_trace_envelope"
+            )
+            trace_invalid_item: dict[str, Any] = {
+                "output_key": "native_trace",
+                "path": trace_raw_info["path"],
+                "exists": trace_raw_info["exists"],
+                "is_symlink": trace_raw_info["is_symlink"],
+                "is_regular_file": trace_raw_info["is_regular_file"],
+                "within_refmac_dir": trace_raw_info["within_refmac_dir"],
+                "size_bytes": trace_raw_info["size_bytes"],
+                "sha256": trace_raw_info["sha256"],
+                "error": f"invalid_native_trace_envelope ({trace_err_detail})",
+                "first_failure": copy.deepcopy(first_trace_err),
+            }
+            if trace_env_exc is not None:
+                trace_invalid_item["exception_type"] = type(trace_env_exc).__name__
+                trace_invalid_item["exception_message"] = str(trace_env_exc)
+                trace_invalid_item["errno"] = getattr(trace_env_exc, "errno", None)
+            missing_or_invalid_outputs.append(trace_invalid_item)
+            missing_or_invalid_output_causes.append(trace_env_exc)
 
     xml_info = raw_outputs["xmlout"]
     if (
@@ -9208,6 +10084,22 @@ def run_refmac_rfactor_operation(
         "timed_out": timed_out,
         "launch_or_timeout_failure": launch_or_timeout_failure,
     }
+    if diagnostic_mode:
+        assert requested_diagnostic_profile is not None
+        assert diagnostic_profile_baseline_provenance is not None
+        assert diagnostic_producer_record is not None
+        assert diagnostic_activation is not None
+        assert native_trace_path is not None
+        invocation_record.update(
+            _build_diagnostic_invocation_fields(
+                requested_profile=requested_diagnostic_profile,
+                profile_provenance=diagnostic_profile_baseline_provenance,
+                profile_post_run=diagnostic_profile_post_run,
+                diagnostic_producer=diagnostic_producer_record,
+                diagnostic_activation=diagnostic_activation,
+                native_trace_path=native_trace_path,
+            )
+        )
 
     for pre_art_key, pre_art_obj in (
         ("pre_execution_checkpoint_json", pre_execution_checkpoint_initial_artifact),
@@ -9535,47 +10427,108 @@ def run_refmac_rfactor_operation(
             "input_immutability_verified": bool(immutability_report["verified"]),
             "collector_succeeded": False if has_failures else None,
         }
+        if diagnostic_mode:
+            updated["operation_checks"].update(
+                {
+                    "diagnostic_profile_files_verified": bool(
+                        diagnostic_profile_baseline_provenance.get(
+                            "profile_files_verified", False
+                        )
+                    )
+                    if diagnostic_profile_baseline_provenance is not None
+                    else False,
+                    "diagnostic_profile_post_run_verified": bool(
+                        diagnostic_profile_post_run.get("verified", False)
+                    )
+                    if diagnostic_profile_post_run is not None
+                    else False,
+                    "diagnostic_helper_role_join_verified": bool(
+                        collector_helper_role_join.get("verified", False)
+                    )
+                    if collector_helper_role_join is not None
+                    else False,
+                    "native_trace_envelope_valid": bool(
+                        native_trace_envelope.get("valid", False)
+                    )
+                    if native_trace_envelope is not None
+                    else False,
+                    "native_trace_envelope_closed": bool(
+                        native_trace_envelope.get("closed", False)
+                    )
+                    if native_trace_envelope is not None
+                    else False,
+                    "native_trace_has_events": bool(
+                        native_trace_envelope.get("has_events", False)
+                    )
+                    if native_trace_envelope is not None
+                    else False,
+                    "native_trace_event_count": (
+                        int(native_trace_envelope["event_count"])
+                        if native_trace_envelope is not None
+                        and isinstance(native_trace_envelope.get("event_count"), int)
+                        else None
+                    ),
+                    "native_trace_scientific_coverage_proven": False,
+                }
+            )
         updated["scientific_admission_proven"] = False
         return updated
 
+    post_execution_checkpoint_base: dict[str, Any] = {
+        "schema_version": envelope_schema_version,
+        "checkpoint_stage": "post_execution",
+        "collector_stage": active_collector_stage,
+        "status": "post_execution_checkpointed",
+        "recorded_at_utc": _utc_timestamp_iso(),
+        "subject_id": subject_id,
+        "evidence_root": str(fresh_root),
+        "inputs_dir": str(inputs_dir),
+        "refmac_dir": str(refmac_dir),
+        "parent_retention_dir": str(parent_retention_dir),
+        "refmac_directory_baseline": copy.deepcopy(refmac_dir_baseline),
+        "parent_retention_directory_baseline": copy.deepcopy(
+            parent_retention_dir_baseline
+        ),
+        "subject": admission_record["subject"],
+        "mtz": admission_record["mtz"],
+        "staged_files": admission_record["staged_files"],
+        "staged_inputs_baseline": copy.deepcopy(staged_input_baseline),
+        "helper_sources": copy.deepcopy(helper_source_baseline),
+        "helper_sources_baseline": copy.deepcopy(helper_source_baseline),
+        "keywords_file_baseline": copy.deepcopy(keywords_baseline),
+        "toolchain": toolchain_record,
+        "preflight_error": preflight_error,
+        "pre_execution_checkpoint_json": pre_execution_checkpoint_artifact,
+        "pre_execution_checkpoint_initial_json": pre_execution_checkpoint_initial_artifact,
+        "pre_execution_checkpoint_post_run": pre_checkpoint_post_run,
+        "pre_execution_checkpoint_recovery_json": pre_execution_checkpoint_recovery_artifact,
+        "pre_execution_checkpoint_verified": pre_execution_checkpoint_verified,
+        "invocation": invocation_record,
+        "raw_outputs": raw_outputs,
+        "additional_refmac_dir_files": dir_scan["additional_files"],
+        "unexpected_symlinks": dir_scan["unexpected_symlinks"],
+        "inspection_errors": dir_scan["inspection_errors"],
+        "missing_or_invalid_outputs": list(missing_or_invalid_outputs),
+        "input_immutability": immutability_report,
+    }
+    if diagnostic_mode:
+        post_execution_checkpoint_base["diagnostic_profile"] = copy.deepcopy(
+            diagnostic_profile_baseline_provenance
+        )
+        post_execution_checkpoint_base["diagnostic_profile_post_run"] = copy.deepcopy(
+            diagnostic_profile_post_run
+        )
+        post_execution_checkpoint_base["diagnostic_producer"] = copy.deepcopy(
+            diagnostic_producer_record
+        )
+        post_execution_checkpoint_base["diagnostic_activation_environment"] = (
+            copy.deepcopy(diagnostic_activation)
+        )
+        post_execution_checkpoint_base["native_trace_envelope"] = copy.deepcopy(
+            native_trace_envelope
+        )
     post_execution_checkpoint_payload: dict[str, Any] = _populate_post_checkpoint_status_fields(
-        {
-            "schema_version": 1,
-            "checkpoint_stage": "post_execution",
-            "collector_stage": COLLECTOR_STAGE,
-            "status": "post_execution_checkpointed",
-            "recorded_at_utc": _utc_timestamp_iso(),
-            "subject_id": subject_id,
-            "evidence_root": str(fresh_root),
-            "inputs_dir": str(inputs_dir),
-            "refmac_dir": str(refmac_dir),
-            "parent_retention_dir": str(parent_retention_dir),
-            "refmac_directory_baseline": copy.deepcopy(refmac_dir_baseline),
-            "parent_retention_directory_baseline": copy.deepcopy(
-                parent_retention_dir_baseline
-            ),
-            "subject": admission_record["subject"],
-            "mtz": admission_record["mtz"],
-            "staged_files": admission_record["staged_files"],
-            "staged_inputs_baseline": copy.deepcopy(staged_input_baseline),
-            "helper_sources": copy.deepcopy(helper_source_baseline),
-            "helper_sources_baseline": copy.deepcopy(helper_source_baseline),
-            "keywords_file_baseline": copy.deepcopy(keywords_baseline),
-            "toolchain": toolchain_record,
-            "preflight_error": preflight_error,
-            "pre_execution_checkpoint_json": pre_execution_checkpoint_artifact,
-            "pre_execution_checkpoint_initial_json": pre_execution_checkpoint_initial_artifact,
-            "pre_execution_checkpoint_post_run": pre_checkpoint_post_run,
-            "pre_execution_checkpoint_recovery_json": pre_execution_checkpoint_recovery_artifact,
-            "pre_execution_checkpoint_verified": pre_execution_checkpoint_verified,
-            "invocation": invocation_record,
-            "raw_outputs": raw_outputs,
-            "additional_refmac_dir_files": dir_scan["additional_files"],
-            "unexpected_symlinks": dir_scan["unexpected_symlinks"],
-            "inspection_errors": dir_scan["inspection_errors"],
-            "missing_or_invalid_outputs": list(missing_or_invalid_outputs),
-            "input_immutability": immutability_report,
-        }
+        post_execution_checkpoint_base
     )
     post_execution_checkpoint_artifact = _persist_collector_json_with_fallback(
         post_execution_checkpoint_payload,
@@ -10113,10 +11066,14 @@ def run_refmac_rfactor_operation(
         base_failure_causes["audit_refmac_xyzout"] = xyzout_audit_exception
     if not input_immutability_verified:
         immutability_primary_cause: Exception | None = (
-            immutability_mutation_causes[0]
-            if len(immutability_report["mutations"]) == 1
-            and len(immutability_mutation_causes) == 1
-            else None
+            next((c for c in immutability_mutation_causes if c is not None), None)
+            if diagnostic_mode
+            else (
+                immutability_mutation_causes[0]
+                if len(immutability_report["mutations"]) == 1
+                and len(immutability_mutation_causes) == 1
+                else None
+            )
         )
         base_failures.append(
             {
@@ -10139,6 +11096,8 @@ def run_refmac_rfactor_operation(
         "hklout_mtz_audit": hklout_audit,
         "xyzout_pdb_audit": xyzout_audit,
     }
+    if diagnostic_mode:
+        audits_bundle["native_trace_envelope"] = native_trace_envelope
 
     def _select_cause_for_stage(stage_name: str | None) -> Exception | None:
         if stage_name is None:
@@ -10611,35 +11570,41 @@ def run_refmac_rfactor_operation(
             proof_name="model_preservation_proven",
         )
 
-        preregistered_gates: dict[str, Any] = {
-            "gate_1_immutable_input_and_toolchain_admission": {
-                "proven": bool(
-                    preflight_error is None
-                    and process_returncode_zero
-                    and bool(ncyc_zero_check["passed"])
-                    and input_immutability_verified
-                    and pre_execution_checkpoint_verified
-                    and refmac_dir_identity_verified
-                    and refmac_dir_writable_post_run
-                    and parent_retention_dir_identity_verified
-                    and parent_retention_dir_writable_post_run
+        operational_gate1_checks_passed = bool(
+            preflight_error is None
+            and process_returncode_zero
+            and bool(ncyc_zero_check["passed"])
+            and input_immutability_verified
+            and pre_execution_checkpoint_verified
+            and refmac_dir_identity_verified
+            and refmac_dir_writable_post_run
+            and parent_retention_dir_identity_verified
+            and parent_retention_dir_writable_post_run
+        )
+        if diagnostic_mode:
+            gate_1_record: dict[str, Any] = {
+                "proven": False,
+                "operational_immutability_and_profile_checks_verified": (
+                    operational_gate1_checks_passed
                 ),
                 "reason": (
+                    "Diagnostic capture executed separate instrumented producer binary rather than stock installed CCP4 refmac5; distinct diagnostic producer is not admitted for Gate 1 scientific toolchain admission despite verified profile files and input immutability."
+                    if operational_gate1_checks_passed
+                    else "Diagnostic capture executed separate instrumented producer binary (not admitted for Gate 1 scientific toolchain admission) and preflight, returncode, NCYC 0, or input/profile/checkpoint/directory immutability check failed."
+                ),
+            }
+        else:
+            gate_1_record = {
+                "proven": operational_gate1_checks_passed,
+                "reason": (
                     None
-                    if (
-                        preflight_error is None
-                        and process_returncode_zero
-                        and bool(ncyc_zero_check["passed"])
-                        and input_immutability_verified
-                        and pre_execution_checkpoint_verified
-                        and refmac_dir_identity_verified
-                        and refmac_dir_writable_post_run
-                        and parent_retention_dir_identity_verified
-                        and parent_retention_dir_writable_post_run
-                    )
+                    if operational_gate1_checks_passed
                     else "Preflight, returncode, NCYC 0, or input/checkpoint/directory immutability check failed"
                 ),
-            },
+            }
+
+        preregistered_gates: dict[str, Any] = {
+            "gate_1_immutable_input_and_toolchain_admission": gate_1_record,
             "gate_2_native_log_extraction_and_internal_reconciliation": {
                 "proven": bool(
                     native_r_pair_parsed
@@ -10736,6 +11701,50 @@ def run_refmac_rfactor_operation(
             "stage2_audits_succeeded": stage2_audits_succeeded,
             "collector_succeeded": collector_succeeded,
         }
+        if diagnostic_mode:
+            operation_checks.update(
+                {
+                    "diagnostic_profile_files_verified": bool(
+                        diagnostic_profile_baseline_provenance.get(
+                            "profile_files_verified", False
+                        )
+                    )
+                    if diagnostic_profile_baseline_provenance is not None
+                    else False,
+                    "diagnostic_profile_post_run_verified": bool(
+                        diagnostic_profile_post_run.get("verified", False)
+                    )
+                    if diagnostic_profile_post_run is not None
+                    else False,
+                    "diagnostic_helper_role_join_verified": bool(
+                        collector_helper_role_join.get("verified", False)
+                    )
+                    if collector_helper_role_join is not None
+                    else False,
+                    "native_trace_envelope_valid": bool(
+                        native_trace_envelope.get("valid", False)
+                    )
+                    if native_trace_envelope is not None
+                    else False,
+                    "native_trace_envelope_closed": bool(
+                        native_trace_envelope.get("closed", False)
+                    )
+                    if native_trace_envelope is not None
+                    else False,
+                    "native_trace_has_events": bool(
+                        native_trace_envelope.get("has_events", False)
+                    )
+                    if native_trace_envelope is not None
+                    else False,
+                    "native_trace_event_count": (
+                        int(native_trace_envelope["event_count"])
+                        if native_trace_envelope is not None
+                        and isinstance(native_trace_envelope.get("event_count"), int)
+                        else None
+                    ),
+                    "native_trace_scientific_coverage_proven": False,
+                }
+            )
 
         return {
             "status": operation_status,
@@ -10847,9 +11856,9 @@ def run_refmac_rfactor_operation(
             selected_destination,
         )
         outcome = _derive_final_collection_outcome()
-        return {
-            "schema_version": 1,
-            "collector_stage": COLLECTOR_STAGE,
+        diagnostics_payload: dict[str, Any] = {
+            "schema_version": envelope_schema_version,
+            "collector_stage": active_collector_stage,
             "status": outcome["status"],
             "failed_stage": outcome["failed_stage"],
             "failures": outcome["failures"],
@@ -10941,6 +11950,24 @@ def run_refmac_rfactor_operation(
             "canary_admission_eligible": False,
             "scientific_admission_proven": False,
         }
+        if diagnostic_mode:
+            diagnostics_payload["diagnostic_profile"] = copy.deepcopy(
+                diagnostic_profile_baseline_provenance
+            )
+            diagnostics_payload["diagnostic_profile_post_run"] = copy.deepcopy(
+                diagnostic_profile_post_run
+            )
+            diagnostics_payload["diagnostic_producer"] = copy.deepcopy(
+                diagnostic_producer_record
+            )
+            diagnostics_payload["diagnostic_activation_environment"] = copy.deepcopy(
+                diagnostic_activation
+            )
+            diagnostics_payload["native_trace_envelope"] = copy.deepcopy(
+                native_trace_envelope
+            )
+            diagnostics_payload["batch_execution_eligible"] = False
+        return diagnostics_payload
 
     def _build_manifest_payload(
         selected_destination: Path | None,
@@ -10956,9 +11983,88 @@ def run_refmac_rfactor_operation(
             if outcome["publication_terminal_failure"] is not None
             else diagnostics_artifact
         )
-        return {
-            "schema_version": 1,
-            "collector_stage": COLLECTOR_STAGE,
+        paths_payload: dict[str, Any] = {
+            "original_pdb_path": str(original_pdb_path),
+            "original_mtz_path": str(original_mtz_path),
+            "projected_mtz_path": str(projected_mtz_path),
+            "input_ledger_path": str(input_ledger_path),
+            "admission_json_path": str(admission_json_path),
+            "keywords_path": str(keywords_path),
+            "parent_retention_dir": str(parent_retention_dir),
+            "intended_parent_retention_dir": str(parent_retention_dir),
+            "actual_parent_retention_anchor_dir": outcome[
+                "actual_parent_retention_anchor_dir"
+            ],
+            "pre_execution_checkpoint_json_path": (
+                str(pre_execution_checkpoint_artifact["path"])
+                if isinstance(pre_execution_checkpoint_artifact.get("path"), str)
+                else None
+            ),
+            "pre_execution_checkpoint_initial_json_path": str(
+                pre_execution_checkpoint_initial_artifact["path"]
+            ),
+            "pre_execution_checkpoint_recovery_json_path": (
+                str(pre_execution_checkpoint_recovery_artifact["path"])
+                if pre_execution_checkpoint_recovery_artifact is not None
+                and isinstance(
+                    pre_execution_checkpoint_recovery_artifact.get("path"), str
+                )
+                else None
+            ),
+            "post_execution_checkpoint_json_path": (
+                str(post_execution_checkpoint_artifact["path"])
+                if isinstance(post_execution_checkpoint_artifact.get("path"), str)
+                else None
+            ),
+            "log_path": str(log_path),
+            "xyzout_path": str(xyzout_path),
+            "hklout_path": str(hklout_path),
+            "xmlout_path": str(xmlout_path),
+            "parsed_log_json_path": (
+                str(parsed_log_artifact["path"])
+                if parsed_log_artifact is not None
+                and isinstance(parsed_log_artifact.get("path"), str)
+                else None
+            ),
+            "xmlout_audit_json_path": (
+                str(xmlout_audit_artifact["path"])
+                if isinstance(xmlout_audit_artifact.get("path"), str)
+                else None
+            ),
+            "hklout_raw_export_json_path": (
+                str(hklout_raw_export_artifact["path"])
+                if isinstance(hklout_raw_export_artifact.get("path"), str)
+                else None
+            ),
+            "hklout_audit_json_path": (
+                str(hklout_audit_artifact["path"])
+                if isinstance(hklout_audit_artifact.get("path"), str)
+                else None
+            ),
+            "xyzout_audit_json_path": (
+                str(xyzout_audit_artifact["path"])
+                if isinstance(xyzout_audit_artifact.get("path"), str)
+                else None
+            ),
+            "diagnostics_json_path": (
+                str(current_diag_artifact["path"])
+                if isinstance(current_diag_artifact, Mapping)
+                and isinstance(current_diag_artifact.get("path"), str)
+                else None
+            ),
+            "manifest_json_path": (
+                str(selected_destination)
+                if selected_destination is not None
+                and outcome["publication_terminal_failure"] is None
+                else None
+            ),
+        }
+        if diagnostic_mode:
+            paths_payload["native_trace_path"] = str(native_trace_path)
+
+        manifest_payload: dict[str, Any] = {
+            "schema_version": envelope_schema_version,
+            "collector_stage": active_collector_stage,
             "status": outcome["status"],
             "failed_stage": outcome["failed_stage"],
             "failures": outcome["failures"],
@@ -11009,82 +12115,7 @@ def run_refmac_rfactor_operation(
             "helper_sources": helper_source_baseline,
             "toolchain": toolchain_record,
             "invocation": invocation_record,
-            "paths": {
-                "original_pdb_path": str(original_pdb_path),
-                "original_mtz_path": str(original_mtz_path),
-                "projected_mtz_path": str(projected_mtz_path),
-                "input_ledger_path": str(input_ledger_path),
-                "admission_json_path": str(admission_json_path),
-                "keywords_path": str(keywords_path),
-                "parent_retention_dir": str(parent_retention_dir),
-                "intended_parent_retention_dir": str(parent_retention_dir),
-                "actual_parent_retention_anchor_dir": outcome[
-                    "actual_parent_retention_anchor_dir"
-                ],
-                "pre_execution_checkpoint_json_path": (
-                    str(pre_execution_checkpoint_artifact["path"])
-                    if isinstance(pre_execution_checkpoint_artifact.get("path"), str)
-                    else None
-                ),
-                "pre_execution_checkpoint_initial_json_path": str(
-                    pre_execution_checkpoint_initial_artifact["path"]
-                ),
-                "pre_execution_checkpoint_recovery_json_path": (
-                    str(pre_execution_checkpoint_recovery_artifact["path"])
-                    if pre_execution_checkpoint_recovery_artifact is not None
-                    and isinstance(
-                        pre_execution_checkpoint_recovery_artifact.get("path"), str
-                    )
-                    else None
-                ),
-                "post_execution_checkpoint_json_path": (
-                    str(post_execution_checkpoint_artifact["path"])
-                    if isinstance(post_execution_checkpoint_artifact.get("path"), str)
-                    else None
-                ),
-                "log_path": str(log_path),
-                "xyzout_path": str(xyzout_path),
-                "hklout_path": str(hklout_path),
-                "xmlout_path": str(xmlout_path),
-                "parsed_log_json_path": (
-                    str(parsed_log_artifact["path"])
-                    if parsed_log_artifact is not None
-                    and isinstance(parsed_log_artifact.get("path"), str)
-                    else None
-                ),
-                "xmlout_audit_json_path": (
-                    str(xmlout_audit_artifact["path"])
-                    if isinstance(xmlout_audit_artifact.get("path"), str)
-                    else None
-                ),
-                "hklout_raw_export_json_path": (
-                    str(hklout_raw_export_artifact["path"])
-                    if isinstance(hklout_raw_export_artifact.get("path"), str)
-                    else None
-                ),
-                "hklout_audit_json_path": (
-                    str(hklout_audit_artifact["path"])
-                    if isinstance(hklout_audit_artifact.get("path"), str)
-                    else None
-                ),
-                "xyzout_audit_json_path": (
-                    str(xyzout_audit_artifact["path"])
-                    if isinstance(xyzout_audit_artifact.get("path"), str)
-                    else None
-                ),
-                "diagnostics_json_path": (
-                    str(current_diag_artifact["path"])
-                    if isinstance(current_diag_artifact, Mapping)
-                    and isinstance(current_diag_artifact.get("path"), str)
-                    else None
-                ),
-                "manifest_json_path": (
-                    str(selected_destination)
-                    if selected_destination is not None
-                    and outcome["publication_terminal_failure"] is None
-                    else None
-                ),
-            },
+            "paths": paths_payload,
             "raw_outputs": raw_outputs,
             "additional_refmac_dir_files": dir_scan["additional_files"],
             "unexpected_symlinks": dir_scan["unexpected_symlinks"],
@@ -11136,6 +12167,24 @@ def run_refmac_rfactor_operation(
             "canary_admission_eligible": False,
             "scientific_admission_proven": False,
         }
+        if diagnostic_mode:
+            manifest_payload["diagnostic_profile"] = copy.deepcopy(
+                diagnostic_profile_baseline_provenance
+            )
+            manifest_payload["diagnostic_profile_post_run"] = copy.deepcopy(
+                diagnostic_profile_post_run
+            )
+            manifest_payload["diagnostic_producer"] = copy.deepcopy(
+                diagnostic_producer_record
+            )
+            manifest_payload["diagnostic_activation_environment"] = copy.deepcopy(
+                diagnostic_activation
+            )
+            manifest_payload["native_trace_envelope"] = copy.deepcopy(
+                native_trace_envelope
+            )
+            manifest_payload["batch_execution_eligible"] = False
+        return manifest_payload
 
     def _verify_saved_snapshot_on_disk(
         artifact_record: Mapping[str, Any] | None,

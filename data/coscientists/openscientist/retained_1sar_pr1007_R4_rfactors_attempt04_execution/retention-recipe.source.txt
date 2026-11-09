@@ -1,0 +1,56 @@
+"""PRIMARY retain byte-identical execution and offline-analysis evidence; no cleanup."""
+from pathlib import Path
+from datetime import datetime,timezone
+import hashlib,json,shutil,subprocess
+E=Path(__file__).resolve().parent;W=E.parents[2].parent/'protstruct_review-wt-078'
+BASE=W/'data/coscientists/openscientist';RAW=BASE/'retained_1sar_pr1007_R4_rfactors_attempt04';EX=BASE/'retained_1sar_pr1007_R4_rfactors_attempt04_execution';AN=BASE/'retained_1sar_pr1007_R4_rfactors_attempt04_analysis'
+assert not EX.exists() and not AN.exists()
+head=subprocess.check_output(['git','-C',str(W),'rev-parse','HEAD'],text=True).strip();assert head=='75c0442c51a1bd679a54bc268334b8378af3a5dd'
+def pin(p):
+ p=Path(p);assert p.is_file() and not p.is_symlink();h=hashlib.sha256()
+ with p.open('rb') as f:
+  for b in iter(lambda:f.read(1048576),b''):h.update(b)
+ return {'path':str(p),'resolved_path':str(p.resolve()),'sha256':h.hexdigest(),'size_bytes':p.stat().st_size}
+raw_inv=json.loads((E/'attempt04-raw790-inventory.json').read_text())
+for x in raw_inv['files']:
+ y=pin(x['path']);assert all(y[k]==x[k] for k in ['sha256','size_bytes'])
+assert {str(p) for p in RAW.rglob('*') if p.is_file() or p.is_symlink()}=={x['path'] for x in raw_inv['files']}
+assert json.loads((E/'attempt04-observations795-01/result.json').read_text())['mismatches']=={}
+EX.mkdir();AN.mkdir();plans={EX:[],AN:[]}
+def add(root,source,dest,role):plans[root].append((Path(source),root/dest,role))
+for p in sorted((E/'attempt04-launch-01').iterdir()):add(EX,p,'launch/'+p.name,'single-use launch receipt')
+for src,dst in [('attempt04-console790.stdout.log','launch/console.stdout.log'),('attempt04-console790.stderr.log','launch/console.stderr.log'),('attempt04-request790.json','request.json'),('attempt04-request790.pin.json','request-pin.json'),('launch-attempt04.py','launcher.source.txt'),('preservation790-prelaunch.json','preservation/prelaunch.json'),('preservation790-postlaunch.json','preservation/postlaunch.json'),('check-preservation788.py','preservation/recipe.source.txt'),('preservation-task781.json','preservation/baseline781.json'),('attempt04-raw790-inventory.json','raw-inventory.json')]:add(EX,E/src,dst,'bound execution/preservation evidence')
+for p in sorted((E/'full-qc788-01').iterdir()):
+ if p.is_file():add(EX,p,'qc/full/'+p.name,'final pre-launch full gate')
+for label,dirname in [('red','collector788-alias-red01'),('green','collector788-alias-green01')]:
+ for p in sorted((E/dirname).iterdir()):
+  if p.is_file():add(EX,p,'qc/alias-'+label+'/'+(p.name.replace('.py','.source.txt') if p.suffix=='.py' else p.name),'synthetic symlink-parent regression; '+label)
+ add(EX,E/dirname/'scripts/test_onesar_refmac_diagnostic.py','qc/alias-'+label+'/test.source.txt','exact test snapshot')
+for p in sorted((E/'attempt04-reparse793-01').iterdir()):add(AN,p,'reparse/'+p.name,'existing reader offline envelope reparse')
+add(AN,E/'reparse-attempt04-793.py','reparse/recipe.source.txt','reparse execution recipe')
+add(AN,W/'scripts/refmac_diagnostic_trace.py','reparse/reader.source.txt','exact existing reader source')
+for label,dirname,number in [('current','attempt04-observations795-01','795'),('superseded794','attempt04-observations794-01','794')]:
+ for p in sorted((E/dirname).iterdir()):add(AN,p,label+'/'+p.name,'bounded observations' if label=='current' else 'superseded analytical recipe error; not native mismatch')
+ add(AN,E/('observe-attempt04-'+number+'.py'),label+'/recipe.source.txt','analytical recipe')
+ for stream in ['stdout','stderr']:add(AN,E/('observations'+number+'.'+stream+'.log'),label+'/'+stream+'.log','analytical execution stream')
+add(AN,E/'binary32-diagnostic-model.py','binary32-model.source.txt','preregistered exact RN-even mathematical model')
+add(AN,E/'raw-side-effects797.json','raw-side-effects.json','PRIMARY independent binary/fixed-width verification')
+add(AN,E/'check-attempt04-raw797.py','raw-side-effects.source.txt','raw verification recipe')
+add(EX,Path(__file__),'retention-recipe.source.txt','this finite byte-copy recipe')
+records={}
+for root,plan in plans.items():
+ dests=set();rows=[]
+ for src,dst,role in plan:
+  assert dst not in dests;dests.add(dst);before=pin(src);dst.parent.mkdir(parents=True,exist_ok=True)
+  with src.open('rb') as f,dst.open('xb') as g:shutil.copyfileobj(f,g)
+  after=pin(src);copied=pin(dst);assert before==after and all(before[k]==copied[k] for k in ['sha256','size_bytes'])
+  rows.append({'source':before,'retained_path':str(dst.relative_to(W)),'sha256':copied['sha256'],'size_bytes':copied['size_bytes'],'role':role,'byte_identical':True})
+ assert {p for p in root.rglob('*') if p.is_file() or p.is_symlink()}==dests
+ records[root]=rows
+for root,rows in records.items():
+ index={'schema_id':'retained_attempt04_diagnostic_evidence_index_v1','created_at':datetime.now(timezone.utc).isoformat(),'execution_code_commit':head,'raw_root':str(RAW.relative_to(W)),'raw_files':[{'path':str(Path(x['path']).relative_to(W)),'sha256':x['sha256'],'size_bytes':x['size_bytes']} for x in raw_inv['files']],'files':rows,'build_evidence_index':'data/coscientists/openscientist/retained_evidence_2026-11-08_refmac-diagnostic-build633/index.json','build_evidence_index_sha256':'da109f1edd0259b41dd8ebf3e2cdd6050c155034981346aae8093b54a442d2bf','raw_files_preserved':True,'native_execution_count':1,'native_returncode':0,'collector_returned':False,'scientific_admission':False,'batch_eligible':False,'limits':['Original absolute receipt paths and timestamps are preserved; this index maps byte-identical copies, not executable path relocation.','Installed/vendor/build binaries, SDK, libraries and Python environments remain local-only dependencies identified by the committed build/profile evidence.','No coordination task, report, LOG or issue snapshot is included.','superseded794 retains the analytical dict-versus-integer flag-comparison error and is not a native discrepancy; current795 decodes captured reals first.','Selected current checks establish only bounded consistency under the declared model, not complete scientific coverage, runtime FP mode, print association or admission.']}
+ with (root/'index.json').open('x') as f:json.dump(index,f,indent=2);f.write('\n')
+for x in raw_inv['files']:
+ y=pin(x['path']);assert all(y[k]==x[k] for k in ['sha256','size_bytes'])
+result={'at':datetime.now(timezone.utc).isoformat(),'recipe':pin(Path(__file__)),'raw_count':len(raw_inv['files']),'raw_bytes':raw_inv['total_bytes'],'bundles':[{'root':str(root),'copy_count':len(rows),'copy_bytes':sum(x['size_bytes'] for x in rows),'index':pin(root/'index.json')} for root,rows in records.items()],'originals_preserved':True,'native_runs_performed_by_this_recipe':0}
+(E/'retention798-result.json').write_text(json.dumps(result,indent=2)+'\n');print(json.dumps(result))

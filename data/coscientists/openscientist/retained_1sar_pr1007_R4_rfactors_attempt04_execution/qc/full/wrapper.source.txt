@@ -1,0 +1,7 @@
+#!/bin/bash
+set -euo pipefail
+slides_repo_root="$1"
+slides_absent_tools=/private/tmp/protstruct_slides_external_tools_intentionally_absent_20261105
+test ! -e "$slides_absent_tools"
+cd "$slides_repo_root"
+exec /usr/bin/env PATH="$slides_repo_root/.venv/bin:/usr/bin:/bin:/usr/sbin:/sbin" PYTHON="$slides_repo_root/.venv/bin/python" BASH_ENV=/dev/null PROTSTRUCT_PHENIX_BIN="$slides_absent_tools/phenix_bin" PROTSTRUCT_CCP4_SETUP="$slides_absent_tools/ccp4.setup-sh" PROTSTRUCT_TMALIGN="$slides_absent_tools/TMalign" PROTSTRUCT_DSSP="$slides_absent_tools/mkdssp" PROTSTRUCT_GEMMI="$slides_absent_tools/gemmi" PROTSTRUCT_PROBE="$slides_absent_tools/probe" PROTSTRUCT_REDUCE="$slides_absent_tools/reduce" PROTSTRUCT_REDUCE_HET_DICT="$slides_absent_tools/reduce_wwPDB_het_dict.txt" /Users/marcin/.local/bin/uv run --locked --offline --extra benchmark -- /bin/bash --noprofile --norc scripts/validate.sh

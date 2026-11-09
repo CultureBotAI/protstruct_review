@@ -1,0 +1,332 @@
+"""PRIMARY one-shot orchestration for the authorized diagnostic Attempt4.
+
+Not a generic runner. No retry, version/control call, paired PHENIX leg or
+scientific admission. This script must be reviewed and pinned before use.
+Importing it does not import a producer or execute anything.
+"""
+import argparse
+from datetime import datetime, timezone
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import stat
+import subprocess
+import sys
+
+E = Path(__file__).resolve().parent
+REPO = E.parents[2]
+WT = REPO.parent / 'protstruct_review-wt-078'
+ROOT = WT / 'data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt04'
+CLAIM = E / 'attempt04-launch-01'
+PROFILE_ID = 'refmac_5_8_0431_instrumented_attempt4_v1'
+BRANCH = 'analysis/1sar-rerun-2026-11-06'
+FIXED_PATH = '/usr/bin:/bin:/usr/sbin:/sbin'
+DENIED = {'BASH_ENV', 'ENV', 'REFMAC_DIAGNOSTIC_TRACE', 'SFOUT', 'FCFOUT'}
+GIT_REDIRECTION = {'GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR',
+                   'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+                   'GIT_CONFIG', 'GIT_CONFIG_COUNT', 'GIT_CONFIG_PARAMETERS',
+                   'GIT_CONFIG_SYSTEM', 'GIT_CONFIG_GLOBAL', 'GIT_NAMESPACE',
+                   'GIT_REPLACE_REF_BASE', 'GIT_SHALLOW_FILE', 'GIT_CEILING_DIRECTORIES',
+                   'GIT_DISCOVERY_ACROSS_FILESYSTEM'}
+
+def now():
+    return datetime.now(timezone.utc).isoformat()
+
+def digest(path):
+    h = hashlib.sha256()
+    with Path(path).open('rb') as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b''):
+            h.update(chunk)
+    return h.hexdigest()
+
+def pin(path):
+    p = Path(path)
+    resolved = p.resolve(strict=True)
+    st = resolved.stat()
+    if not stat.S_ISREG(st.st_mode):
+        raise ValueError('Not a regular pinned file: ' + str(p))
+    return {'path': str(p), 'sha256': digest(p), 'size_bytes': st.st_size,
+            'resolved_path': str(resolved)}
+
+def strict_pairs(pairs):
+    result = {}
+    for k, v in pairs:
+        if k in result:
+            raise ValueError('Duplicate JSON key: ' + k)
+        result[k] = v
+    return result
+
+def reject_constant(token):
+    raise ValueError('Nonstandard JSON constant: ' + token)
+
+def parse_json(raw):
+    return json.loads(raw, object_pairs_hook=strict_pairs, parse_constant=reject_constant)
+
+def checked_pin(row):
+    if (type(row) is not dict or set(row) != {'path', 'sha256', 'size_bytes'} or
+        type(row['path']) is not str or not Path(row['path']).is_absolute() or
+        type(row['sha256']) is not str or not re.fullmatch('[0-9a-f]{64}', row['sha256']) or
+        type(row['size_bytes']) is not int or row['size_bytes'] < 0):
+        raise ValueError('Malformed independently supplied file pin')
+    actual = pin(row['path'])
+    if any(actual[k] != row[k] for k in row):
+        raise ValueError('File pin mismatch: ' + row['path'])
+    return actual
+
+def join_execution_roles(validated, observed):
+    """Bind actual request consumers to the admitted profile's explicit roles.
+
+    File-content equality alone cannot substitute another launcher or Python
+    installation. Preserve the declared lexical spelling as well as its target.
+    The validated object returns a detached snapshot, never mutable authority.
+    """
+    provenance = validated.to_provenance()
+    if provenance.get('profile_files_verified') is not True:
+        raise ValueError('Execution role join requires an admitted profile')
+    joins = {}
+    for request_name, role_name in (
+        ('launcher', 'launcher'), ('interpreter', 'collection_interpreter')
+    ):
+        ids = provenance['roles'][role_name]
+        if type(ids) is not list or len(ids) != 1 or type(ids[0]) is not str:
+            raise ValueError('Execution role must identify exactly one file: ' + role_name)
+        profile_file = provenance['files'][ids[0]]
+        actual = observed[request_name]
+        keys = ('path', 'resolved_path', 'sha256', 'size_bytes')
+        expected = {key: profile_file[key] for key in keys}
+        request_file = {key: actual[key] for key in keys}
+        if request_file != expected:
+            raise ValueError('Execution role mismatch: ' + role_name)
+        joins[request_name] = {'role': role_name, 'file_id': ids[0],
+                               'request_observation': request_file,
+                               'profile_observation': expected, 'matches': True}
+    return joins
+
+def write_new(path, payload):
+    raw = (json.dumps(payload, indent=2, allow_nan=False) + '\n').encode()
+    with Path(path).open('xb') as f:
+        f.write(raw)
+        f.flush()
+        os.fsync(f.fileno())
+    return pin(path)
+
+def git(*args):
+    # Fixed read-only selection; ambient repository/index/config variables never
+    # enter this subprocess. isolate_environment rejects redirects before entry.
+    env = {'PATH': FIXED_PATH, 'HOME': os.environ['HOME'], 'LC_ALL': 'C',
+           'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': '/dev/null',
+           'GIT_OPTIONAL_LOCKS': '0', 'GIT_NO_LAZY_FETCH': '1', 'GIT_ALLOW_PROTOCOL': ''}
+    argv = ['/usr/bin/git', '--no-optional-locks', '-c', 'core.fsmonitor=false', '-C', str(WT), *args]
+    return subprocess.check_output(argv, text=True, env=env).strip()
+
+def read_git_state(*, include_status=False):
+    state = {'head': git('rev-parse', 'HEAD'), 'branch': git('branch', '--show-current'),
+             'worktree': git('rev-parse', '--show-toplevel')}
+    if include_status:
+        state['status'] = git('status', '--porcelain=v1')
+    return state
+
+def validate_reviewed_git_state(expected_head):
+    state = read_git_state(include_status=True)
+    if state['head'] != expected_head or state['branch'] != BRANCH or state['worktree'] != str(WT):
+        raise ValueError('Reviewed worktree/branch/head mismatch')
+    if state['status']:
+        raise ValueError('Worktree must be clean before the one native attempt')
+    return state
+
+def observe_git_postflight(*, include_status=False):
+    """Retain each obtainable identity; generated run files make status inappropriate."""
+    if include_status:
+        raise ValueError('Postflight observes identity, not generated-file cleanliness')
+    state = {}
+    errors = {}
+    for field, argv in [('head', ('rev-parse', 'HEAD')),
+                        ('branch', ('branch', '--show-current')),
+                        ('worktree', ('rev-parse', '--show-toplevel'))]:
+        try:
+            state[field] = git(*argv)
+        except Exception as exc:
+            state[field] = None
+            errors[field] = {'type': type(exc).__name__, 'message': str(exc),
+                             'errno': getattr(exc, 'errno', None)}
+    if errors:
+        state['errors'] = errors
+    return state
+
+def safe_fresh_paths():
+    for p in (ROOT, CLAIM):
+        if p.exists() or p.is_symlink():
+            raise FileExistsError('Single-attempt destination already exists: ' + str(p))
+        if '..' in p.parts or any(q.is_symlink() for q in p.parents):
+            raise ValueError('Unsafe destination ancestry: ' + str(p))
+        if not p.parent.is_dir():
+            raise FileNotFoundError('Destination parent missing: ' + str(p.parent))
+
+def isolate_environment(observation):
+    """Explicit child-only isolation of the one previously observed R/rJava value."""
+    expected = observation['removed_for_next_isolated_child']
+    if type(expected) is not dict or set(expected) != {'LD_LIBRARY_PATH'}:
+        raise ValueError('Unknown isolation observation')
+    inherited = dict(os.environ)
+    removed = {}
+    if 'LD_LIBRARY_PATH' in inherited:
+        if inherited['LD_LIBRARY_PATH'] != expected['LD_LIBRARY_PATH']:
+            raise ValueError('Unexpected LD_LIBRARY_PATH; no silent sanitization')
+        removed['LD_LIBRARY_PATH'] = inherited.pop('LD_LIBRARY_PATH')
+    forbidden = sorted(k for k in inherited if k in DENIED or k in GIT_REDIRECTION or
+                       k.startswith(('LD_', 'DYLD_', 'GIT_CONFIG_KEY_', 'GIT_CONFIG_VALUE_')))
+    if forbidden:
+        raise ValueError('Conflicting environment keys: ' + ', '.join(forbidden))
+    record = {'removed': removed, 'old_PATH': inherited.get('PATH'), 'PATH': FIXED_PATH,
+              'scope': 'this launcher child process only; configured installations unchanged'}
+    inherited['PATH'] = FIXED_PATH
+    inherited['PYTHONDONTWRITEBYTECODE'] = '1'
+    os.environ.clear()
+    os.environ.update(inherited)
+    sys.dont_write_bytecode = True
+    return record
+
+def run_claimed_once(start, collector, profile, *, claim=CLAIM, root=ROOT, git_observer=observe_git_postflight):
+    """One call with terminal evidence. Injected callable/paths are for pure tests only."""
+    claim.mkdir(exist_ok=False)
+    write_new(claim / 'started.json', start)
+    terminal = {'contract': 'primary_instrumented_attempt04_terminal_v1',
+                'started_at': start['started_at'], 'collector_call_count': 0,
+                'collector_returned': False, 'scientific_admission_established': False}
+    error = None
+    stage = 'collector_call'
+    try:
+        terminal['collector_call_count'] = 1
+        result = collector(root, subject_id='R4', repo_root=WT, timeout=900.0,
+                           require_no_protstruct_overrides=True, runner=None,
+                           diagnostic_profile=profile)
+        terminal['collector_returned'] = True
+        stage = 'persist_collector_result'
+        terminal['result'] = write_new(claim / 'collector-result.json', result)
+    except BaseException as exc:
+        error = exc
+        terminal['error'] = {'type': type(exc).__name__, 'message': str(exc),
+                             'launcher_stage': stage,
+                             'failed_stage': getattr(exc, 'failed_stage', None),
+                             'returncode': getattr(exc, 'returncode', None)}
+        if stage == 'persist_collector_result':
+            terminal['collector_result_retention_error'] = terminal['error'].copy()
+            terminal['unpersisted_collector_result'] = result
+        for name in ('manifest_payload', 'diagnostics_payload'):
+            payload = getattr(exc, name, None)
+            if payload is not None:
+                try:
+                    terminal[name] = write_new(claim / (name + '.json'), payload)
+                except Exception as retention_error:
+                    terminal[name + '_retention_error'] = {
+                        'type': type(retention_error).__name__, 'message': str(retention_error)}
+    finally:
+        terminal['finished_at'] = now()
+        observations = []
+        for before in start['launch_file_pins']:
+            try:
+                after = pin(before['path'])
+                observations.append({'before': before, 'after': after, 'unchanged': before == after})
+            except Exception as exc:
+                observations.append({'before': before, 'unchanged': False,
+                                     'error': {'type': type(exc).__name__, 'message': str(exc)}})
+        terminal['launch_file_postflight'] = observations
+        terminal['launch_files_unchanged'] = all(x['unchanged'] for x in observations)
+        baseline = {k: start['git_preclaim'][k] for k in ('head', 'branch', 'worktree')}
+        try:
+            git_after = git_observer(include_status=False)
+            terminal['git_postflight'] = {'before': baseline, 'after': git_after,
+                                         'unchanged': baseline == git_after}
+        except Exception as exc:
+            terminal['git_postflight'] = {'before': baseline, 'unchanged': False,
+                                         'error': {'type': type(exc).__name__, 'message': str(exc)}}
+        try:
+            write_new(claim / 'terminal.json', terminal)
+        except Exception as retention_error:
+            if error is not None:
+                raise error from retention_error
+            raise
+    if error is not None:
+        raise error
+    if not terminal['launch_files_unchanged']:
+        raise RuntimeError('Launch file identity changed; no retry')
+    if not terminal['git_postflight']['unchanged']:
+        raise RuntimeError('Launch Git state changed or unobservable; no retry')
+    return terminal
+
+def main():
+    if sys.flags.optimize:
+        raise RuntimeError('Unoptimized Python required')
+    if os.environ.get('TMUX_PANE') != '%0':
+        raise RuntimeError('This launch belongs to the PRIMARY tmux pane')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--request', type=Path, required=True)
+    parser.add_argument('--request-sha256', required=True)
+    parser.add_argument('--request-size-bytes', type=int, required=True)
+    a = parser.parse_args()
+    request_pin = checked_pin({'path': str(a.request.absolute()), 'sha256': a.request_sha256,
+                               'size_bytes': a.request_size_bytes})
+    raw = a.request.read_bytes()
+    if hashlib.sha256(raw).hexdigest() != request_pin['sha256'] or len(raw) != request_pin['size_bytes']:
+        raise ValueError('Request changed before parsing')
+    request = parse_json(raw)
+    pin_names = ('manifest', 'executable', 'launcher', 'interpreter', 'isolation_observation', 'preregistration')
+    if set(request) != {'contract', 'git_head', *pin_names}:
+        raise ValueError('Unexpected request fields')
+    if request['contract'] != 'primary_instrumented_attempt04_request_v1':
+        raise ValueError('Unsupported request contract')
+    if type(request['git_head']) is not str or not re.fullmatch('[0-9a-f]{40}', request['git_head']):
+        raise ValueError('Full reviewed Git head required')
+    observed = {name: checked_pin(request[name]) for name in pin_names}
+    if Path(observed['launcher']['path']).resolve() != Path(__file__).resolve():
+        raise ValueError('Wrong launcher identity')
+    if Path(observed['interpreter']['path']).resolve() != Path(sys.executable).resolve():
+        raise ValueError('Wrong interpreter identity')
+    prereg = WT / 'ref/research/1sar_rerun_2026_11_08_instrumented_attempt04_preregistration.md'
+    if Path(observed['preregistration']['path']) != prereg:
+        raise ValueError('Wrong prospective preregistration file')
+    safe_fresh_paths()
+    iso_path = E / 'runtime-configuration-preflight-01.json'
+    if Path(observed['isolation_observation']['path']) != iso_path:
+        raise ValueError('Unexpected isolation evidence')
+    iso_raw = iso_path.read_bytes()
+    if (hashlib.sha256(iso_raw).hexdigest() != observed['isolation_observation']['sha256'] or
+        len(iso_raw) != observed['isolation_observation']['size_bytes']):
+        raise ValueError('Isolation observation changed before parsing')
+    environment = isolate_environment(parse_json(iso_raw))
+    git_initial = validate_reviewed_git_state(request['git_head'])
+    sys.path.insert(0, str(WT / 'scripts'))
+    import refmac_diagnostic_profile as dp
+    import onesar_refmac
+    import onesar_rerun
+    dp.reject_conflicting_environment(os.environ)
+    onesar_rerun._verify_no_protstruct_overrides()
+    profile = dp.RefmacDiagnosticProfile(PROFILE_ID, dp.FilePin(**request['manifest']), dp.FilePin(**request['executable']))
+    installed, ccp4_env, _ = onesar_refmac._resolve_ccp4_refmac_toolchain()
+    validated = dp.validate_profile(profile, installed, ccp4_env, ROOT)
+    execution_role_joins = join_execution_roles(validated, observed)
+    safe_fresh_paths()
+    for name in pin_names:
+        if checked_pin(request[name]) != observed[name]:
+            raise ValueError('Launch pin changed during preflight: ' + name)
+    if pin(request_pin['path']) != request_pin:
+        raise ValueError('Request changed during preflight')
+    git_preclaim = validate_reviewed_git_state(request['git_head'])
+    start = {'contract': 'primary_instrumented_attempt04_start_v1', 'started_at': now(),
+             'request': request, 'request_pin': request_pin, 'profile_id': PROFILE_ID,
+             'subject_id': 'R4', 'evidence_root': str(ROOT), 'launch_receipt_root': str(CLAIM),
+             'launch_file_pins': [request_pin, *observed.values(), pin('/usr/bin/git')],
+             'git_initial': git_initial, 'git_preclaim': git_preclaim,
+             'environment_isolation': environment, 'installed_reference': installed,
+             'profile_preflight_files_verified': True,
+             'execution_role_joins': execution_role_joins,
+             'hydrogen_defaults': 'MAKE HYDR All / HOUT No; riding hydrogens contribute to structure factors; output PDB is hydrogen-free',
+             'native_refmac_started_at_receipt_creation': False}
+    result = run_claimed_once(start, onesar_refmac.run_refmac_rfactor_operation, profile)
+    print(json.dumps({'collector_returned': result['collector_returned'],
+                      'scientific_admission_established': False, 'receipt': str(CLAIM / 'terminal.json')}))
+
+if __name__ == '__main__':
+    main()

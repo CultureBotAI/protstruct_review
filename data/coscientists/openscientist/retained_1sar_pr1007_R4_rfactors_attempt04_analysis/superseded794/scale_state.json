@@ -1,0 +1,104 @@
+[
+  {
+    "line": 29095,
+    "record": {
+      "sequence": 29094,
+      "event": "lsq_coef_begin",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L0",
+      "call_id": 1,
+      "NREF": 7248,
+      "NOBS": 7248,
+      "NPART": 1,
+      "NDENS": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "IMODE": 0,
+      "N_REFINED_ATOMS": 1641,
+      "NREF_PARS": 6564,
+      "NSMULT": 1,
+      "IFACTOR_CC": 1,
+      "LREFIN": false,
+      "REFS": "MLKF",
+      "FREER_FLAG": true,
+      "LEXPUSE": true,
+      "DataSource": "XR",
+      "PHASE_FLAG": false,
+      "MIR_FLAG": false,
+      "SCALE_LS_OVER": {
+        "bits_hex": "3F800035",
+        "decimal": "100000631809234619140625E-23"
+      },
+      "B_LS_OVER": {
+        "bits_hex": "40770829",
+        "decimal": "38598730564117431640625E-22"
+      },
+      "B_LS_OVER_FLAG": true,
+      "B_LS_OVER_REFINE_FLAG": true,
+      "B_LS_ANISO_OVER_FLAG": true,
+      "B_LS_ANISO_OVER_REFINE_FLAG": true,
+      "BULK_LS_FLAG": false,
+      "SCALE_LS_BULK_REFINE_FLAG": true,
+      "B_LS_BULK_REFINE_FLAG": true,
+      "LFreeRexcludeVal": 1,
+      "B_LS_ANISO_OVER_1": {
+        "bits_hex": "BF41EC08",
+        "decimal": "-757507801055908203125000E-24"
+      },
+      "B_LS_ANISO_OVER_2": {
+        "bits_hex": "3F3E37B3",
+        "decimal": "743037402629852294921875E-24"
+      },
+      "B_LS_ANISO_OVER_3": {
+        "bits_hex": "3C6D1468",
+        "decimal": "14470197260379791259765625000E-30"
+      },
+      "B_LS_ANISO_OVER_4": {
+        "bits_hex": "A51A322E",
+        "decimal": "-1337437230445958453659005549241101107327267527580261230468750E-76"
+      },
+      "B_LS_ANISO_OVER_5": {
+        "bits_hex": "24DFABA8",
+        "decimal": "9700163078441123749862118330611338024027645587921142578125000E-77"
+      },
+      "B_LS_ANISO_OVER_6": {
+        "bits_hex": "0E2F5CB1",
+        "decimal": "216150446658581008506694971958179806359290730440069795703639243811267078854143619537353515625E-122"
+      },
+      "RCELL_1": {
+        "bits_hex": "3C7C762A",
+        "decimal": "15409031882882118225097656250E-30"
+      },
+      "RCELL_2": {
+        "bits_hex": "3C512F60",
+        "decimal": "12767642736434936523437500000E-30"
+      },
+      "RCELL_3": {
+        "bits_hex": "3CD32D74",
+        "decimal": "2577850967645645141601562500E-29"
+      }
+    }
+  },
+  {
+    "line": 29096,
+    "record": {
+      "sequence": 29095,
+      "event": "lsq_coef_part_scale",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L0",
+      "call_id": 1,
+      "NPART": 1,
+      "part_index": 1,
+      "SCALE_LS_PART": {
+        "bits_hex": "3EB40CFA",
+        "decimal": "3516615033149719238281250E-25"
+      },
+      "B_LS_PART": {
+        "bits_hex": "41F44E11",
+        "decimal": "305381183624267578125E-19"
+      },
+      "SCALE_LS_PART_REFINE_FLAG": true,
+      "B_LS_PART_REFINE_FLAG": true
+    }
+  }
+]

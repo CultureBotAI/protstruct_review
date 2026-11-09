@@ -1,0 +1,163 @@
+{
+  "contract": "primary_instrumented_attempt04_terminal_v1",
+  "started_at": "2026-11-09T09:05:44.058027+00:00",
+  "collector_call_count": 1,
+  "collector_returned": false,
+  "scientific_admission_established": false,
+  "error": {
+    "type": "RefmacCollectorError",
+    "message": "REFMAC5 collector failed at audit_refmac_hklout (ValueError): HKLOUT observation columns ('F-obs', 'SIGF-obs', 'R-free-flags') span multiple dataset IDs: ['0', '1']; HKLOUT dropped or invalidated 11 eligible observation(s)",
+    "launcher_stage": "collector_call",
+    "failed_stage": "audit_refmac_hklout",
+    "returncode": 0
+  },
+  "manifest_payload": {
+    "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/attempt04-launch-01/manifest_payload.json",
+    "sha256": "1e7ddc9b5afbb20e70c8fa4ad23b57b3273dbeb9c9d726aa583d91171def3059",
+    "size_bytes": 79791657,
+    "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/attempt04-launch-01/manifest_payload.json"
+  },
+  "diagnostics_payload": {
+    "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/attempt04-launch-01/diagnostics_payload.json",
+    "sha256": "3b23da8a50c2170e7707370322d6ef563ed241289c0d2151cfa78aa0908394f2",
+    "size_bytes": 79652730,
+    "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/attempt04-launch-01/diagnostics_payload.json"
+  },
+  "finished_at": "2026-11-09T09:06:06.422259+00:00",
+  "launch_file_postflight": [
+    {
+      "before": {
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/attempt04-request790.json",
+        "sha256": "5d10db6421626aad27298a138945dad29cec9ef07fa030d2bab7f69fdd87bea3",
+        "size_bytes": 1782,
+        "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/attempt04-request790.json"
+      },
+      "after": {
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/attempt04-request790.json",
+        "sha256": "5d10db6421626aad27298a138945dad29cec9ef07fa030d2bab7f69fdd87bea3",
+        "size_bytes": 1782,
+        "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/attempt04-request790.json"
+      },
+      "unchanged": true
+    },
+    {
+      "before": {
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/profile-final783-01/diagnostic-profile.json",
+        "sha256": "1065026df4f77de26307cd5644691e49f2effe025dcc75bc1dda7b635e3ed5d1",
+        "size_bytes": 1196465,
+        "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/profile-final783-01/diagnostic-profile.json"
+      },
+      "after": {
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/profile-final783-01/diagnostic-profile.json",
+        "sha256": "1065026df4f77de26307cd5644691e49f2effe025dcc75bc1dda7b635e3ed5d1",
+        "size_bytes": 1196465,
+        "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/profile-final783-01/diagnostic-profile.json"
+      },
+      "unchanged": true
+    },
+    {
+      "before": {
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build/refmac5",
+        "sha256": "4f4c7045c73a9c2c725746b3d8ab73adbb98a2f6379b5493e9422d8da65db89b",
+        "size_bytes": 40983744,
+        "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build/refmac5"
+      },
+      "after": {
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build/refmac5",
+        "sha256": "4f4c7045c73a9c2c725746b3d8ab73adbb98a2f6379b5493e9422d8da65db89b",
+        "size_bytes": 40983744,
+        "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build/refmac5"
+      },
+      "unchanged": true
+    },
+    {
+      "before": {
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/launch-attempt04.py",
+        "sha256": "a2e2b92ffe05f6c984de87171352ad288333eb49ec82a7975fcfbe27f2663eb3",
+        "size_bytes": 16844,
+        "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/launch-attempt04.py"
+      },
+      "after": {
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/launch-attempt04.py",
+        "sha256": "a2e2b92ffe05f6c984de87171352ad288333eb49ec82a7975fcfbe27f2663eb3",
+        "size_bytes": 16844,
+        "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/launch-attempt04.py"
+      },
+      "unchanged": true
+    },
+    {
+      "before": {
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/.venv/bin/python",
+        "sha256": "fe1d249d8278c3ac1a8e7d0550394adfe0485a5f5802fe070c17bc1aa40b00f9",
+        "size_bytes": 33816,
+        "resolved_path": "/Users/marcin/.pyenv/versions/3.12.11/bin/python3.12"
+      },
+      "after": {
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/.venv/bin/python",
+        "sha256": "fe1d249d8278c3ac1a8e7d0550394adfe0485a5f5802fe070c17bc1aa40b00f9",
+        "size_bytes": 33816,
+        "resolved_path": "/Users/marcin/.pyenv/versions/3.12.11/bin/python3.12"
+      },
+      "unchanged": true
+    },
+    {
+      "before": {
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/runtime-configuration-preflight-01.json",
+        "sha256": "637def8fc7a3791384bae7a56d12fc4bb99bd2351901e7e46559a4168d707a9b",
+        "size_bytes": 1264,
+        "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/runtime-configuration-preflight-01.json"
+      },
+      "after": {
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/runtime-configuration-preflight-01.json",
+        "sha256": "637def8fc7a3791384bae7a56d12fc4bb99bd2351901e7e46559a4168d707a9b",
+        "size_bytes": 1264,
+        "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/runtime-configuration-preflight-01.json"
+      },
+      "unchanged": true
+    },
+    {
+      "before": {
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/ref/research/1sar_rerun_2026_11_08_instrumented_attempt04_preregistration.md",
+        "sha256": "badee1c9f79e223b86e3f94d3ea5ca377f79d7f86bd9aa11b2560862b4c41ed2",
+        "size_bytes": 7869,
+        "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/ref/research/1sar_rerun_2026_11_08_instrumented_attempt04_preregistration.md"
+      },
+      "after": {
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/ref/research/1sar_rerun_2026_11_08_instrumented_attempt04_preregistration.md",
+        "sha256": "badee1c9f79e223b86e3f94d3ea5ca377f79d7f86bd9aa11b2560862b4c41ed2",
+        "size_bytes": 7869,
+        "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/ref/research/1sar_rerun_2026_11_08_instrumented_attempt04_preregistration.md"
+      },
+      "unchanged": true
+    },
+    {
+      "before": {
+        "path": "/usr/bin/git",
+        "sha256": "34129c71a01a74f7f3b2443521519b2e5447553fa187f5fcafaaf8c42cc192e2",
+        "size_bytes": 200560,
+        "resolved_path": "/usr/bin/git"
+      },
+      "after": {
+        "path": "/usr/bin/git",
+        "sha256": "34129c71a01a74f7f3b2443521519b2e5447553fa187f5fcafaaf8c42cc192e2",
+        "size_bytes": 200560,
+        "resolved_path": "/usr/bin/git"
+      },
+      "unchanged": true
+    }
+  ],
+  "launch_files_unchanged": true,
+  "git_postflight": {
+    "before": {
+      "head": "75c0442c51a1bd679a54bc268334b8378af3a5dd",
+      "branch": "analysis/1sar-rerun-2026-11-06",
+      "worktree": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078"
+    },
+    "after": {
+      "head": "75c0442c51a1bd679a54bc268334b8378af3a5dd",
+      "branch": "analysis/1sar-rerun-2026-11-06",
+      "worktree": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078"
+    },
+    "unchanged": true
+  }
+}

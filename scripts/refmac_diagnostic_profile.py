@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Primitive types, file/environment guards, outer profile validation, and inner receipt admission.
 
-Bounded slices (Tasks 653, 657, 663, 658, 668, 673, 677, 681, 685, and 661):
+Bounded slices (Tasks 653, 657, 663, 658, 668, 673, 677, 681, 685, 661, 734, 739, 744, 751, and 737):
 - Defines the frozen public dataclasses :class:`FilePin`,
   :class:`RefmacDiagnosticProfile`, :class:`FileObservation`,
   :class:`RootObservation`, and :class:`ValidatedProfile`, and the public
@@ -27,22 +27,27 @@ Bounded slices (Tasks 653, 657, 663, 658, 668, 673, 677, 681, 685, and 661):
   and full file/root/ancestor/symlink observation
   (:func:`_validate_and_observe_outer_profile` and
   :func:`_reobserve_outer_profile_state`) returning deeply immutable private
-  state while retaining obtainable partial observations on failure via
-  :class:`_ProfileObservationError`.
+  state while retaining obtainable partial observations, partial file reads, and
+  distinguishing comparison-only mismatches from actual observation failure
+  causes on :class:`_OuterProfileRecheckResult` and :class:`_ProfileObservationError`.
 - Provides scoped inner source/build/runtime receipt joins and public
   :func:`validate_profile` admission returning a deeply immutable
   :class:`ValidatedProfile` with detached :meth:`ValidatedProfile.to_provenance`
   snapshots and partial-observation failure retention via
   :class:`ProfileValidationError`.
+- Provides public :func:`recheck_profile` postflight projection as a single call
+  to :func:`_reobserve_outer_profile_state` followed by detached in-memory
+  projection of ``manifest``, ``files``, ``roots``, ``mutations``, and ``errors``
+  with aligned ``mutation_causes_out`` retention.
 
 Scope note:
-- Public ``recheck_profile`` and collector wiring remain deliberately absent in
-  this slice and will be added in Task 662 / Task 639; no collector imports this
-  module yet.
+- Collector wiring remains deliberately absent in this slice; no collector
+  imports this module yet.
 """
 
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass, field
 try:
     import fcntl
@@ -54,7 +59,7 @@ import os
 from pathlib import Path
 import stat
 from types import MappingProxyType
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 
 PROFILE_SCHEMA_ID = "protstruct_refmac_diagnostic_profile_v1"
@@ -885,14 +890,20 @@ class _PartialFileReadError(ValueError):
         *,
         observation: PartialFileReadObservation,
         stage: str = "file_pin",
+        is_size_mismatch: bool = False,
     ) -> None:
         super().__init__(message)
         if type(observation) is not PartialFileReadObservation:
             raise ValueError(
                 "_PartialFileReadError.observation must be a PartialFileReadObservation"
             )
+        if type(is_size_mismatch) is not bool:
+            raise ValueError(
+                "_PartialFileReadError.is_size_mismatch must be a bool"
+            )
         object.__setattr__(self, "observation", observation)
         object.__setattr__(self, "stage", stage)
+        object.__setattr__(self, "is_size_mismatch", is_size_mismatch)
 
     def __setattr__(self, name: str, value: Any) -> None:
         if name in _MUTABLE_EXCEPTION_ATTRS:
@@ -1291,6 +1302,7 @@ def _stream_observe_regular_file(
                     fstat_st=fstat_before,
                     streamed_bytes=0,
                 ),
+                is_size_mismatch=True,
             ) from size_err
         _clear_nonblock_flag(fd)
         handle = os.fdopen(fd, "rb")
@@ -1321,6 +1333,7 @@ def _stream_observe_regular_file(
                             fstat_st=fstat_before,
                             streamed_bytes=total_bytes,
                         ),
+                        is_size_mismatch=True,
                     ) from overflow_err
                 hasher.update(chunk)
                 if retain_bytes:
@@ -2927,12 +2940,80 @@ class _OuterProfileRecheckResult:
     unverified_files: Mapping[str, _ObservedRegularFilePin] = field(
         default_factory=_empty_mapping_proxy
     )
+    manifest_dependencies: _ObservedFileDependencies | None = None
+    file_dependencies: Mapping[str, _ObservedFileDependencies] = field(
+        default_factory=_empty_mapping_proxy
+    )
+    partial_manifest_observation: PartialFileReadObservation | None = None
+    partial_files: Mapping[str, PartialFileReadObservation] = field(
+        default_factory=_empty_mapping_proxy
+    )
+    manifest_file_observation: FileObservation | PartialFileReadObservation | None = None
+    file_observations: Mapping[str, FileObservation | PartialFileReadObservation] = field(
+        default_factory=_empty_mapping_proxy
+    )
+    manifest_errors: tuple[str, ...] = ()
+    manifest_cause: BaseException | None = None
+    file_errors: Mapping[str, tuple[str, ...]] = field(
+        default_factory=_empty_mapping_proxy
+    )
+    file_causes: Mapping[str, BaseException | None] = field(
+        default_factory=_empty_mapping_proxy
+    )
+    root_errors: Mapping[str, tuple[str, ...]] = field(
+        default_factory=_empty_mapping_proxy
+    )
+    root_causes: Mapping[str, BaseException | None] = field(
+        default_factory=_empty_mapping_proxy
+    )
+    ancestor_errors: Mapping[str, tuple[str, ...]] = field(
+        default_factory=_empty_mapping_proxy
+    )
+    ancestor_causes: Mapping[str, BaseException | None] = field(
+        default_factory=_empty_mapping_proxy
+    )
+    symlink_errors: Mapping[str, tuple[str, ...]] = field(
+        default_factory=_empty_mapping_proxy
+    )
+    symlink_causes: Mapping[str, BaseException | None] = field(
+        default_factory=_empty_mapping_proxy
+    )
+    observation_causes: Mapping[str, BaseException | None] = field(
+        default_factory=_empty_mapping_proxy
+    )
 
     def __post_init__(self) -> None:
         if type(self.verified) is not bool:
             raise ValueError("_OuterProfileRecheckResult.verified must be a bool")
+        if (
+            self.partial_manifest_observation is not None
+            and type(self.partial_manifest_observation)
+            is not PartialFileReadObservation
+        ):
+            raise ValueError(
+                "_OuterProfileRecheckResult.partial_manifest_observation must be PartialFileReadObservation or None"
+            )
+        if (
+            self.manifest_observation is not None
+            and self.partial_manifest_observation is not None
+        ):
+            raise ValueError(
+                "_OuterProfileRecheckResult cannot have both complete and partial manifest observations"
+            )
         sorted_roots = dict(sorted(self.observed_roots.items()))
         sorted_files = dict(sorted(self.observed_files.items()))
+        sorted_partial_files = dict(sorted(self.partial_files.items()))
+        for fid, pobs in sorted_partial_files.items():
+            if type(pobs) is not PartialFileReadObservation:
+                raise ValueError(
+                    f"_OuterProfileRecheckResult.partial_files[{fid!r}] must be PartialFileReadObservation"
+                )
+        if not set(sorted_files.keys()).isdisjoint(
+            set(sorted_partial_files.keys())
+        ):
+            raise ValueError(
+                "_OuterProfileRecheckResult.observed_files and partial_files must be disjoint"
+            )
         object.__setattr__(
             self,
             "observed_roots",
@@ -2942,6 +3023,11 @@ class _OuterProfileRecheckResult:
             self,
             "observed_files",
             MappingProxyType(sorted_files),
+        )
+        object.__setattr__(
+            self,
+            "partial_files",
+            MappingProxyType(sorted_partial_files),
         )
         object.__setattr__(
             self,
@@ -2994,6 +3080,70 @@ class _OuterProfileRecheckResult:
             self,
             "unverified_files",
             MappingProxyType(dict(sorted(self.unverified_files.items()))),
+        )
+        object.__setattr__(
+            self,
+            "file_dependencies",
+            MappingProxyType(dict(sorted(self.file_dependencies.items()))),
+        )
+        object.__setattr__(
+            self,
+            "file_observations",
+            MappingProxyType(dict(sorted(self.file_observations.items()))),
+        )
+        object.__setattr__(self, "manifest_errors", tuple(self.manifest_errors))
+        object.__setattr__(
+            self,
+            "file_errors",
+            MappingProxyType(
+                {k: tuple(v) for k, v in sorted(self.file_errors.items())}
+            ),
+        )
+        object.__setattr__(
+            self,
+            "file_causes",
+            MappingProxyType(dict(sorted(self.file_causes.items()))),
+        )
+        object.__setattr__(
+            self,
+            "root_errors",
+            MappingProxyType(
+                {k: tuple(v) for k, v in sorted(self.root_errors.items())}
+            ),
+        )
+        object.__setattr__(
+            self,
+            "root_causes",
+            MappingProxyType(dict(sorted(self.root_causes.items()))),
+        )
+        object.__setattr__(
+            self,
+            "ancestor_errors",
+            MappingProxyType(
+                {k: tuple(v) for k, v in sorted(self.ancestor_errors.items())}
+            ),
+        )
+        object.__setattr__(
+            self,
+            "ancestor_causes",
+            MappingProxyType(dict(sorted(self.ancestor_causes.items()))),
+        )
+        object.__setattr__(
+            self,
+            "symlink_errors",
+            MappingProxyType(
+                {k: tuple(v) for k, v in sorted(self.symlink_errors.items())}
+            ),
+        )
+        object.__setattr__(
+            self,
+            "symlink_causes",
+            MappingProxyType(dict(sorted(self.symlink_causes.items()))),
+        )
+        object.__setattr__(
+            self,
+            "observation_causes",
+            MappingProxyType(dict(sorted(self.observation_causes.items()))),
         )
 
 
@@ -3058,8 +3208,14 @@ def _observe_directory_identity(
 
 def _observe_symlink_identity(
     edge: _SymlinkEdge,
+    *,
+    check_expected_target: bool = True,
 ) -> _ObservedSymlinkIdentity:
     """Observe a literal symlink's mtime-free ``(dev, ino, mode, uid, gid)`` identity and target."""
+    if type(check_expected_target) is not bool:
+        raise ValueError(
+            "_observe_symlink_identity.check_expected_target must be a bool"
+        )
     try:
         st = os.lstat(edge.path)
         actual_target = os.readlink(edge.path)
@@ -3069,7 +3225,11 @@ def _observe_symlink_identity(
         ) from exc
     if not stat.S_ISLNK(st.st_mode):
         raise ValueError(f"Expected symlink at {edge.path!r}")
-    if actual_target != edge.target:
+    if not actual_target or "\x00" in actual_target:
+        raise ValueError(
+            f"Invalid symlink target at {edge.path!r}: {actual_target!r}"
+        )
+    if check_expected_target and actual_target != edge.target:
         raise ValueError(
             f"Symlink target changed at {edge.path!r}: expected {edge.target!r}, got {actual_target!r}"
         )
@@ -3307,17 +3467,9 @@ def _observe_controlled_root(
     _validate_canonical_no_traversal_abs_path(
         root_path, field_name=f"roots[{root_name!r}].path"
     )
-    root_dir_obs = _observe_directory_identity(
-        root_path, require_no_symlink_ancestors=True
-    )
     root_path_obj = Path(root_path)
+    root_dir_obs: _ObservedDirectoryIdentity | None = None
     ancestor_list: list[_ObservedDirectoryIdentity] = []
-    for anc in (root_path_obj, *root_path_obj.parents):
-        ancestor_list.append(
-            _observe_directory_identity(
-                str(anc), require_no_symlink_ancestors=True
-            )
-        )
 
     def _raise_walk_error(exc: OSError) -> None:
         raise ValueError(
@@ -3331,6 +3483,16 @@ def _observe_controlled_root(
     excluded_git_present = False
 
     try:
+        root_dir_obs = _observe_directory_identity(
+            root_path, require_no_symlink_ancestors=True
+        )
+        ancestor_list.append(root_dir_obs)
+        for anc in root_path_obj.parents:
+            ancestor_list.append(
+                _observe_directory_identity(
+                    str(anc), require_no_symlink_ancestors=True
+                )
+            )
         for base, dirs, files in os.walk(
             root_path, topdown=True, followlinks=False, onerror=_raise_walk_error
         ):
@@ -3344,34 +3506,6 @@ def _observe_controlled_root(
                 dirs.sort()
                 files = sorted(files)
 
-            for entry_name in [*dirs, *files]:
-                entry_path = base_path / entry_name
-                entry_str = str(entry_path)
-                try:
-                    entry_lstat = os.lstat(entry_str)
-                except OSError as exc:
-                    raise ValueError(
-                        f"Cannot lstat controlled root member {entry_str!r} in {root_name!r} "
-                        f"({type(exc).__name__}): {exc}"
-                    ) from exc
-                if stat.S_ISLNK(entry_lstat.st_mode):
-                    raise ValueError(
-                        f"Controlled root {root_name!r} contains forbidden symlink: {entry_str!r}"
-                    )
-
-            for dname in dirs:
-                dpath = base_path / dname
-                dstr = str(dpath)
-                rel_dir = dpath.relative_to(root_path_obj).as_posix()
-                d_obs = _observe_directory_identity(
-                    dstr, require_no_symlink_ancestors=False
-                )
-                if d_obs.path != d_obs.resolved_path:
-                    raise ValueError(
-                        f"Controlled root {root_name!r} subdirectory {dstr!r} resolved to {d_obs.resolved_path!r}"
-                    )
-                subdir_identities[rel_dir] = d_obs
-
             for fname in files:
                 fpath = base_path / fname
                 fstr = str(fpath)
@@ -3379,8 +3513,13 @@ def _observe_controlled_root(
                     flstat = os.lstat(fstr)
                 except OSError as exc:
                     raise ValueError(
-                        f"Cannot lstat controlled root file {fstr!r} in {root_name!r}: {exc}"
+                        f"Cannot lstat controlled root member {fstr!r} in {root_name!r} "
+                        f"({type(exc).__name__}): {exc}"
                     ) from exc
+                if stat.S_ISLNK(flstat.st_mode):
+                    raise ValueError(
+                        f"Controlled root {root_name!r} contains forbidden symlink: {fstr!r}"
+                    )
                 if not stat.S_ISREG(flstat.st_mode):
                     raise ValueError(
                         f"Controlled root {root_name!r} contains non-regular member: {fstr!r}"
@@ -3394,6 +3533,30 @@ def _observe_controlled_root(
                         f"Controlled root {root_name!r} member {fstr!r} must not use symlinks"
                     )
 
+            for dname in dirs:
+                dpath = base_path / dname
+                dstr = str(dpath)
+                try:
+                    dlstat = os.lstat(dstr)
+                except OSError as exc:
+                    raise ValueError(
+                        f"Cannot lstat controlled root member {dstr!r} in {root_name!r} "
+                        f"({type(exc).__name__}): {exc}"
+                    ) from exc
+                if stat.S_ISLNK(dlstat.st_mode):
+                    raise ValueError(
+                        f"Controlled root {root_name!r} contains forbidden symlink: {dstr!r}"
+                    )
+                rel_dir = dpath.relative_to(root_path_obj).as_posix()
+                d_obs = _observe_directory_identity(
+                    dstr, require_no_symlink_ancestors=False
+                )
+                if d_obs.path != d_obs.resolved_path:
+                    raise ValueError(
+                        f"Controlled root {root_name!r} subdirectory {dstr!r} resolved to {d_obs.resolved_path!r}"
+                    )
+                subdir_identities[rel_dir] = d_obs
+
         root_dir_after = _observe_directory_identity(
             root_path, require_no_symlink_ancestors=True
         )
@@ -3403,20 +3566,24 @@ def _observe_controlled_root(
             )
     except ValueError as exc:
         err_msg = str(exc)
-        incomplete_inv = _ObservedRootInventory(
-            name=root_name,
-            path=root_path,
-            resolved_path=root_dir_obs.resolved_path,
-            file_ids=declared_file_ids,
-            directory_identity=root_dir_obs,
-            ancestor_identities=tuple(ancestor_list),
-            subdirectory_identities=subdir_identities,
-            member_pins=member_pins,
-            excluded_root_git_present=excluded_git_present,
-            member_observations=member_observations,
-            scan_complete=False,
-            verified=False,
-            errors=(err_msg,),
+        incomplete_inv = (
+            _ObservedRootInventory(
+                name=root_name,
+                path=root_path,
+                resolved_path=root_dir_obs.resolved_path,
+                file_ids=declared_file_ids,
+                directory_identity=root_dir_obs,
+                ancestor_identities=tuple(ancestor_list),
+                subdirectory_identities=subdir_identities,
+                member_pins=member_pins,
+                excluded_root_git_present=excluded_git_present,
+                member_observations=member_observations,
+                scan_complete=False,
+                verified=False,
+                errors=(err_msg,),
+            )
+            if root_dir_obs is not None
+            else None
         )
         raise _ControlledRootObservationError(
             err_msg,
@@ -3475,7 +3642,7 @@ def _observe_controlled_root(
             root_errors[0],
             root_inventory=failed_inv,
             errors=tuple(root_errors),
-            causes=tuple(ValueError(m) for m in root_errors),
+            causes=(),
         )
 
     return _ObservedRootInventory(
@@ -4090,7 +4257,9 @@ def _reobserve_outer_profile_state(
 
     Continues after individual errors so all obtainable post-run observations are
     retained against the original baseline authority (a replaced manifest on disk
-    never redefines expected file/root pins).
+    never redefines expected file/root pins). Comparison-only mismatches record
+    ``None`` causes, whereas actual observation/read/stat/walk failures preserve
+    the underlying caught exception objects.
     """
     if type(state) is not _CheckedOuterProfileState:
         raise ValueError(
@@ -4101,12 +4270,25 @@ def _reobserve_outer_profile_state(
 
     errors: list[str] = []
     manifest_after: _ObservedRegularFilePin | None = None
+    partial_manifest_after: PartialFileReadObservation | None = None
+    manifest_errors: list[str] = []
+    manifest_cause: BaseException | None = None
     roots_after: dict[str, _ObservedRootInventory] = {}
+    root_errors_map: dict[str, list[str]] = {}
+    root_causes_map: dict[str, BaseException | None] = {}
     files_after: dict[str, _ObservedRegularFilePin] = {}
+    partial_files_after: dict[str, PartialFileReadObservation] = {}
     verified_files_after: dict[str, _ObservedRegularFilePin] = {}
     unverified_files_after: dict[str, _ObservedRegularFilePin] = {}
+    file_errors_map: dict[str, list[str]] = {}
+    file_causes_map: dict[str, BaseException | None] = {}
     ancestors_after: dict[str, _ObservedDirectoryIdentity] = {}
+    ancestor_errors_map: dict[str, list[str]] = {}
+    ancestor_causes_map: dict[str, BaseException | None] = {}
     symlinks_after: dict[str, _ObservedSymlinkIdentity] = {}
+    symlink_errors_map: dict[str, list[str]] = {}
+    symlink_causes_map: dict[str, BaseException | None] = {}
+    observation_causes: dict[str, BaseException | None] = {}
 
     # 1. Re-observe original manifest pin against state.manifest_observation
     try:
@@ -4116,19 +4298,35 @@ def _reobserve_outer_profile_state(
             chunk_size=chunk_size,
         )
         if manifest_after != state.manifest_observation:
-            errors.append(
+            msg = (
                 f"Manifest observation changed at {state.profile.manifest.path!r}: "
                 f"expected={state.manifest_observation}, observed={manifest_after}"
             )
+            errors.append(msg)
+            manifest_errors.append(msg)
     except _ObservedFilePinError as exc:
         manifest_after = exc.observation
-        errors.append(f"Manifest recheck failed: {exc}")
+        msg = f"Manifest recheck failed: {exc}"
+        errors.append(msg)
+        manifest_errors.append(msg)
+    except _PartialFileReadError as exc:
+        partial_manifest_after = exc.observation
+        msg = f"Manifest recheck failed: {exc}"
+        errors.append(msg)
+        manifest_errors.append(msg)
+        if not exc.is_size_mismatch:
+            manifest_cause = _select_original_cause_exception(exc)
     except ValueError as exc:
-        errors.append(f"Manifest recheck failed: {exc}")
+        msg = f"Manifest recheck failed: {exc}"
+        errors.append(msg)
+        manifest_errors.append(msg)
+        manifest_cause = _select_original_cause_exception(exc)
 
     # 2. Re-observe controlled roots against state.observed_roots
     for root_name in EXPECTED_ROOT_NAMES:
         expected_root = state.observed_roots[root_name]
+        r_errs: list[str] = []
+        r_cause: BaseException | None = None
         try:
             actual_root = _observe_controlled_root(
                 root_name,
@@ -4158,22 +4356,35 @@ def _reobserve_outer_profile_state(
                     errors=(mut_err,),
                 )
                 errors.append(mut_err)
+                r_errs.append(mut_err)
             roots_after[root_name] = actual_root
         except _ControlledRootObservationError as exc:
             if exc.root_inventory is not None:
                 roots_after[root_name] = exc.root_inventory
             for r_err in exc.errors:
-                errors.append(
-                    f"Controlled root {root_name!r} recheck failed: {r_err}"
-                )
+                msg = f"Controlled root {root_name!r} recheck failed: {r_err}"
+                errors.append(msg)
+                r_errs.append(msg)
+            if exc.causes or (
+                exc.root_inventory is None or not exc.root_inventory.scan_complete
+            ):
+                r_cause = _select_original_cause_exception(exc)
         except ValueError as exc:
-            errors.append(f"Controlled root {root_name!r} recheck failed: {exc}")
+            msg = f"Controlled root {root_name!r} recheck failed: {exc}"
+            errors.append(msg)
+            r_errs.append(msg)
+            r_cause = _select_original_cause_exception(exc)
+        if r_errs:
+            root_errors_map[root_name] = r_errs
+            root_causes_map[root_name] = r_cause
 
     # 3. Re-observe all files against state.observed_files (original baseline authority)
     diag_id = state.outer_manifest.roles["diagnostic_executable"][0]
     for file_id, expected_file_obs in sorted(state.observed_files.items()):
         actual_file_obs: _ObservedRegularFilePin | None = None
+        partial_file_obs: PartialFileReadObservation | None = None
         file_recheck_errors: list[str] = []
+        f_cause: BaseException | None = None
         try:
             actual_file_obs = _observe_regular_file_pin(
                 expected_file_obs.path,
@@ -4185,10 +4396,18 @@ def _reobserve_outer_profile_state(
             file_recheck_errors.append(
                 f"File {file_id!r} ({expected_file_obs.path!r}) recheck failed: {exc}"
             )
+        except _PartialFileReadError as exc:
+            partial_file_obs = exc.observation
+            file_recheck_errors.append(
+                f"File {file_id!r} ({expected_file_obs.path!r}) recheck failed: {exc}"
+            )
+            if not exc.is_size_mismatch:
+                f_cause = _select_original_cause_exception(exc)
         except ValueError as exc:
             file_recheck_errors.append(
                 f"File {file_id!r} ({expected_file_obs.path!r}) recheck failed: {exc}"
             )
+            f_cause = _select_original_cause_exception(exc)
 
         if actual_file_obs is not None:
             files_after[file_id] = actual_file_obs
@@ -4209,7 +4428,13 @@ def _reobserve_outer_profile_state(
             else:
                 verified_files_after[file_id] = actual_file_obs
         else:
+            if partial_file_obs is not None:
+                partial_files_after[file_id] = partial_file_obs
             errors.extend(file_recheck_errors)
+
+        if file_recheck_errors:
+            file_errors_map[file_id] = file_recheck_errors
+            file_causes_map[file_id] = f_cause
 
     # 4. Re-observe all recorded ancestor directories against state.observed_ancestors
     for anc_path, expected_anc in sorted(state.observed_ancestors.items()):
@@ -4219,25 +4444,439 @@ def _reobserve_outer_profile_state(
             )
             ancestors_after[anc_path] = actual_anc
             if actual_anc != expected_anc:
-                errors.append(
-                    f"Ancestor directory {anc_path!r} identity changed since baseline"
-                )
+                msg = f"Ancestor directory {anc_path!r} identity changed since baseline"
+                errors.append(msg)
+                ancestor_errors_map[anc_path] = [msg]
+                ancestor_causes_map[anc_path] = None
         except ValueError as exc:
-            errors.append(f"Ancestor directory {anc_path!r} recheck failed: {exc}")
+            msg = f"Ancestor directory {anc_path!r} recheck failed: {exc}"
+            errors.append(msg)
+            ancestor_errors_map[anc_path] = [msg]
+            ancestor_causes_map[anc_path] = _select_original_cause_exception(exc)
 
     # 5. Re-observe all recorded symlink edges against state.observed_symlinks
     for sym_path, expected_sym in sorted(state.observed_symlinks.items()):
         try:
             actual_sym = _observe_symlink_identity(
-                _SymlinkEdge(path=sym_path, target=expected_sym.target)
+                _SymlinkEdge(path=sym_path, target=expected_sym.target),
+                check_expected_target=False,
             )
             symlinks_after[sym_path] = actual_sym
             if actual_sym != expected_sym:
-                errors.append(
-                    f"Symlink {sym_path!r} identity changed since baseline"
-                )
+                if actual_sym.target != expected_sym.target:
+                    msg = (
+                        f"Symlink {sym_path!r} identity changed since baseline: "
+                        f"expected target {expected_sym.target!r}, observed {actual_sym.target!r}"
+                    )
+                else:
+                    msg = f"Symlink {sym_path!r} identity changed since baseline"
+                errors.append(msg)
+                symlink_errors_map[sym_path] = [msg]
+                symlink_causes_map[sym_path] = None
         except ValueError as exc:
-            errors.append(f"Symlink {sym_path!r} recheck failed: {exc}")
+            msg = f"Symlink {sym_path!r} recheck failed: {exc}"
+            errors.append(msg)
+            symlink_errors_map[sym_path] = [msg]
+            symlink_causes_map[sym_path] = _select_original_cause_exception(exc)
+
+    # 6. Associate ancestor/symlink mismatches and failures with owning manifest, files, and roots
+    # and build postflight file dependencies / FileObservations using only actual postflight observations.
+    def _baseline_file_anc_paths(
+        base_fobs: _ObservedRegularFilePin,
+        base_deps: _ObservedFileDependencies | None,
+        base_public_obs: FileObservation | None,
+    ) -> tuple[str, ...]:
+        if base_public_obs is not None:
+            return tuple(a.path for a in base_public_obs.ancestors)
+        if base_deps is not None:
+            return tuple(a.path for a in base_deps.ancestors)
+        return tuple(
+            dict.fromkeys(
+                [
+                    *(str(p) for p in Path(base_fobs.resolved_path).parents),
+                    *(d.path for d in base_fobs.traversed_directory_identities),
+                ]
+            )
+        )
+
+    def _current_file_anc_paths(
+        actual_fobs: _ObservedRegularFilePin,
+    ) -> tuple[str, ...]:
+        return tuple(
+            dict.fromkeys(
+                [
+                    *(str(p) for p in Path(actual_fobs.resolved_path).parents),
+                    *(d.path for d in actual_fobs.traversed_directory_identities),
+                ]
+            )
+        )
+
+    def _current_partial_anc_paths(
+        partial_obs: PartialFileReadObservation,
+    ) -> tuple[str, ...]:
+        return tuple(
+            dict.fromkeys(
+                [
+                    *(
+                        (str(p) for p in Path(partial_obs.resolved_path).parents)
+                        if partial_obs.resolved_path is not None
+                        else ()
+                    ),
+                    *(d.path for d in partial_obs.ancestors),
+                ]
+            )
+        )
+
+    def _build_postflight_deps(
+        actual_fobs: _ObservedRegularFilePin,
+        base_anc_paths: tuple[str, ...],
+        base_sym_paths: tuple[str, ...],
+    ) -> _ObservedFileDependencies:
+        traversed_by_path: dict[str, _ObservedDirectoryIdentity] = {
+            d.path: d for d in actual_fobs.traversed_directory_identities
+        }
+        current_anc_paths = _current_file_anc_paths(actual_fobs)
+        anc_list: list[_ObservedDirectoryIdentity] = []
+        dep_incomplete_errors: list[str] = []
+        for apath in current_anc_paths:
+            if apath in traversed_by_path:
+                t_obs = traversed_by_path[apath]
+                if t_obs.path != t_obs.resolved_path:
+                    non_canon_msg = (
+                        f"Traversed directory dependency {t_obs.path!r} is not canonical "
+                        f"({t_obs.resolved_path!r})"
+                    )
+                    dep_incomplete_errors.append(non_canon_msg)
+                    if non_canon_msg not in errors:
+                        errors.append(non_canon_msg)
+                    anc_errs = ancestor_errors_map.setdefault(apath, [])
+                    if non_canon_msg not in anc_errs:
+                        anc_errs.append(non_canon_msg)
+                    if ancestor_causes_map.get(apath) is None:
+                        ancestor_causes_map[apath] = None
+                    continue
+
+                anc_list.append(t_obs)
+                if (
+                    apath in ancestor_errors_map
+                    and ancestor_causes_map.get(apath) is not None
+                ):
+                    dep_incomplete_errors.extend(ancestor_errors_map[apath])
+                elif apath in ancestors_after:
+                    if ancestors_after[apath] != t_obs:
+                        conflict_msg = (
+                            f"Directory identity changed during observation at {apath!r}: "
+                            f"before={t_obs.to_dict()}, after={ancestors_after[apath].to_dict()}"
+                        )
+                        dep_incomplete_errors.append(conflict_msg)
+                        if conflict_msg not in errors:
+                            errors.append(conflict_msg)
+                        anc_errs = ancestor_errors_map.setdefault(apath, [])
+                        if conflict_msg not in anc_errs:
+                            anc_errs.append(conflict_msg)
+                        if ancestor_causes_map.get(apath) is None:
+                            ancestor_causes_map[apath] = None
+                else:
+                    try:
+                        _record_directory_identity(ancestors_after, t_obs)
+                    except ValueError as exc:
+                        dep_incomplete_errors.append(str(exc))
+                        if str(exc) not in errors:
+                            errors.append(str(exc))
+                        anc_errs = ancestor_errors_map.setdefault(apath, [])
+                        if str(exc) not in anc_errs:
+                            anc_errs.append(str(exc))
+                        if ancestor_causes_map.get(apath) is None:
+                            ancestor_causes_map[apath] = None
+            elif (
+                apath in ancestor_errors_map
+                and ancestor_causes_map.get(apath) is not None
+            ):
+                dep_incomplete_errors.extend(ancestor_errors_map[apath])
+            elif apath in ancestors_after:
+                anc_list.append(ancestors_after[apath])
+            elif apath in ancestor_errors_map:
+                dep_incomplete_errors.extend(ancestor_errors_map[apath])
+            else:
+                dep_incomplete_errors.append(
+                    f"Unavailable postflight ancestor observation for {apath!r}"
+                )
+
+        for apath in base_anc_paths:
+            if (
+                apath not in current_anc_paths
+                and apath in ancestor_errors_map
+                and ancestor_causes_map.get(apath) is not None
+            ):
+                dep_incomplete_errors.extend(ancestor_errors_map[apath])
+
+        req_edges = actual_fobs.symlinks
+        sym_list: list[_ObservedSymlinkIdentity] = []
+        for edge in req_edges:
+            if (
+                edge.path not in state.observed_symlinks
+                and edge.path not in symlinks_after
+                and edge.path not in symlink_errors_map
+            ):
+                try:
+                    new_sym_obs = _observe_symlink_identity(
+                        edge, check_expected_target=False
+                    )
+                    _record_symlink_identity(symlinks_after, new_sym_obs)
+                except ValueError as exc:
+                    msg = f"Symlink {edge.path!r} recheck failed: {exc}"
+                    errors.append(msg)
+                    symlink_errors_map[edge.path] = [msg]
+                    symlink_causes_map[edge.path] = (
+                        _select_original_cause_exception(exc)
+                    )
+            s_obs = symlinks_after.get(edge.path)
+            if s_obs is not None:
+                sym_list.append(s_obs)
+                if s_obs.target != edge.target:
+                    conflict_msg = (
+                        f"Symlink target changed during observation at {edge.path!r}: "
+                        f"expected {edge.target!r}, observed {s_obs.target!r}"
+                    )
+                    dep_incomplete_errors.append(conflict_msg)
+                    if conflict_msg not in errors:
+                        errors.append(conflict_msg)
+                    sym_errs = symlink_errors_map.setdefault(edge.path, [])
+                    if conflict_msg not in sym_errs:
+                        sym_errs.append(conflict_msg)
+                    if symlink_causes_map.get(edge.path) is None:
+                        symlink_causes_map[edge.path] = None
+            elif (
+                edge.path in symlink_errors_map
+                and symlink_causes_map.get(edge.path) is not None
+            ):
+                dep_incomplete_errors.extend(symlink_errors_map[edge.path])
+            elif edge.path in symlink_errors_map:
+                dep_incomplete_errors.extend(symlink_errors_map[edge.path])
+            else:
+                dep_incomplete_errors.append(
+                    f"Unavailable postflight symlink observation for {edge.path!r}"
+                )
+        for spath in base_sym_paths:
+            if spath in symlink_errors_map and spath not in {e.path for e in req_edges}:
+                if symlink_causes_map.get(spath) is not None:
+                    dep_incomplete_errors.extend(symlink_errors_map[spath])
+
+        is_complete = (
+            len(dep_incomplete_errors) == 0
+            and len(anc_list) > 0
+            and len(sym_list) == len(req_edges)
+        )
+        return _ObservedFileDependencies(
+            ancestors=tuple(anc_list),
+            symlink_identities=tuple(sym_list),
+            complete=is_complete,
+            errors=tuple(dep_incomplete_errors) if not is_complete else (),
+        )
+
+    manifest_base_ancs = _baseline_file_anc_paths(
+        state.manifest_observation,
+        state.manifest_dependencies,
+        state.manifest_file_observation,
+    )
+    manifest_base_syms = tuple(e.path for e in state.manifest_observation.symlinks)
+    manifest_deps_after: _ObservedFileDependencies | None = None
+    if manifest_after is not None:
+        manifest_deps_after = _build_postflight_deps(
+            manifest_after, manifest_base_ancs, manifest_base_syms
+        )
+
+    file_base_ancs_map: dict[str, tuple[str, ...]] = {}
+    file_base_syms_map: dict[str, tuple[str, ...]] = {}
+    file_deps_after: dict[str, _ObservedFileDependencies] = {}
+    for file_id, expected_file_obs in sorted(state.observed_files.items()):
+        f_base_ancs = _baseline_file_anc_paths(
+            expected_file_obs,
+            state.file_dependencies.get(file_id),
+            state.file_observations.get(file_id),
+        )
+        f_base_syms = tuple(e.path for e in expected_file_obs.symlinks)
+        file_base_ancs_map[file_id] = f_base_ancs
+        file_base_syms_map[file_id] = f_base_syms
+        actual_fobs = files_after.get(file_id)
+        if actual_fobs is not None:
+            file_deps_after[file_id] = _build_postflight_deps(
+                actual_fobs, f_base_ancs, f_base_syms
+            )
+
+    manifest_curr_ancs = (
+        _current_file_anc_paths(manifest_after)
+        if manifest_after is not None
+        else (
+            _current_partial_anc_paths(partial_manifest_after)
+            if partial_manifest_after is not None
+            else ()
+        )
+    )
+    manifest_curr_syms = (
+        tuple(e.path for e in manifest_after.symlinks)
+        if manifest_after is not None
+        else (
+            tuple(e.path for e in partial_manifest_after.symlinks)
+            if partial_manifest_after is not None
+            else ()
+        )
+    )
+    manifest_all_ancs = tuple(
+        dict.fromkeys([*manifest_base_ancs, *manifest_curr_ancs])
+    )
+    manifest_all_syms = tuple(
+        dict.fromkeys([*manifest_base_syms, *manifest_curr_syms])
+    )
+    for apath in manifest_all_ancs:
+        if apath in ancestor_errors_map:
+            for m_str in ancestor_errors_map[apath]:
+                if m_str not in manifest_errors:
+                    manifest_errors.append(m_str)
+            if manifest_cause is None and ancestor_causes_map.get(apath) is not None:
+                manifest_cause = ancestor_causes_map[apath]
+    for spath in manifest_all_syms:
+        if spath in symlink_errors_map:
+            for m_str in symlink_errors_map[spath]:
+                if m_str not in manifest_errors:
+                    manifest_errors.append(m_str)
+            if manifest_cause is None and symlink_causes_map.get(spath) is not None:
+                manifest_cause = symlink_causes_map[spath]
+
+    manifest_file_obs_after: FileObservation | PartialFileReadObservation | None = None
+    if manifest_after is not None and manifest_deps_after is not None:
+        for d_err in manifest_deps_after.errors:
+            if d_err not in manifest_errors:
+                manifest_errors.append(d_err)
+        manifest_file_obs_after = _build_file_observation(
+            manifest_after,
+            observed_ancestors=ancestors_after,
+            observed_symlinks=symlinks_after,
+            file_dependencies=manifest_deps_after,
+            verified=(len(manifest_errors) == 0 and manifest_deps_after.complete),
+            errors=tuple(manifest_errors),
+        )
+    elif partial_manifest_after is not None:
+        manifest_file_obs_after = partial_manifest_after
+
+    if manifest_errors:
+        observation_causes["profile:manifest"] = manifest_cause
+
+    file_obs_after: dict[str, FileObservation | PartialFileReadObservation] = {}
+    for file_id in sorted(state.observed_files.keys()):
+        f_base_ancs = file_base_ancs_map[file_id]
+        f_base_syms = file_base_syms_map[file_id]
+        actual_fobs = files_after.get(file_id)
+        partial_fobs = partial_files_after.get(file_id)
+        f_curr_ancs = (
+            _current_file_anc_paths(actual_fobs)
+            if actual_fobs is not None
+            else (
+                _current_partial_anc_paths(partial_fobs)
+                if partial_fobs is not None
+                else ()
+            )
+        )
+        f_curr_syms = (
+            tuple(e.path for e in actual_fobs.symlinks)
+            if actual_fobs is not None
+            else (
+                tuple(e.path for e in partial_fobs.symlinks)
+                if partial_fobs is not None
+                else ()
+            )
+        )
+        f_all_ancs = tuple(dict.fromkeys([*f_base_ancs, *f_curr_ancs]))
+        f_all_syms = tuple(dict.fromkeys([*f_base_syms, *f_curr_syms]))
+
+        f_errs = list(file_errors_map.get(file_id, ()))
+        f_cause = file_causes_map.get(file_id)
+
+        for apath in f_all_ancs:
+            if apath in ancestor_errors_map:
+                for m_str in ancestor_errors_map[apath]:
+                    if m_str not in f_errs:
+                        f_errs.append(m_str)
+                if f_cause is None and ancestor_causes_map.get(apath) is not None:
+                    f_cause = ancestor_causes_map[apath]
+        for spath in f_all_syms:
+            if spath in symlink_errors_map:
+                for m_str in symlink_errors_map[spath]:
+                    if m_str not in f_errs:
+                        f_errs.append(m_str)
+                if f_cause is None and symlink_causes_map.get(spath) is not None:
+                    f_cause = symlink_causes_map[spath]
+
+        if actual_fobs is not None:
+            fdeps = file_deps_after[file_id]
+            for d_err in fdeps.errors:
+                if d_err not in f_errs:
+                    f_errs.append(d_err)
+            if f_errs or not fdeps.complete:
+                verified_files_after.pop(file_id, None)
+                unverified_files_after[file_id] = actual_fobs
+            file_obs_after[file_id] = _build_file_observation(
+                actual_fobs,
+                observed_ancestors=ancestors_after,
+                observed_symlinks=symlinks_after,
+                file_dependencies=fdeps,
+                verified=(file_id in verified_files_after and fdeps.complete and not f_errs),
+                errors=tuple(f_errs),
+            )
+        elif file_id in partial_files_after:
+            file_obs_after[file_id] = partial_files_after[file_id]
+
+        if f_errs:
+            file_errors_map[file_id] = f_errs
+            file_causes_map[file_id] = f_cause
+            observation_causes[f"profile:file:{file_id}"] = f_cause
+
+    for root_name, expected_root in sorted(state.observed_roots.items()):
+        r_base_ancs = tuple(a.path for a in expected_root.ancestor_identities)
+        r_curr_ancs = (
+            tuple(a.path for a in roots_after[root_name].ancestor_identities)
+            if root_name in roots_after
+            else ()
+        )
+        r_all_ancs = tuple(dict.fromkeys([*r_base_ancs, *r_curr_ancs]))
+        r_errs = list(root_errors_map.get(root_name, ()))
+        r_cause = root_causes_map.get(root_name)
+        for apath in r_all_ancs:
+            if apath in ancestor_errors_map:
+                for m_str in ancestor_errors_map[apath]:
+                    if m_str not in r_errs:
+                        r_errs.append(m_str)
+                if r_cause is None and ancestor_causes_map.get(apath) is not None:
+                    r_cause = ancestor_causes_map[apath]
+        if r_errs:
+            root_errors_map[root_name] = r_errs
+            root_causes_map[root_name] = r_cause
+            observation_causes[f"profile:root:{root_name}"] = r_cause
+            if root_name in roots_after and (
+                roots_after[root_name].verified
+                or roots_after[root_name].errors != tuple(r_errs)
+            ):
+                cur_rinv = roots_after[root_name]
+                roots_after[root_name] = _ObservedRootInventory(
+                    name=cur_rinv.name,
+                    path=cur_rinv.path,
+                    resolved_path=cur_rinv.resolved_path,
+                    file_ids=cur_rinv.file_ids,
+                    directory_identity=cur_rinv.directory_identity,
+                    ancestor_identities=cur_rinv.ancestor_identities,
+                    subdirectory_identities=cur_rinv.subdirectory_identities,
+                    member_pins=cur_rinv.member_pins,
+                    excluded_root_git_present=cur_rinv.excluded_root_git_present,
+                    member_observations=cur_rinv.member_observations,
+                    scan_complete=cur_rinv.scan_complete,
+                    verified=False,
+                    errors=tuple(r_errs),
+                )
+
+    for anc_path, a_cause in sorted(ancestor_causes_map.items()):
+        observation_causes[f"profile:ancestor:{anc_path}"] = a_cause
+    for sym_path, s_cause in sorted(symlink_causes_map.items()):
+        observation_causes[f"profile:symlink:{sym_path}"] = s_cause
 
     return _OuterProfileRecheckResult(
         verified=(len(errors) == 0),
@@ -4249,6 +4888,23 @@ def _reobserve_outer_profile_state(
         errors=tuple(errors),
         verified_files=verified_files_after,
         unverified_files=unverified_files_after,
+        manifest_dependencies=manifest_deps_after,
+        file_dependencies=file_deps_after,
+        partial_manifest_observation=partial_manifest_after,
+        partial_files=partial_files_after,
+        manifest_file_observation=manifest_file_obs_after,
+        file_observations=file_obs_after,
+        manifest_errors=tuple(manifest_errors),
+        manifest_cause=manifest_cause,
+        file_errors={k: tuple(v) for k, v in file_errors_map.items()},
+        file_causes=file_causes_map,
+        root_errors={k: tuple(v) for k, v in root_errors_map.items()},
+        root_causes=root_causes_map,
+        ancestor_errors={k: tuple(v) for k, v in ancestor_errors_map.items()},
+        ancestor_causes=ancestor_causes_map,
+        symlink_errors={k: tuple(v) for k, v in symlink_errors_map.items()},
+        symlink_causes=symlink_causes_map,
+        observation_causes=observation_causes,
     )
 
 
@@ -4571,8 +5227,9 @@ class FileObservation:
                     "FileObservation.ancestors must be a non-empty tuple of _ObservedDirectoryIdentity"
                 )
         else:
-            it = iter(expected_pairs)
-            if not all(pair in it for pair in observed_pairs):
+            observed_edge_paths = [s.path for s in self.symlink_identities]
+            it = iter(edge_paths)
+            if not all(path in it for path in observed_edge_paths):
                 raise ValueError(
                     "FileObservation.symlink_identities must be an ordered subset of FileObservation.symlinks"
                 )
@@ -5448,26 +6105,47 @@ def _build_file_observation(
                 err_list.append(d_err)
     else:
         anc_map: dict[str, _ObservedDirectoryIdentity] = {}
+        anc_conflict_errors: list[str] = []
         for parent in Path(file_obs.resolved_path).parents:
             p_str = str(parent)
             if p_str in observed_ancestors:
                 anc_map[p_str] = observed_ancestors[p_str]
         for dir_obs in file_obs.traversed_directory_identities:
-            if dir_obs.path in observed_ancestors:
-                anc_map.setdefault(dir_obs.path, observed_ancestors[dir_obs.path])
-            else:
-                anc_map.setdefault(dir_obs.path, dir_obs)
+            if dir_obs.path != dir_obs.resolved_path:
+                anc_conflict_errors.append(
+                    f"Traversed directory dependency {dir_obs.path!r} is not canonical ({dir_obs.resolved_path!r})"
+                )
+                continue
+            if (
+                dir_obs.path in observed_ancestors
+                and observed_ancestors[dir_obs.path] != dir_obs
+            ):
+                anc_conflict_errors.append(
+                    f"Directory identity changed during observation at {dir_obs.path!r}: "
+                    f"before={dir_obs.to_dict()}, after={observed_ancestors[dir_obs.path].to_dict()}"
+                )
+            anc_map[dir_obs.path] = dir_obs
         file_ancs = tuple(anc_map.values())
 
         sym_list: list[_ObservedSymlinkIdentity] = []
         missing_edges: list[_SymlinkEdge] = []
+        sym_conflict_errors: list[str] = []
         for edge in file_obs.symlinks:
             sym_obs = observed_symlinks.get(edge.path)
-            if sym_obs is not None and sym_obs.target == edge.target:
+            if sym_obs is not None:
                 sym_list.append(sym_obs)
+                if sym_obs.target != edge.target:
+                    sym_conflict_errors.append(
+                        f"Symlink target changed during observation at {edge.path!r}: "
+                        f"expected {edge.target!r}, observed {sym_obs.target!r}"
+                    )
             else:
                 missing_edges.append(edge)
         file_syms = tuple(sym_list)
+
+        for c_err in (*anc_conflict_errors, *sym_conflict_errors):
+            if c_err not in err_list:
+                err_list.append(c_err)
 
         resolved_parents_present = all(
             str(p) in anc_map for p in Path(file_obs.resolved_path).parents
@@ -5480,6 +6158,8 @@ def _build_file_observation(
             and resolved_parents_present
             and traversed_dirs_present
             and len(missing_edges) == 0
+            and len(anc_conflict_errors) == 0
+            and len(sym_conflict_errors) == 0
         )
         if not deps_complete and not err_list:
             if missing_edges:
@@ -6735,3 +7415,641 @@ def validate_profile(
         evidence_root=outer_state.evidence_root,
         _outer_state=outer_state,
     )
+
+
+def _is_size_mismatch_partial_observation(
+    pobs: PartialFileReadObservation,
+) -> bool:
+    """Return True iff ``pobs`` was produced by a pre-parse/stream size-mismatch comparison."""
+    return bool(pobs.errors) and (
+        pobs.errors[0].startswith("Size mismatch for ")
+        or pobs.errors[0].startswith("Pinned JSON size mismatch for ")
+    )
+
+
+def _build_postflight_error_descriptor(
+    key: str,
+    exc: BaseException,
+) -> dict[str, Any]:
+    """Build a detached JSON-safe error descriptor for an actual caught exception."""
+    cause = _select_original_cause_exception(exc)
+    raw_errno = getattr(cause, "errno", None)
+    errno_val = raw_errno if type(raw_errno) is int else None
+    return {
+        "key": key,
+        "type": type(cause).__name__,
+        "message": str(cause),
+        "errno": errno_val,
+    }
+
+
+def _cause_chain_reaches(
+    start: BaseException,
+    target: BaseException,
+) -> bool:
+    """Return True iff ``target`` is reachable from ``start`` by walking explicit ``__cause__`` links."""
+    seen: set[int] = set()
+    cur: BaseException | None = start
+    while cur is not None and id(cur) not in seen:
+        if cur is target:
+            return True
+        seen.add(id(cur))
+        cur = cur.__cause__
+    return False
+
+
+def _select_postflight_mutation_cause(
+    raw_exc: BaseException,
+) -> tuple[Exception, BaseException]:
+    """Return ``(carrier_exception, original_cause)`` for a postflight failure cause.
+
+    When the selected original cause is an :class:`Exception`, returns it directly
+    for both elements. When the selected original cause is a :class:`BaseException`
+    outside :class:`Exception`, returns an actual :class:`Exception` carrier from
+    the retained cause chain whose ``__cause__`` chain reaches the original cause,
+    or a :class:`RuntimeError` wrapper explicitly chained via ``__cause__`` to the
+    original cause.
+    """
+    orig_exc = _select_original_cause_exception(raw_exc)
+    if isinstance(orig_exc, Exception):
+        return orig_exc, orig_exc
+
+    chain = _walk_exception_cause_chain(raw_exc)
+    carrier_types = (
+        _ProfileObservationError,
+        _ControlledRootObservationError,
+        _ObservedFilePinError,
+        _PartialFileReadError,
+        _FileDependencyObservationError,
+    )
+    for cand in reversed(chain):
+        if (
+            isinstance(cand, Exception)
+            and not isinstance(cand, carrier_types)
+            and _cause_chain_reaches(cand, orig_exc)
+        ):
+            return cand, orig_exc
+    for cand in reversed(chain):
+        if isinstance(cand, Exception) and _cause_chain_reaches(cand, orig_exc):
+            return cand, orig_exc
+
+    wrapper = RuntimeError(f"{type(orig_exc).__name__}: {orig_exc}")
+    wrapper.__cause__ = orig_exc
+    return wrapper, orig_exc
+
+
+def _collect_owner_postflight_findings(
+    *,
+    owner_key: str,
+    owner_category: str,
+    owner_path: str,
+    expected_payload: dict[str, Any],
+    observed_payload: dict[str, Any] | None,
+    matches_baseline: bool,
+    owner_errors: Sequence[str],
+    direct_cause: BaseException | None,
+    all_ancs: Sequence[str],
+    all_syms: Sequence[str],
+    recheck: _OuterProfileRecheckResult,
+    mutations_out: list[dict[str, Any]],
+    causes_out: list[Exception | None],
+    top_errors_out: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Project one owner's comparison mismatches and actual failure causes into rows, mutations, and errors."""
+    dep_failure_msg_to_cause: dict[str, BaseException] = {}
+    dep_comparison_msgs: set[str] = set()
+    ordered_dep_failures: list[tuple[str, BaseException]] = []
+
+    for apath in all_ancs:
+        a_errs = recheck.ancestor_errors.get(apath, ())
+        a_cause = recheck.ancestor_causes.get(apath)
+        if a_cause is not None:
+            sel_a = _select_original_cause_exception(a_cause)
+            a_reason = (
+                "; ".join(a_errs)
+                if a_errs
+                else f"Ancestor directory {apath!r} recheck failed: {sel_a}"
+            )
+            ordered_dep_failures.append((a_reason, a_cause))
+            for m_str in a_errs:
+                dep_failure_msg_to_cause.setdefault(m_str, sel_a)
+        else:
+            for m_str in a_errs:
+                dep_comparison_msgs.add(m_str)
+
+    for spath in all_syms:
+        s_errs = recheck.symlink_errors.get(spath, ())
+        s_cause = recheck.symlink_causes.get(spath)
+        if s_cause is not None:
+            sel_s = _select_original_cause_exception(s_cause)
+            s_reason = (
+                "; ".join(s_errs)
+                if s_errs
+                else f"Symlink {spath!r} recheck failed: {sel_s}"
+            )
+            ordered_dep_failures.append((s_reason, s_cause))
+            for m_str in s_errs:
+                dep_failure_msg_to_cause.setdefault(m_str, sel_s)
+        else:
+            for m_str in s_errs:
+                dep_comparison_msgs.add(m_str)
+
+    direct_msgs = [
+        m_str
+        for m_str in owner_errors
+        if m_str not in dep_failure_msg_to_cause
+        and m_str not in dep_comparison_msgs
+    ]
+
+    comparison_reasons: list[str] = []
+    raw_failure_items: list[tuple[str, BaseException]] = []
+
+    if direct_cause is not None:
+        sel_direct = _select_original_cause_exception(direct_cause)
+        direct_reason = (
+            "; ".join(direct_msgs)
+            if direct_msgs
+            else f"{owner_key} recheck failed: {sel_direct}"
+        )
+        raw_failure_items.append((direct_reason, direct_cause))
+        for m_str in owner_errors:
+            if m_str in dep_comparison_msgs and m_str not in comparison_reasons:
+                comparison_reasons.append(m_str)
+    else:
+        for m_str in owner_errors:
+            if (
+                m_str not in dep_failure_msg_to_cause
+                and m_str not in comparison_reasons
+            ):
+                comparison_reasons.append(m_str)
+
+    raw_failure_items.extend(ordered_dep_failures)
+
+    failure_items: list[tuple[str, Exception, BaseException]] = []
+    seen_exc_index: dict[int, int] = {}
+    for reason_str, raw_exc in raw_failure_items:
+        exc_obj, orig_exc = _select_postflight_mutation_cause(raw_exc)
+        exc_id = id(orig_exc)
+        if exc_id in seen_exc_index:
+            idx = seen_exc_index[exc_id]
+            prev_reason, prev_exc, prev_orig = failure_items[idx]
+            if reason_str not in prev_reason:
+                failure_items[idx] = (
+                    f"{prev_reason}; {reason_str}",
+                    prev_exc,
+                    prev_orig,
+                )
+        else:
+            seen_exc_index[exc_id] = len(failure_items)
+            failure_items.append((reason_str, exc_obj, orig_exc))
+
+    row_errors: list[dict[str, Any]] = [
+        _build_postflight_error_descriptor(owner_key, orig_exc)
+        for _, _, orig_exc in failure_items
+    ]
+
+    if not matches_baseline and not comparison_reasons and not failure_items:
+        comparison_reasons.append(
+            f"{owner_key} observation changed since baseline at {owner_path!r}"
+        )
+
+    if comparison_reasons:
+        mutations_out.append(
+            {
+                "category": owner_category,
+                "key": owner_key,
+                "path": owner_path,
+                "reason": "; ".join(comparison_reasons),
+                "expected": copy.deepcopy(expected_payload),
+                "observed": copy.deepcopy(observed_payload),
+                "error": None,
+            }
+        )
+        causes_out.append(None)
+
+    for (fail_reason, exc_obj, _orig_exc), err_desc in zip(
+        failure_items, row_errors
+    ):
+        mutations_out.append(
+            {
+                "category": owner_category,
+                "key": owner_key,
+                "path": owner_path,
+                "reason": fail_reason,
+                "expected": copy.deepcopy(expected_payload),
+                "observed": copy.deepcopy(observed_payload),
+                "error": copy.deepcopy(err_desc),
+            }
+        )
+        causes_out.append(exc_obj)
+        top_errors_out.append(copy.deepcopy(err_desc))
+
+    return row_errors
+
+
+def recheck_profile(
+    baseline: ValidatedProfile,
+    *,
+    mutation_causes_out: list[Exception | None] | None = None,
+) -> dict[str, Any]:
+    """Re-observe ``baseline`` once via :func:`_reobserve_outer_profile_state` and project detached JSON-safe postflight state."""
+    if type(baseline) is not ValidatedProfile:
+        raise ValueError(
+            f"baseline must be a ValidatedProfile, got {type(baseline).__name__}"
+        )
+    state = baseline._outer_state
+    if type(state) is not _CheckedOuterProfileState:
+        raise ValueError(
+            "baseline must retain a verified _CheckedOuterProfileState"
+        )
+    if mutation_causes_out is not None and not isinstance(
+        mutation_causes_out, list
+    ):
+        raise ValueError(
+            f"mutation_causes_out must be a list or None, got {type(mutation_causes_out).__name__}"
+        )
+    if mutation_causes_out is not None:
+        mutation_causes_out.clear()
+
+    recheck = _reobserve_outer_profile_state(state)
+    baseline_prov = baseline.to_provenance()
+
+    mutations: list[dict[str, Any]] = []
+    aligned_causes: list[Exception | None] = []
+    top_errors: list[dict[str, Any]] = []
+
+    # 1. Project manifest row
+    manifest_expected: dict[str, Any] = copy.deepcopy(baseline_prov["manifest"])
+    if recheck.manifest_file_observation is not None:
+        m_obs_obj: FileObservation | PartialFileReadObservation | None = (
+            recheck.manifest_file_observation
+        )
+    elif recheck.partial_manifest_observation is not None:
+        m_obs_obj = recheck.partial_manifest_observation
+    elif recheck.manifest_observation is not None:
+        m_obs_obj = _build_file_observation(
+            recheck.manifest_observation,
+            observed_ancestors=recheck.observed_ancestors,
+            observed_symlinks=recheck.observed_symlinks,
+            file_dependencies=recheck.manifest_dependencies,
+            verified=(len(recheck.manifest_errors) == 0),
+            errors=recheck.manifest_errors,
+        )
+    else:
+        m_obs_obj = None
+
+    manifest_observed: dict[str, Any] | None = (
+        copy.deepcopy(m_obs_obj.to_dict()) if m_obs_obj is not None else None
+    )
+
+    m_base_ancs = (
+        tuple(a.path for a in state.manifest_file_observation.ancestors)
+        if state.manifest_file_observation is not None
+        else tuple(
+            dict.fromkeys(
+                [
+                    *(
+                        str(p)
+                        for p in Path(
+                            state.manifest_observation.resolved_path
+                        ).parents
+                    ),
+                    *(
+                        d.path
+                        for d in state.manifest_observation.traversed_directory_identities
+                    ),
+                ]
+            )
+        )
+    )
+    m_base_syms = tuple(e.path for e in state.manifest_observation.symlinks)
+    if recheck.manifest_observation is not None:
+        m_curr_ancs = tuple(
+            dict.fromkeys(
+                [
+                    *(
+                        str(p)
+                        for p in Path(
+                            recheck.manifest_observation.resolved_path
+                        ).parents
+                    ),
+                    *(
+                        d.path
+                        for d in recheck.manifest_observation.traversed_directory_identities
+                    ),
+                ]
+            )
+        )
+        m_curr_syms = tuple(
+            e.path for e in recheck.manifest_observation.symlinks
+        )
+    elif recheck.partial_manifest_observation is not None:
+        p_m = recheck.partial_manifest_observation
+        m_curr_ancs = tuple(
+            dict.fromkeys(
+                [
+                    *(
+                        (str(p) for p in Path(p_m.resolved_path).parents)
+                        if p_m.resolved_path is not None
+                        else ()
+                    ),
+                    *(d.path for d in p_m.ancestors),
+                ]
+            )
+        )
+        m_curr_syms = tuple(e.path for e in p_m.symlinks)
+    else:
+        m_curr_ancs = ()
+        m_curr_syms = ()
+
+    m_all_ancs = tuple(dict.fromkeys([*m_base_ancs, *m_curr_ancs]))
+    m_all_syms = tuple(dict.fromkeys([*m_base_syms, *m_curr_syms]))
+    m_has_direct_failure = recheck.manifest_observation is None and (
+        recheck.partial_manifest_observation is None
+        or not _is_size_mismatch_partial_observation(
+            recheck.partial_manifest_observation
+        )
+    )
+    m_direct_cause = recheck.manifest_cause if m_has_direct_failure else None
+
+    manifest_matches_prelim = (
+        m_obs_obj is not None
+        and isinstance(m_obs_obj, FileObservation)
+        and m_obs_obj.verified
+        and m_obs_obj.dependencies_complete
+        and len(recheck.manifest_errors) == 0
+        and manifest_observed == manifest_expected
+    )
+    manifest_row_errors = _collect_owner_postflight_findings(
+        owner_key="profile:manifest",
+        owner_category="diagnostic_profile_manifest",
+        owner_path=str(baseline.manifest_identity.path),
+        expected_payload=manifest_expected,
+        observed_payload=manifest_observed,
+        matches_baseline=manifest_matches_prelim,
+        owner_errors=recheck.manifest_errors,
+        direct_cause=m_direct_cause,
+        all_ancs=m_all_ancs,
+        all_syms=m_all_syms,
+        recheck=recheck,
+        mutations_out=mutations,
+        causes_out=aligned_causes,
+        top_errors_out=top_errors,
+    )
+    manifest_matches = bool(
+        manifest_matches_prelim and len(manifest_row_errors) == 0
+    )
+    manifest_row: dict[str, Any] = {
+        "expected": manifest_expected,
+        "observed": manifest_observed,
+        "matches_baseline": manifest_matches,
+        "errors": manifest_row_errors,
+    }
+
+    # 2. Project files rows in sorted original file_id order
+    files_rows: dict[str, dict[str, Any]] = {}
+    for fid in sorted(baseline_prov["files"].keys()):
+        f_expected: dict[str, Any] = copy.deepcopy(baseline_prov["files"][fid])
+        if fid in recheck.file_observations:
+            f_obs_obj: FileObservation | PartialFileReadObservation | None = (
+                recheck.file_observations[fid]
+            )
+        elif fid in recheck.partial_files:
+            f_obs_obj = recheck.partial_files[fid]
+        elif fid in recheck.observed_files:
+            raw_fobs = recheck.observed_files[fid]
+            f_obs_obj = _build_file_observation(
+                raw_fobs,
+                observed_ancestors=recheck.observed_ancestors,
+                observed_symlinks=recheck.observed_symlinks,
+                file_dependencies=recheck.file_dependencies.get(fid),
+                verified=(fid in recheck.verified_files),
+                errors=recheck.file_errors.get(fid, ()),
+            )
+        else:
+            f_obs_obj = None
+
+        f_observed: dict[str, Any] | None = (
+            copy.deepcopy(f_obs_obj.to_dict())
+            if f_obs_obj is not None
+            else None
+        )
+
+        expected_fpin_obs = state.observed_files[fid]
+        base_f_pub = state.file_observations.get(fid)
+        f_base_ancs = (
+            tuple(a.path for a in base_f_pub.ancestors)
+            if base_f_pub is not None
+            else tuple(
+                dict.fromkeys(
+                    [
+                        *(
+                            str(p)
+                            for p in Path(
+                                expected_fpin_obs.resolved_path
+                            ).parents
+                        ),
+                        *(
+                            d.path
+                            for d in expected_fpin_obs.traversed_directory_identities
+                        ),
+                    ]
+                )
+            )
+        )
+        f_base_syms = tuple(e.path for e in expected_fpin_obs.symlinks)
+
+        actual_fpin_obs = recheck.observed_files.get(fid)
+        partial_f_obs = recheck.partial_files.get(fid)
+        if actual_fpin_obs is not None:
+            f_curr_ancs = tuple(
+                dict.fromkeys(
+                    [
+                        *(
+                            str(p)
+                            for p in Path(
+                                actual_fpin_obs.resolved_path
+                            ).parents
+                        ),
+                        *(
+                            d.path
+                            for d in actual_fpin_obs.traversed_directory_identities
+                        ),
+                    ]
+                )
+            )
+            f_curr_syms = tuple(e.path for e in actual_fpin_obs.symlinks)
+        elif partial_f_obs is not None:
+            f_curr_ancs = tuple(
+                dict.fromkeys(
+                    [
+                        *(
+                            (
+                                str(p)
+                                for p in Path(partial_f_obs.resolved_path).parents
+                            )
+                            if partial_f_obs.resolved_path is not None
+                            else ()
+                        ),
+                        *(d.path for d in partial_f_obs.ancestors),
+                    ]
+                )
+            )
+            f_curr_syms = tuple(e.path for e in partial_f_obs.symlinks)
+        else:
+            f_curr_ancs = ()
+            f_curr_syms = ()
+
+        f_all_ancs = tuple(dict.fromkeys([*f_base_ancs, *f_curr_ancs]))
+        f_all_syms = tuple(dict.fromkeys([*f_base_syms, *f_curr_syms]))
+        f_has_direct_failure = actual_fpin_obs is None and (
+            partial_f_obs is None
+            or not _is_size_mismatch_partial_observation(partial_f_obs)
+        )
+        f_direct_cause = (
+            recheck.file_causes.get(fid) if f_has_direct_failure else None
+        )
+        f_errs_tuple = recheck.file_errors.get(fid, ())
+
+        f_matches_prelim = (
+            fid in recheck.verified_files
+            and f_obs_obj is not None
+            and isinstance(f_obs_obj, FileObservation)
+            and f_obs_obj.verified
+            and f_obs_obj.dependencies_complete
+            and len(f_errs_tuple) == 0
+            and f_observed == f_expected
+        )
+        f_row_errors = _collect_owner_postflight_findings(
+            owner_key=f"profile:file:{fid}",
+            owner_category="diagnostic_profile_file",
+            owner_path=str(f_expected["path"]),
+            expected_payload=f_expected,
+            observed_payload=f_observed,
+            matches_baseline=f_matches_prelim,
+            owner_errors=f_errs_tuple,
+            direct_cause=f_direct_cause,
+            all_ancs=f_all_ancs,
+            all_syms=f_all_syms,
+            recheck=recheck,
+            mutations_out=mutations,
+            causes_out=aligned_causes,
+            top_errors_out=top_errors,
+        )
+        f_matches = bool(f_matches_prelim and len(f_row_errors) == 0)
+        files_rows[fid] = {
+            "expected": f_expected,
+            "observed": f_observed,
+            "matches_baseline": f_matches,
+            "errors": f_row_errors,
+        }
+
+    # 3. Project roots rows in sorted original root_name order
+    roots_rows: dict[str, dict[str, Any]] = {}
+    for rname in sorted(baseline_prov["roots"].keys()):
+        r_expected: dict[str, Any] = copy.deepcopy(baseline_prov["roots"][rname])
+        r_inv = recheck.observed_roots.get(rname)
+        if r_inv is not None:
+            r_obs_obj: RootObservation | None = _build_root_observation(
+                r_inv, state.outer_manifest
+            )
+            r_observed: dict[str, Any] | None = copy.deepcopy(
+                r_obs_obj.to_dict()
+            )
+            scan_complete = bool(r_inv.scan_complete)
+            actual_rels = set(r_inv.member_pins.keys())
+        else:
+            r_obs_obj = None
+            r_observed = None
+            scan_complete = False
+            actual_rels = set()
+
+        expected_rels = {
+            str(m["relative_path"]) for m in r_expected["members"]
+        }
+        added_rels = sorted(actual_rels - expected_rels)
+        removed_rels = (
+            sorted(expected_rels - actual_rels) if scan_complete else []
+        )
+
+        expected_root_inv = state.observed_roots[rname]
+        r_base_ancs = tuple(
+            a.path for a in expected_root_inv.ancestor_identities
+        )
+        r_curr_ancs = (
+            tuple(a.path for a in r_inv.ancestor_identities)
+            if r_inv is not None
+            else ()
+        )
+        r_all_ancs = tuple(dict.fromkeys([*r_base_ancs, *r_curr_ancs]))
+        r_has_direct_failure = r_inv is None or not r_inv.scan_complete
+        r_direct_cause = (
+            recheck.root_causes.get(rname) if r_has_direct_failure else None
+        )
+        r_errs_tuple = recheck.root_errors.get(rname, ())
+
+        r_matches_prelim = (
+            rname in recheck.verified_roots
+            and r_obs_obj is not None
+            and r_obs_obj.scan_complete
+            and r_obs_obj.verified
+            and len(r_errs_tuple) == 0
+            and r_observed == r_expected
+            and not added_rels
+            and not removed_rels
+        )
+        r_row_errors = _collect_owner_postflight_findings(
+            owner_key=f"profile:root:{rname}",
+            owner_category="diagnostic_profile_root",
+            owner_path=str(r_expected["path"]),
+            expected_payload=r_expected,
+            observed_payload=r_observed,
+            matches_baseline=r_matches_prelim,
+            owner_errors=r_errs_tuple,
+            direct_cause=r_direct_cause,
+            all_ancs=r_all_ancs,
+            all_syms=(),
+            recheck=recheck,
+            mutations_out=mutations,
+            causes_out=aligned_causes,
+            top_errors_out=top_errors,
+        )
+        r_matches = bool(r_matches_prelim and len(r_row_errors) == 0)
+        roots_rows[rname] = {
+            "expected": r_expected,
+            "observed": r_observed,
+            "matches_baseline": r_matches,
+            "scan_complete": scan_complete,
+            "member_diff": {
+                "added": added_rels,
+                "removed": removed_rels,
+            },
+            "errors": r_row_errors,
+        }
+
+    if mutation_causes_out is not None:
+        mutation_causes_out.extend(aligned_causes)
+
+    all_rows_match = (
+        manifest_row["matches_baseline"]
+        and all(row["matches_baseline"] for row in files_rows.values())
+        and all(row["matches_baseline"] for row in roots_rows.values())
+    )
+    overall_verified = bool(
+        recheck.verified
+        and all_rows_match
+        and len(mutations) == 0
+        and len(top_errors) == 0
+    )
+
+    return {
+        "profile_id": str(baseline.profile_id),
+        "verified": overall_verified,
+        "runtime_image_coverage": "not_assessed",
+        "manifest": manifest_row,
+        "files": files_rows,
+        "roots": roots_rows,
+        "mutations": mutations,
+        "errors": top_errors,
+    }
+

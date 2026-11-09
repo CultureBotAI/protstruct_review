@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Focused synthetic unit tests for scripts/refmac_diagnostic_profile.py (Tasks 653, 657, 663, and 658)."""
+"""Focused synthetic unit tests for scripts/refmac_diagnostic_profile.py (Tasks 653, 657, 663, 658, 668, 673, 677, 681, 685, 661, 734, 739, 742, 744, 749, 751, and 737)."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import stat
 import sys
 import tempfile
 import unittest
@@ -54,6 +55,7 @@ from refmac_diagnostic_profile import (  # noqa: E402
     _reobserve_outer_profile_state,
     _validate_and_observe_outer_profile,
     _validate_outer_manifest_shape,
+    recheck_profile,
     reject_conflicting_environment,
     validate_profile,
 )
@@ -64,12 +66,13 @@ def _sha256_bytes(data: bytes) -> str:
 
 
 class TestPublicDataclassesAndSliceBoundary(unittest.TestCase):
-    """Verify frozen FilePin, RefmacDiagnosticProfile, and slice boundary (validate_profile present, recheck_profile absent)."""
+    """Verify frozen FilePin, RefmacDiagnosticProfile, and public entrypoints (validate_profile and recheck_profile)."""
 
     def test_validate_and_recheck_stubs_are_deliberately_absent(self) -> None:
         self.assertTrue(hasattr(profile_mod, "validate_profile"))
         self.assertTrue(callable(profile_mod.validate_profile))
-        self.assertFalse(hasattr(profile_mod, "recheck_profile"))
+        self.assertTrue(hasattr(profile_mod, "recheck_profile"))
+        self.assertTrue(callable(profile_mod.recheck_profile))
 
     def test_file_pin_preserves_lexical_alias_and_is_frozen(self) -> None:
         raw_alias = "/opt/tools/bin/../libexec/refmac5"
@@ -5735,6 +5738,2295 @@ class TestValidateProfileAndInnerReceiptJoins(unittest.TestCase):
                 },
             )
             self.assertEqual(err.to_provenance(), initial_prov)
+
+
+class TestTask734PrivatePostflightObservations(unittest.TestCase):
+    """Focused synthetic tests for Task 734 private postflight observation collection and cause distinction."""
+
+    def test_private_reobserve_distinguishes_comparison_mismatches_from_actual_observation_causes(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = _build_synthetic_outer_profile_fixture(Path(tmp))
+            root = fx["root"]
+            assert isinstance(root, Path)
+            trees = fx["trees"]
+            assert isinstance(trees, dict)
+            profile = fx["profile"]
+            assert isinstance(profile, RefmacDiagnosticProfile)
+            base_payload = fx["manifest_payload"]
+            assert isinstance(base_payload, dict)
+
+            state = _validate_and_observe_outer_profile(profile)
+
+            # 1. Unchanged state: verified=True, no errors, no causes
+            unchanged = _reobserve_outer_profile_state(state)
+            self.assertTrue(unchanged.verified)
+            self.assertEqual(unchanged.errors, ())
+            self.assertEqual(unchanged.manifest_errors, ())
+            self.assertIsNone(unchanged.manifest_cause)
+            self.assertIsNone(unchanged.partial_manifest_observation)
+            self.assertEqual(len(unchanged.partial_files), 0)
+            self.assertEqual(len(unchanged.file_errors), 0)
+            self.assertEqual(len(unchanged.file_causes), 0)
+            self.assertEqual(len(unchanged.root_errors), 0)
+            self.assertEqual(len(unchanged.root_causes), 0)
+            self.assertEqual(len(unchanged.observation_causes), 0)
+            self.assertIsInstance(unchanged.manifest_file_observation, FileObservation)
+            self.assertTrue(unchanged.manifest_file_observation.verified)
+            self.assertEqual(
+                set(unchanged.file_observations.keys()),
+                set(state.observed_files.keys()),
+            )
+
+            # 2. Complete same-byte file inode replacement and same-byte root directory replacement are comparison-only (None cause)
+            qc_path = root / "support" / "qc-item.json"
+            qc_fid = next(
+                fid
+                for fid, row in base_payload["files"].items()  # type: ignore[union-attr]
+                if row["path"] == str(qc_path)
+            )
+            orig_qc_bytes = qc_path.read_bytes()
+            orig_qc_ino = qc_path.stat().st_ino
+            replacement_tmp = root / "support" / "qc-item.new-inode"
+            replacement_tmp.write_bytes(orig_qc_bytes)
+            qc_backup = root / "support" / "qc-item.orig-inode"
+            os.link(qc_path, qc_backup)
+            os.replace(replacement_tmp, qc_path)
+            self.assertNotEqual(qc_path.stat().st_ino, orig_qc_ino)
+
+            prepared_dir = trees["prepared"]
+            orig_prepared_ino = prepared_dir.stat().st_ino
+            prepared_backup = root / "prepared-orig-backup"
+            os.rename(prepared_dir, prepared_backup)
+            prepared_dir.mkdir(mode=prepared_backup.stat().st_mode & 0o777)
+            for member in sorted(prepared_backup.iterdir()):
+                if member.is_file():
+                    (prepared_dir / member.name).write_bytes(member.read_bytes())
+            self.assertNotEqual(prepared_dir.stat().st_ino, orig_prepared_ino)
+            try:
+                same_byte = _reobserve_outer_profile_state(state)
+                self.assertFalse(same_byte.verified)
+                self.assertIn(qc_fid, same_byte.unverified_files)
+                self.assertIn(qc_fid, same_byte.file_errors)
+                self.assertIn(qc_fid, same_byte.file_causes)
+                self.assertIsNone(same_byte.file_causes[qc_fid])
+                self.assertIsNone(
+                    same_byte.observation_causes[f"profile:file:{qc_fid}"]
+                )
+                self.assertIn("prepared", same_byte.failed_roots)
+                self.assertNotIn("prepared", same_byte.incomplete_roots)
+                self.assertTrue(same_byte.observed_roots["prepared"].scan_complete)
+                self.assertFalse(same_byte.observed_roots["prepared"].verified)
+                self.assertIn("prepared", same_byte.root_errors)
+                self.assertIn("prepared", same_byte.root_causes)
+                self.assertIsNone(same_byte.root_causes["prepared"])
+                self.assertIsNone(
+                    same_byte.observation_causes["profile:root:prepared"]
+                )
+            finally:
+                for member in list(prepared_dir.iterdir()):
+                    member.unlink()
+                prepared_dir.rmdir()
+                os.rename(prepared_backup, prepared_dir)
+                os.replace(qc_backup, qc_path)
+                self.assertEqual(qc_path.stat().st_ino, orig_qc_ino)
+                self.assertEqual(prepared_dir.stat().st_ino, orig_prepared_ino)
+
+            # 3. Multi-error continuation: missing early file (FileNotFoundError), later equal-length corrupt file (comparison-only),
+            # longer size-mismatched file (is_size_mismatch=True -> comparison-only), post-fstat read OSError/ValueError
+            # (is_size_mismatch=False -> actual cause + PartialFileReadObservation), and child scan failure (PermissionError + completed members)
+            external_fids = sorted(
+                fid
+                for fid, fobs in state.observed_files.items()
+                if fid not in state.outer_manifest.tree_member_ids
+                and not fobs.symlinks
+                and ".." not in Path(fobs.path).parts
+            )
+            self.assertGreaterEqual(len(external_fids), 4)
+            missing_fid = external_fids[0]
+            corrupt_same_len_fid = external_fids[1]
+            longer_size_fid = external_fids[2]
+            io_read_fid = external_fids[3]
+
+            missing_path = Path(state.observed_files[missing_fid].path)
+            corrupt_path = Path(state.observed_files[corrupt_same_len_fid].path)
+            longer_path = Path(state.observed_files[longer_size_fid].path)
+            io_read_path = Path(state.observed_files[io_read_fid].path)
+
+            missing_backup = root / "missing.orig-inode"
+            os.link(missing_path, missing_backup)
+            missing_path.unlink()
+
+            orig_corrupt_bytes = corrupt_path.read_bytes()
+            corrupt_backup = root / "corrupt.orig-inode"
+            os.link(corrupt_path, corrupt_backup)
+            corrupt_tmp = root / "corrupt.same-len-tmp"
+            corrupt_tmp.write_bytes(
+                (b"X" if orig_corrupt_bytes[:1] != b"X" else b"Y")
+                + orig_corrupt_bytes[1:]
+            )
+            os.replace(corrupt_tmp, corrupt_path)
+
+            longer_backup = root / "longer.orig-inode"
+            os.link(longer_path, longer_backup)
+            longer_tmp = root / "longer.size-tmp"
+            longer_tmp.write_bytes(longer_path.read_bytes() + b"extra-longer-bytes\n")
+            os.replace(longer_tmp, longer_path)
+
+            io_stat = io_read_path.stat()
+            target_dev_ino = (int(io_stat.st_dev), int(io_stat.st_ino))
+            injected_eio = OSError(errno.EIO, "simulated post-fstat stream read error")
+            injected_walk_perm = PermissionError(
+                errno.EACCES, "simulated child directory walk permission denied"
+            )
+            real_fdopen = os.fdopen
+            real_walk = os.walk
+
+            class _FaultAfterFirstByteReader:
+                def __init__(self, inner) -> None:
+                    self._inner = inner
+                    self._calls = 0
+
+                def __enter__(self):
+                    self._inner.__enter__()
+                    return self
+
+                def __exit__(self, exc_type, exc, tb):
+                    return self._inner.__exit__(exc_type, exc, tb)
+
+                def read(self, size: int = -1) -> bytes:
+                    self._calls += 1
+                    if self._calls == 1:
+                        return self._inner.read(1)
+                    raise injected_eio
+
+                def fileno(self) -> int:
+                    return self._inner.fileno()
+
+            def fault_fdopen(fd: int, *args, **kwargs):
+                st = os.fstat(fd)
+                fh = real_fdopen(fd, *args, **kwargs)
+                if (int(st.st_dev), int(st.st_ino)) == target_dev_ino:
+                    return _FaultAfterFirstByteReader(fh)
+                return fh
+
+            def fault_vendor_child_walk(top, topdown=True, onerror=None, followlinks=False):
+                if str(top) == str(trees["vendor"]):
+                    for idx, item in enumerate(
+                        real_walk(
+                            top,
+                            topdown=topdown,
+                            onerror=onerror,
+                            followlinks=followlinks,
+                        )
+                    ):
+                        if idx == 0:
+                            yield item
+                            if onerror is not None:
+                                onerror(injected_walk_perm)
+                            return
+                else:
+                    yield from real_walk(
+                        top,
+                        topdown=topdown,
+                        onerror=onerror,
+                        followlinks=followlinks,
+                    )
+
+            try:
+                with (
+                    mock.patch(
+                        "refmac_diagnostic_profile.os.fdopen",
+                        side_effect=fault_fdopen,
+                    ),
+                    mock.patch(
+                        "refmac_diagnostic_profile.os.walk",
+                        side_effect=fault_vendor_child_walk,
+                    ),
+                ):
+                    multi = _reobserve_outer_profile_state(state, chunk_size=4)
+
+                self.assertFalse(multi.verified)
+                # Manifest and unaffected roots/files still observed and verified
+                self.assertIsNotNone(multi.manifest_observation)
+                self.assertIsNone(multi.manifest_cause)
+                self.assertIn("prepared", multi.verified_roots)
+                self.assertIn("build", multi.verified_roots)
+                self.assertGreater(len(multi.verified_files), 20)
+
+                # Early missing file: absent from observed_files and partial_files, FileNotFoundError cause preserved
+                self.assertNotIn(missing_fid, multi.observed_files)
+                self.assertNotIn(missing_fid, multi.partial_files)
+                self.assertNotIn(missing_fid, multi.file_observations)
+                self.assertIsInstance(
+                    multi.file_causes[missing_fid], FileNotFoundError
+                )
+                self.assertEqual(
+                    getattr(multi.file_causes[missing_fid], "errno", None),
+                    errno.ENOENT,
+                )
+
+                # Equal-length corrupt file: completed observation retained, comparison-only (None cause)
+                self.assertIn(corrupt_same_len_fid, multi.observed_files)
+                self.assertIn(corrupt_same_len_fid, multi.unverified_files)
+                self.assertIsNone(multi.file_causes[corrupt_same_len_fid])
+                self.assertIsInstance(
+                    multi.file_observations[corrupt_same_len_fid], FileObservation
+                )
+                self.assertFalse(
+                    multi.file_observations[corrupt_same_len_fid].verified
+                )
+
+                # Longer size-mismatched file: PartialFileReadObservation retained via is_size_mismatch=True, comparison-only (None cause)
+                self.assertNotIn(longer_size_fid, multi.observed_files)
+                self.assertIn(longer_size_fid, multi.partial_files)
+                self.assertEqual(
+                    multi.partial_files[longer_size_fid].streamed_size_bytes, 0
+                )
+                self.assertIsNone(multi.file_causes[longer_size_fid])
+
+                # Post-fstat read failure: PartialFileReadObservation retained with streamed_size_bytes=1 and exact OSError cause
+                self.assertNotIn(io_read_fid, multi.observed_files)
+                self.assertIn(io_read_fid, multi.partial_files)
+                p_obs = multi.partial_files[io_read_fid]
+                self.assertEqual(p_obs.stat_size_bytes, int(io_stat.st_size))
+                self.assertEqual(p_obs.streamed_size_bytes, 1)
+                self.assertIsNone(p_obs.sha256)
+                self.assertIsNone(p_obs.size_bytes)
+                self.assertFalse(p_obs.read_complete)
+                self.assertIs(multi.file_causes[io_read_fid], injected_eio)
+                self.assertIs(
+                    multi.observation_causes[f"profile:file:{io_read_fid}"],
+                    injected_eio,
+                )
+
+                # Child scan failure on vendor: scan_complete=False, retains actual root identity and completed members, preserves exact PermissionError
+                self.assertIn("vendor", multi.incomplete_roots)
+                self.assertIn("vendor", multi.failed_roots)
+                vendor_inv = multi.observed_roots["vendor"]
+                self.assertFalse(vendor_inv.scan_complete)
+                self.assertFalse(vendor_inv.verified)
+                self.assertEqual(
+                    vendor_inv.directory_identity,
+                    state.observed_roots["vendor"].directory_identity,
+                )
+                self.assertEqual(
+                    vendor_inv.ancestor_identities,
+                    state.observed_roots["vendor"].ancestor_identities,
+                )
+                self.assertGreaterEqual(len(vendor_inv.member_pins), 1)
+                self.assertTrue(
+                    set(vendor_inv.member_pins.keys()).issubset(
+                        set(state.observed_roots["vendor"].member_pins.keys())
+                    )
+                )
+                self.assertIs(multi.root_causes["vendor"], injected_walk_perm)
+                self.assertIs(
+                    multi.observation_causes["profile:root:vendor"],
+                    injected_walk_perm,
+                )
+            finally:
+                os.replace(missing_backup, missing_path)
+                os.replace(corrupt_backup, corrupt_path)
+                os.replace(longer_backup, longer_path)
+
+    def test_739_retargeted_symlink_sole_observer_new_ancestor_and_root_ancestor_prefix_retention(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = _build_synthetic_outer_profile_fixture(Path(tmp))
+            root = fx["root"]
+            assert isinstance(root, Path)
+            trees = fx["trees"]
+            assert isinstance(trees, dict)
+            alias_symlink = fx["alias_symlink"]
+            assert isinstance(alias_symlink, Path)
+            profile = fx["profile"]
+            assert isinstance(profile, RefmacDiagnosticProfile)
+            base_payload = fx["manifest_payload"]
+            assert isinstance(base_payload, dict)
+
+            state = _validate_and_observe_outer_profile(profile)
+            alias_fid = next(
+                fid
+                for fid, row in base_payload["files"].items()  # type: ignore[union-attr]
+                if row["path"] == str(alias_symlink)
+            )
+            orig_target = os.readlink(alias_symlink)
+            orig_bytes = alias_symlink.read_bytes()
+
+            # 1 & 3. Retarget alias_symlink into a new parent directory support/new-targets/python:
+            # sole symlink observer is called once (no fallback second lstat/readlink), retains actual target,
+            # retains new parent directory in raw AND projected observations with complete dependencies,
+            # and keeps comparison mismatch cause as None.
+            new_target_dir = root / "support" / "new-targets"
+            new_target_file = new_target_dir / "python"
+            new_target_dir.mkdir(parents=True, exist_ok=True)
+            new_target_file.write_bytes(orig_bytes)
+            alias_symlink.unlink()
+            os.symlink("new-targets/python", alias_symlink)
+
+            real_observe_symlink = profile_mod._observe_symlink_identity
+            symlink_observer_calls: list[tuple[str, bool]] = []
+
+            def spy_observe_symlink(
+                edge: _SymlinkEdge,
+                *,
+                check_expected_target: bool = True,
+            ):
+                symlink_observer_calls.append(
+                    (edge.path, check_expected_target)
+                )
+                return real_observe_symlink(
+                    edge,
+                    check_expected_target=check_expected_target,
+                )
+
+            try:
+                with mock.patch(
+                    "refmac_diagnostic_profile._observe_symlink_identity",
+                    side_effect=spy_observe_symlink,
+                ):
+                    retargeted = _reobserve_outer_profile_state(state)
+
+                self.assertFalse(retargeted.verified)
+                self.assertEqual(
+                    symlink_observer_calls,
+                    [(str(alias_symlink), False)],
+                )
+                self.assertIn(str(alias_symlink), retargeted.observed_symlinks)
+                self.assertEqual(
+                    retargeted.observed_symlinks[str(alias_symlink)].target,
+                    "new-targets/python",
+                )
+                self.assertIsNone(
+                    retargeted.symlink_causes[str(alias_symlink)]
+                )
+                self.assertIsNone(
+                    retargeted.observation_causes[
+                        f"profile:symlink:{alias_symlink}"
+                    ]
+                )
+                self.assertIsNone(retargeted.file_causes[alias_fid])
+                self.assertIsNone(
+                    retargeted.observation_causes[f"profile:file:{alias_fid}"]
+                )
+
+                raw_anc_paths = {
+                    d.path
+                    for d in retargeted.observed_files[
+                        alias_fid
+                    ].traversed_directory_identities
+                }
+                dep_anc_paths = {
+                    d.path
+                    for d in retargeted.file_dependencies[alias_fid].ancestors
+                }
+                proj_obs = retargeted.file_observations[alias_fid]
+                self.assertIsInstance(proj_obs, FileObservation)
+                proj_anc_paths = {d.path for d in proj_obs.ancestors}
+                self.assertIn(str(new_target_dir), raw_anc_paths)
+                self.assertIn(str(new_target_dir), dep_anc_paths)
+                self.assertIn(str(new_target_dir), proj_anc_paths)
+                self.assertIn(str(new_target_dir), retargeted.observed_ancestors)
+                self.assertTrue(
+                    retargeted.file_dependencies[alias_fid].complete
+                )
+                self.assertEqual(
+                    retargeted.file_dependencies[alias_fid].errors, ()
+                )
+                self.assertTrue(proj_obs.dependencies_complete)
+                self.assertFalse(proj_obs.verified)
+                self.assertEqual(
+                    len(proj_obs.symlink_identities), 1
+                )
+                self.assertEqual(
+                    proj_obs.symlink_identities[0].target,
+                    "new-targets/python",
+                )
+
+                # 1b. Actual readlink failure inside sole symlink observer preserves exact OSError cause
+                # and propagates it to symlink_causes, file_causes, and observation_causes
+                injected_sym_eio = OSError(
+                    errno.EIO,
+                    "simulated symlink readlink failure in sole observer",
+                    str(alias_symlink),
+                )
+                real_readlink = os.readlink
+                in_step5 = {"active": False, "injections": 0}
+
+                def observe_sym_trigger(
+                    edge: _SymlinkEdge,
+                    *,
+                    check_expected_target: bool = True,
+                ):
+                    if edge.path == str(alias_symlink):
+                        in_step5["active"] = True
+                    try:
+                        return real_observe_symlink(
+                            edge,
+                            check_expected_target=check_expected_target,
+                        )
+                    finally:
+                        in_step5["active"] = False
+
+                def readlink_fail_in_step5(path, *args, **kwargs):
+                    if (
+                        in_step5["active"]
+                        and os.fsdecode(path) == str(alias_symlink)
+                    ):
+                        in_step5["injections"] += 1
+                        raise injected_sym_eio
+                    return real_readlink(path, *args, **kwargs)
+
+                with (
+                    mock.patch(
+                        "refmac_diagnostic_profile._observe_symlink_identity",
+                        side_effect=observe_sym_trigger,
+                    ),
+                    mock.patch(
+                        "refmac_diagnostic_profile.os.readlink",
+                        side_effect=readlink_fail_in_step5,
+                    ),
+                ):
+                    sym_failed = _reobserve_outer_profile_state(state)
+
+                self.assertEqual(in_step5["injections"], 1)
+                self.assertFalse(sym_failed.verified)
+                self.assertNotIn(
+                    str(alias_symlink), sym_failed.observed_symlinks
+                )
+                self.assertIs(
+                    sym_failed.symlink_causes[str(alias_symlink)],
+                    injected_sym_eio,
+                )
+                self.assertIs(
+                    sym_failed.observation_causes[
+                        f"profile:symlink:{alias_symlink}"
+                    ],
+                    injected_sym_eio,
+                )
+                self.assertIs(
+                    sym_failed.file_causes[alias_fid], injected_sym_eio
+                )
+                self.assertIs(
+                    sym_failed.observation_causes[f"profile:file:{alias_fid}"],
+                    injected_sym_eio,
+                )
+                self.assertFalse(
+                    sym_failed.file_dependencies[alias_fid].complete
+                )
+                self.assertFalse(
+                    sym_failed.file_observations[alias_fid].dependencies_complete
+                )
+                self.assertFalse(
+                    sym_failed.file_observations[alias_fid].verified
+                )
+            finally:
+                if alias_symlink.exists() or alias_symlink.is_symlink():
+                    alias_symlink.unlink()
+                os.symlink(orig_target, alias_symlink)
+                if new_target_file.exists():
+                    new_target_file.unlink()
+                if new_target_dir.exists():
+                    new_target_dir.rmdir()
+
+            # 2. Controlled root failure AFTER successful root identity and non-empty ancestor prefix
+            # retains incomplete_inv with exact root identity, completed ancestor prefix, scan_complete=False,
+            # and exact PermissionError cause while continuing later roots and files.
+            # Start a separate experiment with a fresh admission baseline after fixture restoration.
+            state = _validate_and_observe_outer_profile(profile)
+            vendor_dir = trees["vendor"]
+            parent_dir = root
+            grandparent_dir = root.parent
+            injected_anc_perm = PermissionError(
+                errno.EACCES,
+                "simulated root ancestor lstat failure after root and parent observed",
+                str(grandparent_dir),
+            )
+            real_dir_obs = profile_mod._observe_directory_identity
+            real_lstat = os.lstat
+            anc_probe_state = {
+                "vendor_and_parent_observed": False,
+                "seen_vendor": False,
+                "injections": 0,
+            }
+
+            def dir_obs_tracker(path_str: str, *args, **kwargs):
+                val = real_dir_obs(path_str, *args, **kwargs)
+                if str(path_str) == str(vendor_dir):
+                    anc_probe_state["seen_vendor"] = True
+                elif (
+                    anc_probe_state["seen_vendor"]
+                    and str(path_str) == str(parent_dir)
+                ):
+                    anc_probe_state["vendor_and_parent_observed"] = True
+                return val
+
+            def lstat_fail_on_grandparent(path, *args, **kwargs):
+                if (
+                    anc_probe_state["vendor_and_parent_observed"]
+                    and anc_probe_state["injections"] == 0
+                    and os.fsdecode(path) == str(grandparent_dir)
+                ):
+                    anc_probe_state["injections"] += 1
+                    raise injected_anc_perm
+                return real_lstat(path, *args, **kwargs)
+
+            with (
+                mock.patch(
+                    "refmac_diagnostic_profile._observe_directory_identity",
+                    side_effect=dir_obs_tracker,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.lstat",
+                    side_effect=lstat_fail_on_grandparent,
+                ),
+            ):
+                root_anc_failed = _reobserve_outer_profile_state(state)
+
+            self.assertEqual(anc_probe_state["injections"], 1)
+            self.assertFalse(root_anc_failed.verified)
+            self.assertIn("vendor", root_anc_failed.observed_roots)
+            self.assertIn("vendor", root_anc_failed.incomplete_roots)
+            self.assertIn("vendor", root_anc_failed.failed_roots)
+            retained_vendor = root_anc_failed.observed_roots["vendor"]
+            self.assertFalse(retained_vendor.scan_complete)
+            self.assertFalse(retained_vendor.verified)
+            self.assertEqual(
+                retained_vendor.directory_identity,
+                state.observed_roots["vendor"].directory_identity,
+            )
+            self.assertEqual(
+                retained_vendor.ancestor_identities,
+                state.observed_roots["vendor"].ancestor_identities[:2],
+            )
+            self.assertEqual(len(retained_vendor.member_pins), 0)
+            self.assertIs(
+                root_anc_failed.root_causes["vendor"], injected_anc_perm
+            )
+            self.assertIs(
+                root_anc_failed.observation_causes["profile:root:vendor"],
+                injected_anc_perm,
+            )
+            # Later roots and files still completed
+            self.assertIn("prepared", root_anc_failed.verified_roots)
+            self.assertIn("build", root_anc_failed.verified_roots)
+            self.assertEqual(
+                len(root_anc_failed.verified_files),
+                len(state.observed_files),
+            )
+
+    def test_744_new_hop_eio_propagation_retarget_retention_and_per_file_ancestor_retention(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = _build_synthetic_outer_profile_fixture(Path(tmp))
+            root = fx["root"]
+            assert isinstance(root, Path)
+            alias_symlink = fx["alias_symlink"]
+            assert isinstance(alias_symlink, Path)
+            profile = fx["profile"]
+            assert isinstance(profile, RefmacDiagnosticProfile)
+            base_payload = fx["manifest_payload"]
+            assert isinstance(base_payload, dict)
+
+            alias_fid = next(
+                fid
+                for fid, row in base_payload["files"].items()  # type: ignore[union-attr]
+                if row["path"] == str(alias_symlink)
+            )
+            orig_target = os.readlink(alias_symlink)
+            orig_bytes = alias_symlink.read_bytes()
+            support_dir = root / "support"
+            new_hop = support_dir / "new-hop"
+            second_target = support_dir / "collection-python-second"
+
+            # 1. New-hop EIO at dedicated symlink observer after raw file traversal succeeds:
+            # symlink and owner keyed causes both retain identical EIO (preferred over comparison None),
+            # while continuing other files and roots.
+            state = _validate_and_observe_outer_profile(profile)
+            os.symlink("collection-python", new_hop)
+            alias_symlink.unlink()
+            os.symlink("new-hop", alias_symlink)
+            try:
+                injected_new_hop_eio = OSError(
+                    errno.EIO,
+                    "simulated EIO inside dedicated new-hop symlink observer",
+                    str(new_hop),
+                )
+                real_observe_symlink = profile_mod._observe_symlink_identity
+                real_readlink = os.readlink
+                new_hop_obs_state = {
+                    "active": False,
+                    "injections": 0,
+                    "calls": [],
+                }
+
+                def observe_sym_new_hop_trigger(
+                    edge: _SymlinkEdge,
+                    *,
+                    check_expected_target: bool = True,
+                ):
+                    new_hop_obs_state["calls"].append(
+                        (edge.path, check_expected_target)
+                    )
+                    if edge.path == str(new_hop):
+                        new_hop_obs_state["active"] = True
+                    try:
+                        return real_observe_symlink(
+                            edge,
+                            check_expected_target=check_expected_target,
+                        )
+                    finally:
+                        new_hop_obs_state["active"] = False
+
+                def readlink_fail_on_new_hop(path, *args, **kwargs):
+                    if (
+                        new_hop_obs_state["active"]
+                        and new_hop_obs_state["injections"] == 0
+                        and os.fsdecode(path) == str(new_hop)
+                    ):
+                        new_hop_obs_state["injections"] += 1
+                        raise injected_new_hop_eio
+                    return real_readlink(path, *args, **kwargs)
+
+                with (
+                    mock.patch(
+                        "refmac_diagnostic_profile._observe_symlink_identity",
+                        side_effect=observe_sym_new_hop_trigger,
+                    ),
+                    mock.patch(
+                        "refmac_diagnostic_profile.os.readlink",
+                        side_effect=readlink_fail_on_new_hop,
+                    ),
+                ):
+                    res_eio = _reobserve_outer_profile_state(state)
+
+                self.assertEqual(new_hop_obs_state["injections"], 1)
+                self.assertEqual(
+                    new_hop_obs_state["calls"],
+                    [
+                        (str(alias_symlink), False),
+                        (str(new_hop), False),
+                    ],
+                )
+                self.assertFalse(res_eio.verified)
+                self.assertIn(str(alias_symlink), res_eio.observed_symlinks)
+                self.assertEqual(
+                    res_eio.observed_symlinks[str(alias_symlink)].target,
+                    "new-hop",
+                )
+                self.assertNotIn(str(new_hop), res_eio.observed_symlinks)
+                self.assertIsNone(res_eio.symlink_causes[str(alias_symlink)])
+                self.assertIs(
+                    res_eio.symlink_causes[str(new_hop)],
+                    injected_new_hop_eio,
+                )
+                self.assertIs(
+                    res_eio.observation_causes[f"profile:symlink:{new_hop}"],
+                    injected_new_hop_eio,
+                )
+                self.assertIs(
+                    res_eio.file_causes[alias_fid],
+                    injected_new_hop_eio,
+                )
+                self.assertIs(
+                    res_eio.observation_causes[f"profile:file:{alias_fid}"],
+                    injected_new_hop_eio,
+                )
+                self.assertTrue(
+                    any(
+                        str(new_hop) in m
+                        for m in res_eio.file_errors[alias_fid]
+                    )
+                )
+                self.assertFalse(res_eio.file_dependencies[alias_fid].complete)
+                self.assertEqual(
+                    res_eio.file_dependencies[alias_fid].symlink_identities,
+                    (res_eio.observed_symlinks[str(alias_symlink)],),
+                )
+                proj_eio = res_eio.file_observations[alias_fid]
+                self.assertIsInstance(proj_eio, FileObservation)
+                self.assertFalse(proj_eio.dependencies_complete)
+                self.assertFalse(proj_eio.verified)
+                self.assertEqual(
+                    proj_eio.symlink_identities,
+                    (res_eio.observed_symlinks[str(alias_symlink)],),
+                )
+                self.assertEqual(
+                    proj_eio.unavailable_symlinks,
+                    (
+                        _SymlinkEdge(
+                            path=str(new_hop), target="collection-python"
+                        ),
+                    ),
+                )
+                self.assertEqual(
+                    len(res_eio.verified_files),
+                    len(state.observed_files) - 1,
+                )
+                self.assertEqual(
+                    set(res_eio.verified_roots.keys()),
+                    {"vendor", "prepared", "build"},
+                )
+            finally:
+                if alias_symlink.exists() or alias_symlink.is_symlink():
+                    alias_symlink.unlink()
+                os.symlink(orig_target, alias_symlink)
+                if new_hop.exists() or new_hop.is_symlink():
+                    new_hop.unlink()
+
+            # 2. New-hop retargeted to same-byte second target between raw file read and dedicated observer:
+            # observer-only mode retains actual new-hop identity in raw and dependency/FileObservation projections
+            # with comparison-only None cause, incomplete/unverified status, and conflict error.
+            state = _validate_and_observe_outer_profile(profile)
+            second_target.write_bytes(orig_bytes)
+            os.symlink("collection-python", new_hop)
+            alias_symlink.unlink()
+            os.symlink("new-hop", alias_symlink)
+            try:
+                real_observe_pin = profile_mod._observe_regular_file_pin
+                real_observe_symlink = profile_mod._observe_symlink_identity
+                retarget_observer_calls: list[tuple[str, bool]] = []
+                new_hop_ino_after_retarget: list[int] = []
+
+                def observe_pin_then_retarget_new_hop(path, *args, **kwargs):
+                    pin_obs = real_observe_pin(path, *args, **kwargs)
+                    if str(path) == str(alias_symlink):
+                        new_hop.unlink()
+                        os.symlink("collection-python-second", new_hop)
+                        new_hop_ino_after_retarget.append(
+                            int(os.lstat(new_hop).st_ino)
+                        )
+                    return pin_obs
+
+                def spy_observe_symlink_retarget(
+                    edge: _SymlinkEdge,
+                    *,
+                    check_expected_target: bool = True,
+                ):
+                    retarget_observer_calls.append(
+                        (edge.path, check_expected_target)
+                    )
+                    return real_observe_symlink(
+                        edge,
+                        check_expected_target=check_expected_target,
+                    )
+
+                with (
+                    mock.patch(
+                        "refmac_diagnostic_profile._observe_regular_file_pin",
+                        side_effect=observe_pin_then_retarget_new_hop,
+                    ),
+                    mock.patch(
+                        "refmac_diagnostic_profile._observe_symlink_identity",
+                        side_effect=spy_observe_symlink_retarget,
+                    ),
+                ):
+                    res_ret = _reobserve_outer_profile_state(state)
+
+                self.assertEqual(len(new_hop_ino_after_retarget), 1)
+                self.assertEqual(
+                    retarget_observer_calls,
+                    [
+                        (str(alias_symlink), False),
+                        (str(new_hop), False),
+                    ],
+                )
+                self.assertFalse(res_ret.verified)
+                self.assertIn(str(new_hop), res_ret.observed_symlinks)
+                retained_new_hop = res_ret.observed_symlinks[str(new_hop)]
+                self.assertEqual(
+                    retained_new_hop.target, "collection-python-second"
+                )
+                self.assertEqual(
+                    retained_new_hop.ino, new_hop_ino_after_retarget[0]
+                )
+                self.assertIsNone(res_ret.symlink_causes[str(new_hop)])
+                self.assertIsNone(
+                    res_ret.observation_causes[f"profile:symlink:{new_hop}"]
+                )
+                self.assertIsNone(res_ret.file_causes[alias_fid])
+                self.assertIsNone(
+                    res_ret.observation_causes[f"profile:file:{alias_fid}"]
+                )
+                self.assertTrue(
+                    any(
+                        "Symlink target changed during observation" in m
+                        for m in res_ret.symlink_errors[str(new_hop)]
+                    )
+                )
+                self.assertTrue(
+                    any(
+                        "Symlink target changed during observation" in m
+                        for m in res_ret.file_errors[alias_fid]
+                    )
+                )
+                fdeps_ret = res_ret.file_dependencies[alias_fid]
+                self.assertFalse(fdeps_ret.complete)
+                self.assertEqual(
+                    fdeps_ret.symlink_identities,
+                    (
+                        retained_new_hop,
+                        res_ret.observed_symlinks[str(alias_symlink)],
+                    ),
+                )
+                proj_ret = res_ret.file_observations[alias_fid]
+                self.assertIsInstance(proj_ret, FileObservation)
+                self.assertFalse(proj_ret.dependencies_complete)
+                self.assertFalse(proj_ret.verified)
+                self.assertEqual(proj_ret.unavailable_symlinks, ())
+                self.assertEqual(
+                    proj_ret.symlink_identities,
+                    (
+                        retained_new_hop,
+                        res_ret.observed_symlinks[str(alias_symlink)],
+                    ),
+                )
+            finally:
+                if alias_symlink.exists() or alias_symlink.is_symlink():
+                    alias_symlink.unlink()
+                os.symlink(orig_target, alias_symlink)
+                if new_hop.exists() or new_hop.is_symlink():
+                    new_hop.unlink()
+                if second_target.exists():
+                    second_target.unlink()
+
+            # 3. Support directory mode change after file traversal and before dedicated ancestor observation:
+            # global observed_ancestors retains dedicated observation, while per-file dependency and FileObservation
+            # projections retain their own traversal identity, marked incomplete/unverified with None cause.
+            state = _validate_and_observe_outer_profile(profile)
+            orig_support_mode = stat.S_IMODE(os.lstat(support_dir).st_mode)
+            alt_support_mode = orig_support_mode ^ 0o005
+            real_dir_obs = profile_mod._observe_directory_identity
+            step4_chmod_done = {"done": False}
+
+            def dir_obs_chmod_support_in_step4(
+                dir_path_str: str,
+                *,
+                require_no_symlink_ancestors: bool = False,
+            ):
+                if (
+                    not step4_chmod_done["done"]
+                    and str(dir_path_str) == str(support_dir)
+                ):
+                    # Step 3 traversal happens inside _traverse_path_components before Step 4;
+                    # trigger mode change only once Step 3 has already observed alias_fid.
+                    if step4_chmod_done.get("files_done", False):
+                        step4_chmod_done["done"] = True
+                        os.chmod(support_dir, alt_support_mode)
+                return real_dir_obs(
+                    dir_path_str,
+                    require_no_symlink_ancestors=require_no_symlink_ancestors,
+                )
+
+            real_observe_pin = profile_mod._observe_regular_file_pin
+            last_fid = sorted(state.observed_files.keys())[-1]
+            last_fpath = state.observed_files[last_fid].path
+
+            def observe_pin_mark_files_done(path, *args, **kwargs):
+                res = real_observe_pin(path, *args, **kwargs)
+                if str(path) == str(last_fpath):
+                    step4_chmod_done["files_done"] = True
+                return res
+
+            try:
+                with (
+                    mock.patch(
+                        "refmac_diagnostic_profile._observe_regular_file_pin",
+                        side_effect=observe_pin_mark_files_done,
+                    ),
+                    mock.patch(
+                        "refmac_diagnostic_profile._observe_directory_identity",
+                        side_effect=dir_obs_chmod_support_in_step4,
+                    ),
+                ):
+                    res_dir_conf = _reobserve_outer_profile_state(state)
+
+                self.assertTrue(step4_chmod_done["done"])
+                self.assertFalse(res_dir_conf.verified)
+                global_support = res_dir_conf.observed_ancestors[
+                    str(support_dir)
+                ]
+                self.assertEqual(global_support.mode, alt_support_mode)
+
+                raw_file_support = next(
+                    d
+                    for d in res_dir_conf.observed_files[
+                        alias_fid
+                    ].traversed_directory_identities
+                    if d.path == str(support_dir)
+                )
+                dep_file_support = next(
+                    d
+                    for d in res_dir_conf.file_dependencies[alias_fid].ancestors
+                    if d.path == str(support_dir)
+                )
+                proj_dir_conf = res_dir_conf.file_observations[alias_fid]
+                self.assertIsInstance(proj_dir_conf, FileObservation)
+                proj_file_support = next(
+                    d
+                    for d in proj_dir_conf.ancestors
+                    if d.path == str(support_dir)
+                )
+                self.assertEqual(raw_file_support.mode, orig_support_mode)
+                self.assertEqual(dep_file_support, raw_file_support)
+                self.assertEqual(proj_file_support, raw_file_support)
+                self.assertNotEqual(dep_file_support, global_support)
+                self.assertFalse(
+                    res_dir_conf.file_dependencies[alias_fid].complete
+                )
+                self.assertFalse(proj_dir_conf.dependencies_complete)
+                self.assertFalse(proj_dir_conf.verified)
+                self.assertIsNone(
+                    res_dir_conf.ancestor_causes[str(support_dir)]
+                )
+                self.assertIsNone(res_dir_conf.file_causes[alias_fid])
+                self.assertTrue(
+                    any(
+                        "Directory identity changed during observation" in m
+                        for m in res_dir_conf.ancestor_errors[str(support_dir)]
+                    )
+                )
+                self.assertTrue(
+                    any(
+                        "Directory identity changed during observation" in m
+                        for m in res_dir_conf.file_errors[alias_fid]
+                    )
+                )
+            finally:
+                os.chmod(support_dir, orig_support_mode)
+
+            # 4. Support directory lookup failure in dedicated ancestor observation after file traversal:
+            # per-file dependency and FileObservation projections retain their own traversal identity
+            # while global observed_ancestors omits support_dir and preserves exact PermissionError cause.
+            state = _validate_and_observe_outer_profile(profile)
+            injected_support_perm = PermissionError(
+                errno.EACCES,
+                "simulated Step 4 support directory lstat failure after file traversal",
+                str(support_dir),
+            )
+            real_lstat = os.lstat
+            step4_fail_state = {"files_done": False, "injections": 0}
+
+            def observe_pin_mark_done_for_fail(path, *args, **kwargs):
+                res = real_observe_pin(path, *args, **kwargs)
+                if str(path) == str(last_fpath):
+                    step4_fail_state["files_done"] = True
+                return res
+
+            def lstat_fail_support_in_step4(path, *args, **kwargs):
+                if (
+                    step4_fail_state["files_done"]
+                    and step4_fail_state["injections"] == 0
+                    and os.fsdecode(path) == str(support_dir)
+                ):
+                    step4_fail_state["injections"] += 1
+                    raise injected_support_perm
+                return real_lstat(path, *args, **kwargs)
+
+            with (
+                mock.patch(
+                    "refmac_diagnostic_profile._observe_regular_file_pin",
+                    side_effect=observe_pin_mark_done_for_fail,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.lstat",
+                    side_effect=lstat_fail_support_in_step4,
+                ),
+            ):
+                res_dir_fail = _reobserve_outer_profile_state(state)
+
+            self.assertEqual(step4_fail_state["injections"], 1)
+            self.assertFalse(res_dir_fail.verified)
+            self.assertNotIn(str(support_dir), res_dir_fail.observed_ancestors)
+            self.assertIs(
+                res_dir_fail.ancestor_causes[str(support_dir)],
+                injected_support_perm,
+            )
+            self.assertIs(
+                res_dir_fail.observation_causes[
+                    f"profile:ancestor:{support_dir}"
+                ],
+                injected_support_perm,
+            )
+            self.assertIs(
+                res_dir_fail.file_causes[alias_fid],
+                injected_support_perm,
+            )
+            self.assertIs(
+                res_dir_fail.observation_causes[f"profile:file:{alias_fid}"],
+                injected_support_perm,
+            )
+            raw_fail_support = next(
+                d
+                for d in res_dir_fail.observed_files[
+                    alias_fid
+                ].traversed_directory_identities
+                if d.path == str(support_dir)
+            )
+            dep_fail_support = next(
+                d
+                for d in res_dir_fail.file_dependencies[alias_fid].ancestors
+                if d.path == str(support_dir)
+            )
+            proj_dir_fail = res_dir_fail.file_observations[alias_fid]
+            self.assertIsInstance(proj_dir_fail, FileObservation)
+            proj_fail_support = next(
+                d
+                for d in proj_dir_fail.ancestors
+                if d.path == str(support_dir)
+            )
+            self.assertEqual(dep_fail_support, raw_fail_support)
+            self.assertEqual(proj_fail_support, raw_fail_support)
+            self.assertFalse(res_dir_fail.file_dependencies[alias_fid].complete)
+            self.assertFalse(proj_dir_fail.dependencies_complete)
+            self.assertFalse(proj_dir_fail.verified)
+
+    def test_751_partial_owner_file_and_manifest_dependency_failure_association(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = _build_synthetic_outer_profile_fixture(Path(tmp))
+            root = fx["root"]
+            assert isinstance(root, Path)
+            alias_symlink = fx["alias_symlink"]
+            assert isinstance(alias_symlink, Path)
+            installed_record = fx["installed_record"]
+            assert isinstance(installed_record, dict)
+            ccp4_env = fx["ccp4_env"]
+            assert isinstance(ccp4_env, dict)
+            ev_root = fx["evidence_root"]
+            assert isinstance(ev_root, Path)
+            manifest_path = fx["manifest_path"]
+            assert isinstance(manifest_path, Path)
+            base_payload = copy.deepcopy(fx["manifest_payload"])
+            assert isinstance(base_payload, dict)
+
+            support_dir = root / "support"
+            orig_alias_target = os.readlink(alias_symlink)
+            orig_alias_bytes = alias_symlink.read_bytes()
+            alias_fid = next(
+                fid
+                for fid, row in base_payload["files"].items()  # type: ignore[union-attr]
+                if row["path"] == str(alias_symlink)
+            )
+
+            # 1. Shared new-hop EIO propagation to a partial file owner (1-byte baseline redirected to longer target)
+            partial_alias = support_dir / "z-partial-alias"
+            short_target = support_dir / "short-target"
+            new_hop = support_dir / "new-hop"
+            partial_id = "task751_partial_owner"
+            short_target.write_bytes(b"x")
+            os.symlink("short-target", partial_alias)
+            try:
+                payload_1 = copy.deepcopy(base_payload)
+                partial_obs_init = _observe_regular_file_pin(str(partial_alias))
+                payload_1["files"][partial_id] = (  # type: ignore[index]
+                    partial_obs_init.to_manifest_row()
+                )
+                payload_1["roles"]["qc_evidence"] = sorted(  # type: ignore[index]
+                    [*payload_1["roles"]["qc_evidence"], partial_id]  # type: ignore[index]
+                )
+                profile_1 = _rewrite_manifest_and_profile(fx, payload_1)
+                validated_1 = validate_profile(
+                    profile_1, installed_record, ccp4_env, ev_root
+                )
+                state_1 = validated_1._outer_state
+                assert state_1 is not None
+                before_repr_1 = repr(state_1)
+                before_prov_1 = copy.deepcopy(validated_1.to_provenance())
+
+                os.symlink("collection-python", new_hop)
+                for a_path in (alias_symlink, partial_alias):
+                    a_path.unlink()
+                    os.symlink("new-hop", a_path)
+
+                injected_hop_eio = OSError(
+                    errno.EIO,
+                    "task751 dedicated new-hop readlink failure",
+                    str(new_hop),
+                )
+                real_observe_symlink = profile_mod._observe_symlink_identity
+                real_readlink = os.readlink
+                trace_1 = {
+                    "inside_new_hop": False,
+                    "observer_calls": 0,
+                    "injections": 0,
+                }
+
+                def observe_sym_1(edge: _SymlinkEdge, *args, **kwargs):
+                    monitored = edge.path == str(new_hop)
+                    if monitored:
+                        trace_1["observer_calls"] += 1
+                        trace_1["inside_new_hop"] = True
+                    try:
+                        return real_observe_symlink(edge, *args, **kwargs)
+                    finally:
+                        if monitored:
+                            trace_1["inside_new_hop"] = False
+
+                def readlink_1(path, *args, **kwargs):
+                    if (
+                        trace_1["inside_new_hop"]
+                        and trace_1["injections"] == 0
+                        and os.fsdecode(path) == str(new_hop)
+                    ):
+                        trace_1["injections"] += 1
+                        raise injected_hop_eio
+                    return real_readlink(path, *args, **kwargs)
+
+                with (
+                    mock.patch(
+                        "refmac_diagnostic_profile._observe_symlink_identity",
+                        side_effect=observe_sym_1,
+                    ),
+                    mock.patch(
+                        "refmac_diagnostic_profile.os.readlink",
+                        side_effect=readlink_1,
+                    ),
+                ):
+                    res_1 = _reobserve_outer_profile_state(state_1)
+
+                self.assertEqual(trace_1["observer_calls"], 1)
+                self.assertEqual(trace_1["injections"], 1)
+                self.assertFalse(res_1.verified)
+                self.assertIn(alias_fid, res_1.observed_files)
+                self.assertIn(partial_id, res_1.partial_files)
+                partial_fobs = res_1.partial_files[partial_id]
+                self.assertIsInstance(partial_fobs, PartialFileReadObservation)
+                self.assertIs(res_1.file_observations[partial_id], partial_fobs)
+                self.assertIsNone(partial_fobs.sha256)
+                self.assertIsNone(partial_fobs.size_bytes)
+                self.assertEqual(
+                    partial_fobs.stat_size_bytes, len(orig_alias_bytes)
+                )
+                self.assertEqual(partial_fobs.streamed_size_bytes, 0)
+                self.assertFalse(partial_fobs.read_complete)
+                self.assertFalse(partial_fobs.verified)
+                self.assertTrue(
+                    any(e.path == str(new_hop) for e in partial_fobs.symlinks)
+                )
+                self.assertGreater(len(partial_fobs.ancestors), 0)
+
+                hop_errs_1 = res_1.symlink_errors[str(new_hop)]
+                self.assertGreater(len(hop_errs_1), 0)
+                self.assertIs(
+                    res_1.symlink_causes[str(new_hop)], injected_hop_eio
+                )
+                self.assertIs(
+                    res_1.observation_causes[f"profile:symlink:{new_hop}"],
+                    injected_hop_eio,
+                )
+                self.assertIs(res_1.file_causes[alias_fid], injected_hop_eio)
+                self.assertIs(res_1.file_causes[partial_id], injected_hop_eio)
+                self.assertIs(
+                    res_1.observation_causes[f"profile:file:{partial_id}"],
+                    injected_hop_eio,
+                )
+                self.assertTrue(
+                    all(
+                        err in res_1.file_errors[partial_id]
+                        for err in hop_errs_1
+                    )
+                )
+                self.assertTrue(
+                    all(err in res_1.errors for err in hop_errs_1)
+                )
+                self.assertEqual(
+                    set(res_1.observed_files) | set(res_1.partial_files),
+                    set(state_1.observed_files),
+                )
+                self.assertEqual(
+                    set(res_1.observed_roots), set(state_1.observed_roots)
+                )
+                self.assertIs(validated_1._outer_state, state_1)
+                self.assertEqual(repr(state_1), before_repr_1)
+                self.assertEqual(validated_1.to_provenance(), before_prov_1)
+            finally:
+                if alias_symlink.exists() or alias_symlink.is_symlink():
+                    alias_symlink.unlink()
+                os.symlink(orig_alias_target, alias_symlink)
+                for p in (partial_alias, new_hop, short_target):
+                    if p.exists() or p.is_symlink():
+                        p.unlink()
+                _rewrite_manifest_and_profile(fx, base_payload)
+
+            # 2. Analogous partial manifest owner sharing new-hop with a complete QC alias to a longer opaque target
+            long_qc_alias = support_dir / "z-long-qc-alias"
+            long_opaque_target = support_dir / "long-opaque-target"
+            new_hop_m = support_dir / "new-hop-manifest"
+            long_qc_id = "task751_long_qc_owner"
+            orig_manifest_bytes_base = manifest_path.read_bytes()
+            long_opaque_bytes = (
+                b"opaque-non-json-header-" * 64 + orig_manifest_bytes_base
+            )
+            long_opaque_target.write_bytes(long_opaque_bytes)
+            os.symlink("long-opaque-target", long_qc_alias)
+            try:
+                payload_2 = copy.deepcopy(base_payload)
+                long_qc_obs_init = _observe_regular_file_pin(str(long_qc_alias))
+                payload_2["files"][long_qc_id] = (  # type: ignore[index]
+                    long_qc_obs_init.to_manifest_row()
+                )
+                payload_2["roles"]["qc_evidence"] = sorted(  # type: ignore[index]
+                    [*payload_2["roles"]["qc_evidence"], long_qc_id]  # type: ignore[index]
+                )
+                profile_2 = _rewrite_manifest_and_profile(fx, payload_2)
+                saved_manifest_bytes = manifest_path.read_bytes()
+                self.assertGreater(
+                    len(long_opaque_bytes), len(saved_manifest_bytes)
+                )
+
+                validated_2 = validate_profile(
+                    profile_2, installed_record, ccp4_env, ev_root
+                )
+                state_2 = validated_2._outer_state
+                assert state_2 is not None
+                before_repr_2 = repr(state_2)
+                before_prov_2 = copy.deepcopy(validated_2.to_provenance())
+
+                os.symlink("long-opaque-target", new_hop_m)
+                long_qc_alias.unlink()
+                os.symlink("new-hop-manifest", long_qc_alias)
+                manifest_path.unlink()
+                os.symlink(str(new_hop_m), manifest_path)
+
+                injected_hop_m_eio = OSError(
+                    errno.EIO,
+                    "task751 dedicated manifest new-hop readlink failure",
+                    str(new_hop_m),
+                )
+                real_observe_symlink = profile_mod._observe_symlink_identity
+                real_readlink = os.readlink
+                trace_2 = {
+                    "inside_new_hop": False,
+                    "observer_calls": 0,
+                    "injections": 0,
+                }
+
+                def observe_sym_2(edge: _SymlinkEdge, *args, **kwargs):
+                    monitored = edge.path == str(new_hop_m)
+                    if monitored:
+                        trace_2["observer_calls"] += 1
+                        trace_2["inside_new_hop"] = True
+                    try:
+                        return real_observe_symlink(edge, *args, **kwargs)
+                    finally:
+                        if monitored:
+                            trace_2["inside_new_hop"] = False
+
+                def readlink_2(path, *args, **kwargs):
+                    if (
+                        trace_2["inside_new_hop"]
+                        and trace_2["injections"] == 0
+                        and os.fsdecode(path) == str(new_hop_m)
+                    ):
+                        trace_2["injections"] += 1
+                        raise injected_hop_m_eio
+                    return real_readlink(path, *args, **kwargs)
+
+                with (
+                    mock.patch(
+                        "refmac_diagnostic_profile._observe_symlink_identity",
+                        side_effect=observe_sym_2,
+                    ),
+                    mock.patch(
+                        "refmac_diagnostic_profile.os.readlink",
+                        side_effect=readlink_2,
+                    ),
+                ):
+                    res_2 = _reobserve_outer_profile_state(state_2)
+
+                self.assertEqual(trace_2["observer_calls"], 1)
+                self.assertEqual(trace_2["injections"], 1)
+                self.assertFalse(res_2.verified)
+                self.assertIsNone(res_2.manifest_observation)
+                self.assertIsNotNone(res_2.partial_manifest_observation)
+                p_man = res_2.partial_manifest_observation
+                assert p_man is not None
+                self.assertIsInstance(p_man, PartialFileReadObservation)
+                self.assertIs(res_2.manifest_file_observation, p_man)
+                self.assertIsNone(p_man.sha256)
+                self.assertIsNone(p_man.size_bytes)
+                self.assertEqual(
+                    p_man.stat_size_bytes, len(long_opaque_bytes)
+                )
+                self.assertEqual(p_man.streamed_size_bytes, 0)
+                self.assertFalse(p_man.read_complete)
+                self.assertFalse(p_man.verified)
+                self.assertTrue(
+                    any(e.path == str(new_hop_m) for e in p_man.symlinks)
+                )
+                self.assertGreater(len(p_man.ancestors), 0)
+
+                hop_errs_2 = res_2.symlink_errors[str(new_hop_m)]
+                self.assertGreater(len(hop_errs_2), 0)
+                self.assertIs(
+                    res_2.symlink_causes[str(new_hop_m)], injected_hop_m_eio
+                )
+                self.assertIs(
+                    res_2.observation_causes[f"profile:symlink:{new_hop_m}"],
+                    injected_hop_m_eio,
+                )
+                self.assertIs(
+                    res_2.file_causes[long_qc_id], injected_hop_m_eio
+                )
+                self.assertIs(res_2.manifest_cause, injected_hop_m_eio)
+                self.assertIs(
+                    res_2.observation_causes["profile:manifest"],
+                    injected_hop_m_eio,
+                )
+                self.assertTrue(
+                    all(err in res_2.manifest_errors for err in hop_errs_2)
+                )
+                self.assertTrue(
+                    all(err in res_2.errors for err in hop_errs_2)
+                )
+                self.assertEqual(
+                    set(res_2.observed_files) | set(res_2.partial_files),
+                    set(state_2.observed_files),
+                )
+                self.assertEqual(
+                    set(res_2.observed_roots), set(state_2.observed_roots)
+                )
+                self.assertIs(validated_2._outer_state, state_2)
+                self.assertEqual(repr(state_2), before_repr_2)
+                self.assertEqual(validated_2.to_provenance(), before_prov_2)
+            finally:
+                if manifest_path.exists() or manifest_path.is_symlink():
+                    manifest_path.unlink()
+                manifest_path.write_bytes(orig_manifest_bytes_base)
+                for p in (long_qc_alias, new_hop_m, long_opaque_target):
+                    if p.exists() or p.is_symlink():
+                        p.unlink()
+                _rewrite_manifest_and_profile(fx, base_payload)
+
+
+class TestTask737PublicRecheckProfile(unittest.TestCase):
+    """Focused synthetic tests for public recheck_profile projection (Tasks 662 and 737)."""
+
+    def test_recheck_profile_positive_baseline_single_call_and_detachment(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fx = _build_synthetic_outer_profile_fixture(Path(tmpdir))
+            root = fx["root"]
+            assert isinstance(root, Path)
+            profile = fx["profile"]
+            assert isinstance(profile, RefmacDiagnosticProfile)
+            installed_record = fx["installed_record"]
+            assert isinstance(installed_record, dict)
+            ccp4_env = fx["ccp4_env"]
+            assert isinstance(ccp4_env, dict)
+            ev_root = fx["evidence_root"]
+            assert isinstance(ev_root, Path)
+
+            validated = validate_profile(
+                profile, installed_record, ccp4_env, ev_root
+            )
+            baseline_prov = copy.deepcopy(validated.to_provenance())
+
+            for bad_baseline in (None, "not_a_profile", profile, {}):
+                with self.assertRaises(ValueError):
+                    recheck_profile(bad_baseline)  # type: ignore[arg-type]
+
+            for bad_causes in ("not_a_list", (), {}, 42):
+                with self.assertRaises(ValueError):
+                    recheck_profile(
+                        validated,
+                        mutation_causes_out=bad_causes,  # type: ignore[arg-type]
+                    )
+
+            real_reobserve = profile_mod._reobserve_outer_profile_state
+            reobserve_calls = {"count": 0, "done": False}
+            real_lstat = os.lstat
+            real_stat = os.stat
+            real_open = os.open
+            real_walk = os.walk
+            real_readlink = os.readlink
+
+            def wrapped_reobserve(state, *args, **kwargs):
+                reobserve_calls["count"] += 1
+                res = real_reobserve(state, *args, **kwargs)
+                reobserve_calls["done"] = True
+                return res
+
+            def forbid_fs_after_reobserve(fn, name: str):
+                def _wrapper(*args, **kwargs):
+                    if reobserve_calls["done"]:
+                        raise AssertionError(
+                            f"Filesystem call {name} invoked after _reobserve_outer_profile_state during in-memory projection"
+                        )
+                    return fn(*args, **kwargs)
+
+                return _wrapper
+
+            causes: list[Exception | None] = [RuntimeError("stale")]
+            with (
+                mock.patch(
+                    "refmac_diagnostic_profile._reobserve_outer_profile_state",
+                    side_effect=wrapped_reobserve,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.lstat",
+                    side_effect=forbid_fs_after_reobserve(
+                        real_lstat, "os.lstat"
+                    ),
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.stat",
+                    side_effect=forbid_fs_after_reobserve(real_stat, "os.stat"),
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.open",
+                    side_effect=forbid_fs_after_reobserve(real_open, "os.open"),
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.walk",
+                    side_effect=forbid_fs_after_reobserve(real_walk, "os.walk"),
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.readlink",
+                    side_effect=forbid_fs_after_reobserve(
+                        real_readlink, "os.readlink"
+                    ),
+                ),
+            ):
+                report = recheck_profile(validated, mutation_causes_out=causes)
+
+            self.assertEqual(reobserve_calls["count"], 1)
+            self.assertEqual(causes, [])
+            self.assertEqual(
+                set(report.keys()),
+                {
+                    "profile_id",
+                    "verified",
+                    "runtime_image_coverage",
+                    "manifest",
+                    "files",
+                    "roots",
+                    "mutations",
+                    "errors",
+                },
+            )
+            self.assertEqual(report["profile_id"], SUPPORTED_PROFILE_ID)
+            self.assertTrue(report["verified"])
+            self.assertEqual(report["runtime_image_coverage"], "not_assessed")
+            self.assertEqual(report["mutations"], [])
+            self.assertEqual(report["errors"], [])
+
+            self.assertEqual(
+                set(report["manifest"].keys()),
+                {"expected", "observed", "matches_baseline", "errors"},
+            )
+            self.assertTrue(report["manifest"]["matches_baseline"])
+            self.assertEqual(report["manifest"]["errors"], [])
+            self.assertEqual(
+                report["manifest"]["expected"], baseline_prov["manifest"]
+            )
+            self.assertEqual(
+                report["manifest"]["observed"], baseline_prov["manifest"]
+            )
+
+            self.assertEqual(
+                list(report["files"].keys()),
+                sorted(baseline_prov["files"].keys()),
+            )
+            self.assertEqual(len(report["files"]), 59)
+            for fid, frow in report["files"].items():
+                self.assertEqual(
+                    set(frow.keys()),
+                    {"expected", "observed", "matches_baseline", "errors"},
+                )
+                self.assertTrue(frow["matches_baseline"])
+                self.assertEqual(frow["errors"], [])
+                self.assertEqual(frow["expected"], baseline_prov["files"][fid])
+                self.assertEqual(frow["observed"], baseline_prov["files"][fid])
+
+            self.assertEqual(
+                list(report["roots"].keys()),
+                sorted(baseline_prov["roots"].keys()),
+            )
+            self.assertEqual(len(report["roots"]), 3)
+            for rname, rrow in report["roots"].items():
+                self.assertEqual(
+                    set(rrow.keys()),
+                    {
+                        "expected",
+                        "observed",
+                        "matches_baseline",
+                        "scan_complete",
+                        "member_diff",
+                        "errors",
+                    },
+                )
+                self.assertTrue(rrow["matches_baseline"])
+                self.assertTrue(rrow["scan_complete"])
+                self.assertEqual(
+                    rrow["member_diff"], {"added": [], "removed": []}
+                )
+                self.assertEqual(rrow["errors"], [])
+                self.assertEqual(rrow["expected"], baseline_prov["roots"][rname])
+                self.assertEqual(rrow["observed"], baseline_prov["roots"][rname])
+
+            # Parent directory mtime change and unrelated sibling file outside controlled roots do not fail
+            sibling_outside = root / "unrelated_outside_sibling.tmp"
+            sibling_outside.write_bytes(b"unrelated sibling outside roots\n")
+            os.utime(root, None)
+            try:
+                causes_sibling: list[Exception | None] = []
+                report_sibling = recheck_profile(
+                    validated, mutation_causes_out=causes_sibling
+                )
+                self.assertTrue(report_sibling["verified"])
+                self.assertEqual(report_sibling["mutations"], [])
+                self.assertEqual(report_sibling["errors"], [])
+                self.assertEqual(causes_sibling, [])
+            finally:
+                sibling_outside.unlink()
+
+            # Mutating returned dict does not alter baseline or subsequent recheck_profile calls
+            report["verified"] = False
+            report["manifest"]["expected"]["sha256"] = "0" * 64
+            report["manifest"]["observed"]["ino"] = -1
+            first_fid = sorted(report["files"].keys())[0]
+            report["files"][first_fid]["expected"]["size_bytes"] = 999999
+            report["roots"]["build"]["member_diff"]["added"].append("tampered")
+            report["mutations"].append({"tampered": True})
+            report["errors"].append({"tampered": True})
+
+            self.assertEqual(validated.to_provenance(), baseline_prov)
+            fresh_report = recheck_profile(validated)
+            self.assertTrue(fresh_report["verified"])
+            self.assertEqual(
+                fresh_report["manifest"]["expected"], baseline_prov["manifest"]
+            )
+            self.assertEqual(
+                fresh_report["files"][first_fid]["expected"],
+                baseline_prov["files"][first_fid],
+            )
+            self.assertEqual(
+                fresh_report["roots"]["build"]["member_diff"],
+                {"added": [], "removed": []},
+            )
+            self.assertEqual(fresh_report["mutations"], [])
+            self.assertEqual(fresh_report["errors"], [])
+
+    def test_recheck_profile_comparison_only_mutations_have_null_error_and_none_cause(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fx = _build_synthetic_outer_profile_fixture(Path(tmpdir))
+            root = fx["root"]
+            assert isinstance(root, Path)
+            profile = fx["profile"]
+            assert isinstance(profile, RefmacDiagnosticProfile)
+            installed_record = fx["installed_record"]
+            assert isinstance(installed_record, dict)
+            ccp4_env = fx["ccp4_env"]
+            assert isinstance(ccp4_env, dict)
+            ev_root = fx["evidence_root"]
+            assert isinstance(ev_root, Path)
+            alias_symlink = fx["alias_symlink"]
+            assert isinstance(alias_symlink, Path)
+            base_payload = copy.deepcopy(fx["manifest_payload"])
+            assert isinstance(base_payload, dict)
+
+            validated = validate_profile(
+                profile, installed_record, ccp4_env, ev_root
+            )
+            baseline_prov = copy.deepcopy(validated.to_provenance())
+
+            # 1. Same-byte file replacement with new inode on an external file
+            ext_fid = base_payload["roles"]["installed_reference"][0]  # type: ignore[index]
+            ext_path = Path(base_payload["files"][ext_fid]["path"])  # type: ignore[index]
+            orig_ext_bytes = ext_path.read_bytes()
+            orig_ext_mode = stat.S_IMODE(os.lstat(ext_path).st_mode)
+            orig_ext_ino = os.lstat(ext_path).st_ino
+            replacement_hold = root / "hold_inode_ext.tmp"
+            try:
+                ext_path.rename(replacement_hold)
+                ext_path.write_bytes(orig_ext_bytes)
+                os.chmod(ext_path, orig_ext_mode)
+                self.assertNotEqual(os.lstat(ext_path).st_ino, orig_ext_ino)
+
+                causes_1: list[Exception | None] = []
+                rep_1 = recheck_profile(
+                    validated, mutation_causes_out=causes_1
+                )
+                self.assertFalse(rep_1["verified"])
+                self.assertEqual(rep_1["errors"], [])
+                self.assertFalse(rep_1["files"][ext_fid]["matches_baseline"])
+                self.assertEqual(rep_1["files"][ext_fid]["errors"], [])
+                self.assertEqual(
+                    rep_1["files"][ext_fid]["expected"],
+                    baseline_prov["files"][ext_fid],
+                )
+                self.assertNotEqual(
+                    rep_1["files"][ext_fid]["observed"]["ino"],
+                    baseline_prov["files"][ext_fid]["ino"],
+                )
+                self.assertEqual(len(rep_1["mutations"]), 1)
+                mut_1 = rep_1["mutations"][0]
+                self.assertEqual(
+                    mut_1["category"], "diagnostic_profile_file"
+                )
+                self.assertEqual(mut_1["key"], f"profile:file:{ext_fid}")
+                self.assertEqual(mut_1["path"], str(ext_path))
+                self.assertIsNone(mut_1["error"])
+                self.assertEqual(
+                    mut_1["expected"], rep_1["files"][ext_fid]["expected"]
+                )
+                self.assertEqual(
+                    mut_1["observed"], rep_1["files"][ext_fid]["observed"]
+                )
+                self.assertEqual(causes_1, [None])
+            finally:
+                if replacement_hold.exists():
+                    if ext_path.exists():
+                        ext_path.unlink()
+                    replacement_hold.rename(ext_path)
+                    os.chmod(ext_path, orig_ext_mode)
+
+            # 2. Controlled root comparison mismatch (extra file added in build root)
+            build_root = Path(base_payload["roots"]["build"]["path"])  # type: ignore[index]
+            extra_build_file = build_root / "extra_comparison_probe.txt"
+            extra_build_file.write_bytes(b"extra probe\n")
+            try:
+                causes_2: list[Exception | None] = []
+                rep_2 = recheck_profile(
+                    validated, mutation_causes_out=causes_2
+                )
+                self.assertFalse(rep_2["verified"])
+                self.assertEqual(rep_2["errors"], [])
+                self.assertFalse(rep_2["roots"]["build"]["matches_baseline"])
+                self.assertTrue(rep_2["roots"]["build"]["scan_complete"])
+                self.assertEqual(
+                    rep_2["roots"]["build"]["member_diff"],
+                    {"added": ["extra_comparison_probe.txt"], "removed": []},
+                )
+                self.assertEqual(rep_2["roots"]["build"]["errors"], [])
+                self.assertEqual(len(rep_2["mutations"]), 1)
+                self.assertEqual(
+                    rep_2["mutations"][0]["key"], "profile:root:build"
+                )
+                self.assertEqual(
+                    rep_2["mutations"][0]["category"],
+                    "diagnostic_profile_root",
+                )
+                self.assertIsNone(rep_2["mutations"][0]["error"])
+                self.assertEqual(causes_2, [None])
+            finally:
+                if extra_build_file.exists():
+                    extra_build_file.unlink()
+
+            # 3. Ancestor directory identity change (mode change on support directory)
+            support_dir = root / "support"
+            orig_support_mode = stat.S_IMODE(os.lstat(support_dir).st_mode)
+            os.chmod(support_dir, orig_support_mode ^ 0o005)
+            try:
+                causes_3: list[Exception | None] = []
+                rep_3 = recheck_profile(
+                    validated, mutation_causes_out=causes_3
+                )
+                self.assertFalse(rep_3["verified"])
+                self.assertEqual(rep_3["errors"], [])
+                self.assertGreater(len(rep_3["mutations"]), 0)
+                self.assertTrue(
+                    all(m["error"] is None for m in rep_3["mutations"])
+                )
+                self.assertEqual(causes_3, [None] * len(rep_3["mutations"]))
+            finally:
+                os.chmod(support_dir, orig_support_mode)
+
+            # 4. Symlink replacement with new inode pointing to the same target
+            alias_fid = next(
+                fid
+                for fid, row in base_payload["files"].items()  # type: ignore[union-attr]
+                if row["path"] == str(alias_symlink)
+            )
+            orig_sym_target = os.readlink(alias_symlink)
+            orig_sym_ino = os.lstat(alias_symlink).st_ino
+            sym_hold = root / "hold_sym_inode.tmp"
+            try:
+                alias_symlink.rename(sym_hold)
+                os.symlink(orig_sym_target, alias_symlink)
+                self.assertNotEqual(
+                    os.lstat(alias_symlink).st_ino, orig_sym_ino
+                )
+
+                causes_4: list[Exception | None] = []
+                rep_4 = recheck_profile(
+                    validated, mutation_causes_out=causes_4
+                )
+                self.assertFalse(rep_4["verified"])
+                self.assertEqual(rep_4["errors"], [])
+                self.assertFalse(rep_4["files"][alias_fid]["matches_baseline"])
+                self.assertEqual(rep_4["files"][alias_fid]["errors"], [])
+                self.assertEqual(len(rep_4["mutations"]), 1)
+                self.assertEqual(
+                    rep_4["mutations"][0]["key"], f"profile:file:{alias_fid}"
+                )
+                self.assertIsNone(rep_4["mutations"][0]["error"])
+                self.assertEqual(causes_4, [None])
+            finally:
+                if sym_hold.exists() or sym_hold.is_symlink():
+                    if alias_symlink.exists() or alias_symlink.is_symlink():
+                        alias_symlink.unlink()
+                    sym_hold.rename(alias_symlink)
+
+            # 5. diagnostic_executable chmodded 0o644 (non-executable)
+            diag_id = base_payload["roles"]["diagnostic_executable"][0]  # type: ignore[index]
+            diag_path = Path(base_payload["files"][diag_id]["path"])  # type: ignore[index]
+            orig_diag_mode = stat.S_IMODE(os.lstat(diag_path).st_mode)
+            os.chmod(diag_path, 0o644)
+            try:
+                causes_5: list[Exception | None] = []
+                rep_5 = recheck_profile(
+                    validated, mutation_causes_out=causes_5
+                )
+                self.assertFalse(rep_5["verified"])
+                self.assertEqual(rep_5["errors"], [])
+                self.assertFalse(rep_5["files"][diag_id]["matches_baseline"])
+                self.assertEqual(rep_5["files"][diag_id]["errors"], [])
+                diag_muts = [
+                    m
+                    for m in rep_5["mutations"]
+                    if m["key"] == f"profile:file:{diag_id}"
+                ]
+                self.assertEqual(len(diag_muts), 1)
+                self.assertIsNone(diag_muts[0]["error"])
+                self.assertIn(
+                    "no longer executable", diag_muts[0]["reason"]
+                )
+                self.assertEqual(causes_5, [None] * len(rep_5["mutations"]))
+            finally:
+                os.chmod(diag_path, orig_diag_mode)
+
+    def test_recheck_profile_mutually_replaced_manifest_and_file_cannot_change_expected_authority(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fx = _build_synthetic_outer_profile_fixture(Path(tmpdir))
+            profile = fx["profile"]
+            assert isinstance(profile, RefmacDiagnosticProfile)
+            installed_record = fx["installed_record"]
+            assert isinstance(installed_record, dict)
+            ccp4_env = fx["ccp4_env"]
+            assert isinstance(ccp4_env, dict)
+            ev_root = fx["evidence_root"]
+            assert isinstance(ev_root, Path)
+            manifest_path = fx["manifest_path"]
+            assert isinstance(manifest_path, Path)
+            base_payload = copy.deepcopy(fx["manifest_payload"])
+            assert isinstance(base_payload, dict)
+
+            validated = validate_profile(
+                profile, installed_record, ccp4_env, ev_root
+            )
+            baseline_prov = copy.deepcopy(validated.to_provenance())
+
+            target_fid = base_payload["roles"]["installed_reference"][0]  # type: ignore[index]
+            target_path = Path(base_payload["files"][target_fid]["path"])  # type: ignore[index]
+            orig_file_bytes = target_path.read_bytes()
+            orig_manifest_bytes = manifest_path.read_bytes()
+
+            new_file_bytes = (
+                bytes([orig_file_bytes[0] ^ 0x01]) + orig_file_bytes[1:]
+            )
+            self.assertEqual(len(new_file_bytes), len(orig_file_bytes))
+            self.assertNotEqual(new_file_bytes, orig_file_bytes)
+
+            forged_payload = copy.deepcopy(base_payload)
+            forged_payload["files"][target_fid]["sha256"] = _sha256_bytes(  # type: ignore[index]
+                new_file_bytes
+            )
+            forged_payload["files"][target_fid]["size_bytes"] = len(  # type: ignore[index]
+                new_file_bytes
+            )
+            forged_manifest_bytes = (
+                json.dumps(forged_payload, indent=2) + "\n"
+            ).encode("utf-8")
+            self.assertEqual(
+                len(forged_manifest_bytes), len(orig_manifest_bytes)
+            )
+            self.assertNotEqual(forged_manifest_bytes, orig_manifest_bytes)
+
+            try:
+                target_path.write_bytes(new_file_bytes)
+                manifest_path.write_bytes(forged_manifest_bytes)
+
+                causes: list[Exception | None] = []
+                report = recheck_profile(validated, mutation_causes_out=causes)
+                self.assertFalse(report["verified"])
+                self.assertEqual(report["errors"], [])
+                self.assertFalse(report["manifest"]["matches_baseline"])
+                self.assertFalse(
+                    report["files"][target_fid]["matches_baseline"]
+                )
+                self.assertEqual(
+                    report["manifest"]["expected"], baseline_prov["manifest"]
+                )
+                self.assertEqual(
+                    report["files"][target_fid]["expected"],
+                    baseline_prov["files"][target_fid],
+                )
+                self.assertEqual(
+                    report["manifest"]["observed"]["sha256"],
+                    _sha256_bytes(forged_manifest_bytes),
+                )
+                self.assertEqual(
+                    report["files"][target_fid]["observed"]["sha256"],
+                    _sha256_bytes(new_file_bytes),
+                )
+                mut_keys = [m["key"] for m in report["mutations"]]
+                self.assertEqual(
+                    mut_keys,
+                    ["profile:manifest", f"profile:file:{target_fid}"],
+                )
+                self.assertEqual(causes, [None, None])
+            finally:
+                target_path.write_bytes(orig_file_bytes)
+                manifest_path.write_bytes(orig_manifest_bytes)
+
+    def test_recheck_profile_multi_error_continuation_partial_observations_and_distinct_causes(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fx = _build_synthetic_outer_profile_fixture(Path(tmpdir))
+            root = fx["root"]
+            assert isinstance(root, Path)
+            profile = fx["profile"]
+            assert isinstance(profile, RefmacDiagnosticProfile)
+            installed_record = fx["installed_record"]
+            assert isinstance(installed_record, dict)
+            ccp4_env = fx["ccp4_env"]
+            assert isinstance(ccp4_env, dict)
+            ev_root = fx["evidence_root"]
+            assert isinstance(ev_root, Path)
+            base_payload = copy.deepcopy(fx["manifest_payload"])
+            assert isinstance(base_payload, dict)
+
+            validated = validate_profile(
+                profile, installed_record, ccp4_env, ev_root
+            )
+            baseline_prov = copy.deepcopy(validated.to_provenance())
+
+            tree_fids = {
+                fid
+                for rdata in base_payload["roots"].values()  # type: ignore[union-attr]
+                for fid in rdata["file_ids"]
+            }
+            external_fids = sorted(
+                fid
+                for fid in base_payload["files"].keys()  # type: ignore[union-attr]
+                if fid not in tree_fids
+                and not base_payload["files"][fid]["symlinks"]  # type: ignore[index]
+            )
+            early_fid = external_fids[0]
+            later_fid = external_fids[-1]
+            self.assertLess(early_fid, later_fid)
+
+            early_path = Path(base_payload["files"][early_fid]["path"])  # type: ignore[index]
+            later_path = Path(base_payload["files"][later_fid]["path"])  # type: ignore[index]
+            orig_early_bytes = early_path.read_bytes()
+            orig_later_bytes = later_path.read_bytes()
+
+            build_root = Path(base_payload["roots"]["build"]["path"])  # type: ignore[index]
+            added_before_err = build_root / "00_added_before_walk_err.txt"
+            walk_sub = build_root / "zz_locked_subdir"
+            walk_sub.mkdir()
+            added_before_err.write_bytes(b"observed before walk error\n")
+            injected_walk_perm = PermissionError(
+                errno.EACCES,
+                "simulated walk permission denied after first root member",
+                str(walk_sub),
+            )
+
+            real_walk = os.walk
+
+            def walk_fail_on_sub(top, *args, **kwargs):
+                onerror = kwargs.get("onerror")
+                for dirpath, dirnames, filenames in real_walk(
+                    top, *args, **kwargs
+                ):
+                    if Path(dirpath) == walk_sub:
+                        if onerror is not None:
+                            onerror(injected_walk_perm)
+                        return
+                    yield dirpath, dirnames, filenames
+
+            try:
+                early_path.unlink()
+                later_path.write_bytes(
+                    orig_later_bytes + b"\n# modified later file\n"
+                )
+                causes_multi: list[Exception | None] = []
+                with mock.patch(
+                    "refmac_diagnostic_profile.os.walk",
+                    side_effect=walk_fail_on_sub,
+                ):
+                    rep_multi = recheck_profile(
+                        validated, mutation_causes_out=causes_multi
+                    )
+
+                self.assertFalse(rep_multi["verified"])
+                self.assertEqual(len(rep_multi["files"]), 59)
+                self.assertEqual(len(rep_multi["roots"]), 3)
+
+                # Early missing file
+                early_row = rep_multi["files"][early_fid]
+                self.assertIsNone(early_row["observed"])
+                self.assertFalse(early_row["matches_baseline"])
+                self.assertEqual(len(early_row["errors"]), 1)
+                self.assertEqual(
+                    early_row["errors"][0]["type"], "FileNotFoundError"
+                )
+                self.assertEqual(early_row["errors"][0]["errno"], errno.ENOENT)
+
+                # Later changed file
+                later_row = rep_multi["files"][later_fid]
+                self.assertIsNotNone(later_row["observed"])
+                self.assertFalse(later_row["matches_baseline"])
+                self.assertEqual(later_row["errors"], [])
+
+                # Incomplete build root scan
+                build_row = rep_multi["roots"]["build"]
+                self.assertIsNotNone(build_row["observed"])
+                self.assertFalse(build_row["matches_baseline"])
+                self.assertFalse(build_row["scan_complete"])
+                self.assertEqual(
+                    build_row["member_diff"],
+                    {
+                        "added": ["00_added_before_walk_err.txt"],
+                        "removed": [],
+                    },
+                )
+                self.assertEqual(len(build_row["errors"]), 1)
+                self.assertEqual(
+                    build_row["errors"][0]["type"], "PermissionError"
+                )
+                self.assertEqual(build_row["errors"][0]["errno"], errno.EACCES)
+
+                # Aligned mutations and causes: (FileNotFoundError, None, PermissionError)
+                self.assertEqual(len(rep_multi["mutations"]), 3)
+                self.assertEqual(len(causes_multi), 3)
+                self.assertEqual(
+                    [m["key"] for m in rep_multi["mutations"]],
+                    [
+                        f"profile:file:{early_fid}",
+                        f"profile:file:{later_fid}",
+                        "profile:root:build",
+                    ],
+                )
+                self.assertIsInstance(causes_multi[0], FileNotFoundError)
+                self.assertIsNone(causes_multi[1])
+                self.assertIs(causes_multi[2], injected_walk_perm)
+                self.assertIsNotNone(rep_multi["mutations"][0]["error"])
+                self.assertIsNone(rep_multi["mutations"][1]["error"])
+                self.assertIsNotNone(rep_multi["mutations"][2]["error"])
+                self.assertEqual(len(rep_multi["errors"]), 2)
+                json.dumps(rep_multi, allow_nan=False)
+            finally:
+                early_path.write_bytes(orig_early_bytes)
+                later_path.write_bytes(orig_later_bytes)
+                if added_before_err.exists():
+                    added_before_err.unlink()
+                if walk_sub.exists():
+                    walk_sub.rmdir()
+
+            # Subcase 2: Partial file read (post-fstat EIO) + distinct Step 4 ancestor PermissionError
+            support_dir = root / "support"
+            alias_symlink = fx["alias_symlink"]
+            assert isinstance(alias_symlink, Path)
+            alias_fid = next(
+                fid
+                for fid, row in base_payload["files"].items()  # type: ignore[union-attr]
+                if row["path"] == str(alias_symlink)
+            )
+            alias_resolved = Path(
+                base_payload["files"][alias_fid]["resolved_path"]  # type: ignore[index]
+            )
+            injected_read_eio = OSError(
+                errno.EIO,
+                "simulated post-fstat read EIO for public recheck",
+                str(alias_resolved),
+            )
+            injected_anc_perm = PermissionError(
+                errno.EACCES,
+                "simulated Step 4 support dir PermissionError for public recheck",
+                str(support_dir),
+            )
+
+            real_fdopen = os.fdopen
+            real_dir_obs = profile_mod._observe_directory_identity
+            step_state = {
+                "current_lexical_path": None,
+                "eio_injected": False,
+                "files_done": False,
+            }
+            last_fid = sorted(baseline_prov["files"].keys())[-1]
+            last_fpath = baseline_prov["files"][last_fid]["path"]
+            real_obs_pin = profile_mod._observe_regular_file_pin
+
+            def obs_pin_track(path, *args, **kwargs):
+                prev_lexical_path = step_state["current_lexical_path"]
+                step_state["current_lexical_path"] = str(path)
+                try:
+                    return real_obs_pin(path, *args, **kwargs)
+                finally:
+                    step_state["current_lexical_path"] = prev_lexical_path
+                    if str(path) == str(last_fpath):
+                        step_state["files_done"] = True
+
+            class _FailingReader:
+                def __init__(self, wrapped):
+                    self._wrapped = wrapped
+
+                def read(self, size=-1):
+                    raise injected_read_eio
+
+                def fileno(self):
+                    return self._wrapped.fileno()
+
+                def __enter__(self):
+                    self._wrapped.__enter__()
+                    return self
+
+                def __exit__(self, exc_type, exc_val, exc_tb):
+                    return self._wrapped.__exit__(exc_type, exc_val, exc_tb)
+
+            def fdopen_inject_on_alias(fd, *args, **kwargs):
+                fobj = real_fdopen(fd, *args, **kwargs)
+                st = os.fstat(fd)
+                target_st = os.lstat(alias_resolved)
+                if (
+                    not step_state["eio_injected"]
+                    and step_state["current_lexical_path"] == str(alias_symlink)
+                    and (st.st_dev, st.st_ino)
+                    == (target_st.st_dev, target_st.st_ino)
+                ):
+                    step_state["eio_injected"] = True
+                    return _FailingReader(fobj)
+                return fobj
+
+            def dir_obs_fail_support_in_step4(
+                dir_path_str: str,
+                *,
+                require_no_symlink_ancestors: bool = False,
+            ):
+                if (
+                    step_state["files_done"]
+                    and str(dir_path_str) == str(support_dir)
+                ):
+                    raise ValueError(
+                        f"Cannot lstat directory {dir_path_str!r} (PermissionError): {injected_anc_perm}"
+                    ) from injected_anc_perm
+                return real_dir_obs(
+                    dir_path_str,
+                    require_no_symlink_ancestors=require_no_symlink_ancestors,
+                )
+
+            causes_sub2: list[Exception | None] = []
+            with (
+                mock.patch(
+                    "refmac_diagnostic_profile._observe_regular_file_pin",
+                    side_effect=obs_pin_track,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.fdopen",
+                    side_effect=fdopen_inject_on_alias,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile._observe_directory_identity",
+                    side_effect=dir_obs_fail_support_in_step4,
+                ),
+            ):
+                rep_sub2 = recheck_profile(
+                    validated, mutation_causes_out=causes_sub2
+                )
+
+            self.assertTrue(step_state["eio_injected"])
+            self.assertFalse(rep_sub2["verified"])
+            alias_row = rep_sub2["files"][alias_fid]
+            self.assertFalse(alias_row["matches_baseline"])
+            self.assertIsNotNone(alias_row["observed"])
+            self.assertFalse(alias_row["observed"]["read_complete"])
+            self.assertIsNone(alias_row["observed"]["sha256"])
+            self.assertIsNone(alias_row["observed"]["size_bytes"])
+            self.assertEqual(len(alias_row["errors"]), 2)
+            self.assertEqual(
+                [e["type"] for e in alias_row["errors"]],
+                ["OSError", "PermissionError"],
+            )
+
+            alias_muts = [
+                (idx, m)
+                for idx, m in enumerate(rep_sub2["mutations"])
+                if m["key"] == f"profile:file:{alias_fid}"
+            ]
+            self.assertEqual(len(alias_muts), 2)
+            self.assertIs(causes_sub2[alias_muts[0][0]], injected_read_eio)
+            self.assertIs(causes_sub2[alias_muts[1][0]], injected_anc_perm)
+            json.dumps(rep_sub2, allow_nan=False)
+
+    def test_recheck_profile_custom_baseexception_cause_chain_and_descriptor(
+        self,
+    ) -> None:
+        class OriginalSignal(BaseException):
+            def __init__(
+                self, message: str, errno_val: int | None = None
+            ) -> None:
+                super().__init__(message)
+                self.errno = errno_val
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fx = _build_synthetic_outer_profile_fixture(Path(tmpdir))
+            profile = fx["profile"]
+            assert isinstance(profile, RefmacDiagnosticProfile)
+            installed_record = fx["installed_record"]
+            assert isinstance(installed_record, dict)
+            ccp4_env = fx["ccp4_env"]
+            assert isinstance(ccp4_env, dict)
+            ev_root = fx["evidence_root"]
+            assert isinstance(ev_root, Path)
+
+            validated = validate_profile(
+                profile, installed_record, ccp4_env, ev_root
+            )
+            state = validated._outer_state
+            assert state is not None
+            clean_recheck = _reobserve_outer_profile_state(state)
+
+            # 1. Pure projection with an actual caught ValueError explicitly chained from a custom BaseException
+            orig_signal = OriginalSignal("original signal object")
+            try:
+                try:
+                    raise orig_signal
+                except OriginalSignal as sig_exc:
+                    raise ValueError("actual caught wrapper") from sig_exc
+            except ValueError as err:
+                caught_wrapper = err
+
+            self.assertIs(caught_wrapper.__cause__, orig_signal)
+            mutations_1: list[dict[str, object]] = []
+            causes_1: list[Exception | None] = []
+            top_errors_1: list[dict[str, object]] = []
+            row_errors_1 = profile_mod._collect_owner_postflight_findings(
+                owner_key="profile:file:example",
+                owner_category="diagnostic_profile_file",
+                owner_path="/inert/example",
+                expected_payload={},
+                observed_payload=None,
+                matches_baseline=False,
+                owner_errors=("actual caught wrapper",),
+                direct_cause=caught_wrapper,
+                all_ancs=(),
+                all_syms=(),
+                recheck=clean_recheck,
+                mutations_out=mutations_1,  # type: ignore[arg-type]
+                causes_out=causes_1,
+                top_errors_out=top_errors_1,  # type: ignore[arg-type]
+            )
+            expected_desc_1 = {
+                "key": "profile:file:example",
+                "type": "OriginalSignal",
+                "message": "original signal object",
+                "errno": None,
+            }
+            self.assertEqual(row_errors_1, [expected_desc_1])
+            self.assertEqual(top_errors_1, [expected_desc_1])
+            self.assertEqual(len(mutations_1), 1)
+            self.assertEqual(len(causes_1), 1)
+            self.assertEqual(mutations_1[0]["error"], expected_desc_1)
+            self.assertIs(causes_1[0], caught_wrapper)
+            self.assertIsInstance(causes_1[0], Exception)
+            assert causes_1[0] is not None
+            self.assertIs(causes_1[0].__cause__, orig_signal)
+
+            # 2. End-to-end recheck_profile with an actual caught ValueError explicitly chained from custom BaseException
+            # alongside a comparison-only mismatch, preserving original reachability, accurate descriptor, and alignment
+            qc_fid = sorted(validated.roles["qc_evidence"])[0]
+            qc_path = Path(validated.files[qc_fid].path)
+            other_fid = sorted(validated.roles["qc_evidence"])[1]
+            other_path = Path(validated.files[other_fid].path)
+            other_path.write_bytes(other_path.read_bytes() + b"\n")
+
+            orig_signal_eio = OriginalSignal(
+                "custom signal during file pin observation", errno.EIO
+            )
+            real_obs_pin = profile_mod._observe_regular_file_pin
+            caught_in_observer: list[ValueError] = []
+
+            def obs_pin_raise_chained_signal(path, *args, **kwargs):
+                if str(path) == str(qc_path):
+                    try:
+                        raise orig_signal_eio
+                    except OriginalSignal as sig_exc:
+                        try:
+                            raise ValueError(
+                                f"observer wrapper for {path!r}: {sig_exc}"
+                            ) from sig_exc
+                        except ValueError as wrapped_exc:
+                            caught_in_observer.append(wrapped_exc)
+                            raise
+                return real_obs_pin(path, *args, **kwargs)
+
+            causes_2: list[Exception | None] = []
+            with mock.patch(
+                "refmac_diagnostic_profile._observe_regular_file_pin",
+                side_effect=obs_pin_raise_chained_signal,
+            ):
+                rep_2 = recheck_profile(validated, mutation_causes_out=causes_2)
+
+            self.assertEqual(len(caught_in_observer), 1)
+            self.assertIs(caught_in_observer[0].__cause__, orig_signal_eio)
+            self.assertFalse(rep_2["verified"])
+            self.assertEqual(len(rep_2["mutations"]), len(causes_2))
+
+            expected_desc_2 = {
+                "key": f"profile:file:{qc_fid}",
+                "type": "OriginalSignal",
+                "message": "custom signal during file pin observation",
+                "errno": errno.EIO,
+            }
+            self.assertEqual(rep_2["files"][qc_fid]["errors"], [expected_desc_2])
+            self.assertIn(expected_desc_2, rep_2["errors"])
+
+            qc_mut_indices = [
+                idx
+                for idx, m in enumerate(rep_2["mutations"])
+                if m["key"] == f"profile:file:{qc_fid}"
+            ]
+            self.assertEqual(len(qc_mut_indices), 1)
+            qc_idx = qc_mut_indices[0]
+            self.assertEqual(
+                rep_2["mutations"][qc_idx]["error"], expected_desc_2
+            )
+            qc_cause = causes_2[qc_idx]
+            self.assertIsInstance(qc_cause, Exception)
+            assert qc_cause is not None
+            self.assertTrue(
+                profile_mod._cause_chain_reaches(qc_cause, orig_signal_eio)
+            )
+            self.assertIs(
+                profile_mod._select_original_cause_exception(qc_cause),
+                orig_signal_eio,
+            )
+
+            other_mut_indices = [
+                idx
+                for idx, m in enumerate(rep_2["mutations"])
+                if m["key"] == f"profile:file:{other_fid}"
+            ]
+            self.assertEqual(len(other_mut_indices), 1)
+            other_idx = other_mut_indices[0]
+            self.assertIsNone(rep_2["mutations"][other_idx]["error"])
+            self.assertIsNone(causes_2[other_idx])
+            json.dumps(rep_2, allow_nan=False)
 
 
 if __name__ == "__main__":

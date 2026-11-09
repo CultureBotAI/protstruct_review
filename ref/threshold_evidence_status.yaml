@@ -203,7 +203,7 @@ rows:
   evidence_refs:
   - path: ref/research/tolerance_benchmark_bond_rmsd.md
     anchor: '## Results'
-    sha256: f5c8ad8e053ac178caf6bc2b835f70ca2476e7ba81b55c504857298662ae40cd
+    sha256: 06120d366a1653150c4674258b3d3513340b81b17d1cbba460302e339fd33b3e
     hash_scope: full_file
   - path: ref/research/tolerance_benchmark_restraint_library.md
     anchor: '## Results'

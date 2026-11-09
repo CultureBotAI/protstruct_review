@@ -87,9 +87,9 @@ mismatch means the two RMSDs are sums over different restraint populations and a
 
 ## Applied tolerance
 
-> **|Δ| ≤ 0.008 Å, and only when both tools restrain the same number of bonds.** With **matched
-> restraint libraries** the tolerance is **|Δ| ≤ 0.006 Å** — barely tighter, because the within-PHENIX
-> library switch accounts for ~21 % of the disagreement (`tolerance_benchmark_restraint_library.md`). Expect gemmi/CCP4-library figures to read
+> **|Δ| ≤ 0.008 Å, and only when both tools restrain the same number of bonds.** The adopted conditional
+> **matched-library** policy band remains **|Δ| ≤ 0.006 Å**; `tolerance_benchmark_restraint_library.md` does not directly measure or bound the truly matched cross-engine contrast,
+> so its empirical tightness is not established by the ~21 % within-PHENIX CDL→E&H (A–B) observation on valid (matched-count) comparisons, while the within-PHENIX CDL→E&H switch alone did not eliminate the observed cross-tool gap. Expect gemmi/CCP4-library figures to read
 > **high** against PHENIX/CDL; a negative Δ is off-distribution. When the bond counts differ (11/17
 > here), the comparison is **void**: report both figures with their counts rather than a Δ.
 
@@ -99,11 +99,11 @@ differences, so it would have flagged correct models as disagreeing.
 
 ## Scope limits
 
-- Cross-library only. The near-matched-library contrast was measured separately in
-  `tolerance_benchmark_restraint_library.md` and informs the adopted conditional **0.006 Å** band, with
-  residual confounding from non-identical Engh & Huber-derived dictionaries and possible bond-population
-  differences — not "much tighter", because the within-PHENIX library switch turned out to be a minor
-  term for bond lengths.
+- Cross-library only. The near-matched-library contrast (`B–C`) was measured separately in
+  `tolerance_benchmark_restraint_library.md` alongside the adopted conditional **0.006 Å** matched-library policy band;
+  that study does not directly measure or bound the truly matched cross-engine contrast, so the **0.006 Å** band's empirical tightness is not established by the ~21 % within-PHENIX CDL→E&H (A–B) observation on valid (matched-count) comparisons,
+  while the within-PHENIX library switch alone did not eliminate the observed cross-tool gap and `B–C` retains
+  non-identical Engh & Huber-derived dictionaries and possible bond-population differences.
 - The ~2× bond-count mismatches are attributed to alternate-conformation handling by inspection, not
   verified — the scripts record the counts but do not diff the restraint lists.
 - 17 X-ray models, bond RMSD 0.0018–0.0175 Å. Models with unusual ligands or heavy covalent

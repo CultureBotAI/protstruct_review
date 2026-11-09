@@ -30,12 +30,19 @@ from refmac_diagnostic_profile import (  # noqa: E402
     SUPPORTED_PROFILE_ID,
     UPSTREAM_COMMIT,
     UPSTREAM_TAG,
+    FileObservation,
     FilePin,
+    PartialFileReadObservation,
+    ProfileValidationError,
     RefmacDiagnosticProfile,
+    RootObservation,
+    ValidatedProfile,
     _CheckedOuterManifest,
     _CheckedOuterProfileState,
+    _FrozenPairTable,
     _ObservedRegularFilePin,
     _OuterProfileRecheckResult,
+    _PartialFileReadError,
     _PartialProfileObservation,
     _PinnedJsonDocument,
     _ProfileObservationError,
@@ -48,6 +55,7 @@ from refmac_diagnostic_profile import (  # noqa: E402
     _validate_and_observe_outer_profile,
     _validate_outer_manifest_shape,
     reject_conflicting_environment,
+    validate_profile,
 )
 
 
@@ -56,10 +64,11 @@ def _sha256_bytes(data: bytes) -> str:
 
 
 class TestPublicDataclassesAndSliceBoundary(unittest.TestCase):
-    """Verify frozen FilePin, RefmacDiagnosticProfile, and absence of premature stubs."""
+    """Verify frozen FilePin, RefmacDiagnosticProfile, and slice boundary (validate_profile present, recheck_profile absent)."""
 
     def test_validate_and_recheck_stubs_are_deliberately_absent(self) -> None:
-        self.assertFalse(hasattr(profile_mod, "validate_profile"))
+        self.assertTrue(hasattr(profile_mod, "validate_profile"))
+        self.assertTrue(callable(profile_mod.validate_profile))
         self.assertFalse(hasattr(profile_mod, "recheck_profile"))
 
     def test_file_pin_preserves_lexical_alias_and_is_frozen(self) -> None:
@@ -907,7 +916,6 @@ def _build_synthetic_outer_profile_fixture(base_dir: Path) -> dict[str, object]:
         ("build_qc_implementation", "compose-diagnostic-profile.py"),
         ("runtime_observation", "runtime-observation.json"),
         ("runtime_observer", "observe-runtime.py"),
-        ("ccp4_setup", "installed/bin/ccp4.setup-sh"),
         ("launcher", "launch-attempt04.py"),
         ("collection_interpreter", "collection-python"),
     ):
@@ -968,6 +976,10 @@ def _build_synthetic_outer_profile_fixture(base_dir: Path) -> dict[str, object]:
     create_file("build/ordinary_object.o", "ordinary build object without role\n")
     create_file("build/.hidden_build_marker", "build_hidden=1\n")
 
+    add_single_role(
+        "ccp4_setup",
+        "installed/bin/ccp4.setup-sh",
+    )
     installed_ref = add_single_role(
         "installed_reference",
         "installed/bin/refmac5",
@@ -1008,6 +1020,175 @@ def _build_synthetic_outer_profile_fixture(base_dir: Path) -> dict[str, object]:
                 register_path(member)
 
     env_values = {key: f"val-{key}" for key in sorted(EXPECTED_RUNTIME_ENV_KEYS)}
+    ccp4_env = dict(env_values)
+    installed_prefix = str(root / "installed")
+    ccp4_setup_row = files[roles["ccp4_setup"][0]]
+    inst_ref_row = files[roles["installed_reference"][0]]
+    installed_record: dict[str, object] = {
+        "configured_installation_prefix": installed_prefix,
+        "setup_script": {
+            "configured_path": str(ccp4_setup_row["path"]),
+            "resolved_path": str(ccp4_setup_row["resolved_path"]),
+            "is_symlink": bool(
+                ccp4_setup_row["path"] != ccp4_setup_row["resolved_path"]
+            ),
+            "within_prefix": True,
+            "sha256": str(ccp4_setup_row["sha256"]),
+            "size_bytes": int(ccp4_setup_row["size_bytes"]),  # type: ignore[arg-type]
+        },
+        "refmac5_binary": {
+            "discovered_path": str(inst_ref_row["path"]),
+            "resolved_path": str(inst_ref_row["resolved_path"]),
+            "is_symlink": bool(
+                inst_ref_row["path"] != inst_ref_row["resolved_path"]
+            ),
+            "within_prefix": True,
+            "executable": True,
+            "sha256": str(inst_ref_row["sha256"]),
+            "size_bytes": int(inst_ref_row["size_bytes"]),  # type: ignore[arg-type]
+        },
+        "bound_ccp4_configuration": {
+            k: env_values[k]
+            for k in (
+                "CBIN",
+                "CCP4",
+                "CCP4_MASTER",
+                "CCP4_SCR",
+                "CINCL",
+                "CLIB",
+                "CLIBD",
+                "CLIBD_MON",
+            )
+        },
+    }
+
+    # Populate self-consistent inner receipts (source_manifest, runtime_observation, build_receipt, source_audit)
+    sm_path = trees["prepared"] / "refmac_diagnostic_source_manifest.json"
+    sm_payload: dict[str, object] = {
+        "schema_id": "protstruct_refmac_diagnostic_source_manifest_v1",
+        "source_verification_status": "verified_upstream_commit_tree",
+        "upstream_source": {
+            "expected_commit": UPSTREAM_COMMIT,
+            "expected_tag": UPSTREAM_TAG,
+            "git_commit": UPSTREAM_COMMIT,
+            "git_tag": UPSTREAM_TAG,
+        },
+        "extra_opaque_metadata": {"synthetic": True},
+    }
+    sm_path.write_text(json.dumps(sm_payload, indent=2) + "\n", encoding="utf-8")
+    register_path(sm_path)
+
+    rt_path = root / "support" / "runtime-observation.json"
+    rt_observer_row = files[roles["runtime_observer"][0]]
+    setup_dep_rows = [files[fid] for fid in roles["ccp4_setup_dependencies"]]
+    rt_img_rows = [files[fid] for fid in roles["runtime_images"]]
+    rt_payload: dict[str, object] = {
+        "contract": "primary_ccp4_runtime_configuration_observation_v1",
+        "selected_nonsecret_environment": dict(env_values),
+        "resolver_record": copy.deepcopy(installed_record),
+        "observation_script": {
+            "path": rt_observer_row["path"],
+            "resolved": rt_observer_row["resolved_path"],
+            "sha256": rt_observer_row["sha256"],
+            "size_bytes": rt_observer_row["size_bytes"],
+        },
+        "setup_source_files": [
+            {
+                "path": r["path"],
+                "resolved": r["resolved_path"],
+                "sha256": r["sha256"],
+                "size_bytes": r["size_bytes"],
+            }
+            for r in [ccp4_setup_row, *setup_dep_rows]
+        ],
+        "static_library_load_commands": [
+            {
+                "index": idx,
+                "library": {
+                    "path": r["path"],
+                    "resolved": r["resolved_path"],
+                    "sha256": r["sha256"],
+                    "size_bytes": r["size_bytes"],
+                },
+            }
+            for idx, r in enumerate(rt_img_rows)
+        ],
+    }
+    rt_path.write_text(json.dumps(rt_payload, indent=2) + "\n", encoding="utf-8")
+    register_path(rt_path)
+
+    br_path = trees["build"] / "build-receipt.json"
+    diag_row = files[roles["diagnostic_executable"][0]]
+    driver_row = files[roles["build_driver"][0]]
+    journal_row = files[roles["build_journal"][0]]
+    rt_cfg_row = files[roles["build_runtime_config"][0]]
+    linked_row = files[roles["linked_executable"][0]]
+    br_payload: dict[str, object] = {
+        "contract": "protstruct_instrumented_build_receipt_v2",
+        "passed": True,
+        "source": str(trees["prepared"]),
+        "output": str(trees["build"]),
+        "executable": {
+            "path": diag_row["path"],
+            "sha256": diag_row["sha256"],
+            "size_bytes": diag_row["size_bytes"],
+        },
+        "driver_sha256": driver_row["sha256"],
+        "journal_sha256": journal_row["sha256"],
+        "runtime_config_sha256": rt_cfg_row["sha256"],
+        "linked_executable_sha256": linked_row["sha256"],
+    }
+    br_path.write_text(json.dumps(br_payload, indent=2) + "\n", encoding="utf-8")
+    register_path(br_path)
+
+    sa_path = root / "support" / "source-audit.json"
+    sm_row = files[roles["source_manifest"][0]]
+    auditor_row = files[roles["source_auditor"][0]]
+    audit_interp_row = files[roles["source_audit_interpreter"][0]]
+    patch_obs = _observe_regular_file_pin(
+        str(trees["prepared"] / "refmac_diagnostic_hooks.patch")
+    )
+    vendor_inv: dict[str, dict[str, object]] = {}
+    prepared_inv: dict[str, dict[str, object]] = {}
+    for _fid, frow in sorted(files.items()):
+        fpath = Path(str(frow["path"]))
+        if fpath.is_relative_to(trees["vendor"]):
+            rel_p = fpath.relative_to(trees["vendor"]).as_posix()
+            vendor_inv[rel_p] = {
+                "sha256": frow["sha256"],
+                "size_bytes": frow["size_bytes"],
+                "git_mode": "100644",
+            }
+        elif fpath.is_relative_to(trees["prepared"]):
+            rel_p = fpath.relative_to(trees["prepared"]).as_posix()
+            prepared_inv[rel_p] = {
+                "sha256": frow["sha256"],
+                "size_bytes": frow["size_bytes"],
+            }
+    sa_payload: dict[str, object] = {
+        "contract": "primary_refmac_source_audit_v1",
+        "passed": True,
+        "source_root": str(trees["vendor"]),
+        "prepared_root": str(trees["prepared"]),
+        "upstream_commit": UPSTREAM_COMMIT,
+        "python_optimization": 0,
+        "literal_git_objects": True,
+        "manifest_sha256": sm_row["sha256"],
+        "auditor_sha256": auditor_row["sha256"],
+        "auditor_path": auditor_row["path"],
+        "patch_sha256": patch_obs.sha256,
+        "interpreter": {
+            "path": audit_interp_row["path"],
+            "resolved_path": audit_interp_row["resolved_path"],
+            "sha256": audit_interp_row["sha256"],
+            "size_bytes": audit_interp_row["size_bytes"],
+        },
+        "original_git_blob_inventory": vendor_inv,
+        "complete_prepared_inventory": prepared_inv,
+    }
+    sa_path.write_text(json.dumps(sa_payload, indent=2) + "\n", encoding="utf-8")
+    register_path(sa_path)
+
     manifest_payload: dict[str, object] = {
         "schema_id": PROFILE_SCHEMA_ID,
         "profile_id": SUPPORTED_PROFILE_ID,
@@ -1046,6 +1227,7 @@ def _build_synthetic_outer_profile_fixture(base_dir: Path) -> dict[str, object]:
         manifest=manifest_pin,
         executable=executable_pin,
     )
+    evidence_root = root / "evidence-output"
     return {
         "root": root,
         "trees": trees,
@@ -1056,12 +1238,21 @@ def _build_synthetic_outer_profile_fixture(base_dir: Path) -> dict[str, object]:
         "installed_ref": installed_ref,
         "alias_symlink": alias_symlink,
         "alias_dotdot": alias_dotdot,
+        "installed_record": installed_record,
+        "ccp4_env": ccp4_env,
+        "evidence_root": evidence_root,
+        "source_manifest_payload": sm_payload,
+        "source_audit_payload": sa_payload,
+        "build_receipt_payload": br_payload,
+        "runtime_observation_payload": rt_payload,
     }
 
 
 def _rewrite_manifest_and_profile(
     fixture: dict[str, object],
     payload: dict[str, object],
+    *,
+    executable_pin: FilePin | None = None,
 ) -> RefmacDiagnosticProfile:
     manifest_path = fixture["manifest_path"]
     assert isinstance(manifest_path, Path)
@@ -1073,8 +1264,59 @@ def _rewrite_manifest_and_profile(
     return RefmacDiagnosticProfile(
         profile_id=orig_profile.profile_id,
         manifest=manifest_pin,
-        executable=orig_profile.executable,
+        executable=(
+            executable_pin if executable_pin is not None else orig_profile.executable
+        ),
     )
+
+
+def _mutate_inner_receipt_and_repin(
+    fixture: dict[str, object],
+    role_name: str,
+    mutator,
+    *,
+    sync_source_audit_manifest_sha: bool = True,
+) -> tuple[RefmacDiagnosticProfile, callable]:
+    """Mutate an inner receipt JSON on disk, update its outer file pin and caller manifest pin, and return a restore hook."""
+    base_payload = fixture["manifest_payload"]
+    assert isinstance(base_payload, dict)
+    payload = copy.deepcopy(base_payload)
+    role_fid = payload["roles"][role_name][0]  # type: ignore[index]
+    role_path = Path(str(payload["files"][role_fid]["path"]))  # type: ignore[index]
+    orig_role_bytes = role_path.read_bytes()
+
+    sa_fid = payload["roles"]["source_audit"][0]  # type: ignore[index]
+    sa_path = Path(str(payload["files"][sa_fid]["path"]))  # type: ignore[index]
+    orig_sa_bytes = sa_path.read_bytes()
+
+    inner_obj = json.loads(orig_role_bytes.decode("utf-8"))
+    mutator(inner_obj)
+    role_path.write_text(json.dumps(inner_obj, indent=2) + "\n", encoding="utf-8")
+    new_role_obs = _observe_regular_file_pin(str(role_path))
+    payload["files"][role_fid] = new_role_obs.to_manifest_row()  # type: ignore[index]
+
+    if role_name == "source_manifest" and sync_source_audit_manifest_sha:
+        sa_obj = json.loads(orig_sa_bytes.decode("utf-8"))
+        sa_obj["manifest_sha256"] = new_role_obs.sha256
+        sa_obj["complete_prepared_inventory"][
+            "refmac_diagnostic_source_manifest.json"
+        ] = {
+            "sha256": new_role_obs.sha256,
+            "size_bytes": new_role_obs.size_bytes,
+        }
+        sa_path.write_text(json.dumps(sa_obj, indent=2) + "\n", encoding="utf-8")
+        payload["files"][sa_fid] = _observe_regular_file_pin(  # type: ignore[index]
+            str(sa_path)
+        ).to_manifest_row()
+
+    new_profile = _rewrite_manifest_and_profile(fixture, payload)
+
+    def restore() -> None:
+        role_path.write_bytes(orig_role_bytes)
+        sa_path.write_bytes(orig_sa_bytes)
+        _rewrite_manifest_and_profile(fixture, base_payload)
+
+    return new_profile, restore
 
 
 class TestOuterManifestAndFileRootObservations(unittest.TestCase):
@@ -2305,6 +2547,3194 @@ class TestTask668FilesystemRegressions(unittest.TestCase):
                 checked.runtime_environment.expected_absent,
                 EXPECTED_RUNTIME_ABSENT_KEYS,
             )
+
+
+class TestValidateProfileAndInnerReceiptJoins(unittest.TestCase):
+    """Focused synthetic tests for Task 661 public validate_profile and scoped inner receipt joins."""
+
+    def test_valid_profile_admission_concrete_observations_detached_provenance_and_immutability(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = _build_synthetic_outer_profile_fixture(Path(tmp))
+            profile = fx["profile"]
+            assert isinstance(profile, RefmacDiagnosticProfile)
+            installed_record = copy.deepcopy(fx["installed_record"])
+            assert isinstance(installed_record, dict)
+            installed_record["extra_caller_metadata"] = {"note": "retained"}
+            ccp4_env = copy.deepcopy(fx["ccp4_env"])
+            assert isinstance(ccp4_env, dict)
+            absent_ev = fx["root"] / "absent-run-dir"  # type: ignore[operator]
+            staged_ev = fx["root"] / "staged-run-dir"  # type: ignore[operator]
+            staged_ev.mkdir()
+
+            for ev_root in (absent_ev, staged_ev):
+                with self.subTest(evidence_root=str(ev_root)):
+                    validated = validate_profile(
+                        profile,
+                        installed_record,
+                        ccp4_env,
+                        ev_root,
+                        chunk_size=128,
+                    )
+                    self.assertIsInstance(validated, ValidatedProfile)
+                    self.assertEqual(validated.profile_id, SUPPORTED_PROFILE_ID)
+                    self.assertEqual(validated.subject_id, PROFILE_SUBJECT_ID)
+                    self.assertTrue(validated.profile_files_verified)
+                    self.assertEqual(
+                        validated.runtime_image_coverage, "not_assessed"
+                    )
+                    self.assertEqual(
+                        validated.selected_executable, profile.executable
+                    )
+                    self.assertNotEqual(
+                        validated.selected_executable,
+                        validated.installed_reference,
+                    )
+                    self.assertEqual(validated.evidence_root, str(ev_root))
+
+                    # Concrete FileObservation checks on manifest_identity and files
+                    self.assertIsInstance(
+                        validated.manifest_identity, FileObservation
+                    )
+                    self.assertGreaterEqual(
+                        len(validated.manifest_identity.ancestors), 1
+                    )
+                    self.assertEqual(
+                        validated.manifest_identity.as_file_pin(),
+                        profile.manifest,
+                    )
+
+                    files_map = dict(validated.files)
+                    self.assertGreater(len(files_map), 30)
+                    for fid, fobs in validated.files:
+                        self.assertIsInstance(fobs, FileObservation)
+                        self.assertEqual(validated.files[fid], fobs)
+                        self.assertGreaterEqual(len(fobs.ancestors), 1)
+                        fdict = fobs.to_dict()
+                        for req_key in (
+                            "path",
+                            "resolved_path",
+                            "sha256",
+                            "size_bytes",
+                            "dev",
+                            "ino",
+                            "mode",
+                            "uid",
+                            "gid",
+                            "symlinks",
+                            "symlink_identities",
+                            "ancestors",
+                        ):
+                            self.assertIn(req_key, fdict)
+
+                    # Verify external symlink alias has populated symlink_identities
+                    alias_symlink_str = str(fx["alias_symlink"])
+                    alias_fobs = next(
+                        fobs
+                        for _fid, fobs in validated.files
+                        if fobs.path == alias_symlink_str
+                    )
+                    self.assertEqual(len(alias_fobs.symlinks), 1)
+                    self.assertEqual(len(alias_fobs.symlink_identities), 1)
+                    self.assertEqual(
+                        alias_fobs.symlink_identities[0].path, alias_symlink_str
+                    )
+                    self.assertEqual(
+                        alias_fobs.symlink_identities[0].target,
+                        "collection-python",
+                    )
+
+                    # Concrete RootObservation checks on vendor, prepared, build
+                    roots_map = dict(validated.roots)
+                    self.assertEqual(
+                        set(roots_map.keys()), {"vendor", "prepared", "build"}
+                    )
+                    for rname, robs in validated.roots:
+                        self.assertIsInstance(robs, RootObservation)
+                        self.assertEqual(validated.roots[rname], robs)
+                        self.assertEqual(robs.name, rname)
+                        self.assertGreaterEqual(len(robs.ancestors), 1)
+                        self.assertGreaterEqual(len(robs.members), 1)
+                        rdict = robs.to_dict()
+                        for req_key in (
+                            "name",
+                            "path",
+                            "resolved_path",
+                            "dev",
+                            "ino",
+                            "mode",
+                            "uid",
+                            "gid",
+                            "ancestors",
+                            "members",
+                        ):
+                            self.assertIn(req_key, rdict)
+                        for m in robs.members:
+                            rel_p, m_fid = m
+                            self.assertEqual(m.relative_path, rel_p)
+                            self.assertEqual(m.file_id, m_fid)
+                            self.assertEqual(m["relative_path"], rel_p)
+                            self.assertEqual(m["file_id"], m_fid)
+                            self.assertIn(m_fid, files_map)
+
+                    # Caller mutations after validate_profile do not mutate ValidatedProfile
+                    caller_inst_copy = copy.deepcopy(installed_record)
+                    caller_env_copy = copy.deepcopy(ccp4_env)
+                    val2 = validate_profile(
+                        profile, caller_inst_copy, caller_env_copy, ev_root
+                    )
+                    caller_inst_copy["configured_installation_prefix"] = "/mutated"
+                    caller_inst_copy["setup_script"]["sha256"] = "0" * 64  # type: ignore[index]
+                    caller_env_copy["CBIN"] = "mutated"
+
+                    prov1 = val2.to_provenance()
+                    self.assertTrue(prov1["profile_files_verified"])
+                    self.assertEqual(
+                        prov1["runtime_image_coverage"], "not_assessed"
+                    )
+                    self.assertEqual(
+                        prov1["selected_executable"],
+                        profile.executable.to_dict(),
+                    )
+                    self.assertEqual(
+                        prov1["installed_record"][
+                            "configured_installation_prefix"
+                        ],
+                        installed_record["configured_installation_prefix"],
+                    )
+                    self.assertEqual(
+                        prov1["installed_record"]["extra_caller_metadata"],
+                        {"note": "retained"},
+                    )
+                    self.assertEqual(
+                        prov1["expected_environment"]["CBIN"], "val-CBIN"
+                    )
+
+                    # Mutating prov1 does not affect subsequent to_provenance() calls
+                    prov1["files"].clear()
+                    prov1["roots"].clear()
+                    prov1["installed_record"]["setup_script"]["sha256"] = "bad"
+                    prov2 = val2.to_provenance()
+                    self.assertEqual(len(prov2["files"]), len(files_map))
+                    self.assertEqual(len(prov2["roots"]), 3)
+                    self.assertEqual(
+                        prov2["installed_record"]["setup_script"]["sha256"],
+                        installed_record["setup_script"]["sha256"],  # type: ignore[index]
+                    )
+
+                    # Deep immutability of ValidatedProfile
+                    with self.assertRaises(FrozenInstanceError):
+                        validated.evidence_root = "/other"  # type: ignore[misc]
+                    with self.assertRaises(TypeError):
+                        validated.files["new"] = validated.manifest_identity  # type: ignore[index]
+                    with self.assertRaises(TypeError):
+                        validated.roots["vendor"] = validated.roots["build"]  # type: ignore[index]
+                    with self.assertRaises(TypeError):
+                        validated.roles["source_manifest"] = ()  # type: ignore[index]
+                    with self.assertRaises(TypeError):
+                        validated.expected_environment["CBIN"] = "x"  # type: ignore[index]
+
+    def test_source_manifest_join_rejects_semantic_mismatches_with_repinned_outer_manifest(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = _build_synthetic_outer_profile_fixture(Path(tmp))
+            installed_record = fx["installed_record"]
+            assert isinstance(installed_record, dict)
+            ccp4_env = fx["ccp4_env"]
+            assert isinstance(ccp4_env, dict)
+            ev_root = fx["evidence_root"]
+            assert isinstance(ev_root, Path)
+
+            cases = (
+                (
+                    "schema_id",
+                    lambda d: d.update({"schema_id": "wrong_schema"}),
+                ),
+                (
+                    "source_verification_status",
+                    lambda d: d.update(
+                        {"source_verification_status": "unverified"}
+                    ),
+                ),
+                (
+                    "expected_commit",
+                    lambda d: d["upstream_source"].update(
+                        {"expected_commit": "0" * 40}
+                    ),
+                ),
+                (
+                    "expected_tag",
+                    lambda d: d["upstream_source"].update(
+                        {"expected_tag": "5.8.9999"}
+                    ),
+                ),
+                (
+                    "git_commit",
+                    lambda d: d["upstream_source"].update(
+                        {"git_commit": "1" * 40}
+                    ),
+                ),
+                (
+                    "git_tag",
+                    lambda d: d["upstream_source"].update(
+                        {"git_tag": "5.8.0000"}
+                    ),
+                ),
+            )
+            for pattern, mutator in cases:
+                with self.subTest(pattern=pattern):
+                    bad_prof, restore = _mutate_inner_receipt_and_repin(
+                        fx, "source_manifest", mutator
+                    )
+                    try:
+                        with self.assertRaisesRegex(
+                            ProfileValidationError, pattern
+                        ) as ctx:
+                            validate_profile(
+                                bad_prof, installed_record, ccp4_env, ev_root
+                            )
+                        err = ctx.exception
+                        self.assertEqual(
+                            err.failed_check, "source_manifest_join"
+                        )
+                        self.assertIsNone(err.selected_executable)
+                        self.assertIsNotNone(err.manifest_identity)
+                        self.assertGreater(len(err.files), 30)
+                        self.assertEqual(len(err.roots), 3)
+                        err_prov = err.to_provenance()
+                        self.assertFalse(err_prov["profile_files_verified"])
+                        self.assertIsNone(err_prov["selected_executable"])
+                        self.assertEqual(
+                            err_prov["failed_check"], "source_manifest_join"
+                        )
+                    finally:
+                        restore()
+
+    def test_source_audit_join_rejects_semantic_and_strict_type_mismatches(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = _build_synthetic_outer_profile_fixture(Path(tmp))
+            installed_record = fx["installed_record"]
+            assert isinstance(installed_record, dict)
+            ccp4_env = fx["ccp4_env"]
+            assert isinstance(ccp4_env, dict)
+            ev_root = fx["evidence_root"]
+            assert isinstance(ev_root, Path)
+
+            cases = (
+                (
+                    "source_audit.contract",
+                    lambda d: d.update({"contract": "wrong_contract"}),
+                ),
+                (
+                    "source_audit.passed",
+                    lambda d: d.update({"passed": False}),
+                ),
+                (
+                    "source_audit.passed",
+                    lambda d: d.update({"passed": 1}),
+                ),
+                (
+                    "source_audit.python_optimization",
+                    lambda d: d.update({"python_optimization": False}),
+                ),
+                (
+                    "source_audit.python_optimization",
+                    lambda d: d.update({"python_optimization": 1}),
+                ),
+                (
+                    "source_audit.literal_git_objects",
+                    lambda d: d.update({"literal_git_objects": 1}),
+                ),
+                (
+                    "source_audit.literal_git_objects",
+                    lambda d: d.update({"literal_git_objects": False}),
+                ),
+                (
+                    "source_audit.source_root",
+                    lambda d: d.update({"source_root": "/wrong/vendor"}),
+                ),
+                (
+                    "source_audit.prepared_root",
+                    lambda d: d.update({"prepared_root": "/wrong/prepared"}),
+                ),
+                (
+                    "source_audit.upstream_commit",
+                    lambda d: d.update({"upstream_commit": "0" * 40}),
+                ),
+                (
+                    "source_audit.manifest_sha256",
+                    lambda d: d.update({"manifest_sha256": "a" * 64}),
+                ),
+                (
+                    "source_audit.auditor_sha256",
+                    lambda d: d.update({"auditor_sha256": "b" * 64}),
+                ),
+                (
+                    "source_audit.auditor_path",
+                    lambda d: d.update({"auditor_path": "/wrong/auditor.py"}),
+                ),
+                (
+                    "source_audit.patch_sha256",
+                    lambda d: d.update({"patch_sha256": "c" * 64}),
+                ),
+                (
+                    "source_audit.interpreter",
+                    lambda d: d["interpreter"].update({"sha256": "d" * 64}),
+                ),
+                (
+                    "source_audit.interpreter.resolved contradicts",
+                    lambda d: d["interpreter"].update(
+                        {"resolved": "/contradictory/python"}
+                    ),
+                ),
+                (
+                    "source_audit.interpreter.size_bytes",
+                    lambda d: d["interpreter"].update({"size_bytes": True}),
+                ),
+                (
+                    "original_git_blob_inventory keys mismatch",
+                    lambda d: d["original_git_blob_inventory"].pop("source.f"),
+                ),
+                (
+                    "original_git_blob_inventory\\['source.f'\\] pin mismatch",
+                    lambda d: d["original_git_blob_inventory"][
+                        "source.f"
+                    ].update({"sha256": "e" * 64}),
+                ),
+                (
+                    "original_git_blob_inventory\\['source.f'\\].size_bytes",
+                    lambda d: d["original_git_blob_inventory"][
+                        "source.f"
+                    ].update({"size_bytes": True}),
+                ),
+                (
+                    "complete_prepared_inventory keys mismatch",
+                    lambda d: d["complete_prepared_inventory"].update(
+                        {
+                            "extra.f": {
+                                "sha256": "f" * 64,
+                                "size_bytes": 1,
+                            }
+                        }
+                    ),
+                ),
+                (
+                    "complete_prepared_inventory\\['source.f'\\] pin mismatch",
+                    lambda d: d["complete_prepared_inventory"][
+                        "source.f"
+                    ].update({"size_bytes": 999999}),
+                ),
+            )
+            for pattern, mutator in cases:
+                with self.subTest(pattern=pattern):
+                    bad_prof, restore = _mutate_inner_receipt_and_repin(
+                        fx, "source_audit", mutator
+                    )
+                    try:
+                        with self.assertRaisesRegex(
+                            ProfileValidationError, pattern
+                        ) as ctx:
+                            validate_profile(
+                                bad_prof, installed_record, ccp4_env, ev_root
+                            )
+                        self.assertEqual(
+                            ctx.exception.failed_check, "source_audit_join"
+                        )
+                    finally:
+                        restore()
+
+    def test_build_receipt_join_and_pair_role_ordering_reject_mismatches(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = _build_synthetic_outer_profile_fixture(Path(tmp))
+            installed_record = fx["installed_record"]
+            assert isinstance(installed_record, dict)
+            ccp4_env = fx["ccp4_env"]
+            assert isinstance(ccp4_env, dict)
+            ev_root = fx["evidence_root"]
+            assert isinstance(ev_root, Path)
+            base_payload = fx["manifest_payload"]
+            assert isinstance(base_payload, dict)
+
+            cases = (
+                (
+                    "build_receipt.contract",
+                    lambda d: d.update({"contract": "wrong"}),
+                ),
+                (
+                    "build_receipt.passed",
+                    lambda d: d.update({"passed": False}),
+                ),
+                (
+                    "build_receipt.passed",
+                    lambda d: d.update({"passed": 1}),
+                ),
+                (
+                    "build_receipt.source",
+                    lambda d: d.update({"source": "/wrong/prepared"}),
+                ),
+                (
+                    "build_receipt.output",
+                    lambda d: d.update({"output": "/wrong/build"}),
+                ),
+                (
+                    "build_receipt.executable",
+                    lambda d: d["executable"].update({"sha256": "0" * 64}),
+                ),
+                (
+                    "build_receipt.executable.size_bytes",
+                    lambda d: d["executable"].update({"size_bytes": True}),
+                ),
+                (
+                    "build_receipt.driver_sha256",
+                    lambda d: d.update({"driver_sha256": "1" * 64}),
+                ),
+                (
+                    "build_receipt.journal_sha256",
+                    lambda d: d.update({"journal_sha256": "2" * 64}),
+                ),
+                (
+                    "build_receipt.runtime_config_sha256",
+                    lambda d: d.update({"runtime_config_sha256": "3" * 64}),
+                ),
+                (
+                    "build_receipt.linked_executable_sha256",
+                    lambda d: d.update({"linked_executable_sha256": "4" * 64}),
+                ),
+            )
+            for pattern, mutator in cases:
+                with self.subTest(pattern=pattern):
+                    bad_prof, restore = _mutate_inner_receipt_and_repin(
+                        fx, "build_receipt", mutator
+                    )
+                    try:
+                        with self.assertRaisesRegex(
+                            ProfileValidationError, pattern
+                        ) as ctx:
+                            validate_profile(
+                                bad_prof, installed_record, ccp4_env, ev_root
+                            )
+                        self.assertEqual(
+                            ctx.exception.failed_check, "build_receipt_join"
+                        )
+                    finally:
+                        restore()
+
+            # Pair role reversal [copy_id, orig_id] on build_driver, build_journal, build_runtime_config, build_inventories
+            for pair_role in (
+                "build_driver",
+                "build_journal",
+                "build_runtime_config",
+            ):
+                with self.subTest(reversed_pair_role=pair_role):
+                    rev_payload = copy.deepcopy(base_payload)
+                    rev_payload["roles"][pair_role] = list(  # type: ignore[index]
+                        reversed(rev_payload["roles"][pair_role])  # type: ignore[index]
+                    )
+                    rev_prof = _rewrite_manifest_and_profile(fx, rev_payload)
+                    try:
+                        with self.assertRaisesRegex(
+                            ProfileValidationError, pair_role
+                        ) as ctx:
+                            validate_profile(
+                                rev_prof, installed_record, ccp4_env, ev_root
+                            )
+                        self.assertIsNone(ctx.exception.selected_executable)
+                    finally:
+                        _rewrite_manifest_and_profile(fx, base_payload)
+
+            rev_inv_payload = copy.deepcopy(base_payload)
+            inv_ids = list(rev_inv_payload["roles"]["build_inventories"])  # type: ignore[index]
+            inv_ids[0], inv_ids[1] = inv_ids[1], inv_ids[0]
+            rev_inv_payload["roles"]["build_inventories"] = inv_ids  # type: ignore[index]
+            rev_inv_prof = _rewrite_manifest_and_profile(fx, rev_inv_payload)
+            try:
+                with self.assertRaisesRegex(
+                    ProfileValidationError, "build_inventories"
+                ):
+                    validate_profile(
+                        rev_inv_prof, installed_record, ccp4_env, ev_root
+                    )
+            finally:
+                _rewrite_manifest_and_profile(fx, base_payload)
+
+    def test_runtime_observation_join_installed_record_and_ccp4_env_reject_mismatches(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = _build_synthetic_outer_profile_fixture(Path(tmp))
+            profile = fx["profile"]
+            assert isinstance(profile, RefmacDiagnosticProfile)
+            installed_record = fx["installed_record"]
+            assert isinstance(installed_record, dict)
+            ccp4_env = fx["ccp4_env"]
+            assert isinstance(ccp4_env, dict)
+            ev_root = fx["evidence_root"]
+            assert isinstance(ev_root, Path)
+
+            rt_cases = (
+                (
+                    "runtime_observation.contract",
+                    lambda d: d.update({"contract": "wrong"}),
+                ),
+                (
+                    "selected_nonsecret_environment keys mismatch",
+                    lambda d: d["selected_nonsecret_environment"].pop("CBIN"),
+                ),
+                (
+                    "selected_nonsecret_environment\\['CBIN'\\] mismatch",
+                    lambda d: d["selected_nonsecret_environment"].update(
+                        {"CBIN": "wrong"}
+                    ),
+                ),
+                (
+                    "resolver_record projection does not match",
+                    lambda d: d["resolver_record"]["setup_script"].update(
+                        {"sha256": "0" * 64}
+                    ),
+                ),
+                (
+                    "resolver_record.setup_script.is_symlink must be a strict bool",
+                    lambda d: d["resolver_record"]["setup_script"].update(
+                        {"is_symlink": 0}
+                    ),
+                ),
+                (
+                    "resolver_record.refmac5_binary.executable must be strict bool True",
+                    lambda d: d["resolver_record"]["refmac5_binary"].update(
+                        {"executable": 1}
+                    ),
+                ),
+                (
+                    "observation_script does not match",
+                    lambda d: d["observation_script"].update(
+                        {"sha256": "1" * 64}
+                    ),
+                ),
+                (
+                    "observation_script.resolved_path contradicts",
+                    lambda d: d["observation_script"].update(
+                        {"resolved_path": "/contradictory/observer.py"}
+                    ),
+                ),
+                (
+                    "setup_source_files does not include roles\\['ccp4_setup'\\]",
+                    lambda d: d.update(
+                        {"setup_source_files": d["setup_source_files"][1:]}
+                    ),
+                ),
+                (
+                    "setup_source_files unique IDs minus ccp4_setup",
+                    lambda d: d.update(
+                        {"setup_source_files": d["setup_source_files"][:1]}
+                    ),
+                ),
+                (
+                    "static_library_load_commands\\[0\\].library pin mismatch",
+                    lambda d: d["static_library_load_commands"][0][
+                        "library"
+                    ].update({"sha256": "2" * 64}),
+                ),
+            )
+            for pattern, mutator in rt_cases:
+                with self.subTest(pattern=pattern):
+                    bad_prof, restore = _mutate_inner_receipt_and_repin(
+                        fx, "runtime_observation", mutator
+                    )
+                    try:
+                        with self.assertRaisesRegex(
+                            ProfileValidationError, pattern
+                        ) as ctx:
+                            validate_profile(
+                                bad_prof, installed_record, ccp4_env, ev_root
+                            )
+                        self.assertEqual(
+                            ctx.exception.failed_check,
+                            "runtime_observation_join",
+                        )
+                    finally:
+                        restore()
+
+            # Supplied installed_record disagreements
+            bad_inst = copy.deepcopy(installed_record)
+            bad_inst["refmac5_binary"]["sha256"] = "9" * 64  # type: ignore[index]
+            with self.assertRaisesRegex(
+                ProfileValidationError,
+                "resolver_record projection does not match supplied installed_record",
+            ) as ctx:
+                validate_profile(profile, bad_inst, ccp4_env, ev_root)
+            self.assertEqual(
+                ctx.exception.failed_check, "runtime_observation_join"
+            )
+
+            bad_inst_bool = copy.deepcopy(installed_record)
+            bad_inst_bool["setup_script"]["within_prefix"] = 1  # type: ignore[index]
+            with self.assertRaisesRegex(
+                ProfileValidationError, "within_prefix must be strict bool True"
+            ) as ctx:
+                validate_profile(profile, bad_inst_bool, ccp4_env, ev_root)
+            self.assertEqual(ctx.exception.failed_check, "installed_record")
+
+            # Supplied ccp4_env disagreements and forbidden variables
+            for env_label, bad_env, pattern in (
+                (
+                    "forbidden_dyld",
+                    {**ccp4_env, "DYLD_INSERT_LIBRARIES": "foo.dylib"},
+                    "Conflicting environment variable",
+                ),
+                (
+                    "expected_absent_ld",
+                    {**ccp4_env, "LD_LIBRARY_PATH": "/tmp"},
+                    "Conflicting environment variable",
+                ),
+                (
+                    "missing_key",
+                    {k: v for k, v in ccp4_env.items() if k != "CLIBD"},
+                    "missing required variable 'CLIBD'",
+                ),
+                (
+                    "wrong_value",
+                    {**ccp4_env, "CLIBD": "wrong-clibd"},
+                    "ccp4_env\\['CLIBD'\\] mismatch",
+                ),
+            ):
+                with self.subTest(env_case=env_label):
+                    with self.assertRaisesRegex(
+                        ProfileValidationError, pattern
+                    ) as ctx:
+                        validate_profile(
+                            profile, installed_record, bad_env, ev_root
+                        )
+                    self.assertEqual(ctx.exception.failed_check, "ccp4_env")
+                    self.assertIsNotNone(ctx.exception.manifest_identity)
+                    self.assertGreater(len(ctx.exception.files), 30)
+
+    def test_partial_observation_retention_on_outer_and_pin_failures(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = _build_synthetic_outer_profile_fixture(Path(tmp))
+            profile = fx["profile"]
+            assert isinstance(profile, RefmacDiagnosticProfile)
+            installed_record = fx["installed_record"]
+            assert isinstance(installed_record, dict)
+            ccp4_env = fx["ccp4_env"]
+            assert isinstance(ccp4_env, dict)
+            ev_root = fx["evidence_root"]
+            assert isinstance(ev_root, Path)
+
+            # 1. Tamper one file on disk (longer size -> rejected before full read, while all other files and all 3 roots are retained)
+            qc_path = fx["root"] / "support" / "qc-item.json"  # type: ignore[operator]
+            orig_qc = qc_path.read_bytes()
+            qc_path.write_bytes(b'{"tampered_longer": true}\n')
+            try:
+                with self.assertRaises(ProfileValidationError) as ctx:
+                    validate_profile(
+                        profile, installed_record, ccp4_env, ev_root
+                    )
+                err = ctx.exception
+                self.assertEqual(
+                    err.failed_check, "outer_profile_files_and_roots"
+                )
+                self.assertIsNone(err.selected_executable)
+                self.assertIsNotNone(err.manifest_identity)
+                self.assertEqual(len(err.roots), 3)
+                self.assertGreater(len(err.files), 25)
+                prov = err.to_provenance()
+                self.assertFalse(prov["profile_files_verified"])
+                self.assertIsNone(prov["selected_executable"])
+                self.assertIn("type", prov["error"])
+                self.assertIn("message", prov["error"])
+                self.assertIn("errno", prov["error"])
+                for fdict in prov["files"].values():
+                    self.assertNotEqual(fdict, {})
+                    self.assertIn("sha256", fdict)
+            finally:
+                qc_path.write_bytes(orig_qc)
+
+    def test_1175_frozen_tuple_wrappers_use_empty_slots_without_instance_dict_or_cache(
+        self,
+    ) -> None:
+        self.assertEqual(profile_mod._FrozenMemberTuple.__slots__, ())
+        self.assertEqual(profile_mod._FrozenPairTable.__slots__, ())
+
+        members = profile_mod._FrozenMemberTuple(
+            [
+                ("a/one.f", "fid_1"),
+                {"relative_path": "b/two.f", "file_id": "fid_2"},
+                profile_mod._RootMember("c/three.f", "fid_3"),
+            ]
+        )
+        self.assertIsInstance(members, tuple)
+        self.assertFalse(hasattr(members, "__dict__"))
+        self.assertFalse(hasattr(members, "_by_rel"))
+        self.assertEqual(len(members), 3)
+        self.assertEqual(members[0], ("a/one.f", "fid_1"))
+        self.assertEqual(members[-1], ("c/three.f", "fid_3"))
+        self.assertEqual(
+            members[:2],
+            (
+                profile_mod._RootMember("a/one.f", "fid_1"),
+                profile_mod._RootMember("b/two.f", "fid_2"),
+            ),
+        )
+        self.assertEqual(
+            list(members),
+            [
+                profile_mod._RootMember("a/one.f", "fid_1"),
+                profile_mod._RootMember("b/two.f", "fid_2"),
+                profile_mod._RootMember("c/three.f", "fid_3"),
+            ],
+        )
+        self.assertEqual(members["b/two.f"], "fid_2")
+        self.assertEqual(members.get("b/two.f"), "fid_2")
+        self.assertIsNone(members.get("missing.f"))
+        self.assertIn("a/one.f", members)
+        self.assertIn(("a/one.f", "fid_1"), members)
+        self.assertEqual(
+            members.keys(), ("a/one.f", "b/two.f", "c/three.f")
+        )
+        self.assertEqual(members.values(), ("fid_1", "fid_2", "fid_3"))
+        self.assertEqual(
+            members.items(),
+            (("a/one.f", "fid_1"), ("b/two.f", "fid_2"), ("c/three.f", "fid_3")),
+        )
+        self.assertEqual(
+            dict(members),
+            {"a/one.f": "fid_1", "b/two.f": "fid_2", "c/three.f": "fid_3"},
+        )
+        with self.assertRaises(KeyError):
+            _ = members["missing.f"]
+        with self.assertRaises(ValueError):
+            profile_mod._FrozenMemberTuple(
+                [("dup.f", "fid_1"), ("dup.f", "fid_2")]
+            )
+        with self.assertRaises(AttributeError):
+            members.extra_attr = 1  # type: ignore[attr-defined]
+
+        pairs = profile_mod._FrozenPairTable(
+            [("k1", 10), ("k2", 20), ("k3", 30)]
+        )
+        self.assertIsInstance(pairs, tuple)
+        self.assertFalse(hasattr(pairs, "__dict__"))
+        self.assertFalse(hasattr(pairs, "_by_key"))
+        self.assertEqual(len(pairs), 3)
+        self.assertEqual(pairs[0], ("k1", 10))
+        self.assertEqual(pairs[-1], ("k3", 30))
+        self.assertEqual(pairs[1:], (("k2", 20), ("k3", 30)))
+        self.assertEqual(list(pairs), [("k1", 10), ("k2", 20), ("k3", 30)])
+        self.assertEqual(pairs["k2"], 20)
+        self.assertEqual(pairs.get("k2"), 20)
+        self.assertEqual(pairs.get("missing", -1), -1)
+        self.assertIn("k1", pairs)
+        self.assertIn(("k1", 10), pairs)
+        self.assertEqual(pairs.keys(), ("k1", "k2", "k3"))
+        self.assertEqual(pairs.values(), (10, 20, 30))
+        self.assertEqual(pairs.items(), (("k1", 10), ("k2", 20), ("k3", 30)))
+        self.assertEqual(dict(pairs), {"k1": 10, "k2": 20, "k3": 30})
+        self.assertEqual(pairs, {"k1": 10, "k2": 20, "k3": 30})
+        with self.assertRaises(KeyError):
+            _ = pairs["missing"]
+        with self.assertRaises(ValueError):
+            profile_mod._FrozenPairTable([("dup", 1), ("dup", 2)])
+        with self.assertRaises(AttributeError):
+            pairs.extra_attr = 1  # type: ignore[attr-defined]
+
+    def test_1176_in_memory_installed_record_json_detachment_and_strict_parsing(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = _build_synthetic_outer_profile_fixture(Path(tmp))
+            profile = fx["profile"]
+            assert isinstance(profile, RefmacDiagnosticProfile)
+            installed_record = copy.deepcopy(fx["installed_record"])
+            assert isinstance(installed_record, dict)
+            ccp4_env = fx["ccp4_env"]
+            assert isinstance(ccp4_env, dict)
+            ev_root = fx["evidence_root"]
+            assert isinstance(ev_root, Path)
+
+            # 1. In-memory detachment helper preserves full content and freezes returned mapping
+            installed_record["custom_nested"] = {"items": [1, 2, 3]}
+            canonical_json, detached_map = (
+                profile_mod._serialize_detached_installed_record(
+                    installed_record
+                )
+            )
+            installed_record["custom_nested"]["items"].append(4)  # type: ignore[index]
+            self.assertEqual(detached_map["custom_nested"]["items"], (1, 2, 3))
+            with self.assertRaises(TypeError):
+                detached_map["new_key"] = "x"  # type: ignore[index]
+
+            # 2. Direct ValidatedProfile construction and to_provenance() with installed_record_json
+            validated = validate_profile(
+                profile, fx["installed_record"], ccp4_env, ev_root  # type: ignore[arg-type]
+            )
+            direct_validated = ValidatedProfile(
+                request=validated.request,
+                manifest_identity=validated.manifest_identity,
+                files=validated.files,
+                roots=validated.roots,
+                roles=validated.roles,
+                installed_reference=validated.installed_reference,
+                selected_executable=validated.selected_executable,
+                installed_record_json=canonical_json,
+                expected_environment=validated.expected_environment,
+                requested_absences=validated.requested_absences,
+                evidence_root=validated.evidence_root,
+            )
+            prov = direct_validated.to_provenance()
+            self.assertEqual(
+                prov["installed_record"]["custom_nested"]["items"], [1, 2, 3]
+            )
+
+            # 3. Malformed, non-object, duplicate-key, and nonstandard-constant JSON rejected in
+            # ValidatedProfile, ProfileValidationError, and _parse_in_memory_json_object
+            for bad_json in (
+                "",
+                "{malformed",
+                "[]",
+                "123",
+                '"string"',
+                '{"a": 1, "a": 2}',
+                '{"nan_val": NaN}',
+                '{"inf_val": Infinity}',
+                '{"neg_inf": -Infinity}',
+            ):
+                with self.subTest(bad_json=bad_json):
+                    with self.assertRaises(ValueError):
+                        profile_mod._parse_in_memory_json_object(
+                            bad_json, label="test_json"
+                        )
+                    with self.assertRaises(ValueError):
+                        ValidatedProfile(
+                            request=validated.request,
+                            manifest_identity=validated.manifest_identity,
+                            files=validated.files,
+                            roots=validated.roots,
+                            roles=validated.roles,
+                            installed_reference=validated.installed_reference,
+                            selected_executable=validated.selected_executable,
+                            installed_record_json=bad_json,
+                            expected_environment=validated.expected_environment,
+                            requested_absences=validated.requested_absences,
+                            evidence_root=validated.evidence_root,
+                        )
+                    with self.assertRaises(ValueError):
+                        ProfileValidationError(
+                            "bad json",
+                            failed_check="installed_record",
+                            installed_record_json=bad_json,
+                        )
+
+            # 4. _parse_verified_json_bytes remains strictly tied to an independent expected_pin
+            with self.assertRaises(TypeError):
+                _parse_verified_json_bytes(b"{}")  # type: ignore[call-arg]
+
+    def test_1177_and_1178_installed_setup_prefix_and_inner_opaque_metadata_controls(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = _build_synthetic_outer_profile_fixture(Path(tmp))
+            root = fx["root"]
+            assert isinstance(root, Path)
+            profile = fx["profile"]
+            assert isinstance(profile, RefmacDiagnosticProfile)
+            installed_record = fx["installed_record"]
+            assert isinstance(installed_record, dict)
+            ccp4_env = fx["ccp4_env"]
+            assert isinstance(ccp4_env, dict)
+            ev_root = fx["evidence_root"]
+            assert isinstance(ev_root, Path)
+            base_payload = fx["manifest_payload"]
+            assert isinstance(base_payload, dict)
+
+            # 1. #1177: unmodified positive fixture places ccp4_setup under root/installed/bin/ccp4.setup-sh
+            setup_fid = base_payload["roles"]["ccp4_setup"][0]  # type: ignore[index]
+            setup_row = base_payload["files"][setup_fid]  # type: ignore[index]
+            expected_setup_path = str(root / "installed" / "bin" / "ccp4.setup-sh")
+            self.assertEqual(setup_row["path"], expected_setup_path)
+            self.assertEqual(setup_row["resolved_path"], expected_setup_path)
+            self.assertEqual(
+                installed_record["configured_installation_prefix"],
+                str(root / "installed"),
+            )
+            baseline_validated = validate_profile(
+                profile, installed_record, ccp4_env, ev_root
+            )
+            self.assertIsInstance(baseline_validated, ValidatedProfile)
+
+            # Setup script resolved_path outside configured_installation_prefix is rejected
+            outside_inst = copy.deepcopy(installed_record)
+            outside_path = str(root / "support" / "installed" / "bin" / "ccp4.setup-sh")
+            outside_inst["setup_script"]["configured_path"] = outside_path  # type: ignore[index]
+            outside_inst["setup_script"]["resolved_path"] = outside_path  # type: ignore[index]
+            with self.assertRaisesRegex(
+                ProfileValidationError,
+                "outside configured_installation_prefix",
+            ) as out_ctx:
+                validate_profile(profile, outside_inst, ccp4_env, ev_root)
+            self.assertEqual(out_ctx.exception.failed_check, "installed_record")
+
+            # 2. #1178 positive: opaque extra keys (including empty-string key "" and consistent recognized aliases) admitted on:
+            # - source_audit.interpreter
+            # - runtime_observation.observation_script
+            # - runtime_observation.setup_source_files[*]
+            # - runtime_observation.static_library_load_commands[*].library
+            # - build_receipt.executable
+            prof_sa, restore_sa = _mutate_inner_receipt_and_repin(
+                fx,
+                "source_audit",
+                lambda d: d["interpreter"].update(
+                    {
+                        "resolved": d["interpreter"]["resolved_path"],
+                        "python_version": "3.12.7",
+                        "opaque_meta": {"implementation": "CPython", "tier": 1},
+                        "": {"empty_key_meta": True},
+                    }
+                ),
+            )
+            try:
+                val_sa = validate_profile(
+                    prof_sa, installed_record, ccp4_env, ev_root
+                )
+                self.assertTrue(val_sa.profile_files_verified)
+            finally:
+                restore_sa()
+
+            prof_rt, restore_rt = _mutate_inner_receipt_and_repin(
+                fx,
+                "runtime_observation",
+                lambda d: (
+                    d["observation_script"].update(
+                        {
+                            "resolved_path": d["observation_script"]["resolved"],
+                            "script_role": "observer",
+                            "opaque_meta": {"version": 1},
+                            "": {"empty_key_meta": "observer"},
+                        }
+                    ),
+                    [
+                        entry.update(
+                            {
+                                "resolved_path": entry["resolved"],
+                                "shell": "sh",
+                                "source_index": idx,
+                                "": {"empty_key_meta": idx},
+                            }
+                        )
+                        for idx, entry in enumerate(d["setup_source_files"])
+                    ],
+                    [
+                        cmd["library"].update(
+                            {
+                                "resolved_path": cmd["library"]["resolved"],
+                                "macho_cmd": "LC_LOAD_DYLIB",
+                                "compat_version": "1.0.0",
+                                "": {"empty_key_meta": "library"},
+                            }
+                        )
+                        for cmd in d["static_library_load_commands"]
+                    ],
+                ),
+            )
+            try:
+                val_rt = validate_profile(
+                    prof_rt, installed_record, ccp4_env, ev_root
+                )
+                self.assertTrue(val_rt.profile_files_verified)
+            finally:
+                restore_rt()
+
+            diag_fid = base_payload["roles"]["diagnostic_executable"][0]  # type: ignore[index]
+            diag_resolved = str(base_payload["files"][diag_fid]["resolved_path"])  # type: ignore[index]
+            prof_br, restore_br = _mutate_inner_receipt_and_repin(
+                fx,
+                "build_receipt",
+                lambda d: d["executable"].update(
+                    {
+                        "resolved_path": diag_resolved,
+                        "resolved": diag_resolved,
+                        "executable": True,
+                        "arch": "arm64",
+                        "opaque_meta": {"stripped": False},
+                        "": {"empty_key_meta": "executable"},
+                    }
+                ),
+            )
+            try:
+                val_br = validate_profile(
+                    prof_br, installed_record, ccp4_env, ev_root
+                )
+                self.assertTrue(val_br.profile_files_verified)
+            finally:
+                restore_br()
+
+            # 3. #1178 negative controls: missing required keys, contradictory recognized aliases,
+            # and unknown extra fields never replacing known comparisons
+            neg_sa_cases = (
+                (
+                    "source_audit.interpreter must contain required keys",
+                    lambda d: d["interpreter"].pop("resolved_path"),
+                ),
+                (
+                    "source_audit.interpreter.resolved contradicts resolved_path",
+                    lambda d: d["interpreter"].update(
+                        {
+                            "resolved": "/contradictory/python",
+                            "extra_meta": "ignored",
+                        }
+                    ),
+                ),
+                (
+                    "source_audit.interpreter does not match",
+                    lambda d: d["interpreter"].update(
+                        {
+                            "true_sha256": d["interpreter"]["sha256"],
+                            "sha256": "0" * 64,
+                        }
+                    ),
+                ),
+            )
+            for pattern, mutator in neg_sa_cases:
+                with self.subTest(neg_sa=pattern):
+                    bad_p, rest = _mutate_inner_receipt_and_repin(
+                        fx, "source_audit", mutator
+                    )
+                    try:
+                        with self.assertRaisesRegex(
+                            ProfileValidationError, pattern
+                        ) as ctx:
+                            validate_profile(
+                                bad_p, installed_record, ccp4_env, ev_root
+                            )
+                        self.assertEqual(
+                            ctx.exception.failed_check, "source_audit_join"
+                        )
+                    finally:
+                        rest()
+
+            neg_rt_cases = (
+                (
+                    "runtime_observation.observation_script must contain required keys",
+                    lambda d: d["observation_script"].pop("resolved"),
+                ),
+                (
+                    "runtime_observation.setup_source_files\\[0\\].resolved_path contradicts resolved",
+                    lambda d: d["setup_source_files"][0].update(
+                        {
+                            "resolved_path": "/contradictory/setup",
+                            "extra_meta": 1,
+                        }
+                    ),
+                ),
+                (
+                    "runtime_observation.static_library_load_commands\\[0\\].library.resolved_path contradicts resolved",
+                    lambda d: d["static_library_load_commands"][0][
+                        "library"
+                    ].update(
+                        {
+                            "resolved_path": "/contradictory/lib.dylib",
+                            "extra_meta": 1,
+                        }
+                    ),
+                ),
+                (
+                    "runtime_observation.static_library_load_commands\\[0\\].library pin mismatch",
+                    lambda d: d["static_library_load_commands"][0][
+                        "library"
+                    ].update(
+                        {
+                            "real_sha256": d["static_library_load_commands"][0][
+                                "library"
+                            ]["sha256"],
+                            "sha256": "9" * 64,
+                        }
+                    ),
+                ),
+            )
+            for pattern, mutator in neg_rt_cases:
+                with self.subTest(neg_rt=pattern):
+                    bad_p, rest = _mutate_inner_receipt_and_repin(
+                        fx, "runtime_observation", mutator
+                    )
+                    try:
+                        with self.assertRaisesRegex(
+                            ProfileValidationError, pattern
+                        ) as ctx:
+                            validate_profile(
+                                bad_p, installed_record, ccp4_env, ev_root
+                            )
+                        self.assertEqual(
+                            ctx.exception.failed_check,
+                            "runtime_observation_join",
+                        )
+                    finally:
+                        rest()
+
+            neg_br_cases = (
+                (
+                    "build_receipt.executable must contain required keys",
+                    lambda d: d["executable"].pop("sha256"),
+                ),
+                (
+                    "build_receipt.executable.resolved_path contradicts",
+                    lambda d: d["executable"].update(
+                        {"resolved_path": "/contradictory/refmac5"}
+                    ),
+                ),
+                (
+                    "build_receipt.executable.resolved contradicts",
+                    lambda d: d["executable"].update(
+                        {"resolved": "/contradictory/refmac5"}
+                    ),
+                ),
+                (
+                    "build_receipt.executable does not match",
+                    lambda d: d["executable"].update(
+                        {
+                            "authoritative_sha256": d["executable"]["sha256"],
+                            "sha256": "a" * 64,
+                        }
+                    ),
+                ),
+            )
+            for pattern, mutator in neg_br_cases:
+                with self.subTest(neg_br=pattern):
+                    bad_p, rest = _mutate_inner_receipt_and_repin(
+                        fx, "build_receipt", mutator
+                    )
+                    try:
+                        with self.assertRaisesRegex(
+                            ProfileValidationError, pattern
+                        ) as ctx:
+                            validate_profile(
+                                bad_p, installed_record, ccp4_env, ev_root
+                            )
+                        self.assertEqual(
+                            ctx.exception.failed_check, "build_receipt_join"
+                        )
+                    finally:
+                        rest()
+
+            # 4. Outer manifest remains CLOSED (extra key on outer manifest file entry rejected)
+            closed_outer_payload = copy.deepcopy(base_payload)
+            closed_outer_payload["files"][setup_fid]["extra_opaque"] = 1  # type: ignore[index]
+            closed_outer_prof = _rewrite_manifest_and_profile(
+                fx, closed_outer_payload
+            )
+            try:
+                with self.assertRaisesRegex(
+                    ProfileValidationError,
+                    r"File row .* must have exact keys",
+                ) as closed_ctx:
+                    validate_profile(
+                        closed_outer_prof, installed_record, ccp4_env, ev_root
+                    )
+                self.assertEqual(
+                    closed_ctx.exception.failed_check, "outer_manifest_shape"
+                )
+            finally:
+                _rewrite_manifest_and_profile(fx, base_payload)
+
+    def test_1168_retains_traversed_dotdot_ancestors_without_retraversal_and_never_fabricates_zero_symlink_identity(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = _build_synthetic_outer_profile_fixture(Path(tmp))
+            root = fx["root"]
+            assert isinstance(root, Path)
+            profile = fx["profile"]
+            assert isinstance(profile, RefmacDiagnosticProfile)
+            installed_record = fx["installed_record"]
+            assert isinstance(installed_record, dict)
+            ccp4_env = fx["ccp4_env"]
+            assert isinstance(ccp4_env, dict)
+            ev_root = fx["evidence_root"]
+            assert isinstance(ev_root, Path)
+            base_payload = fx["manifest_payload"]
+            assert isinstance(base_payload, dict)
+            alias_symlink = fx["alias_symlink"]
+            assert isinstance(alias_symlink, Path)
+            alias_dotdot = str(fx["alias_dotdot"])
+
+            support_bin = root / "support" / "bin"
+            self.assertTrue(support_bin.is_dir())
+            dotdot_fid = next(
+                fid
+                for fid, row in base_payload["files"].items()  # type: ignore[union-attr]
+                if row["path"] == alias_dotdot
+            )
+            symlink_fid = next(
+                fid
+                for fid, row in base_payload["files"].items()  # type: ignore[union-attr]
+                if row["path"] == str(alias_symlink)
+            )
+
+            # 1. Positive baseline: support/bin is retained in FileObservation.ancestors for bin/../collection-python
+            validated = validate_profile(
+                profile, installed_record, ccp4_env, ev_root
+            )
+            dotdot_fobs = validated.files[dotdot_fid]
+            self.assertTrue(dotdot_fobs.dependencies_complete)
+            self.assertTrue(dotdot_fobs.complete)
+            self.assertTrue(dotdot_fobs.verified)
+            self.assertEqual(dotdot_fobs.errors, ())
+            self.assertEqual(dotdot_fobs.unavailable_symlinks, ())
+            self.assertIn(
+                str(support_bin),
+                [anc.path for anc in dotdot_fobs.ancestors],
+            )
+
+            # 2. If support/bin disappears after file observation, public conversion and _build_file_observation
+            # project in memory from retained observations without re-traversing the filesystem or losing support/bin
+            outer_state = _validate_and_observe_outer_profile(
+                profile, evidence_root=ev_root
+            )
+            support_bin.rmdir()
+            try:
+                with (
+                    mock.patch(
+                        "refmac_diagnostic_profile._traverse_path_components",
+                        side_effect=AssertionError(
+                            "_build_file_observation must not re-traverse filesystem"
+                        ),
+                    ),
+                    mock.patch(
+                        "refmac_diagnostic_profile.os.lstat",
+                        side_effect=AssertionError(
+                            "_build_file_observation must not call os.lstat"
+                        ),
+                    ),
+                ):
+                    projected_with_deps = profile_mod._build_file_observation(
+                        outer_state.observed_files[dotdot_fid],
+                        observed_ancestors=outer_state.observed_ancestors,
+                        observed_symlinks=outer_state.observed_symlinks,
+                        file_dependencies=outer_state.file_dependencies[
+                            dotdot_fid
+                        ],
+                    )
+                    projected_from_pin = profile_mod._build_file_observation(
+                        outer_state.observed_files[dotdot_fid],
+                        observed_ancestors=outer_state.observed_ancestors,
+                        observed_symlinks=outer_state.observed_symlinks,
+                    )
+                for proj in (projected_with_deps, projected_from_pin):
+                    self.assertTrue(proj.dependencies_complete)
+                    self.assertTrue(proj.verified)
+                    self.assertIn(
+                        str(support_bin),
+                        [anc.path for anc in proj.ancestors],
+                    )
+            finally:
+                support_bin.mkdir(parents=True, exist_ok=True)
+
+            # Also verify when support/bin disappears during validate_profile right after dotdot_fid is observed
+            real_observe_pin = profile_mod._observe_regular_file_pin
+
+            def observe_pin_then_remove_support_bin(path, *args, **kwargs):
+                res = real_observe_pin(path, *args, **kwargs)
+                if str(path) == alias_dotdot and support_bin.exists():
+                    support_bin.rmdir()
+                return res
+
+            bad_env = {**ccp4_env, "CLIBD": "force-post-outer-failure"}
+            try:
+                with mock.patch(
+                    "refmac_diagnostic_profile._observe_regular_file_pin",
+                    side_effect=observe_pin_then_remove_support_bin,
+                ):
+                    with self.assertRaises(ProfileValidationError) as ctx_rm:
+                        validate_profile(
+                            profile, installed_record, bad_env, ev_root
+                        )
+                retained_dotdot = ctx_rm.exception.files[dotdot_fid]
+                self.assertTrue(retained_dotdot.dependencies_complete)
+                self.assertTrue(retained_dotdot.verified)
+                self.assertIn(
+                    str(support_bin),
+                    [anc.path for anc in retained_dotdot.ancestors],
+                )
+            finally:
+                support_bin.mkdir(parents=True, exist_ok=True)
+
+            # 3. Unavailable symlink identity is represented as incomplete/unverified without fabricated zero identities
+            real_observe_symlink = profile_mod._observe_symlink_identity
+
+            def fail_symlink_identity(edge: _SymlinkEdge):
+                if edge.path == str(alias_symlink):
+                    cause = PermissionError(
+                        errno.EACCES, "symlink lstat denied after read"
+                    )
+                    err = ValueError(
+                        f"Cannot inspect symlink {edge.path!r} (PermissionError): {cause}"
+                    )
+                    err.__cause__ = cause
+                    raise err
+                return real_observe_symlink(edge)
+
+            with mock.patch(
+                "refmac_diagnostic_profile._observe_symlink_identity",
+                side_effect=fail_symlink_identity,
+            ):
+                with self.assertRaises(ProfileValidationError) as sym_ctx:
+                    validate_profile(
+                        profile, installed_record, ccp4_env, ev_root
+                    )
+            sym_err = sym_ctx.exception
+            self.assertEqual(
+                sym_err.failed_check, "outer_profile_files_and_roots"
+            )
+            self.assertEqual(sym_err.error_type, "PermissionError")
+            self.assertEqual(sym_err.error_errno, errno.EACCES)
+            incomplete_fobs = sym_err.files[symlink_fid]
+            self.assertFalse(incomplete_fobs.dependencies_complete)
+            self.assertFalse(incomplete_fobs.complete)
+            self.assertFalse(incomplete_fobs.verified)
+            self.assertEqual(
+                incomplete_fobs.symlinks,
+                (_SymlinkEdge(path=str(alias_symlink), target="collection-python"),),
+            )
+            self.assertEqual(incomplete_fobs.symlink_identities, ())
+            self.assertEqual(
+                incomplete_fobs.unavailable_symlinks,
+                (_SymlinkEdge(path=str(alias_symlink), target="collection-python"),),
+            )
+            self.assertGreaterEqual(len(incomplete_fobs.errors), 1)
+            fobs_dict = incomplete_fobs.to_dict()
+            self.assertFalse(fobs_dict["dependencies_complete"])
+            self.assertFalse(fobs_dict["verified"])
+            self.assertEqual(fobs_dict["symlink_identities"], [])
+            self.assertTrue(fobs_dict["errors"])
+
+            # Direct _build_file_observation with empty observed_symlinks also marks incomplete without touching disk
+            with (
+                mock.patch(
+                    "refmac_diagnostic_profile.os.lstat",
+                    side_effect=AssertionError("must not lstat"),
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.readlink",
+                    side_effect=AssertionError("must not readlink"),
+                ),
+            ):
+                direct_incomplete = profile_mod._build_file_observation(
+                    outer_state.observed_files[symlink_fid],
+                    observed_ancestors=outer_state.observed_ancestors,
+                    observed_symlinks={},
+                )
+            self.assertFalse(direct_incomplete.dependencies_complete)
+            self.assertFalse(direct_incomplete.verified)
+            self.assertEqual(direct_incomplete.symlink_identities, ())
+            self.assertEqual(
+                direct_incomplete.unavailable_symlinks,
+                (_SymlinkEdge(path=str(alias_symlink), target="collection-python"),),
+            )
+            self.assertGreaterEqual(len(direct_incomplete.errors), 1)
+
+            # Fabricated zero identities are rejected by _ObservedSymlinkIdentity, _ObservedDirectoryIdentity,
+            # FileObservation, and ValidatedProfile rejects incomplete FileObservation
+            with self.assertRaisesRegex(
+                ValueError, "fabricated zero or non-positive"
+            ):
+                profile_mod._ObservedSymlinkIdentity(
+                    path=str(alias_symlink),
+                    target="collection-python",
+                    dev=0,
+                    ino=0,
+                    mode=0,
+                    uid=0,
+                    gid=0,
+                )
+            with self.assertRaisesRegex(
+                ValueError, "fabricated zero or non-positive"
+            ):
+                profile_mod._ObservedDirectoryIdentity(
+                    path="/",
+                    resolved_path="/",
+                    dev=0,
+                    ino=0,
+                    mode=0,
+                    uid=0,
+                    gid=0,
+                )
+            with self.assertRaisesRegex(
+                ValueError, "must have dependencies_complete=True"
+            ):
+                ValidatedProfile(
+                    request=validated.request,
+                    manifest_identity=direct_incomplete,
+                    files=validated.files,
+                    roots=validated.roots,
+                    roles=validated.roles,
+                    installed_reference=validated.installed_reference,
+                    selected_executable=validated.selected_executable,
+                    installed_record_json=validated.installed_record_json,
+                    expected_environment=validated.expected_environment,
+                    requested_absences=validated.requested_absences,
+                    evidence_root=validated.evidence_root,
+                )
+
+    def test_1179_preserves_actual_caught_exception_objects_and_walks_cause_chain_at_evidence_root_and_other_boundaries(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = _build_synthetic_outer_profile_fixture(Path(tmp))
+            profile = fx["profile"]
+            assert isinstance(profile, RefmacDiagnosticProfile)
+            installed_record = fx["installed_record"]
+            assert isinstance(installed_record, dict)
+            ccp4_env = fx["ccp4_env"]
+            assert isinstance(ccp4_env, dict)
+            ev_root = fx["evidence_root"]
+            assert isinstance(ev_root, Path)
+
+            perm_err = PermissionError(errno.EACCES, "Permission denied")
+            chained_val_err = ValueError(
+                f"Cannot inspect evidence_root component {str(ev_root)!r} (PermissionError): {perm_err}"
+            )
+            chained_val_err.__cause__ = perm_err
+
+            with mock.patch(
+                "refmac_diagnostic_profile._validate_and_observe_evidence_root",
+                side_effect=chained_val_err,
+            ):
+                with self.assertRaises(ProfileValidationError) as ctx:
+                    validate_profile(
+                        profile, installed_record, ccp4_env, ev_root
+                    )
+
+            err = ctx.exception
+            self.assertEqual(err.failed_check, "evidence_root")
+            # Later manifest, roots, and files were still observed and retained
+            self.assertIsNotNone(err.manifest_identity)
+            self.assertEqual(len(err.roots), 3)
+            self.assertGreater(len(err.files), 30)
+
+            # Exact exception objects are preserved across the __cause__ chain
+            self.assertIsInstance(err.__cause__, _ProfileObservationError)
+            self.assertIs(err.__cause__.__cause__, chained_val_err)
+            self.assertIs(err.__cause__.__cause__.__cause__, perm_err)
+            self.assertIs(err.cause_exception, perm_err)
+            self.assertEqual(len(err.error_records), 1)
+            self.assertEqual(err.error_records[0].stage, "evidence_root")
+            self.assertIs(err.error_records[0].exception, chained_val_err)
+
+            # Public error fields come consistently from the single selected PermissionError cause
+            self.assertEqual(err.error_type, "PermissionError")
+            self.assertEqual(err.error_errno, errno.EACCES)
+            self.assertEqual(err.error_message, str(perm_err))
+            self.assertEqual(err.wrapper_message, str(chained_val_err))
+
+            prov = err.to_provenance()
+            self.assertEqual(prov["failed_check"], "evidence_root")
+            self.assertEqual(prov["error"]["type"], "PermissionError")
+            self.assertEqual(prov["error"]["errno"], errno.EACCES)
+            self.assertEqual(prov["error"]["message"], str(perm_err))
+            self.assertEqual(
+                prov["error"]["wrapper_message"], str(chained_val_err)
+            )
+
+    def test_1180_explicit_failed_check_stage_recording_without_message_substring_classification(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = _build_synthetic_outer_profile_fixture(Path(tmp))
+            profile = fx["profile"]
+            assert isinstance(profile, RefmacDiagnosticProfile)
+            installed_record = fx["installed_record"]
+            assert isinstance(installed_record, dict)
+            ccp4_env = fx["ccp4_env"]
+            assert isinstance(ccp4_env, dict)
+            ev_root = fx["evidence_root"]
+            assert isinstance(ev_root, Path)
+            base_payload = fx["manifest_payload"]
+            assert isinstance(base_payload, dict)
+            manifest_path = fx["manifest_path"]
+            assert isinstance(manifest_path, Path)
+
+            # 1. Repinned manifest with wrong schema_id has "Profile manifest schema_id..." in message
+            # and MUST classify as "outer_manifest_shape" (never misclassified as "manifest_pin")
+            wrong_schema_payload = copy.deepcopy(base_payload)
+            wrong_schema_payload["schema_id"] = "wrong_schema_id"
+            wrong_schema_prof = _rewrite_manifest_and_profile(
+                fx, wrong_schema_payload
+            )
+            try:
+                with self.assertRaisesRegex(
+                    ProfileValidationError,
+                    "Profile manifest schema_id must be",
+                ) as schema_ctx:
+                    validate_profile(
+                        wrong_schema_prof, installed_record, ccp4_env, ev_root
+                    )
+                self.assertEqual(
+                    schema_ctx.exception.failed_check, "outer_manifest_shape"
+                )
+                self.assertEqual(
+                    schema_ctx.exception.to_provenance()["failed_check"],
+                    "outer_manifest_shape",
+                )
+            finally:
+                _rewrite_manifest_and_profile(fx, base_payload)
+
+            # 2. Repinned manifest with invalid JSON syntax, duplicate keys, or NaN classifies as "manifest_json"
+            orig_manifest_bytes = manifest_path.read_bytes()
+            try:
+                for raw_bad_json, exp_err_type in (
+                    (b'{"schema_id": \n', "JSONDecodeError"),
+                    (b'{"a": 1, "a": 2}\n', "ValueError"),
+                    (b'{"a": NaN}\n', "ValueError"),
+                ):
+                    with self.subTest(raw_bad_json=raw_bad_json):
+                        manifest_path.write_bytes(raw_bad_json)
+                        bad_json_pin = _make_file_pin_on_disk(manifest_path)
+                        bad_json_prof = RefmacDiagnosticProfile(
+                            profile_id=profile.profile_id,
+                            manifest=bad_json_pin,
+                            executable=profile.executable,
+                        )
+                        with self.assertRaises(
+                            ProfileValidationError
+                        ) as json_ctx:
+                            validate_profile(
+                                bad_json_prof,
+                                installed_record,
+                                ccp4_env,
+                                ev_root,
+                            )
+                        self.assertEqual(
+                            json_ctx.exception.failed_check, "manifest_json"
+                        )
+                        self.assertEqual(
+                            json_ctx.exception.error_type, exp_err_type
+                        )
+                        self.assertIsNotNone(
+                            json_ctx.exception.manifest_identity
+                        )
+
+                # 3. Wrong caller manifest SHA-256 digest fails at "manifest_pin" before file JSON parsing
+                untrusted_manifest_bytes = b'{"broken_syntax": \n'
+                manifest_path.write_bytes(untrusted_manifest_bytes)
+                wrong_sha_prof = RefmacDiagnosticProfile(
+                    profile_id=profile.profile_id,
+                    manifest=FilePin(
+                        path=str(manifest_path),
+                        sha256="0" * 64,
+                        size_bytes=len(untrusted_manifest_bytes),
+                    ),
+                    executable=profile.executable,
+                )
+                real_json_loads = json.loads
+                manifest_json_loads_calls: list[object] = []
+
+                def trap_manifest_json_loads(s, *args, **kwargs):
+                    if "broken_syntax" in str(s):
+                        manifest_json_loads_calls.append(s)
+                    return real_json_loads(s, *args, **kwargs)
+
+                with (
+                    mock.patch(
+                        "refmac_diagnostic_profile._parse_verified_json_bytes",
+                        wraps=profile_mod._parse_verified_json_bytes,
+                    ) as mocked_parse_file_json,
+                    mock.patch(
+                        "refmac_diagnostic_profile.json.loads",
+                        side_effect=trap_manifest_json_loads,
+                    ),
+                ):
+                    with self.assertRaises(ProfileValidationError) as pin_ctx:
+                        validate_profile(
+                            wrong_sha_prof,
+                            installed_record,
+                            ccp4_env,
+                            ev_root,
+                        )
+                    mocked_parse_file_json.assert_not_called()
+                self.assertEqual(manifest_json_loads_calls, [])
+                self.assertEqual(pin_ctx.exception.failed_check, "manifest_pin")
+                self.assertIsNotNone(pin_ctx.exception.installed_record_json)
+            finally:
+                manifest_path.write_bytes(orig_manifest_bytes)
+
+            # 4. Multiple failures preserve ordered errors and aligned stage/exception error_records
+            extra_vendor = fx["trees"]["vendor"] / ".extra_multi_err"  # type: ignore[index]
+            extra_vendor.write_text("extra\n", encoding="utf-8")
+            perm_err = PermissionError(errno.EACCES, "denied on evidence_root")
+            ev_val_err = ValueError(f"evidence_root error: {perm_err}")
+            ev_val_err.__cause__ = perm_err
+            try:
+                with mock.patch(
+                    "refmac_diagnostic_profile._validate_and_observe_evidence_root",
+                    side_effect=ev_val_err,
+                ):
+                    with self.assertRaises(ProfileValidationError) as multi_ctx:
+                        validate_profile(
+                            profile, installed_record, ccp4_env, ev_root
+                        )
+                m_err = multi_ctx.exception
+                self.assertEqual(m_err.failed_check, "evidence_root")
+                self.assertEqual(m_err.error_type, "PermissionError")
+                self.assertEqual(m_err.error_errno, errno.EACCES)
+                self.assertGreaterEqual(len(m_err.errors), 2)
+                self.assertEqual(len(m_err.error_records), len(m_err.errors))
+                self.assertEqual(m_err.error_records[0].stage, "evidence_root")
+                self.assertIs(m_err.error_records[0].exception, ev_val_err)
+                self.assertEqual(
+                    m_err.error_records[1].stage,
+                    "outer_profile_files_and_roots",
+                )
+            finally:
+                extra_vendor.unlink()
+
+            # 5. Primary manifest JSON error is recorded before secondary dependency recovery error (#1180)
+            manifest_alias = fx["root"] / "manifest-bad-json-alias.json"  # type: ignore[operator]
+            os.symlink("diagnostic-profile.json", manifest_alias)
+            try:
+                manifest_path.write_bytes(b'{"schema_id": \n')
+                bad_alias_pin = _make_file_pin_on_disk(manifest_alias)
+                bad_alias_prof = RefmacDiagnosticProfile(
+                    profile_id=profile.profile_id,
+                    manifest=bad_alias_pin,
+                    executable=profile.executable,
+                )
+                real_observe_symlink = profile_mod._observe_symlink_identity
+                dep_perm_err = PermissionError(
+                    errno.EACCES, "symlink lstat denied during manifest recovery"
+                )
+
+                def fail_manifest_alias_symlink(edge: _SymlinkEdge):
+                    if edge.path == str(manifest_alias):
+                        err = ValueError(
+                            f"Cannot inspect symlink {edge.path!r} (PermissionError): {dep_perm_err}"
+                        )
+                        err.__cause__ = dep_perm_err
+                        raise err
+                    return real_observe_symlink(edge)
+
+                with mock.patch(
+                    "refmac_diagnostic_profile._observe_symlink_identity",
+                    side_effect=fail_manifest_alias_symlink,
+                ):
+                    with self.assertRaises(ProfileValidationError) as rec_ctx:
+                        validate_profile(
+                            bad_alias_prof,
+                            installed_record,
+                            ccp4_env,
+                            ev_root,
+                        )
+                rec_err = rec_ctx.exception
+                self.assertEqual(rec_err.failed_check, "manifest_json")
+                self.assertEqual(rec_err.error_type, "JSONDecodeError")
+                self.assertIsInstance(rec_err.cause_exception, json.JSONDecodeError)
+                self.assertEqual(len(rec_err.errors), 2)
+                self.assertEqual(len(rec_err.error_records), 2)
+                self.assertEqual(rec_err.error_records[0].stage, "manifest_json")
+                self.assertIs(
+                    rec_err.error_records[0].exception.__cause__.__cause__,
+                    rec_err.cause_exception,
+                )
+                self.assertEqual(rec_err.error_records[1].stage, "manifest_pin")
+                self.assertIs(
+                    rec_err.error_records[1].exception.__cause__, dep_perm_err
+                )
+                self.assertIsNotNone(rec_err.manifest_identity)
+                assert rec_err.manifest_identity is not None
+                self.assertFalse(rec_err.manifest_identity.dependencies_complete)
+                self.assertFalse(rec_err.manifest_identity.verified)
+                self.assertEqual(len(rec_err.manifest_identity.errors), 2)
+            finally:
+                manifest_path.write_bytes(orig_manifest_bytes)
+                if manifest_alias.is_symlink() or manifest_alias.exists():
+                    manifest_alias.unlink()
+
+    def test_1168_retains_conflicting_symlink_measurements_and_continues_valid_manifest_dependency_failure(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = _build_synthetic_outer_profile_fixture(Path(tmp))
+            root = fx["root"]
+            assert isinstance(root, Path)
+            profile = fx["profile"]
+            assert isinstance(profile, RefmacDiagnosticProfile)
+            installed_record = fx["installed_record"]
+            assert isinstance(installed_record, dict)
+            ccp4_env = fx["ccp4_env"]
+            assert isinstance(ccp4_env, dict)
+            ev_root = fx["evidence_root"]
+            assert isinstance(ev_root, Path)
+            base_payload = fx["manifest_payload"]
+            assert isinstance(base_payload, dict)
+            alias_symlink = fx["alias_symlink"]
+            assert isinstance(alias_symlink, Path)
+
+            # 1. Positive baseline has 59 verified files and 3 verified controlled roots
+            baseline_val = validate_profile(
+                profile, installed_record, ccp4_env, ev_root
+            )
+            self.assertEqual(len(baseline_val.files), 59)
+            self.assertEqual(len(baseline_val.roots), 3)
+            self.assertEqual(
+                set(dict(baseline_val.roots).keys()),
+                {"vendor", "prepared", "build"},
+            )
+
+            # 2. Valid manifest through symlink alias with only alias metadata denial retains
+            # all 59 obtainable files and all 3 controlled roots while rejecting admission
+            manifest_alias = root / "manifest-valid-alias.json"
+            os.symlink("diagnostic-profile.json", manifest_alias)
+            try:
+                alias_profile = RefmacDiagnosticProfile(
+                    profile_id=profile.profile_id,
+                    manifest=_make_file_pin_on_disk(manifest_alias),
+                    executable=profile.executable,
+                )
+                alias_val = validate_profile(
+                    alias_profile, installed_record, ccp4_env, ev_root
+                )
+                self.assertEqual(len(alias_val.files), 59)
+                self.assertEqual(len(alias_val.roots), 3)
+                self.assertEqual(
+                    alias_val.manifest_identity.symlink_identities[0].path,
+                    str(manifest_alias),
+                )
+
+                real_observe_symlink = profile_mod._observe_symlink_identity
+                alias_perm_err = PermissionError(
+                    errno.EACCES, "manifest alias symlink metadata denied"
+                )
+
+                def deny_only_manifest_alias(edge: _SymlinkEdge):
+                    if edge.path == str(manifest_alias):
+                        err = ValueError(
+                            f"Cannot inspect symlink {edge.path!r} (PermissionError): {alias_perm_err}"
+                        )
+                        err.__cause__ = alias_perm_err
+                        raise err
+                    return real_observe_symlink(edge)
+
+                with mock.patch(
+                    "refmac_diagnostic_profile._observe_symlink_identity",
+                    side_effect=deny_only_manifest_alias,
+                ):
+                    with self.assertRaises(ProfileValidationError) as mdep_ctx:
+                        validate_profile(
+                            alias_profile, installed_record, ccp4_env, ev_root
+                        )
+                mdep_err = mdep_ctx.exception
+                self.assertIsNone(mdep_err.selected_executable)
+                self.assertFalse(mdep_err.profile_files_verified)
+                self.assertEqual(mdep_err.failed_check, "manifest_pin")
+                self.assertEqual(mdep_err.error_type, "PermissionError")
+                self.assertEqual(mdep_err.error_errno, errno.EACCES)
+                self.assertIs(mdep_err.cause_exception, alias_perm_err)
+                self.assertIsNotNone(mdep_err.manifest_identity)
+                assert mdep_err.manifest_identity is not None
+                self.assertFalse(mdep_err.manifest_identity.dependencies_complete)
+                self.assertFalse(mdep_err.manifest_identity.verified)
+                self.assertEqual(
+                    mdep_err.manifest_identity.unavailable_symlinks,
+                    (
+                        _SymlinkEdge(
+                            path=str(manifest_alias),
+                            target="diagnostic-profile.json",
+                        ),
+                    ),
+                )
+                self.assertEqual(len(mdep_err.files), 59)
+                self.assertTrue(
+                    all(
+                        fobs.verified and fobs.dependencies_complete
+                        for _fid, fobs in mdep_err.files
+                    )
+                )
+                self.assertEqual(len(mdep_err.roots), 3)
+                self.assertEqual(
+                    set(dict(mdep_err.roots).keys()),
+                    {"vendor", "prepared", "build"},
+                )
+                self.assertTrue(
+                    all(
+                        robs.verified and robs.scan_complete
+                        for _rname, robs in mdep_err.roots
+                    )
+                )
+                mdep_prov = mdep_err.to_provenance()
+                self.assertFalse(mdep_prov["profile_files_verified"])
+                self.assertIsNone(mdep_prov["selected_executable"])
+                self.assertEqual(mdep_prov["failed_check"], "manifest_pin")
+                self.assertEqual(len(mdep_prov["files"]), 59)
+                self.assertEqual(len(mdep_prov["roots"]), 3)
+            finally:
+                if manifest_alias.is_symlink() or manifest_alias.exists():
+                    manifest_alias.unlink()
+
+            # 3. Two files traversing the same symlink where the symlink is renamed (keeping old inode alive)
+            # and replaced with a new same-target symlink between the two files: both files retain their
+            # respective measured symlink identities, while the second file is incomplete/unverified and
+            # its measured edge is NOT labelled unavailable.
+            symlink_fid_1 = next(
+                fid
+                for fid, row in base_payload["files"].items()  # type: ignore[union-attr]
+                if row["path"] == str(alias_symlink)
+            )
+            symlink_fid_2 = "zz_second_shared_symlink_user"
+            second_lexical_via_link = f"{root}/support/bin/../python-alias"
+            second_obs_initial = _observe_regular_file_pin(second_lexical_via_link)
+            self.assertEqual(
+                second_obs_initial.symlinks,
+                (_SymlinkEdge(path=str(alias_symlink), target="collection-python"),),
+            )
+
+            shared_payload = copy.deepcopy(base_payload)
+            shared_payload["files"][symlink_fid_2] = (  # type: ignore[index]
+                second_obs_initial.to_manifest_row()
+            )
+            shared_payload["roles"]["qc_evidence"] = sorted(  # type: ignore[index]
+                [*shared_payload["roles"]["qc_evidence"], symlink_fid_2]  # type: ignore[index]
+            )
+            shared_profile = _rewrite_manifest_and_profile(fx, shared_payload)
+
+            retained_old_link = root / "support" / "python-alias.retained-old"
+            real_collect_deps = profile_mod._collect_file_dependencies
+            ino_first_holder: list[int] = []
+            ino_second_holder: list[int] = []
+
+            def collect_deps_and_replace_shared_symlink(
+                file_obs, *, ancestors_out, symlinks_out
+            ):
+                res = real_collect_deps(
+                    file_obs,
+                    ancestors_out=ancestors_out,
+                    symlinks_out=symlinks_out,
+                )
+                if file_obs.path == str(alias_symlink):
+                    ino_first_holder.append(os.lstat(alias_symlink).st_ino)
+                    os.rename(alias_symlink, retained_old_link)
+                    os.symlink("collection-python", alias_symlink)
+                    ino_second_holder.append(os.lstat(alias_symlink).st_ino)
+                return res
+
+            try:
+                with mock.patch(
+                    "refmac_diagnostic_profile._collect_file_dependencies",
+                    side_effect=collect_deps_and_replace_shared_symlink,
+                ):
+                    with self.assertRaises(ProfileValidationError) as conf_ctx:
+                        validate_profile(
+                            shared_profile, installed_record, ccp4_env, ev_root
+                        )
+                conf_err = conf_ctx.exception
+                self.assertEqual(len(ino_first_holder), 1)
+                self.assertEqual(len(ino_second_holder), 1)
+                self.assertNotEqual(ino_first_holder[0], ino_second_holder[0])
+
+                self.assertEqual(
+                    conf_err.failed_check, "outer_profile_files_and_roots"
+                )
+                fobs_1 = conf_err.files[symlink_fid_1]
+                fobs_2 = conf_err.files[symlink_fid_2]
+
+                # First file has the original symlink inode and complete dependencies
+                self.assertTrue(fobs_1.dependencies_complete)
+                self.assertTrue(fobs_1.verified)
+                self.assertEqual(len(fobs_1.symlink_identities), 1)
+                self.assertEqual(
+                    fobs_1.symlink_identities[0].ino, ino_first_holder[0]
+                )
+                self.assertEqual(fobs_1.unavailable_symlinks, ())
+
+                # Second file retains its newly measured symlink inode, is incomplete/unverified,
+                # and does NOT label the measured edge as unavailable
+                self.assertFalse(fobs_2.dependencies_complete)
+                self.assertFalse(fobs_2.complete)
+                self.assertFalse(fobs_2.verified)
+                self.assertEqual(len(fobs_2.symlink_identities), 1)
+                self.assertEqual(
+                    fobs_2.symlink_identities[0].ino, ino_second_holder[0]
+                )
+                self.assertEqual(fobs_2.unavailable_symlinks, ())
+                self.assertTrue(
+                    any(
+                        "Symlink identity changed during observation" in e
+                        for e in fobs_2.errors
+                    )
+                )
+
+                # Global observed_symlinks kept the earlier observation, and _build_file_observation
+                # projects both files in memory with zero filesystem calls
+                partial = conf_err.partial_observation
+                assert partial is not None
+                self.assertEqual(
+                    partial.observed_symlinks[str(alias_symlink)].ino,
+                    ino_first_holder[0],
+                )
+                with (
+                    mock.patch(
+                        "refmac_diagnostic_profile.os.lstat",
+                        side_effect=AssertionError("must not lstat"),
+                    ),
+                    mock.patch(
+                        "refmac_diagnostic_profile.os.stat",
+                        side_effect=AssertionError("must not stat"),
+                    ),
+                    mock.patch(
+                        "refmac_diagnostic_profile.os.readlink",
+                        side_effect=AssertionError("must not readlink"),
+                    ),
+                    mock.patch(
+                        "refmac_diagnostic_profile.os.open",
+                        side_effect=AssertionError("must not open"),
+                    ),
+                ):
+                    reproj_2 = profile_mod._build_file_observation(
+                        partial.observed_files[symlink_fid_2],
+                        observed_ancestors=partial.observed_ancestors,
+                        observed_symlinks=partial.observed_symlinks,
+                        file_dependencies=partial.file_dependencies[symlink_fid_2],
+                        verified=False,
+                    )
+                self.assertEqual(
+                    reproj_2.symlink_identities[0].ino, ino_second_holder[0]
+                )
+                self.assertFalse(reproj_2.dependencies_complete)
+                self.assertFalse(reproj_2.verified)
+                self.assertEqual(reproj_2.unavailable_symlinks, ())
+            finally:
+                if retained_old_link.is_symlink():
+                    os.replace(retained_old_link, alias_symlink)
+                _rewrite_manifest_and_profile(fx, base_payload)
+
+    def test_1168_retains_partial_file_read_observations_across_eio_and_initial_size_mismatches(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = _build_synthetic_outer_profile_fixture(Path(tmp))
+            root = fx["root"]
+            assert isinstance(root, Path)
+            profile = fx["profile"]
+            assert isinstance(profile, RefmacDiagnosticProfile)
+            installed_record = fx["installed_record"]
+            assert isinstance(installed_record, dict)
+            ccp4_env = fx["ccp4_env"]
+            assert isinstance(ccp4_env, dict)
+            ev_root = fx["evidence_root"]
+            assert isinstance(ev_root, Path)
+            base_payload = fx["manifest_payload"]
+            assert isinstance(base_payload, dict)
+            manifest_path = fx["manifest_path"]
+            assert isinstance(manifest_path, Path)
+
+            launcher_fid = base_payload["roles"]["launcher"][0]  # type: ignore[index]
+            launcher_row = base_payload["files"][launcher_fid]  # type: ignore[index]
+            launcher_path = Path(str(launcher_row["path"]))
+            launcher_resolved = launcher_path.resolve(strict=True)
+            launcher_bytes = launcher_resolved.read_bytes()
+            launcher_st = os.lstat(launcher_resolved)
+            orig_manifest_bytes = manifest_path.read_bytes()
+            caller_inst_snapshot = copy.deepcopy(installed_record)
+            caller_env_snapshot = copy.deepcopy(ccp4_env)
+
+            # 1. Positive control: complete observations only, no PartialFileReadObservation
+            pos_val = validate_profile(
+                profile, installed_record, ccp4_env, ev_root
+            )
+            self.assertIsInstance(pos_val.manifest_identity, FileObservation)
+            self.assertEqual(len(pos_val.files), 59)
+            self.assertTrue(
+                all(type(fobs) is FileObservation for _fid, fobs in pos_val.files)
+            )
+            self.assertEqual(len(pos_val.roots), 3)
+
+            # 2. External declared file (launcher) raises EIO on first read after successful fstat
+            real_open = os.open
+            real_fdopen = os.fdopen
+            first_read_eio = OSError(
+                errno.EIO, "synthetic launcher first-read EIO"
+            )
+            launcher_fds_case2: list[int] = []
+            current_fd_to_path_case2: dict[int, str] = {}
+            pending_target_fds_case2: set[int] = set()
+            injected_paths_case2: list[str] = []
+
+            def track_open_case2(path, flags, *args, **kwargs):
+                fd = real_open(path, flags, *args, **kwargs)
+                path_str = str(path)
+                current_fd_to_path_case2[fd] = path_str
+                if path_str == str(launcher_resolved):
+                    launcher_fds_case2.append(fd)
+                    pending_target_fds_case2.add(fd)
+                else:
+                    pending_target_fds_case2.discard(fd)
+                return fd
+
+            def fdopen_fail_first_read(fd, mode="rb", *args, **kwargs):
+                handle = real_fdopen(fd, mode, *args, **kwargs)
+                if (
+                    fd in pending_target_fds_case2
+                    and current_fd_to_path_case2.get(fd)
+                    == str(launcher_resolved)
+                ):
+                    pending_target_fds_case2.remove(fd)
+                    injected_paths_case2.append(current_fd_to_path_case2[fd])
+
+                    def raise_eio_first(_n=-1):
+                        raise first_read_eio
+
+                    handle.read = raise_eio_first  # type: ignore[method-assign]
+                return handle
+
+            with (
+                mock.patch(
+                    "refmac_diagnostic_profile.os.open",
+                    side_effect=track_open_case2,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.fdopen",
+                    side_effect=fdopen_fail_first_read,
+                ),
+            ):
+                with self.assertRaises(ProfileValidationError) as eio1_ctx:
+                    validate_profile(
+                        profile, installed_record, ccp4_env, ev_root
+                    )
+            self.assertEqual(len(launcher_fds_case2), 1)
+            self.assertEqual(injected_paths_case2, [str(launcher_resolved)])
+            self.assertEqual(pending_target_fds_case2, set())
+            with self.assertRaises(OSError) as closed_ctx:
+                os.fstat(launcher_fds_case2[0])
+            self.assertEqual(closed_ctx.exception.errno, errno.EBADF)
+
+            eio1_err = eio1_ctx.exception
+            self.assertEqual(
+                eio1_err.failed_check, "outer_profile_files_and_roots"
+            )
+            self.assertIs(eio1_err.cause_exception, first_read_eio)
+            self.assertIsInstance(
+                eio1_err.error_records[0].exception, _PartialFileReadError
+            )
+            self.assertIs(
+                eio1_err.error_records[0].exception.__cause__, first_read_eio
+            )
+            self.assertEqual(eio1_err.error_type, "OSError")
+            self.assertEqual(eio1_err.error_errno, errno.EIO)
+            self.assertIsNone(eio1_err.selected_executable)
+            self.assertFalse(eio1_err.profile_files_verified)
+            self.assertEqual(len(eio1_err.roots), 3)
+            self.assertEqual(len(eio1_err.files), 59)
+
+            partial_launcher_1 = eio1_err.files[launcher_fid]
+            self.assertIsInstance(
+                partial_launcher_1, PartialFileReadObservation
+            )
+            assert isinstance(partial_launcher_1, PartialFileReadObservation)
+            self.assertEqual(partial_launcher_1.path, str(launcher_path))
+            self.assertEqual(
+                partial_launcher_1.resolved_path, str(launcher_resolved)
+            )
+            self.assertIsNone(partial_launcher_1.sha256)
+            self.assertIsNone(partial_launcher_1.size_bytes)
+            self.assertEqual(
+                partial_launcher_1.stat_size_bytes, len(launcher_bytes)
+            )
+            self.assertEqual(partial_launcher_1.streamed_size_bytes, 0)
+            self.assertFalse(partial_launcher_1.read_complete)
+            self.assertFalse(partial_launcher_1.complete)
+            self.assertFalse(partial_launcher_1.verified)
+            self.assertTrue(partial_launcher_1.dependencies_complete)
+            self.assertEqual(partial_launcher_1.dev, int(launcher_st.st_dev))
+            self.assertEqual(partial_launcher_1.ino, int(launcher_st.st_ino))
+            self.assertEqual(
+                partial_launcher_1.mode, int(launcher_st.st_mode & 0o7777)
+            )
+            self.assertEqual(partial_launcher_1.uid, int(launcher_st.st_uid))
+            self.assertEqual(partial_launcher_1.gid, int(launcher_st.st_gid))
+            self.assertGreaterEqual(len(partial_launcher_1.ancestors), 1)
+            self.assertGreaterEqual(len(partial_launcher_1.errors), 1)
+
+            # All other 58 files (including files ordered after launcher_fid) are complete FileObservations
+            later_fids = [
+                fid for fid, _ in eio1_err.files if fid > launcher_fid
+            ]
+            self.assertGreaterEqual(len(later_fids), 1)
+            for fid, fobs in eio1_err.files:
+                if fid == launcher_fid:
+                    self.assertIsInstance(fobs, PartialFileReadObservation)
+                else:
+                    self.assertIsInstance(fobs, FileObservation)
+                    self.assertTrue(fobs.verified)
+
+            # Private partial_observation stores partial_launcher_1 in partial_files and file_observations,
+            # never in observed_files / verified_files / unverified_files
+            priv_1 = eio1_err.partial_observation
+            assert priv_1 is not None
+            self.assertNotIn(launcher_fid, priv_1.observed_files)
+            self.assertNotIn(launcher_fid, priv_1.verified_files)
+            self.assertNotIn(launcher_fid, priv_1.unverified_files)
+            self.assertIn(launcher_fid, priv_1.partial_files)
+            self.assertIs(priv_1.partial_files[launcher_fid], partial_launcher_1)
+            self.assertIs(
+                priv_1.file_observations[launcher_fid], partial_launcher_1
+            )
+
+            # Serialization is JSON-safe with null sha256/size_bytes and zero filesystem calls
+            with (
+                mock.patch(
+                    "refmac_diagnostic_profile.os.lstat",
+                    side_effect=AssertionError("must not lstat"),
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.stat",
+                    side_effect=AssertionError("must not stat"),
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.open",
+                    side_effect=AssertionError("must not open"),
+                ),
+            ):
+                prov_1 = eio1_err.to_provenance()
+            json.dumps(prov_1)
+            pdict_1 = prov_1["files"][launcher_fid]
+            self.assertIsNone(pdict_1["sha256"])
+            self.assertIsNone(pdict_1["size_bytes"])
+            self.assertEqual(pdict_1["stat_size_bytes"], len(launcher_bytes))
+            self.assertEqual(pdict_1["streamed_size_bytes"], 0)
+            self.assertFalse(pdict_1["read_complete"])
+            self.assertFalse(pdict_1["verified"])
+
+            # Verify fallback merge in validate_profile when partial.file_observations is empty
+            priv_without_preprojected = _PartialProfileObservation(
+                profile=priv_1.profile,
+                evidence_root=priv_1.evidence_root,
+                evidence_root_ancestor_identities=priv_1.evidence_root_ancestor_identities,
+                manifest_observation=priv_1.manifest_observation,
+                outer_manifest=priv_1.outer_manifest,
+                observed_roots=priv_1.observed_roots,
+                observed_files=priv_1.observed_files,
+                observed_ancestors=priv_1.observed_ancestors,
+                observed_symlinks=priv_1.observed_symlinks,
+                errors=priv_1.errors,
+                verified_files=priv_1.verified_files,
+                unverified_files=priv_1.unverified_files,
+                manifest_dependencies=priv_1.manifest_dependencies,
+                file_dependencies=priv_1.file_dependencies,
+                partial_manifest_observation=priv_1.partial_manifest_observation,
+                partial_files=priv_1.partial_files,
+                manifest_file_observation=None,
+                file_observations={},
+                error_records=priv_1.error_records,
+            )
+            with mock.patch(
+                "refmac_diagnostic_profile._validate_and_observe_outer_profile",
+                side_effect=_ProfileObservationError(
+                    str(eio1_err),
+                    partial_observation=priv_without_preprojected,
+                    errors=priv_1.errors,
+                    failed_check="outer_profile_files_and_roots",
+                    error_records=priv_1.error_records,
+                ),
+            ):
+                with self.assertRaises(ProfileValidationError) as fb_ctx:
+                    validate_profile(
+                        profile, installed_record, ccp4_env, ev_root
+                    )
+            self.assertEqual(len(fb_ctx.exception.files), 59)
+            self.assertIs(
+                fb_ctx.exception.files[launcher_fid], partial_launcher_1
+            )
+
+            # 3. Same target (launcher) returns one 5-byte chunk followed by EIO on the second read
+            chunk_eio = OSError(
+                errno.EIO, "synthetic launcher second-chunk EIO"
+            )
+            launcher_fds_case3: list[int] = []
+            current_fd_to_path_case3: dict[int, str] = {}
+            pending_target_fds_case3: set[int] = set()
+            injected_paths_case3: list[str] = []
+
+            def track_open_case3(path, flags, *args, **kwargs):
+                fd = real_open(path, flags, *args, **kwargs)
+                path_str = str(path)
+                current_fd_to_path_case3[fd] = path_str
+                if path_str == str(launcher_resolved):
+                    launcher_fds_case3.append(fd)
+                    pending_target_fds_case3.add(fd)
+                else:
+                    pending_target_fds_case3.discard(fd)
+                return fd
+
+            def fdopen_fail_second_chunk(fd, mode="rb", *args, **kwargs):
+                handle = real_fdopen(fd, mode, *args, **kwargs)
+                if (
+                    fd in pending_target_fds_case3
+                    and current_fd_to_path_case3.get(fd)
+                    == str(launcher_resolved)
+                ):
+                    pending_target_fds_case3.remove(fd)
+                    injected_paths_case3.append(current_fd_to_path_case3[fd])
+                    orig_read = handle.read
+                    calls = 0
+
+                    def read_one_chunk_then_eio(_n=-1):
+                        nonlocal calls
+                        calls += 1
+                        if calls == 1:
+                            return orig_read(5)
+                        raise chunk_eio
+
+                    handle.read = read_one_chunk_then_eio  # type: ignore[method-assign]
+                return handle
+
+            with (
+                mock.patch(
+                    "refmac_diagnostic_profile.os.open",
+                    side_effect=track_open_case3,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.fdopen",
+                    side_effect=fdopen_fail_second_chunk,
+                ),
+            ):
+                with self.assertRaises(ProfileValidationError) as eio2_ctx:
+                    validate_profile(
+                        profile,
+                        installed_record,
+                        ccp4_env,
+                        ev_root,
+                        chunk_size=5,
+                    )
+            self.assertEqual(len(launcher_fds_case3), 1)
+            self.assertEqual(injected_paths_case3, [str(launcher_resolved)])
+            self.assertEqual(pending_target_fds_case3, set())
+            with self.assertRaises(OSError):
+                os.fstat(launcher_fds_case3[0])
+
+            eio2_err = eio2_ctx.exception
+            self.assertIs(eio2_err.cause_exception, chunk_eio)
+            self.assertEqual(eio2_err.error_errno, errno.EIO)
+            partial_launcher_2 = eio2_err.files[launcher_fid]
+            self.assertIsInstance(
+                partial_launcher_2, PartialFileReadObservation
+            )
+            assert isinstance(partial_launcher_2, PartialFileReadObservation)
+            self.assertIsNone(partial_launcher_2.sha256)
+            self.assertIsNone(partial_launcher_2.size_bytes)
+            self.assertEqual(
+                partial_launcher_2.stat_size_bytes, len(launcher_bytes)
+            )
+            self.assertEqual(partial_launcher_2.streamed_size_bytes, 5)
+            self.assertNotEqual(
+                partial_launcher_2.streamed_size_bytes,
+                partial_launcher_2.stat_size_bytes,
+            )
+            self.assertFalse(partial_launcher_2.read_complete)
+            self.assertFalse(partial_launcher_2.verified)
+            self.assertEqual(len(eio2_err.files), 59)
+            for fid, fobs in eio2_err.files:
+                if fid == launcher_fid:
+                    self.assertIsInstance(fobs, PartialFileReadObservation)
+                else:
+                    self.assertIsInstance(fobs, FileObservation)
+                    self.assertTrue(fobs.verified)
+            self.assertEqual(len(eio2_err.roots), 3)
+
+            # 4. Pinned manifest read EIO after fstat retains partial manifest without parsing or inspecting refs
+            manifest_resolved = manifest_path.resolve(strict=True)
+            manifest_eio = OSError(errno.EIO, "synthetic manifest read EIO")
+            manifest_fds: list[int] = []
+            current_fd_to_path_case4: dict[int, str] = {}
+            pending_target_fds_case4: set[int] = set()
+            injected_paths_case4: list[str] = []
+
+            def track_open_manifest(path, flags, *args, **kwargs):
+                fd = real_open(path, flags, *args, **kwargs)
+                path_str = str(path)
+                current_fd_to_path_case4[fd] = path_str
+                if path_str == str(manifest_resolved):
+                    manifest_fds.append(fd)
+                    pending_target_fds_case4.add(fd)
+                else:
+                    pending_target_fds_case4.discard(fd)
+                return fd
+
+            def fdopen_fail_manifest_after_chunk(fd, mode="rb", *args, **kwargs):
+                handle = real_fdopen(fd, mode, *args, **kwargs)
+                if (
+                    fd in pending_target_fds_case4
+                    and current_fd_to_path_case4.get(fd)
+                    == str(manifest_resolved)
+                ):
+                    pending_target_fds_case4.remove(fd)
+                    injected_paths_case4.append(current_fd_to_path_case4[fd])
+                    orig_read = handle.read
+                    calls = 0
+
+                    def read_16_then_eio(_n=-1):
+                        nonlocal calls
+                        calls += 1
+                        if calls == 1:
+                            return orig_read(16)
+                        raise manifest_eio
+
+                    handle.read = read_16_then_eio  # type: ignore[method-assign]
+                return handle
+
+            with (
+                mock.patch(
+                    "refmac_diagnostic_profile.os.open",
+                    side_effect=track_open_manifest,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.fdopen",
+                    side_effect=fdopen_fail_manifest_after_chunk,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile._parse_verified_json_bytes",
+                    side_effect=AssertionError("must not parse JSON"),
+                ) as mocked_parse,
+                mock.patch(
+                    "refmac_diagnostic_profile._validate_outer_manifest_shape",
+                    side_effect=AssertionError("must not validate shape"),
+                ) as mocked_shape,
+                mock.patch(
+                    "refmac_diagnostic_profile._observe_controlled_root",
+                    side_effect=AssertionError("must not inspect roots"),
+                ) as mocked_root,
+            ):
+                with self.assertRaises(ProfileValidationError) as meio_ctx:
+                    validate_profile(
+                        profile,
+                        installed_record,
+                        ccp4_env,
+                        ev_root,
+                        chunk_size=16,
+                    )
+                mocked_parse.assert_not_called()
+                mocked_shape.assert_not_called()
+                mocked_root.assert_not_called()
+            self.assertEqual(len(manifest_fds), 1)
+            self.assertEqual(injected_paths_case4, [str(manifest_resolved)])
+            self.assertEqual(pending_target_fds_case4, set())
+            with self.assertRaises(OSError):
+                os.fstat(manifest_fds[0])
+
+            meio_err = meio_ctx.exception
+            self.assertEqual(meio_err.failed_check, "manifest_pin")
+            self.assertIs(meio_err.cause_exception, manifest_eio)
+            self.assertEqual(meio_err.error_errno, errno.EIO)
+            self.assertIsInstance(
+                meio_err.manifest_identity, PartialFileReadObservation
+            )
+            assert isinstance(
+                meio_err.manifest_identity, PartialFileReadObservation
+            )
+            self.assertIsNone(meio_err.manifest_identity.sha256)
+            self.assertIsNone(meio_err.manifest_identity.size_bytes)
+            self.assertEqual(
+                meio_err.manifest_identity.stat_size_bytes,
+                len(orig_manifest_bytes),
+            )
+            self.assertEqual(meio_err.manifest_identity.streamed_size_bytes, 16)
+            self.assertFalse(meio_err.manifest_identity.read_complete)
+            self.assertEqual(len(meio_err.files), 0)
+            self.assertEqual(len(meio_err.roots), 0)
+
+            # 5. 3-byte inert manifest with expected 4-byte pin rejects before content read, retaining
+            # stat_size_bytes=3, streamed_size_bytes=0, sha256=None, size_bytes=None while requested stays 4
+            short_manifest_path = root / "inert-3byte-manifest.json"
+            short_manifest_path.write_bytes(b"{}\n")
+            short_manifest_st = os.lstat(short_manifest_path)
+            self.assertEqual(short_manifest_st.st_size, 3)
+            expected_4_pin = FilePin(
+                path=str(short_manifest_path),
+                sha256=_sha256_bytes(b"{}\n"),
+                size_bytes=4,
+            )
+            short_manifest_prof = RefmacDiagnosticProfile(
+                profile_id=profile.profile_id,
+                manifest=expected_4_pin,
+                executable=profile.executable,
+            )
+            with (
+                mock.patch(
+                    "refmac_diagnostic_profile.os.fdopen",
+                    side_effect=AssertionError("must not fdopen or stream on initial size mismatch"),
+                ) as mocked_fdopen_short,
+                mock.patch(
+                    "refmac_diagnostic_profile._parse_verified_json_bytes",
+                    side_effect=AssertionError("must not parse JSON"),
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile._validate_outer_manifest_shape",
+                    side_effect=AssertionError("must not validate shape"),
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile._observe_controlled_root",
+                    side_effect=AssertionError("must not inspect roots"),
+                ),
+            ):
+                with self.assertRaises(ProfileValidationError) as sz_ctx:
+                    validate_profile(
+                        short_manifest_prof,
+                        installed_record,
+                        ccp4_env,
+                        ev_root,
+                    )
+                mocked_fdopen_short.assert_not_called()
+
+            sz_err = sz_ctx.exception
+            self.assertEqual(sz_err.failed_check, "manifest_pin")
+            self.assertEqual(sz_err.error_type, "ValueError")
+            self.assertIsNotNone(sz_err.request)
+            assert sz_err.request is not None
+            self.assertEqual(sz_err.request.manifest.size_bytes, 4)
+            self.assertIsInstance(
+                sz_err.manifest_identity, PartialFileReadObservation
+            )
+            assert isinstance(
+                sz_err.manifest_identity, PartialFileReadObservation
+            )
+            self.assertEqual(
+                sz_err.manifest_identity.path, str(short_manifest_path)
+            )
+            self.assertEqual(sz_err.manifest_identity.stat_size_bytes, 3)
+            self.assertEqual(sz_err.manifest_identity.streamed_size_bytes, 0)
+            self.assertIsNone(sz_err.manifest_identity.sha256)
+            self.assertIsNone(sz_err.manifest_identity.size_bytes)
+            self.assertFalse(sz_err.manifest_identity.read_complete)
+            self.assertEqual(
+                sz_err.manifest_identity.ino, int(short_manifest_st.st_ino)
+            )
+            sz_prov = sz_err.to_provenance()
+            self.assertEqual(sz_prov["requested"]["manifest"]["size_bytes"], 4)
+            self.assertEqual(sz_prov["manifest"]["stat_size_bytes"], 3)
+            self.assertEqual(sz_prov["manifest"]["streamed_size_bytes"], 0)
+            self.assertIsNone(sz_prov["manifest"]["sha256"])
+            self.assertIsNone(sz_prov["manifest"]["size_bytes"])
+            short_manifest_path.unlink()
+
+            # 6. Declared-file initial size mismatch vs completed-read hash mismatch on launcher
+            try:
+                # 6a. 3-byte launcher vs expected 38-byte pin: PartialFileReadObservation with stat=3, streamed=0
+                launcher_resolved.write_bytes(b"#a\n")
+                with self.assertRaises(ProfileValidationError) as dsz_ctx:
+                    validate_profile(
+                        profile, installed_record, ccp4_env, ev_root
+                    )
+                dsz_fobs = dsz_ctx.exception.files[launcher_fid]
+                self.assertIsInstance(dsz_fobs, PartialFileReadObservation)
+                assert isinstance(dsz_fobs, PartialFileReadObservation)
+                self.assertEqual(dsz_fobs.stat_size_bytes, 3)
+                self.assertEqual(dsz_fobs.streamed_size_bytes, 0)
+                self.assertIsNone(dsz_fobs.sha256)
+                self.assertIsNone(dsz_fobs.size_bytes)
+                self.assertFalse(dsz_fobs.read_complete)
+                self.assertEqual(len(dsz_ctx.exception.files), 59)
+                self.assertEqual(len(dsz_ctx.exception.roots), 3)
+
+                # 6b. Equal-length (38-byte) modified launcher: completed FileObservation with actual digest/size
+                alt_bytes = b"# modified equal-length launcher file\n"
+                self.assertEqual(len(alt_bytes), len(launcher_bytes))
+                launcher_resolved.write_bytes(alt_bytes)
+                with self.assertRaises(ProfileValidationError) as dhash_ctx:
+                    validate_profile(
+                        profile, installed_record, ccp4_env, ev_root
+                    )
+                dhash_fobs = dhash_ctx.exception.files[launcher_fid]
+                self.assertIsInstance(dhash_fobs, FileObservation)
+                assert isinstance(dhash_fobs, FileObservation)
+                self.assertEqual(dhash_fobs.sha256, _sha256_bytes(alt_bytes))
+                self.assertEqual(dhash_fobs.size_bytes, len(alt_bytes))
+                self.assertFalse(dhash_fobs.verified)
+            finally:
+                launcher_resolved.write_bytes(launcher_bytes)
+
+            # 7. Strict rejection boundaries: PartialFileReadObservation cannot become a FilePin,
+            # _PinnedJsonDocument, _CheckedOuterProfileState, or ValidatedProfile
+            with self.assertRaisesRegex(
+                ValueError, "cannot be converted to a FilePin"
+            ):
+                partial_launcher_1.as_file_pin()
+            with self.assertRaises(ValueError):
+                _PinnedJsonDocument(
+                    pin=profile.manifest,
+                    observation=partial_launcher_1,  # type: ignore[arg-type]
+                    payload={},
+                )
+            with self.assertRaises(ValueError):
+                ValidatedProfile(
+                    request=pos_val.request,
+                    manifest_identity=partial_launcher_1,  # type: ignore[arg-type]
+                    files=pos_val.files,
+                    roots=pos_val.roots,
+                    roles=pos_val.roles,
+                    installed_reference=pos_val.installed_reference,
+                    selected_executable=pos_val.selected_executable,
+                    installed_record_json=pos_val.installed_record_json,
+                    expected_environment=pos_val.expected_environment,
+                    requested_absences=pos_val.requested_absences,
+                    evidence_root=pos_val.evidence_root,
+                )
+            with self.assertRaises(ValueError):
+                ValidatedProfile(
+                    request=pos_val.request,
+                    manifest_identity=pos_val.manifest_identity,
+                    files=((launcher_fid, partial_launcher_1),),  # type: ignore[arg-type]
+                    roots=pos_val.roots,
+                    roles=pos_val.roles,
+                    installed_reference=pos_val.installed_reference,
+                    selected_executable=pos_val.selected_executable,
+                    installed_record_json=pos_val.installed_record_json,
+                    expected_environment=pos_val.expected_environment,
+                    requested_absences=pos_val.requested_absences,
+                    evidence_root=pos_val.evidence_root,
+                )
+
+            # 8. Post-fstat os.fdopen failure and mid-stream handle.read ValueError retain
+            # PartialFileReadObservation across both declared-file and manifest-pin paths
+            launcher_fdopen_eio = OSError(
+                errno.EIO, "synthetic launcher fdopen EIO"
+            )
+            launcher_fdopen_fds: list[int] = []
+            current_fd_to_path_fdopen_l: dict[int, str] = {}
+            pending_target_fds_fdopen_l: set[int] = set()
+            injected_paths_fdopen_l: list[str] = []
+
+            def track_open_launcher_fdopen(path, flags, *args, **kwargs):
+                fd = real_open(path, flags, *args, **kwargs)
+                path_str = str(path)
+                current_fd_to_path_fdopen_l[fd] = path_str
+                if path_str == str(launcher_resolved):
+                    launcher_fdopen_fds.append(fd)
+                    pending_target_fds_fdopen_l.add(fd)
+                else:
+                    pending_target_fds_fdopen_l.discard(fd)
+                return fd
+
+            def fail_fdopen_for_launcher(fd, mode="rb", *args, **kwargs):
+                if (
+                    fd in pending_target_fds_fdopen_l
+                    and current_fd_to_path_fdopen_l.get(fd)
+                    == str(launcher_resolved)
+                ):
+                    pending_target_fds_fdopen_l.remove(fd)
+                    injected_paths_fdopen_l.append(
+                        current_fd_to_path_fdopen_l[fd]
+                    )
+                    raise launcher_fdopen_eio
+                return real_fdopen(fd, mode, *args, **kwargs)
+
+            with (
+                mock.patch(
+                    "refmac_diagnostic_profile.os.open",
+                    side_effect=track_open_launcher_fdopen,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.fdopen",
+                    side_effect=fail_fdopen_for_launcher,
+                ),
+            ):
+                with self.assertRaises(ProfileValidationError) as lfdo_ctx:
+                    validate_profile(
+                        profile, installed_record, ccp4_env, ev_root
+                    )
+            self.assertEqual(len(launcher_fdopen_fds), 1)
+            self.assertEqual(
+                injected_paths_fdopen_l, [str(launcher_resolved)]
+            )
+            self.assertEqual(pending_target_fds_fdopen_l, set())
+            with self.assertRaises(OSError):
+                os.fstat(launcher_fdopen_fds[0])
+            lfdo_err = lfdo_ctx.exception
+            self.assertEqual(
+                lfdo_err.failed_check, "outer_profile_files_and_roots"
+            )
+            self.assertIs(lfdo_err.cause_exception, launcher_fdopen_eio)
+            self.assertEqual(lfdo_err.error_type, "OSError")
+            self.assertEqual(lfdo_err.error_errno, errno.EIO)
+            lfdo_obs = lfdo_err.files[launcher_fid]
+            self.assertIsInstance(lfdo_obs, PartialFileReadObservation)
+            assert isinstance(lfdo_obs, PartialFileReadObservation)
+            self.assertEqual(lfdo_obs.stat_size_bytes, len(launcher_bytes))
+            self.assertEqual(lfdo_obs.streamed_size_bytes, 0)
+            self.assertIsNone(lfdo_obs.sha256)
+            self.assertIsNone(lfdo_obs.size_bytes)
+            self.assertFalse(lfdo_obs.read_complete)
+            self.assertFalse(lfdo_obs.verified)
+            self.assertEqual(lfdo_obs.ino, int(launcher_st.st_ino))
+            self.assertEqual(len(lfdo_err.files), 59)
+            for fid, fobs in lfdo_err.files:
+                if fid == launcher_fid:
+                    self.assertIsInstance(fobs, PartialFileReadObservation)
+                else:
+                    self.assertIsInstance(fobs, FileObservation)
+                    self.assertTrue(fobs.verified)
+            self.assertEqual(len(lfdo_err.roots), 3)
+
+            manifest_fdopen_eio = OSError(
+                errno.EIO, "synthetic manifest fdopen EIO"
+            )
+            manifest_fdopen_fds: list[int] = []
+            current_fd_to_path_fdopen_m: dict[int, str] = {}
+            pending_target_fds_fdopen_m: set[int] = set()
+            injected_paths_fdopen_m: list[str] = []
+
+            def track_open_manifest_fdopen(path, flags, *args, **kwargs):
+                fd = real_open(path, flags, *args, **kwargs)
+                path_str = str(path)
+                current_fd_to_path_fdopen_m[fd] = path_str
+                if path_str == str(manifest_resolved):
+                    manifest_fdopen_fds.append(fd)
+                    pending_target_fds_fdopen_m.add(fd)
+                else:
+                    pending_target_fds_fdopen_m.discard(fd)
+                return fd
+
+            def fail_fdopen_for_manifest(fd, mode="rb", *args, **kwargs):
+                if (
+                    fd in pending_target_fds_fdopen_m
+                    and current_fd_to_path_fdopen_m.get(fd)
+                    == str(manifest_resolved)
+                ):
+                    pending_target_fds_fdopen_m.remove(fd)
+                    injected_paths_fdopen_m.append(
+                        current_fd_to_path_fdopen_m[fd]
+                    )
+                    raise manifest_fdopen_eio
+                return real_fdopen(fd, mode, *args, **kwargs)
+
+            with (
+                mock.patch(
+                    "refmac_diagnostic_profile.os.open",
+                    side_effect=track_open_manifest_fdopen,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.fdopen",
+                    side_effect=fail_fdopen_for_manifest,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile._parse_verified_json_bytes",
+                    side_effect=AssertionError("must not parse JSON"),
+                ) as mocked_parse_fdo,
+                mock.patch(
+                    "refmac_diagnostic_profile._validate_outer_manifest_shape",
+                    side_effect=AssertionError("must not validate shape"),
+                ) as mocked_shape_fdo,
+                mock.patch(
+                    "refmac_diagnostic_profile._observe_controlled_root",
+                    side_effect=AssertionError("must not inspect roots"),
+                ) as mocked_root_fdo,
+            ):
+                with self.assertRaises(ProfileValidationError) as mfdo_ctx:
+                    validate_profile(
+                        profile, installed_record, ccp4_env, ev_root
+                    )
+                mocked_parse_fdo.assert_not_called()
+                mocked_shape_fdo.assert_not_called()
+                mocked_root_fdo.assert_not_called()
+            self.assertEqual(len(manifest_fdopen_fds), 1)
+            self.assertEqual(
+                injected_paths_fdopen_m, [str(manifest_resolved)]
+            )
+            self.assertEqual(pending_target_fds_fdopen_m, set())
+            with self.assertRaises(OSError):
+                os.fstat(manifest_fdopen_fds[0])
+            mfdo_err = mfdo_ctx.exception
+            self.assertEqual(mfdo_err.failed_check, "manifest_pin")
+            self.assertIs(mfdo_err.cause_exception, manifest_fdopen_eio)
+            self.assertEqual(mfdo_err.error_type, "OSError")
+            self.assertEqual(mfdo_err.error_errno, errno.EIO)
+            self.assertIsInstance(
+                mfdo_err.manifest_identity, PartialFileReadObservation
+            )
+            assert isinstance(
+                mfdo_err.manifest_identity, PartialFileReadObservation
+            )
+            self.assertEqual(
+                mfdo_err.manifest_identity.stat_size_bytes,
+                len(orig_manifest_bytes),
+            )
+            self.assertEqual(mfdo_err.manifest_identity.streamed_size_bytes, 0)
+            self.assertIsNone(mfdo_err.manifest_identity.sha256)
+            self.assertIsNone(mfdo_err.manifest_identity.size_bytes)
+            self.assertFalse(mfdo_err.manifest_identity.read_complete)
+            self.assertEqual(len(mfdo_err.files), 0)
+            self.assertEqual(len(mfdo_err.roots), 0)
+
+            launcher_read_val_err = ValueError(
+                "synthetic launcher mid-stream read ValueError"
+            )
+            launcher_rve_fds: list[int] = []
+            current_fd_to_path_rve_l: dict[int, str] = {}
+            pending_target_fds_rve_l: set[int] = set()
+            injected_paths_rve_l: list[str] = []
+
+            def track_open_launcher_rve(path, flags, *args, **kwargs):
+                fd = real_open(path, flags, *args, **kwargs)
+                path_str = str(path)
+                current_fd_to_path_rve_l[fd] = path_str
+                if path_str == str(launcher_resolved):
+                    launcher_rve_fds.append(fd)
+                    pending_target_fds_rve_l.add(fd)
+                else:
+                    pending_target_fds_rve_l.discard(fd)
+                return fd
+
+            def fdopen_launcher_read_val_err(fd, mode="rb", *args, **kwargs):
+                handle = real_fdopen(fd, mode, *args, **kwargs)
+                if (
+                    fd in pending_target_fds_rve_l
+                    and current_fd_to_path_rve_l.get(fd)
+                    == str(launcher_resolved)
+                ):
+                    pending_target_fds_rve_l.remove(fd)
+                    injected_paths_rve_l.append(current_fd_to_path_rve_l[fd])
+                    orig_read = handle.read
+                    calls = 0
+
+                    def read_5_then_val_err(_n=-1):
+                        nonlocal calls
+                        calls += 1
+                        if calls == 1:
+                            return orig_read(5)
+                        raise launcher_read_val_err
+
+                    handle.read = read_5_then_val_err  # type: ignore[method-assign]
+                return handle
+
+            with (
+                mock.patch(
+                    "refmac_diagnostic_profile.os.open",
+                    side_effect=track_open_launcher_rve,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.fdopen",
+                    side_effect=fdopen_launcher_read_val_err,
+                ),
+            ):
+                with self.assertRaises(ProfileValidationError) as lrve_ctx:
+                    validate_profile(
+                        profile,
+                        installed_record,
+                        ccp4_env,
+                        ev_root,
+                        chunk_size=5,
+                    )
+            self.assertEqual(len(launcher_rve_fds), 1)
+            self.assertEqual(injected_paths_rve_l, [str(launcher_resolved)])
+            self.assertEqual(pending_target_fds_rve_l, set())
+            with self.assertRaises(OSError):
+                os.fstat(launcher_rve_fds[0])
+            lrve_err = lrve_ctx.exception
+            self.assertEqual(
+                lrve_err.failed_check, "outer_profile_files_and_roots"
+            )
+            self.assertIs(lrve_err.cause_exception, launcher_read_val_err)
+            self.assertEqual(lrve_err.error_type, "ValueError")
+            self.assertIsNone(lrve_err.error_errno)
+            lrve_obs = lrve_err.files[launcher_fid]
+            self.assertIsInstance(lrve_obs, PartialFileReadObservation)
+            assert isinstance(lrve_obs, PartialFileReadObservation)
+            self.assertEqual(lrve_obs.stat_size_bytes, len(launcher_bytes))
+            self.assertEqual(lrve_obs.streamed_size_bytes, 5)
+            self.assertIsNone(lrve_obs.sha256)
+            self.assertIsNone(lrve_obs.size_bytes)
+            self.assertFalse(lrve_obs.read_complete)
+            self.assertFalse(lrve_obs.verified)
+            self.assertEqual(len(lrve_err.files), 59)
+            for fid, fobs in lrve_err.files:
+                if fid == launcher_fid:
+                    self.assertIsInstance(fobs, PartialFileReadObservation)
+                else:
+                    self.assertIsInstance(fobs, FileObservation)
+                    self.assertTrue(fobs.verified)
+            self.assertEqual(len(lrve_err.roots), 3)
+
+            manifest_read_val_err = ValueError(
+                "synthetic manifest mid-stream read ValueError"
+            )
+            manifest_rve_fds: list[int] = []
+            current_fd_to_path_rve_m: dict[int, str] = {}
+            pending_target_fds_rve_m: set[int] = set()
+            injected_paths_rve_m: list[str] = []
+
+            def track_open_manifest_rve(path, flags, *args, **kwargs):
+                fd = real_open(path, flags, *args, **kwargs)
+                path_str = str(path)
+                current_fd_to_path_rve_m[fd] = path_str
+                if path_str == str(manifest_resolved):
+                    manifest_rve_fds.append(fd)
+                    pending_target_fds_rve_m.add(fd)
+                else:
+                    pending_target_fds_rve_m.discard(fd)
+                return fd
+
+            def fdopen_manifest_read_val_err(fd, mode="rb", *args, **kwargs):
+                handle = real_fdopen(fd, mode, *args, **kwargs)
+                if (
+                    fd in pending_target_fds_rve_m
+                    and current_fd_to_path_rve_m.get(fd)
+                    == str(manifest_resolved)
+                ):
+                    pending_target_fds_rve_m.remove(fd)
+                    injected_paths_rve_m.append(current_fd_to_path_rve_m[fd])
+                    orig_read = handle.read
+                    calls = 0
+
+                    def read_16_then_val_err(_n=-1):
+                        nonlocal calls
+                        calls += 1
+                        if calls == 1:
+                            return orig_read(16)
+                        raise manifest_read_val_err
+
+                    handle.read = read_16_then_val_err  # type: ignore[method-assign]
+                return handle
+
+            with (
+                mock.patch(
+                    "refmac_diagnostic_profile.os.open",
+                    side_effect=track_open_manifest_rve,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.fdopen",
+                    side_effect=fdopen_manifest_read_val_err,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile._parse_verified_json_bytes",
+                    side_effect=AssertionError("must not parse JSON"),
+                ) as mocked_parse_rve,
+                mock.patch(
+                    "refmac_diagnostic_profile._validate_outer_manifest_shape",
+                    side_effect=AssertionError("must not validate shape"),
+                ) as mocked_shape_rve,
+                mock.patch(
+                    "refmac_diagnostic_profile._observe_controlled_root",
+                    side_effect=AssertionError("must not inspect roots"),
+                ) as mocked_root_rve,
+            ):
+                with self.assertRaises(ProfileValidationError) as mrve_ctx:
+                    validate_profile(
+                        profile,
+                        installed_record,
+                        ccp4_env,
+                        ev_root,
+                        chunk_size=16,
+                    )
+                mocked_parse_rve.assert_not_called()
+                mocked_shape_rve.assert_not_called()
+                mocked_root_rve.assert_not_called()
+            self.assertEqual(len(manifest_rve_fds), 1)
+            self.assertEqual(injected_paths_rve_m, [str(manifest_resolved)])
+            self.assertEqual(pending_target_fds_rve_m, set())
+            with self.assertRaises(OSError):
+                os.fstat(manifest_rve_fds[0])
+            mrve_err = mrve_ctx.exception
+            self.assertEqual(mrve_err.failed_check, "manifest_pin")
+            self.assertIs(mrve_err.cause_exception, manifest_read_val_err)
+            self.assertEqual(mrve_err.error_type, "ValueError")
+            self.assertIsNone(mrve_err.error_errno)
+            self.assertIsInstance(
+                mrve_err.manifest_identity, PartialFileReadObservation
+            )
+            assert isinstance(
+                mrve_err.manifest_identity, PartialFileReadObservation
+            )
+            self.assertEqual(
+                mrve_err.manifest_identity.stat_size_bytes,
+                len(orig_manifest_bytes),
+            )
+            self.assertEqual(mrve_err.manifest_identity.streamed_size_bytes, 16)
+            self.assertIsNone(mrve_err.manifest_identity.sha256)
+            self.assertIsNone(mrve_err.manifest_identity.size_bytes)
+            self.assertFalse(mrve_err.manifest_identity.read_complete)
+            self.assertEqual(len(mrve_err.files), 0)
+            self.assertEqual(len(mrve_err.roots), 0)
+
+            # Verify caller inputs and fixture bytes remained completely untouched
+            self.assertEqual(installed_record, caller_inst_snapshot)
+            self.assertEqual(ccp4_env, caller_env_snapshot)
+            self.assertEqual(manifest_path.read_bytes(), orig_manifest_bytes)
+            self.assertEqual(launcher_resolved.read_bytes(), launcher_bytes)
+
+    def test_1181_profile_validation_error_evidence_is_deeply_immutable_and_provenance_is_detached(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = _build_synthetic_outer_profile_fixture(Path(tmp))
+            profile = fx["profile"]
+            assert isinstance(profile, RefmacDiagnosticProfile)
+            installed_record = fx["installed_record"]
+            assert isinstance(installed_record, dict)
+            ccp4_env = fx["ccp4_env"]
+            assert isinstance(ccp4_env, dict)
+            ev_root = fx["evidence_root"]
+            assert isinstance(ev_root, Path)
+            base_payload = fx["manifest_payload"]
+            assert isinstance(base_payload, dict)
+
+            launcher_fid = base_payload["roles"]["launcher"][0]  # type: ignore[index]
+            launcher_row = base_payload["files"][launcher_fid]  # type: ignore[index]
+            launcher_resolved = Path(str(launcher_row["path"])).resolve(
+                strict=True
+            )
+
+            real_open = os.open
+            real_fdopen = os.fdopen
+            eio_cause = OSError(errno.EIO, "synthetic #1181 mid-stream EIO")
+            current_fd_to_path: dict[int, str] = {}
+            pending_target_fds: set[int] = set()
+
+            def track_open(path, flags, *args, **kwargs):
+                fd = real_open(path, flags, *args, **kwargs)
+                path_str = str(path)
+                current_fd_to_path[fd] = path_str
+                if path_str == str(launcher_resolved):
+                    pending_target_fds.add(fd)
+                else:
+                    pending_target_fds.discard(fd)
+                return fd
+
+            def fdopen_with_eio(fd, mode="rb", *args, **kwargs):
+                handle = real_fdopen(fd, mode, *args, **kwargs)
+                if (
+                    fd in pending_target_fds
+                    and current_fd_to_path.get(fd) == str(launcher_resolved)
+                ):
+                    pending_target_fds.remove(fd)
+                    orig_read = handle.read
+                    calls = 0
+
+                    def read_5_then_eio(_n=-1):
+                        nonlocal calls
+                        calls += 1
+                        if calls == 1:
+                            return orig_read(5)
+                        raise eio_cause
+
+                    handle.read = read_5_then_eio  # type: ignore[method-assign]
+                return handle
+
+            mutable_installed = copy.deepcopy(installed_record)
+            mutable_env = copy.deepcopy(ccp4_env)
+
+            with (
+                mock.patch(
+                    "refmac_diagnostic_profile.os.open",
+                    side_effect=track_open,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.fdopen",
+                    side_effect=fdopen_with_eio,
+                ),
+            ):
+                with self.assertRaises(ProfileValidationError) as ctx:
+                    validate_profile(
+                        profile,
+                        mutable_installed,
+                        mutable_env,
+                        ev_root,
+                        chunk_size=5,
+                    )
+
+            err = ctx.exception
+            self.assertEqual(len(err.files), 59)
+            self.assertEqual(len(err.roots), 3)
+            self.assertIs(err.cause_exception, eio_cause)
+            self.assertEqual(err.error_type, "OSError")
+            self.assertEqual(err.error_errno, errno.EIO)
+            self.assertIsInstance(
+                err.files[launcher_fid], PartialFileReadObservation
+            )
+
+            initial_prov = copy.deepcopy(err.to_provenance())
+            self.assertEqual(len(initial_prov["files"]), 59)
+
+            # 1. Direct writes and deletions to all public evidence fields and internal _payload fail with AttributeError
+            readonly_attrs = (
+                "failed_check",
+                "request",
+                "profile_id",
+                "subject_id",
+                "manifest_identity",
+                "files",
+                "roots",
+                "roles",
+                "installed_reference",
+                "selected_executable",
+                "profile_files_verified",
+                "runtime_image_coverage",
+                "installed_record_json",
+                "installed_record",
+                "expected_environment",
+                "requested_absences",
+                "evidence_root",
+                "cause_exception",
+                "wrapper_message",
+                "error_type",
+                "error_message",
+                "error_errno",
+                "errors",
+                "error_records",
+                "partial_observation",
+                "_payload",
+                "arbitrary_new_attribute",
+            )
+            for attr in readonly_attrs:
+                with self.subTest(write_attr=attr):
+                    with self.assertRaises(AttributeError):
+                        setattr(err, attr, ())
+                with self.subTest(delete_attr=attr):
+                    with self.assertRaises(AttributeError):
+                        delattr(err, attr)
+
+            # 2. Nested field mutations on payload, request, observations, tables,installed_record, and carrier exceptions fail
+            with self.assertRaises(AttributeError):
+                err._payload.files = _FrozenPairTable(())  # type: ignore[misc]
+            with self.assertRaises(AttributeError):
+                del err._payload.files  # type: ignore[misc]
+            assert err.request is not None
+            with self.assertRaises(AttributeError):
+                err.request.profile_id = "tampered"  # type: ignore[misc]
+            with self.assertRaises(AttributeError):
+                err.request.manifest.sha256 = "0" * 64  # type: ignore[misc]
+            assert err.manifest_identity is not None
+            with self.assertRaises(AttributeError):
+                err.manifest_identity.verified = True  # type: ignore[misc]
+            with self.assertRaises(AttributeError):
+                err.manifest_identity.ancestors[0].ino = 1  # type: ignore[misc]
+            with self.assertRaises(TypeError):
+                err.files[launcher_fid] = err.manifest_identity  # type: ignore[index]
+            with self.assertRaises(TypeError):
+                del err.files[launcher_fid]  # type: ignore[attr-defined]
+            with self.assertRaises(AttributeError):
+                err.files.extra = 1  # type: ignore[attr-defined]
+            with self.assertRaises(AttributeError):
+                del err.files.extra  # type: ignore[attr-defined]
+            with self.assertRaises(AttributeError):
+                err.files[launcher_fid].streamed_size_bytes = 999  # type: ignore[misc,union-attr]
+            other_fid = next(
+                fid for fid, _ in err.files if fid != launcher_fid
+            )
+            with self.assertRaises(AttributeError):
+                err.files[other_fid].verified = False  # type: ignore[misc]
+            with self.assertRaises(TypeError):
+                err.roots["vendor"] = err.roots["prepared"]  # type: ignore[index]
+            with self.assertRaises(AttributeError):
+                err.roots["vendor"].verified = False  # type: ignore[misc]
+            with self.assertRaises(AttributeError):
+                err.roots["vendor"].members[0].file_id = "tampered"  # type: ignore[misc]
+            with self.assertRaises(AttributeError):
+                err.roots["vendor"].members.extra = 1  # type: ignore[attr-defined]
+            with self.assertRaises(AttributeError):
+                del err.roots["vendor"].members.extra  # type: ignore[attr-defined]
+            with self.assertRaises(TypeError):
+                err.roles["launcher"] = ("tampered",)  # type: ignore[index]
+            assert err.installed_reference is not None
+            with self.assertRaises(AttributeError):
+                err.installed_reference.sha256 = "0" * 64  # type: ignore[misc]
+            assert err.installed_record is not None
+            with self.assertRaises(TypeError):
+                err.installed_record["configured_installation_prefix"] = "/tampered"  # type: ignore[index]
+            with self.assertRaises(TypeError):
+                err.installed_record["setup_script"]["sha256"] = "0" * 64  # type: ignore[index]
+            with self.assertRaises(TypeError):
+                err.expected_environment["CCP4"] = "/tampered"  # type: ignore[index]
+            assert err.partial_observation is not None
+            with self.assertRaises(AttributeError):
+                err.partial_observation.errors = ()  # type: ignore[misc]
+            with self.assertRaises(TypeError):
+                err.partial_observation.partial_files[launcher_fid] = None  # type: ignore[index]
+            with self.assertRaises(AttributeError):
+                err.error_records[0].stage = "tampered"  # type: ignore[misc]
+            with self.assertRaises(AttributeError):
+                err.error_records[0].error_type = "TamperedError"  # type: ignore[misc]
+            with self.assertRaises(AttributeError):
+                err.__cause__.partial_observation = None  # type: ignore[union-attr]
+            with self.assertRaises(AttributeError):
+                err.error_records[0].exception.observation = None  # type: ignore[attr-defined]
+
+            # 3. Caller-owned mapping mutations after failure do not affect retained evidence or provenance
+            mutable_installed["configured_installation_prefix"] = "/mutated/prefix"
+            mutable_installed["setup_script"]["sha256"] = "f" * 64
+            mutable_installed["bound_ccp4_configuration"]["CCP4"] = "/mutated/ccp4"
+            mutable_env["CCP4"] = "/mutated/ccp4"
+            mutable_env["NEW_KEY"] = "mutated"
+
+            self.assertEqual(
+                err.installed_record["configured_installation_prefix"],
+                installed_record["configured_installation_prefix"],
+            )
+            self.assertEqual(
+                err.installed_record["setup_script"]["sha256"],
+                installed_record["setup_script"]["sha256"],
+            )
+            self.assertEqual(
+                err.expected_environment["CCP4"], ccp4_env["CCP4"]
+            )
+
+            # 4. Mutating a returned provenance dict leaves subsequent to_provenance() calls and retained state unchanged
+            mutated_prov = err.to_provenance()
+            mutated_prov["profile_id"] = "tampered"
+            mutated_prov["profile_files_verified"] = True
+            mutated_prov["selected_executable"] = {"path": "/fake"}
+            mutated_prov["requested"]["manifest"]["sha256"] = "0" * 64
+            mutated_prov["installed_reference"]["sha256"] = "0" * 64
+            mutated_prov["installed_record"]["setup_script"]["sha256"] = "0" * 64
+            mutated_prov["manifest"]["sha256"] = "0" * 64
+            mutated_prov["files"].clear()
+            mutated_prov["roots"]["vendor"]["members"].clear()
+            mutated_prov["roles"]["launcher"].append("extra")
+            mutated_prov["expected_environment"]["CCP4"] = "/tampered"
+            mutated_prov["requested_absences"].append("EXTRA_ABSENT")
+            mutated_prov["failed_check"] = "tampered"
+            mutated_prov["error"]["type"] = "TamperedError"
+            mutated_prov["error"]["errno"] = 999
+            mutated_prov["errors"].clear()
+
+            fresh_prov = err.to_provenance()
+            self.assertEqual(fresh_prov, initial_prov)
+            self.assertEqual(len(err.files), 59)
+            self.assertEqual(len(fresh_prov["files"]), 59)
+
+            # 5. Raising and chaining the same exception works normally and preserves #1179 cause/errno/type metadata
+            # even if caller mutates Exception.args or cause_exception.args/errno afterwards
+            try:
+                try:
+                    raise err
+                except ProfileValidationError as caught_once:
+                    self.assertIs(caught_once, err)
+                    raise RuntimeError("outer wrapper") from caught_once
+            except RuntimeError as wrapped_err:
+                self.assertIs(wrapped_err.__cause__, err)
+
+            orig_err_msg = err.error_message
+            orig_wrap_msg = err.wrapper_message
+            err.args = ("caller mutated wrapper args",)
+            eio_cause.args = (errno.ENOENT, "caller mutated cause args")
+            eio_cause.errno = errno.ENOENT
+            self.assertEqual(err.error_type, "OSError")
+            self.assertEqual(err.error_errno, errno.EIO)
+            self.assertEqual(err.error_message, orig_err_msg)
+            self.assertEqual(err.wrapper_message, orig_wrap_msg)
+            self.assertEqual(err.error_records[0].error_type, "OSError")
+            self.assertEqual(err.error_records[0].error_errno, errno.EIO)
+            self.assertEqual(
+                err.error_records[0].to_dict(),
+                {
+                    "stage": "outer_profile_files_and_roots",
+                    "message": orig_wrap_msg,
+                    "type": "OSError",
+                    "errno": errno.EIO,
+                },
+            )
+            self.assertEqual(err.to_provenance(), initial_prov)
 
 
 if __name__ == "__main__":

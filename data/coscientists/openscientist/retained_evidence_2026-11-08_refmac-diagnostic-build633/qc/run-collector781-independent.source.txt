@@ -1,0 +1,37 @@
+"""PRIMARY bounded controls against the completed passing focused snapshot; no native calls."""
+from pathlib import Path
+from datetime import datetime,timezone
+import hashlib,json,subprocess,sys
+E=Path(__file__).resolve().parent
+W=E.parents[2].parent/'protstruct_review-wt-078'
+F=E/'collector781-focused-01'
+S=F/'scripts'
+CONTROL=E/'collector767-controls/collector_controls770.py'
+OUT=E/'collector781-independent01'
+DRIVER_RESULT=E/'collector781-independent01-driver.json'
+def pin(path):
+ p=Path(path);b=p.read_bytes();return {'sha256':hashlib.sha256(b).hexdigest(),'size_bytes':len(b)}
+assert not OUT.exists() and not OUT.is_symlink() and not DRIVER_RESULT.exists()
+assert pin(CONTROL)['sha256']=='4db067c752a8a1e335ce089231d7baa3e9764e4481e252247ff7b8b1ebbde12d'
+focused=json.loads((F/'result.json').read_text())
+assert focused['passed'] is True and focused['source_closure_unchanged'] is True
+inventory={p.relative_to(S).as_posix():pin(p) for p in sorted(S.rglob('*.py'))}
+for name in ['onesar_refmac.py','test_onesar_refmac_diagnostic.py']:
+ assert inventory[name]==focused['frozen_scripts']['scripts/'+name]
+invpath=E/'collector781-independent01-source-inventory.json'
+with invpath.open('x') as f:json.dump(inventory,f,indent=2);f.write('\n')
+archive=W/'data/coscientists/openscientist/cdba2c07-daff-4f60-ae96-12452b3a5fbb_artifacts.zip'
+ap=pin(archive)
+assert ap['sha256']=='9fc5352284b7ffa7763c633a3eb4d3d0db96b8c25a1be9bcea361722d2c53054'
+closure={str(p):pin(p) for p in [Path(__file__),CONTROL,invpath,F/'result.json',archive]}
+argv=[str(W/'.venv/bin/python'),'-B',str(CONTROL),'--scripts',str(S),'--pins',str(invpath),'--collector-sha256',inventory['onesar_refmac.py']['sha256'],'--fixture-sha256',inventory['test_onesar_refmac_diagnostic.py']['sha256'],'--archive',str(archive),'--archive-sha256',ap['sha256'],'--archive-size',str(ap['size_bytes']),'--output',str(OUT)]
+started=datetime.now(timezone.utc).isoformat()
+with (E/'collector781-independent01.stdout.log').open('xb') as out,(E/'collector781-independent01.stderr.log').open('xb') as err:
+ process=subprocess.run(argv,stdout=out,stderr=err)
+result=json.loads((OUT/'results.json').read_text()) if (OUT/'results.json').exists() else None
+unchanged=all(pin(Path(p))==h for p,h in closure.items()) and inventory=={p.relative_to(S).as_posix():pin(p) for p in sorted(S.rglob('*.py'))}
+passed=process.returncode==0 and unchanged and result is not None and result['status']=='passed'
+record={'at':started,'completed_at':datetime.now(timezone.utc).isoformat(),'argv':argv,'returncode':process.returncode,'input_pins':closure,'source_closure_unchanged':unchanged,'passed':passed,'native_execution':False,'scope':'six independent inert collector controls; no scientific/canary acceptance','result':str(OUT/'results.json')}
+with DRIVER_RESULT.open('x') as f:json.dump(record,f,indent=2);f.write('\n')
+print(json.dumps({'passed':passed,'returncode':process.returncode,'source_closure_unchanged':unchanged,'result':str(DRIVER_RESULT)}))
+sys.exit(0 if passed else 1)

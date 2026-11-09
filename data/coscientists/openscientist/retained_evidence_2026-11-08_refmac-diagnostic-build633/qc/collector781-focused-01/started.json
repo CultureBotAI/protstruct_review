@@ -1,0 +1,19 @@
+{
+  "at": "2026-11-09T08:29:55.804338+00:00",
+  "head": "47569d52c54323af56d1a7bd1d9c3a9d06f0f426",
+  "branch": "analysis/1sar-rerun-2026-11-06",
+  "driver": {
+    "sha256": "1dc47f5396e6dbb48f52997a36657dfc892fb03af4a299f198c60a408f1f7c40",
+    "size_bytes": 5612
+  },
+  "guard": {
+    "sha256": "87f3a26b3316ba5b67d9658158de9f37cf42896f97eb026d95902ca9e4ee1856",
+    "size_bytes": 708
+  },
+  "input_count": 917,
+  "removed_environment_keys": [
+    "LD_LIBRARY_PATH"
+  ],
+  "native_execution": false,
+  "scope": "focused synthetic diagnostic and legacy collector tests; no canary admission"
+}

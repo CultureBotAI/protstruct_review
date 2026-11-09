@@ -1,0 +1,6 @@
+{
+  "scripts/prepare_refmac_diagnostic.py": "9f116be407c71494e2350fff1ffe4e49e4d16824f327fcc8781847aef61633fe",
+  "scripts/test_prepare_refmac_diagnostic.py": "fe04eb9ef72e2be2cb3a1361e3568f42e819a774dca9052e8efcbee14baa92d1",
+  "scripts/refmac_diagnostic/trace_hooks.f90": "fdfbfb3dbe46cd4a58547b9032036775b2ba698bc3b9d0cde4cc8eb44293cd95",
+  "scripts/refmac_diagnostic/trace_writer.f90": "9539453a7137ae01c27f43441c0a3fcaadf3ffe211a71198d0df13e4412199dd"
+}

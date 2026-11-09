@@ -1,0 +1,696 @@
+#!/usr/bin/env python3
+"""PRIMARY-only C1-C5 controls. Authored inert; never run by the author.
+
+Requires the corrected focused fixture and independently supplied final pins.
+No unittest lifecycle/test method is invoked. This is not scientific acceptance.
+"""
+from __future__ import annotations
+
+import argparse
+import copy
+import ctypes
+import hashlib
+import importlib
+import importlib.machinery
+import importlib.util
+import json
+import os
+from pathlib import Path
+import re
+import socket
+import subprocess
+import sys
+import traceback
+from types import MethodType, SimpleNamespace
+from unittest.mock import patch
+
+
+KEYWORDS = (
+    "LABIN FP=F-obs SIGFP=SIGF-obs FREE=R-free-flags\n"
+    "FREE 1\nREFI BREF MIXED\nNCYC 0\nMONI MANY\n"
+    "LABOUT FC=FC PHIC=PHIC FWT=FWT PHWT=PHWT DELFWT=DELFWT PHDELWT=PHDELWT FOM=FOM\n"
+    "END\n"
+)
+TRACE = b'{"control_767":"raw-before-new-audits"}\n'
+STAGE = "instrumented_native_trace_capture_v1"
+LEGACY_STAGE = "stage2_invocation_raw_retention_log_parse_and_output_audits"
+ARCHIVE_SHA = "9fc5352284b7ffa7763c633a3eb4d3d0db96b8c25a1be9bcea361722d2c53054"
+HELPERS = (
+    ("audit_1sar_retained_evidence.py", "audit_1sar_retained_evidence_py"),
+    ("onesar_refmac.py", "onesar_refmac_py"),
+    ("onesar_refmac_log.py", "onesar_refmac_log_py"),
+    ("onesar_rerun.py", "onesar_rerun_py"),
+    ("t03_reflection_retention.py", "t03_reflection_retention_py"),
+    ("toolchain.py", "toolchain_py"),
+    ("refmac_diagnostic_profile.py", "refmac_diagnostic_profile_py"),
+    ("refmac_diagnostic_trace.py", "refmac_diagnostic_trace_py"),
+)
+# Literal frozen reader requirements. Null placeholders are deliberately only
+# sufficient to reach the early schema/stage boundary, not later admission.
+CONSUMER_KEYS = """
+actual_parent_retention_anchor_baseline actual_parent_retention_anchor_dir
+actual_parent_retention_anchor_kind additional_refmac_dir_files
+all_preregistered_gates_passed audits canary_admission_eligible
+canonical_eval_qds_eligible child_dir_persistence_failures collector_stage
+diagnostics_json effective_hkls_proven effective_hkls_unproven_reason
+eval_admission_eligible evidence_root failed_stage failures helper_sources
+hklout_audit_json hklout_raw_export_json input_admission_json_path
+input_admission_json_sha256 input_hkl_ledger_json_path input_hkl_ledger_json_sha256
+input_immutability inputs_dir inspection_errors intended_parent_retention_dir
+invocation model_preservation_proven model_preservation_unproven_reason mtz
+native_bin_membership_proven native_bin_membership_unproven_reason
+native_log_diagnostics native_residual_reconstruction_proven
+native_residual_reconstruction_unproven_reason operation_checks
+parent_retention_dir parent_retention_directory_baseline
+parent_retention_directory_post_run parent_retention_fallback_anchor
+parent_retention_used parsed_log parsed_log_json paths
+post_execution_checkpoint_json pre_execution_checkpoint_initial_json
+pre_execution_checkpoint_json pre_execution_checkpoint_post_run
+pre_execution_checkpoint_recovery_json pre_execution_checkpoint_verified
+preregistered_gates publication_history publication_pair_complete
+publication_terminal_failure qds_admission_eligible raw_outputs refmac_dir
+refmac_directory_baseline refmac_directory_post_run schema_version
+scientific_admission_proven staged_files status subject subject_id toolchain
+unexpected_symlinks xmlout_audit_json xyzout_audit_json
+""".split()
+
+
+def pin(path: Path) -> dict:
+    if path.is_symlink() or not path.is_file():
+        raise ValueError(f"Expected regular non-symlink file: {path}")
+    if path.stat().st_size > 1024 * 1024 * 1024:
+        raise ValueError(f"Input exceeds 1 GiB control limit: {path}")
+    digest = hashlib.sha256()
+    size = 0
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+            size += len(chunk)
+            if size > 1024 * 1024 * 1024:
+                raise ValueError(f"Input grew beyond 1 GiB control limit: {path}")
+    return {"sha256": digest.hexdigest(), "size_bytes": size}
+
+
+def dump(path: Path, payload: object) -> None:
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + "\n")
+
+
+def exception_record(exc: BaseException) -> dict:
+    return {
+        "type": type(exc).__name__, "message": str(exc),
+        "traceback": "".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
+    }
+
+
+class DeniedActivity(RuntimeError):
+    pass
+
+
+def install_guards(output: Path, denied: list) -> None:
+    """Install before any candidate import; latch denials even if product catches."""
+    def deny(label):
+        def blocked(*args, **kwargs):
+            denied.append({"event": label})
+            raise DeniedActivity(f"Forbidden process/network/native operation: {label}")
+        return blocked
+
+    def owned(raw):
+        if isinstance(raw, int):
+            return
+        path = Path(os.fsdecode(raw)).absolute().resolve(strict=False)
+        if path != output and not path.is_relative_to(output):
+            denied.append({"event": "write_outside_owned_output", "path": str(path)})
+            raise DeniedActivity(f"Write outside owned output: {path}")
+
+    def audit(event, args):
+        if (event.startswith("subprocess.") or event.startswith("socket.")
+                or event.startswith("ctypes.")
+                or event in {"os.system", "os.exec", "os.posix_spawn", "os.fork",
+                             "os.forkpty", "os.startfile", "os.startfile/2"}):
+            deny(event)()
+        if event == "open":
+            raw, mode, flags = args
+            if ((isinstance(mode, str) and any(x in mode for x in "wax+"))
+                    or (isinstance(flags, int) and flags & (
+                        os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND))):
+                owned(raw)
+        elif event in {"os.mkdir", "os.remove", "os.rmdir", "os.chmod",
+                       "os.chown", "os.utime", "os.truncate"}:
+            owned(args[0])
+        elif event in {"os.rename", "os.link"}:
+            owned(args[0])
+            owned(args[1])
+        elif event == "os.symlink":
+            owned(args[1])
+
+    sys.addaudithook(audit)
+    for name in ("Popen", "run", "call", "check_call", "check_output",
+                 "getoutput", "getstatusoutput"):
+        setattr(subprocess, name, deny("subprocess." + name))
+    for name in dir(os):
+        if name.startswith(("exec", "spawn", "posix_spawn")) or name in {
+            "system", "fork", "forkpty", "startfile", "popen", "_exit"
+        }:
+            if callable(getattr(os, name)):
+                setattr(os, name, deny("os." + name))
+    for name in ("socket", "socketpair", "create_connection", "create_server",
+                 "fromfd", "getaddrinfo", "gethostbyname", "gethostbyname_ex"):
+        if hasattr(socket, name):
+            setattr(socket, name, deny("socket." + name))
+    for name in ("CDLL", "PyDLL", "WinDLL", "OleDLL"):
+        if hasattr(ctypes, name):
+            setattr(ctypes, name, deny("ctypes." + name))
+    for name in ("cdll", "pydll", "windll", "oledll"):
+        if hasattr(ctypes, name):
+            getattr(ctypes, name).LoadLibrary = deny("ctypes." + name + ".LoadLibrary")
+
+
+def source_inventory(scripts: Path) -> dict:
+    rows = {}
+    total = 0
+    for path in sorted(scripts.rglob("*")):
+        if path.is_symlink():
+            raise ValueError(f"Symlink in candidate source tree: {path}")
+        if path.is_file() and path.suffix == ".py":
+            if path.stat().st_size > 5 * 1024 * 1024 or len(rows) >= 1024:
+                raise ValueError("Source inventory exceeds bounded control limits")
+            row = pin(path)
+            total += row["size_bytes"]
+            if row["size_bytes"] > 5 * 1024 * 1024 or total > 64 * 1024 * 1024:
+                raise ValueError("Source inventory exceeds bounded control limits")
+            rows[path.relative_to(scripts).as_posix()] = row
+    if not rows or len(rows) > 1024:
+        raise ValueError("Expected 1..1024 pinned Python source files")
+    return rows
+
+
+class PinnedSourceFinder:
+    """Use verified source bytes, never an existing candidate bytecode cache."""
+    def __init__(self, scripts, pins, imported):
+        self.scripts, self.pins, self.imported = scripts, pins, imported
+
+    def find_spec(self, fullname, path=None, target=None):
+        spec = importlib.machinery.PathFinder.find_spec(fullname, path)
+        if spec is None or not spec.origin or spec.origin in {"built-in", "frozen"}:
+            return None
+        origin = Path(spec.origin).resolve(strict=True)
+        if not origin.is_relative_to(self.scripts):
+            if fullname.replace(".", "/") + ".py" in self.pins:
+                raise ImportError(f"Candidate module resolved outside pinned scripts: {fullname}: {origin}")
+            return None
+        relative = origin.relative_to(self.scripts).as_posix()
+        expected = self.pins.get(relative)
+        if expected is None or origin.suffix != ".py" or pin(origin) != expected:
+            raise ImportError(f"Unpinned candidate import: {fullname}: {origin}")
+        raw = origin.read_bytes()
+        if {"sha256": hashlib.sha256(raw).hexdigest(), "size_bytes": len(raw)} != expected:
+            raise ImportError(f"Candidate source changed while loading: {origin}")
+        self.imported[fullname] = {"path": str(origin), **expected}
+
+        class Loader(importlib.machinery.SourceFileLoader):
+            def get_code(self, module_name):
+                return self.source_to_code(raw, str(origin))
+
+        return importlib.util.spec_from_file_location(
+            fullname, str(origin), loader=Loader(fullname, str(origin)),
+            submodule_search_locations=spec.submodule_search_locations,
+        )
+
+
+class Case:
+    def __init__(self, name, root):
+        self.name, self.root = name, root
+        root.mkdir()
+        self.record = {"name": name, "status": "running", "checks": [], "events": []}
+
+    def check(self, condition, label, detail=None):
+        self.record["checks"].append({"passed": bool(condition), "assertion": label,
+                                      "detail": detail})
+
+    def event(self, name):
+        self.record["events"].append(name)
+
+
+def reopen_reference(reference, output):
+    path = Path(reference["path"])
+    resolved = path.resolve(strict=True)
+    if path != resolved or not resolved.is_relative_to(output):
+        raise ValueError(f"Unexpected retained reference destination: {path}")
+    actual = pin(path)
+    if any(actual[k] != reference[k] for k in ("sha256", "size_bytes")):
+        raise AssertionError(f"Retained reference pins mismatch: {path}")
+    return json.loads(path.read_text())
+
+
+def fixture_for(case, modules, archive):
+    test, collector, profile, trace, records = modules
+    # The incoming fixture resolves this directory strictly. Create only the
+    # owned plumbing directory; no repair of its manifest/environment is made.
+    (case.root / "diag_fixture").mkdir()
+    fixture = test._DiagnosticCollectorFixture(case.root)
+    repo = case.root / "repo"
+    repo.mkdir()
+    (repo / "runs").mkdir()
+    def assert_equal(actual, expected):
+        if actual != expected:
+            raise AssertionError("Fixture caller-state equality failed")
+    plumbing = SimpleNamespace(fx=fixture, repo_root=repo, assertEqual=assert_equal)
+    cls = test.TestOnesarRefmacDiagnosticWiring
+    plumbing._clean_ambient_env = MethodType(cls._clean_ambient_env, plumbing)
+    plumbing._run_collector = MethodType(cls._run_collector, plumbing)
+    evidence = repo / "runs" / "capture"
+    # This must actually validate the final fixture, never be mocked to pass.
+    baseline = profile.validate_profile(
+        fixture.profile, fixture.installed_record, fixture.sourced_env, evidence
+    )
+    case.record["validated_fixture"] = {
+        "manifest": {"path": fixture.profile.manifest.path,
+                     **pin(Path(fixture.profile.manifest.path))},
+        "profile_id": baseline.profile_id,
+    }
+    provenance = baseline.to_provenance()
+    role_ids = provenance["roles"]["collector_helpers"]
+    case.check(len(role_ids) == 8, "Eight helper role entries")
+    for index, (basename, _) in enumerate(HELPERS):
+        module = sys.modules[basename[:-3]]
+        actual = Path(module.__file__).resolve(strict=True)
+        row = provenance["files"][role_ids[index]]
+        case.check(row["resolved_path"] == str(actual) and
+                   row["sha256"] == pin(actual)["sha256"] and
+                   row["size_bytes"] == pin(actual)["size_bytes"],
+                   "Fixture role joins actual imported helper: " + basename)
+    return fixture, plumbing, evidence
+
+
+def retained_pair(case, error, output):
+    if error.manifest_path is None or error.diagnostics_path is None:
+        raise AssertionError("Expected persisted authoritative manifest and diagnostics")
+    manifest_path = Path(error.manifest_path)
+    manifest_ref = {"path": str(manifest_path), **pin(manifest_path)}
+    manifest = reopen_reference(manifest_ref, output)
+    diagnostics = reopen_reference(manifest["diagnostics_json"], output)
+    case.check(manifest == error.manifest_payload, "Persisted manifest equals actual error payload")
+    case.check(diagnostics == error.diagnostics_payload, "Persisted diagnostics equal actual error payload")
+    case.check(error.publication_pair_complete is True, "Publication pair complete")
+    case.check(str(error.diagnostics_path) == manifest["diagnostics_json"]["path"],
+               "Error diagnostics path binds pinned manifest reference")
+    case.record["manifest_reference"] = manifest_ref
+    case.record["diagnostics_reference"] = manifest["diagnostics_json"]
+    return manifest, diagnostics
+
+
+def run_helper_target(case, modules, archive, output):
+    test, collector, profile, trace, records = modules
+    fixture, plumbing, evidence = fixture_for(case, modules, archive)
+    doc = json.loads(fixture.manifest_path.read_text())
+    fid = doc["roles"]["collector_helpers"][2]
+    original = Path(collector.onesar_refmac_log.__file__).resolve(strict=True)
+    alternate_dir = case.root / "alternate-helper"
+    alternate_dir.mkdir()
+    alternate = alternate_dir / "onesar_refmac_log.py"
+    alternate.write_bytes(original.read_bytes())
+    doc["files"][fid] = {"path": str(alternate), "resolved_path": str(alternate),
+                         **pin(alternate), "symlinks": []}
+    dump(fixture.manifest_path, doc)
+    request = profile.RefmacDiagnosticProfile(
+        "refmac_5_8_0431_instrumented_attempt4_v1",
+        profile.FilePin(str(fixture.manifest_path), **pin(fixture.manifest_path)),
+        fixture.profile.executable,
+    )
+    validated = profile.validate_profile(
+        request, fixture.installed_record, fixture.sourced_env, evidence
+    )
+    case.check(validated.to_provenance()["profile_files_verified"] is True,
+               "Independently repinned alternate helper passes public profile validation")
+    case.check(pin(original) == pin(alternate) and original != alternate,
+               "Same bytes and size, genuinely different resolved targets")
+    calls = []
+    def runner(*args, **kwargs):
+        calls.append(True)
+        raise AssertionError("C1 runner must never be reached")
+    try:
+        with patch.object(test, "COMMITTED_ARCHIVE", archive):
+            plumbing._run_collector("capture", runner, diagnostic_profile=request,
+                                    evidence_root=evidence, timeout=900.0)
+    except collector.RefmacCollectorError as error:
+        case.record["collector_error"] = exception_record(error)
+        manifest, diagnostics = retained_pair(case, error, output)
+        case.check(error.failed_stage == "verify_diagnostic_helper_role_join",
+                   "Specific actual-helper preflight refusal", error.failed_stage)
+        for document in (manifest, diagnostics):
+            join = document["diagnostic_profile"]["collector_helper_role_join"]
+            mismatch = join["mismatches"]
+            case.check(join["verified"] is False and len(mismatch) == 1,
+                       "Exactly one retained role mismatch")
+            row = mismatch[0]
+            case.check(row["helper_baseline_key"] == "onesar_refmac_log_py" and
+                       row["sha256_matches"] is True and row["size_bytes_matches"] is True and
+                       row["resolved_path_matches"] is False,
+                       "Only resolved helper target differs", row)
+            case.check(row["actual_helper"]["path"] == str(original) and
+                       row["profile_role_observation"]["resolved_path"] == str(alternate),
+                       "Both actual and declared helper targets retained")
+    else:
+        case.check(False, "Collector must refuse alternate helper target")
+    case.check(calls == [], "Zero runner calls")
+
+
+def run_capture(case, modules, archive, output, mode):
+    test, collector, profile, trace, records = modules
+    fixture, plumbing, evidence = fixture_for(case, modules, archive)
+    expected = {}
+    observations = {}
+    calls = []
+    # Attach observations before callbacks: an unexpected exception must not
+    # discard already measured argument/retention evidence.
+    case.record["runner_calls"] = calls
+    case.record["raw_observations"] = observations
+    audits = {"profile": 0, "trace": 0}
+    lists = {}
+    runner_error = RuntimeError("control767-primary-runner")
+    profile_error = OSError("control767-later-profile")
+    trace_error = ValueError("control767-later-trace")
+    source_env = copy.deepcopy(fixture.sourced_env)
+    ambient = dict(os.environ)
+    native_trace = evidence / "refmac/refmac_native_trace.jsonl"
+    log_bytes = test.SYNTHETIC_SINGLE_CYCLE_NCYC0_LOG.encode("utf-8")
+    if len(log_bytes) != 2054 or hashlib.sha256(log_bytes).hexdigest() != (
+        "392992723c3a3f1f6f8368642bef28da317eacf5002556dd294e789e995449eb"
+    ):
+        raise AssertionError("Focused fixture's synthetic log differs from the frozen text pin")
+    argv = [str(fixture.diagnostic_executable_path),
+            "XYZIN", str(evidence / "inputs/original_model.pdb"),
+            "HKLIN", str(evidence / "inputs/projected_observations.mtz"),
+            "XYZOUT", str(evidence / "refmac/refmac_xyzout.pdb"),
+            "HKLOUT", str(evidence / "refmac/refmac_hklout.mtz"),
+            "XMLOUT", str(evidence / "refmac/refmac_xmlout.xml")]
+
+    def runner(*args, **kwargs):
+        case.event("runner")
+        calls.append({"args": [str(value) for value in args],
+                      "kwargs": {key: (dict(value) if key == "env" else str(value))
+                                 for key, value in kwargs.items()}})
+        case.check(len(args) == 6 and set(kwargs) == {
+            "cwd", "timeout", "xml_output", "executable", "env", "ccp4"
+        }, "Exactly six positional and six named runner arguments")
+        case.check(str(args[0]) == argv[2] and str(args[1]) == argv[4] and
+                   str(args[2]) == argv[6] and str(args[3]) == argv[8] and
+                   str(args[4]) == str(evidence / "refmac/refmac.log"),
+                   "Exact staged input and fixed output paths")
+        case.check(args[5] == KEYWORDS, "Literal seven stdin lines and final newline")
+        case.check(kwargs["timeout"] == 900.0 and type(kwargs["timeout"]) in (int, float),
+                   "900-second production timeout")
+        case.check(kwargs["ccp4"] is False, "Explicit ccp4=False")
+        case.check(str(kwargs["cwd"]) == str(evidence / "refmac") and
+                   str(kwargs["xml_output"]) == argv[10] and
+                   str(kwargs["executable"]) == argv[0], "Exact cwd/XML/selected executable")
+        expected_env = {**source_env, "REFMAC_DIAGNOSTIC_TRACE": str(native_trace),
+                        "DYLD_PRINT_LIBRARIES": "1"}
+        case.check(kwargs["env"] == expected_env, "Only two fixed child activation settings added")
+        for path, raw in (
+            (Path(args[2]), Path(args[0]).read_bytes()),
+            (Path(args[3]), Path(args[1]).read_bytes()),
+            (Path(args[4]), log_bytes),
+            (Path(kwargs["xml_output"]), b"<control767/>\n"),
+            (native_trace, TRACE),
+        ):
+            path.write_bytes(raw)
+            expected[str(path)] = {"sha256": hashlib.sha256(raw).hexdigest(),
+                                   "size_bytes": len(raw)}
+        if mode == "combined":
+            raise runner_error
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    real_raw = collector._inspect_output_artifact
+    real_profile = profile.recheck_profile
+    real_trace = trace.inspect_native_trace_envelope
+    real_immutable = collector._verify_immutable_baselines_post_run
+
+    def observe_raw(path, **kwargs):
+        result = real_raw(path, **kwargs)
+        if str(path) in expected:
+            case.event("raw:" + Path(path).name)
+            observations[str(path)] = copy.deepcopy(result)
+            case.check(all(result.get(key) == value for key, value in expected[str(path)].items()),
+                       "Actual raw observation matches independent bytes: " + Path(path).name)
+        return result
+
+    def audit_entry(name):
+        audits[name] += 1
+        case.event(name + "_inspection")
+        if mode != "invocation":
+            case.check(len(expected) == 5 and set(expected) <= set(observations),
+                       "All five raw observations precede " + name,
+                       {"observed": sorted(observations), "expected": sorted(expected)})
+            case.check(native_trace.read_bytes() == TRACE,
+                       "Literal raw trace bytes still present before " + name)
+
+    def observe_profile(baseline, **kwargs):
+        audit_entry("profile")
+        if mode in {"profile_exception", "combined"}:
+            raise profile_error
+        result = real_profile(baseline, **kwargs)
+        case.record["actual_profile_result_verified"] = result.get("verified")
+        case.check(result.get("verified") is True,
+                   "Real profile recheck verifies the unchanged fixture")
+        return result
+
+    def observe_trace(path, **kwargs):
+        audit_entry("trace")
+        case.check(str(path) == str(native_trace) and kwargs == {
+            "expected_sha256": hashlib.sha256(TRACE).hexdigest(),
+            "expected_size_bytes": len(TRACE),
+        }, "Trace inspector receives exact retained path and independent pins")
+        if mode in {"trace_exception", "combined"}:
+            raise trace_error
+        result = real_trace(path, **kwargs)
+        case.record["actual_trace_result"] = copy.deepcopy(result)
+        return result
+
+    def observe_immutable(*args, **kwargs):
+        lists["mutations"] = kwargs["mutation_causes_out"]
+        lists["inspection"] = kwargs["caught_exceptions"]
+        return real_immutable(*args, **kwargs)
+
+    caught = None
+    with (patch.object(test, "COMMITTED_ARCHIVE", archive),
+          patch.object(collector, "_inspect_output_artifact", side_effect=observe_raw),
+          patch.object(profile, "recheck_profile", side_effect=observe_profile),
+          patch.object(trace, "inspect_native_trace_envelope", side_effect=observe_trace),
+          patch.object(collector, "_verify_immutable_baselines_post_run", side_effect=observe_immutable),
+          patch.object(collector, "_resolve_ccp4_refmac_toolchain",
+                       wraps=collector._resolve_ccp4_refmac_toolchain) as resolver):
+        try:
+            plumbing._run_collector("capture", runner, diagnostic_profile=fixture.profile,
+                                    evidence_root=evidence, timeout=900.0)
+        except collector.RefmacCollectorError as error:
+            caught = error
+            case.record["collector_error"] = exception_record(error)
+        case.check(resolver.call_count == 1, "Exactly one real installed resolver call")
+    case.record["runner_calls"] = calls
+    case.record["raw_observations"] = observations
+    case.check(len(calls) == 1, "Exactly one runner call; no retry")
+    case.check(audits == {"profile": 1, "trace": 1}, "Both real audit boundaries reached once", audits)
+    case.check(fixture.sourced_env == source_env and dict(os.environ) == ambient,
+               "Caller/sourced environments unchanged")
+    if caught is None:
+        raise AssertionError("Deliberately malformed trace or injected errors must refuse capture")
+    manifest, diagnostics = retained_pair(case, caught, output)
+    for document in (manifest, diagnostics):
+        raw = document["raw_outputs"]["native_trace"]
+        case.check(raw["path"] == str(native_trace) and
+                   raw["sha256"] == hashlib.sha256(TRACE).hexdigest() and
+                   raw["size_bytes"] == len(TRACE) and native_trace.read_bytes() == TRACE,
+                   "Final persisted raw trace path/hash/size and bytes retained")
+        case.check(document["schema_version"] == 2 and type(document["schema_version"]) is int
+                   and document["collector_stage"] == STAGE, "Diagnostic outer schema/stage retained")
+        if mode in {"profile_exception", "combined"}:
+            post = document["diagnostic_profile_post_run"]
+            case.check(post["verified"] is False and any(
+                row.get("type") == "OSError" and row.get("message") == str(profile_error)
+                for row in post["errors"]), "Actual profile inspection error retained")
+        else:
+            case.check(document["diagnostic_profile_post_run"]["verified"] is True,
+                       "Profile recheck continues and verifies unchanged fixture")
+        envelope = document["native_trace_envelope"]
+        if mode in {"trace_exception", "combined"}:
+            case.check(envelope["first_failure"]["code"] == "envelope_inspection_exception"
+                       and envelope["first_failure"]["message"] == "ValueError: " + str(trace_error),
+                       "Actual trace inspection exception retained")
+        else:
+            actual = case.record["actual_trace_result"]
+            case.check(envelope["valid"] is False and envelope["errors"] == actual["errors"],
+                       "Actual malformed-trace findings retained")
+    for key in ("pre_execution_checkpoint_json", "post_execution_checkpoint_json"):
+        document = reopen_reference(manifest[key], output)
+        case.check(type(document["schema_version"]) is int and document["schema_version"] == 2
+                   and document["collector_stage"] == STAGE, "Checkpoint schema/stage: " + key)
+    case.check(manifest["toolchain"]["refmac5_binary"]["resolved_path"] == str(fixture.installed_refmac)
+               and str(fixture.installed_refmac) != str(fixture.diagnostic_executable_path),
+               "Installed identity remains distinct from selected diagnostic executable")
+    if mode == "combined":
+        case.check(caught.failed_stage == "refmac_runner_invocation" and
+                   caught.primary_cause is runner_error and caught.__cause__ is runner_error,
+                   "Original runner exception remains primary and explicit cause")
+        case.check(any(item is profile_error for item in lists["mutations"]),
+                   "Original profile exception retained in aligned mutation-cause list")
+        case.check(any(item is profile_error for item in lists["inspection"]) and
+                   any(item is trace_error for item in lists["inspection"]),
+                   "Both original later inspection objects retained")
+        for document in (manifest, diagnostics):
+            stages = [row["failed_stage"] for row in document["failures"]]
+            case.check(stages[0] == "refmac_runner_invocation" and
+                       "verify_input_immutability" in stages and "refmac_raw_outputs" in stages,
+                       "Persisted failures retain primary and both later channels", stages)
+    elif mode == "invocation":
+        case.check(caught.failed_stage == "refmac_raw_outputs",
+                   "Invocation case fails specifically on deliberately invalid trace", caught.failed_stage)
+
+
+def run_consumer(case, modules, output):
+    records = modules[4]
+    repo = case.root / "repo"
+    repo.mkdir()
+    for schema, fragment in ((2, "expected integer schema_version == 1"),
+                             (1, "refmac_operation_manifest.collector_stage: expected")):
+        # Bound only to the inspected early gates; no valid-science fixture is claimed.
+        document = dict.fromkeys(CONSUMER_KEYS)
+        document.update(schema_version=schema, collector_stage=STAGE, subject_id="R4")
+        path = case.root / f"schema-{schema}.json"
+        dump(path, document)
+        reference = {"path": str(path), **pin(path)}
+        try:
+            records.verify_retained_refmac_rfactor_evidence(
+                case.root, subject_id="R4", manifest_reference=reference, repo_root=repo,
+            )
+        except records.RefmacRetainedVerificationError as error:
+            case.record[f"schema_{schema}_error"] = exception_record(error)
+            case.check(fragment in str(error), "Specific legacy refusal for schema " + str(schema), str(error))
+            if schema == 1:
+                case.check(LEGACY_STAGE in str(error) and STAGE in str(error),
+                           "Stage refusal identifies both literal stages")
+        else:
+            case.check(False, "Legacy reader must reject schema/stage " + str(schema))
+        case.check(reopen_reference(reference, output) == document, "Consumer input unchanged and hash-consistent")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--scripts", type=Path, required=True)
+    parser.add_argument("--pins", type=Path, required=True,
+                        help="JSON mapping EVERY scripts/**/*.py relative name to sha256,size_bytes")
+    parser.add_argument("--collector-sha256", required=True)
+    parser.add_argument("--fixture-sha256", required=True)
+    parser.add_argument("--archive", type=Path, required=True)
+    parser.add_argument("--archive-sha256", required=True)
+    parser.add_argument("--archive-size", type=int, required=True)
+    parser.add_argument("--output", type=Path, required=True)
+    args = parser.parse_args()
+    evidence_parent = Path(__file__).resolve(strict=True).parent.parent
+    output = args.output.absolute()
+    if (evidence_parent.name != "601-instrumented-build" or output.exists() or output.is_symlink()
+            or not output.parent.resolve(strict=True).is_relative_to(evidence_parent)
+            or output != output.resolve(strict=False)):
+        parser.error("--output must be a fresh canonical durable child under 601-instrumented-build")
+    output.mkdir()
+    result = {"status": "running", "cases": [], "denied_events": [],
+              "scope": "C1-C5 bounded synthetic controls; no scientific/native acceptance"}
+    before = None
+    scripts = None
+    archive = None
+    imported = {}
+    sys.dont_write_bytecode = True
+    try:
+        install_guards(output, result["denied_events"])
+        if sys.flags.optimize:
+            raise ValueError("Run without Python optimization")
+        scripts = args.scripts.resolve(strict=True)
+        if scripts.is_relative_to(output) or output.is_relative_to(scripts):
+            raise ValueError("Candidate source tree must be separate from owned output")
+        pins = json.loads(args.pins.read_text())
+        before = source_inventory(scripts)
+        if before != pins:
+            raise ValueError("Complete candidate Python-source inventory does not match supplied pins")
+        for name, expected in (("onesar_refmac.py", args.collector_sha256),
+                               ("test_onesar_refmac_diagnostic.py", args.fixture_sha256)):
+            if not re.fullmatch(r"[0-9a-f]{64}", expected) or pins[name]["sha256"] != expected:
+                raise ValueError(f"Explicit final source pin mismatch: {name}")
+        dump(output / "source-before.json", before)
+        archive = args.archive.resolve(strict=True)
+        if (args.archive_sha256 != ARCHIVE_SHA or args.archive_size <= 0
+                or args.archive_size > 1024 * 1024 * 1024
+                or archive.stat().st_size != args.archive_size or pin(archive) != {
+                    "sha256": args.archive_sha256, "size_bytes": args.archive_size}):
+            raise ValueError("PRIMARY-supplied actual committed archive pin mismatch")
+        result["archive"] = {"path": str(archive), **pin(archive)}
+        result["pins_document"] = {"path": str(args.pins.resolve()), **pin(args.pins)}
+        for name in (relative[:-3].replace("/", ".") for relative in pins):
+            if name in sys.modules:
+                raise ValueError(f"Candidate was imported before guards: {name}")
+        sys.path.insert(0, str(scripts))
+        sys.meta_path.insert(0, PinnedSourceFinder(scripts, pins, imported))
+        modules = tuple(importlib.import_module(name) for name in (
+            "test_onesar_refmac_diagnostic", "onesar_refmac", "refmac_diagnostic_profile",
+            "refmac_diagnostic_trace", "onesar_records",
+        ))
+        cases = [
+            ("c1-helper-target", lambda case: run_helper_target(case, modules, archive, output)),
+            ("c2-one-invocation", lambda case: run_capture(case, modules, archive, output, "invocation")),
+            ("c3a-profile-error", lambda case: run_capture(case, modules, archive, output, "profile_exception")),
+            ("c3b-trace-error", lambda case: run_capture(case, modules, archive, output, "trace_exception")),
+            ("c4-combined-errors", lambda case: run_capture(case, modules, archive, output, "combined")),
+            ("c5-consumer", lambda case: run_consumer(case, modules, output)),
+        ]
+        for name, function in cases:
+            case = Case(name, output / name)
+            result["cases"].append(case.record)
+            try:
+                function(case)
+            except BaseException as error:
+                case.record["unexpected_error"] = exception_record(error)
+            case.record["status"] = (
+                "passed" if case.record["checks"] and "unexpected_error" not in case.record
+                and all(row["passed"] for row in case.record["checks"]) else "failed"
+            )
+            dump(case.root / "control-result.json", case.record)
+            dump(output / "results.json", result)
+    except BaseException as error:
+        result["setup_or_execution_error"] = exception_record(error)
+    finally:
+        if archive is not None and "archive" in result:
+            try:
+                result["archive_unchanged"] = pin(archive) == {
+                    "sha256": result["archive"]["sha256"],
+                    "size_bytes": result["archive"]["size_bytes"],
+                }
+            except BaseException as error:
+                result["archive_recheck_error"] = exception_record(error)
+        if before is not None and scripts is not None:
+            try:
+                after = source_inventory(scripts)
+                dump(output / "source-after.json", after)
+                result["source_inventory_unchanged"] = before == after
+                result["imported_candidate_sources"] = imported
+                result["all_candidate_imports_pinned"] = all(
+                    row["path"] == str(scripts / name) and pin(Path(row["path"])) == before[name]
+                    for row in imported.values()
+                    for name in [Path(row["path"]).relative_to(scripts).as_posix()]
+                )
+            except BaseException as error:
+                result["source_recheck_error"] = exception_record(error)
+        result["status"] = (
+            "passed" if len(result["cases"]) == 6
+            and all(case["status"] == "passed" for case in result["cases"])
+            and not result["denied_events"] and result.get("source_inventory_unchanged") is True
+            and result.get("archive_unchanged") is True
+            and result.get("all_candidate_imports_pinned") is True
+            and "setup_or_execution_error" not in result and "source_recheck_error" not in result
+            else "failed"
+        )
+        dump(output / "results.json", result)
+    print(json.dumps({"status": result["status"], "results": str(output / "results.json")}))
+    return 0 if result["status"] == "passed" else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

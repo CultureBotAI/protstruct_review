@@ -1,0 +1,84 @@
+{
+  "at": "2026-11-08T20:50:16.417501+00:00",
+  "tools": {
+    "gfortran": {
+      "path": "/opt/homebrew/bin/gfortran",
+      "resolved": "/opt/homebrew/Cellar/gcc/16.2.0/bin/gfortran-16",
+      "sha256": "cbb8bd0d062fdcf330aa09ff6bc523eddfb4c79b8f7c5de6108d8b134cf209f9",
+      "version_stdout": "GNU Fortran (Homebrew GCC 16.2.0) 16.2.0\nCopyright (C) 2026 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n",
+      "version_stderr": ""
+    },
+    "gcc": {
+      "path": "/opt/homebrew/bin/gcc-16",
+      "resolved": "/opt/homebrew/Cellar/gcc/16.2.0/bin/gcc-16",
+      "sha256": "e6e12f73dbc937615843ba4b4ed64955e50ef289e668896aa4f5437bc6617a80",
+      "version_stdout": "gcc-16 (Homebrew GCC 16.2.0) 16.2.0\nCopyright (C) 2026 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n",
+      "version_stderr": ""
+    },
+    "cmake": {
+      "path": "/opt/homebrew/bin/cmake",
+      "resolved": "/opt/homebrew/Cellar/cmake/4.4.5/bin/cmake",
+      "sha256": "9fec3619ad7a0680df833f6bc644f57d09355c3598b01805e927d4e98e2d8a68",
+      "version_stdout": "cmake version 4.4.5\n\nCMake suite maintained and supported by Kitware (kitware.com/cmake).\n",
+      "version_stderr": ""
+    },
+    "clang": {
+      "path": "/usr/bin/clang",
+      "resolved": "/usr/bin/clang",
+      "sha256": "34129c71a01a74f7f3b2443521519b2e5447553fa187f5fcafaaf8c42cc192e2",
+      "version_stdout": "Apple clang version 21.0.0 (clang-2100.3.34.2)\nTarget: arm64-apple-darwin27.0.0\nThread model: posix\nInstalledDir: /Library/Developer/CommandLineTools/usr/bin\n",
+      "version_stderr": ""
+    },
+    "clang++": {
+      "path": "/usr/bin/clang++",
+      "resolved": "/usr/bin/clang++",
+      "sha256": "34129c71a01a74f7f3b2443521519b2e5447553fa187f5fcafaaf8c42cc192e2",
+      "version_stdout": "Apple clang version 21.0.0 (clang-2100.3.34.2)\nTarget: arm64-apple-darwin27.0.0\nThread model: posix\nInstalledDir: /Library/Developer/CommandLineTools/usr/bin\n",
+      "version_stderr": ""
+    }
+  },
+  "libraries": {
+    "libccp4f.8.0.dylib": {
+      "path": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libccp4f.8.0.dylib",
+      "resolved": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libccp4f.8.0.dylib",
+      "sha256": "9925bad1f4e73478fafbeb057c7d84853e6eeeab24cd9f2fc2e78f1ad2427b41",
+      "size_bytes": 703056,
+      "otool_L": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libccp4f.8.0.dylib:\n\t/Users/Shared/ccb63/Jenkins/workspace/CCP4/release-9-osx-clang-m1/devtools/install/lib/libccp4f.8.0.dylib (compatibility version 8.0.0, current version 0.0.0)\n\t@loader_path/libccp4c.8.0.dylib (compatibility version 8.0.0, current version 0.0.0)\n\t@loader_path/libmmdb2.0.dylib (compatibility version 1.0.0, current version 1.0.0)\n\t@loader_path/libgfortran.5.dylib (compatibility version 6.0.0, current version 6.0.0)\n\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1311.0.0)\n"
+    },
+    "libccp4c.8.0.dylib": {
+      "path": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libccp4c.8.0.dylib",
+      "resolved": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libccp4c.8.0.dylib",
+      "sha256": "819a5ed173331d43cbeda5511d90869d29b953fca05d8c5bd345d2b7bbf49b74",
+      "size_bytes": 258592,
+      "otool_L": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libccp4c.8.0.dylib:\n\t/Users/Shared/ccb63/Jenkins/workspace/CCP4/release-9-osx-clang-m1/devtools/install/lib/libccp4c.8.0.dylib (compatibility version 8.0.0, current version 0.0.0)\n\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1311.0.0)\n"
+    },
+    "librfftw.2.dylib": {
+      "path": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/librfftw.2.dylib",
+      "resolved": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/librfftw.2.0.7.dylib",
+      "sha256": "861631f5926aded83f46479bce0ebd1ac103d5cd40d3e505e16fe952cacd1462",
+      "size_bytes": 182193,
+      "otool_L": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/librfftw.2.dylib:\n\t/Users/Shared/ccb63/Jenkins/workspace/CCP4/release-9-osx-clang-m1/devtools/install/lib/librfftw.2.dylib (compatibility version 3.0.0, current version 3.7.0)\n\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1311.0.0)\n"
+    },
+    "libfftw.2.dylib": {
+      "path": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libfftw.2.dylib",
+      "resolved": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libfftw.2.0.7.dylib",
+      "sha256": "0ecef9bc57a6b594af89ac35bf46fe275d4b074e5bdc431991df78a76c6b3e24",
+      "size_bytes": 184384,
+      "otool_L": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libfftw.2.dylib:\n\t/Users/Shared/ccb63/Jenkins/workspace/CCP4/release-9-osx-clang-m1/devtools/install/lib/libfftw.2.dylib (compatibility version 3.0.0, current version 3.7.0)\n\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1311.0.0)\n"
+    },
+    "libmmdb2.0.dylib": {
+      "path": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libmmdb2.0.dylib",
+      "resolved": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libmmdb2.0.dylib",
+      "sha256": "f924787f721cd153756f5f7dccf620891de95c7b77c093bc32d3b00e9d51698a",
+      "size_bytes": 947725,
+      "otool_L": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libmmdb2.0.dylib:\n\t/Users/Shared/ccb63/Jenkins/workspace/CCP4/release-9-osx-clang-m1/devtools/install/lib/libmmdb2.0.dylib (compatibility version 1.0.0, current version 1.0.0)\n\t/usr/lib/libc++.1.dylib (compatibility version 1.0.0, current version 1200.3.0)\n\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1311.0.0)\n"
+    },
+    "libgfortran.5.dylib": {
+      "path": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libgfortran.5.dylib",
+      "resolved": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libgfortran.5.dylib",
+      "sha256": "7d0a91bfb27d35604f72168f696d5952569f5252219565650fdfa1b647755c48",
+      "size_bytes": 1617744,
+      "otool_L": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libgfortran.5.dylib:\n\t/Users/Shared/ccb63/Jenkins/workspace/CCP4/release-9-osx-clang-m1/devtools/install/lib/libgfortran.5.dylib (compatibility version 6.0.0, current version 6.0.0)\n\t@loader_path/libgcc_s.2.dylib (compatibility version 2.0.0, current version 2.0.0)\n\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1292.0.0)\n"
+    }
+  }
+}

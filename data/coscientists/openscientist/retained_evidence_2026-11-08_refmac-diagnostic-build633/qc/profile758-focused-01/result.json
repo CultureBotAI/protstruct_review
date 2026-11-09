@@ -1,0 +1,106 @@
+{
+  "at": "2026-11-09T06:16:52.904741+00:00",
+  "argv": [
+    "/Library/Developer/CommandLineTools/usr/bin/python3",
+    "-B",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/profile758-focused-01/guarded-test.py"
+  ],
+  "cwd": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/profile758-focused-01",
+  "python": "3.9.6 (default, Aug 25 2026, 21:26:21) \n[Clang 21.0.0 (clang-2100.3.34.2)]",
+  "inputs_before": [
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/refmac_diagnostic_profile.py",
+      "sha256": "082b4703d75150e02ae253bb4a262cf333f49f91d89fd49c576548b8667b2d42",
+      "size_bytes": 320519
+    },
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/test_refmac_diagnostic_profile.py",
+      "sha256": "87313fbc7b275c15019f3f8c5cc8443cc353d53968ce9553f36906b475e8e6a4",
+      "size_bytes": 367105
+    }
+  ],
+  "frozen_before": [
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/profile758-focused-01/scripts/refmac_diagnostic_profile.py",
+      "sha256": "082b4703d75150e02ae253bb4a262cf333f49f91d89fd49c576548b8667b2d42",
+      "size_bytes": 320519
+    },
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/profile758-focused-01/scripts/test_refmac_diagnostic_profile.py",
+      "sha256": "87313fbc7b275c15019f3f8c5cc8443cc353d53968ce9553f36906b475e8e6a4",
+      "size_bytes": 367105
+    }
+  ],
+  "driver_before": {
+    "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/run-profile758-focused.py",
+    "sha256": "97725384b3bd27c59ca8009e8950b31eeee08c10f2b5c786ff2718d315c5e159",
+    "size_bytes": 3588
+  },
+  "guard_before": {
+    "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/profile758-focused-01/guarded-test.py",
+    "sha256": "8db1a06d3340dbad064b74f887fbeeaf948848225e6223898e917f1c674adb22",
+    "size_bytes": 433
+  },
+  "environment": {
+    "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+    "TMPDIR": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/profile758-focused-01/tmp",
+    "removed_keys": [
+      "LD_LIBRARY_PATH"
+    ]
+  },
+  "native_executed": false,
+  "ruff": {
+    "argv": [
+      "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/.venv/bin/ruff",
+      "check",
+      "--no-cache",
+      "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/profile758-focused-01/scripts"
+    ],
+    "tool": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/.venv/bin/ruff",
+      "sha256": "663a2e6dbfcb7f417e49bfb867257cb7f84a06637cd76179d50aefffc9aad92f",
+      "size_bytes": 21566208
+    },
+    "returncode": 0
+  },
+  "frozen_unchanged": true,
+  "driver_unchanged": true,
+  "guard_unchanged": true,
+  "returncode": 0,
+  "inputs_after": [
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/refmac_diagnostic_profile.py",
+      "sha256": "082b4703d75150e02ae253bb4a262cf333f49f91d89fd49c576548b8667b2d42",
+      "size_bytes": 320519
+    },
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/test_refmac_diagnostic_profile.py",
+      "sha256": "87313fbc7b275c15019f3f8c5cc8443cc353d53968ce9553f36906b475e8e6a4",
+      "size_bytes": 367105
+    }
+  ],
+  "live_unchanged": true,
+  "frozen": [
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/profile758-focused-01/scripts/refmac_diagnostic_profile.py",
+      "sha256": "082b4703d75150e02ae253bb4a262cf333f49f91d89fd49c576548b8667b2d42",
+      "size_bytes": 320519
+    },
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/profile758-focused-01/scripts/test_refmac_diagnostic_profile.py",
+      "sha256": "87313fbc7b275c15019f3f8c5cc8443cc353d53968ce9553f36906b475e8e6a4",
+      "size_bytes": 367105
+    }
+  ],
+  "passed": true,
+  "driver": {
+    "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/run-profile758-focused.py",
+    "sha256": "97725384b3bd27c59ca8009e8950b31eeee08c10f2b5c786ff2718d315c5e159",
+    "size_bytes": 3588
+  },
+  "guard": {
+    "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/profile758-focused-01/guarded-test.py",
+    "sha256": "8db1a06d3340dbad064b74f887fbeeaf948848225e6223898e917f1c674adb22",
+    "size_bytes": 433
+  }
+}

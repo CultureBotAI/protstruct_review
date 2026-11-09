@@ -1,0 +1,18 @@
+{
+  "at": "2026-11-08T22:44:29.953626+00:00",
+  "passed": true,
+  "build_receipt_sha256": "b98b4e4ad6dacf14cf0f2a9a29ac3d83e225b1880e102e0a5d5a6152e4058f2f",
+  "executable": {
+    "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build/refmac5",
+    "sha256": "4f4c7045c73a9c2c725746b3d8ab73adbb98a2f6379b5493e9422d8da65db89b",
+    "size_bytes": 40983744
+  },
+  "source_files_verified": 268,
+  "commands_verified": 24,
+  "all84_unchanged": true,
+  "stock_binary_unchanged": true,
+  "attempt04_root_absent": true,
+  "native_refmac_executed": false,
+  "runtime_loading_proved": false,
+  "implementation_sha256": "e3c2ab244117ad552680c2dd7f594661bf8bc2efa7db0cb7ce106b7c816b08ca"
+}

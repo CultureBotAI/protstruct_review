@@ -1,0 +1,605 @@
+Change Dir: '/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build'
+
+Run Build Command(s): /opt/homebrew/bin/cmake -E env VERBOSE=1 /Library/Developer/CommandLineTools/usr/bin/make -f Makefile -j4 refmac5
+/opt/homebrew/bin/cmake -S/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01 -B/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build --check-build-system CMakeFiles/Makefile.cmake 0
+/Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/Makefile2 refmac5
+/opt/homebrew/bin/cmake -S/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01 -B/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build --check-build-system CMakeFiles/Makefile.cmake 0
+/opt/homebrew/bin/cmake -E cmake_progress_start /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build/CMakeFiles 76
+/Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/Makefile2 CMakeFiles/refmac5.dir/all
+/Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/refmac5.dir/build.make CMakeFiles/refmac5.dir/depend
+cd /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build && /opt/homebrew/bin/cmake -E cmake_depends "Unix Makefiles" /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01 /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01 /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build/CMakeFiles/refmac5.dir/DependInfo.cmake "--color=" refmac5
+Dependee "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build/CMakeFiles/refmac5.dir/DependInfo.cmake" is newer than depender "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build/CMakeFiles/refmac5.dir/depend.internal".
+Dependee "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build/CMakeFiles/CMakeDirectoryInformation.cmake" is newer than depender "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build/CMakeFiles/refmac5.dir/depend.internal".
+Scanning dependencies of target refmac5
+/Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/refmac5.dir/build.make CMakeFiles/refmac5.dir/build
+[  5%] Building Fortran object CMakeFiles/refmac5.dir/linalgebra_f90.f90.o
+[  5%] Building Fortran object CMakeFiles/refmac5.dir/agreem.f90.o
+[  5%] Building Fortran object CMakeFiles/refmac5.dir/celsym.f90.o
+[  5%] Building Fortran object CMakeFiles/refmac5.dir/random.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/linalgebra_f90.f90 -o CMakeFiles/refmac5.dir/linalgebra_f90.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/celsym.f90 -o CMakeFiles/refmac5.dir/celsym.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/random.f90 -o CMakeFiles/refmac5.dir/random.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/agreem.f90 -o CMakeFiles/refmac5.dir/agreem.f90.o
+[  5%] Building Fortran object CMakeFiles/refmac5.dir/align_refmac.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/align_refmac.f90 -o CMakeFiles/refmac5.dir/align_refmac.f90.o
+[  6%] Building Fortran object CMakeFiles/refmac5.dir/atom_com.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/atom_com.f90 -o CMakeFiles/refmac5.dir/atom_com.f90.o
+[  6%] Building Fortran object CMakeFiles/refmac5.dir/makecif_pars.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/makecif_pars.f90 -o CMakeFiles/refmac5.dir/makecif_pars.f90.o
+[  6%] Building Fortran object CMakeFiles/refmac5.dir/ncs_constr.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ncs_constr.f90 -o CMakeFiles/refmac5.dir/ncs_constr.f90.o
+[  7%] Building Fortran object CMakeFiles/refmac5.dir/ncs_rest_mod.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ncs_rest_mod.f90 -o CMakeFiles/refmac5.dir/ncs_rest_mod.f90.o
+[  7%] Building Fortran object CMakeFiles/refmac5.dir/atom_grads.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/atom_grads.f90 -o CMakeFiles/refmac5.dir/atom_grads.f90.o
+[  9%] Building Fortran object CMakeFiles/refmac5.dir/automorphism.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/automorphism.f90 -o CMakeFiles/refmac5.dir/automorphism.f90.o
+[ 10%] Building Fortran object CMakeFiles/refmac5.dir/monitor.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/monitor.f90 -o CMakeFiles/refmac5.dir/monitor.f90.o
+[ 11%] Building Fortran object CMakeFiles/refmac5.dir/refi_flags.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/refi_flags.f90 -o CMakeFiles/refmac5.dir/refi_flags.f90.o
+[ 11%] Building Fortran object CMakeFiles/refmac5.dir/restr_files.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/restr_files.f90 -o CMakeFiles/refmac5.dir/restr_files.f90.o
+[ 13%] Building Fortran object CMakeFiles/refmac5.dir/rharvest_mod.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/rharvest_mod.f90 -o CMakeFiles/refmac5.dir/rharvest_mod.f90.o
+[ 13%] Building Fortran object CMakeFiles/refmac5.dir/const.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/const.f90 -o CMakeFiles/refmac5.dir/const.f90.o
+[ 14%] Building Fortran object CMakeFiles/refmac5.dir/vitals.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/vitals.f90 -o CMakeFiles/refmac5.dir/vitals.f90.o
+[ 14%] Building Fortran object CMakeFiles/refmac5.dir/comcif_info.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/comcif_info.f90 -o CMakeFiles/refmac5.dir/comcif_info.f90.o
+[ 14%] Building Fortran object CMakeFiles/refmac5.dir/conf_select.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/conf_select.f90 -o CMakeFiles/refmac5.dir/conf_select.f90.o
+[ 14%] Building Fortran object CMakeFiles/refmac5.dir/crd_com.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/crd_com.f90 -o CMakeFiles/refmac5.dir/crd_com.f90.o
+[ 14%] Building Fortran object CMakeFiles/refmac5.dir/twin_refmac.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/twin_refmac.f90 -o CMakeFiles/refmac5.dir/twin_refmac.f90.o
+[ 14%] Building Fortran object CMakeFiles/refmac5.dir/weights.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/weights.f90 -o CMakeFiles/refmac5.dir/weights.f90.o
+[ 15%] Building Fortran object CMakeFiles/refmac5.dir/dist_routines.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/dist_routines.f90 -o CMakeFiles/refmac5.dir/dist_routines.f90.o
+[ 17%] Building Fortran object CMakeFiles/refmac5.dir/elements_module.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/elements_module.f90 -o CMakeFiles/refmac5.dir/elements_module.f90.o
+[ 17%] Building Fortran object CMakeFiles/refmac5.dir/filter_params.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/filter_params.f90 -o CMakeFiles/refmac5.dir/filter_params.f90.o
+[ 18%] Building Fortran object CMakeFiles/refmac5.dir/hkl_pack.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/hkl_pack.f90 -o CMakeFiles/refmac5.dir/hkl_pack.f90.o
+[ 19%] Building Fortran object CMakeFiles/refmac5.dir/lib_com.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/lib_com.f90 -o CMakeFiles/refmac5.dir/lib_com.f90.o
+[ 19%] Building Fortran object CMakeFiles/refmac5.dir/makecif_version.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/makecif_version.f90 -o CMakeFiles/refmac5.dir/makecif_version.f90.o
+[ 21%] Building Fortran object CMakeFiles/refmac5.dir/map_stats.f90.o
+[ 21%] Building Fortran object CMakeFiles/refmac5.dir/mtz_things.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/map_stats.f90 -o CMakeFiles/refmac5.dir/map_stats.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/mtz_things.f90 -o CMakeFiles/refmac5.dir/mtz_things.f90.o
+[ 22%] Building Fortran object CMakeFiles/refmac5.dir/stats_calc.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/stats_calc.f90 -o CMakeFiles/refmac5.dir/stats_calc.f90.o
+[ 23%] Building Fortran object CMakeFiles/refmac5.dir/trace_writer.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/trace_writer.f90 -o CMakeFiles/refmac5.dir/trace_writer.f90.o
+[ 25%] Building Fortran object CMakeFiles/refmac5.dir/refmac_histograms.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/refmac_histograms.f90 -o CMakeFiles/refmac5.dir/refmac_histograms.f90.o
+[ 25%] Building Fortran object CMakeFiles/refmac5.dir/ridge.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ridge.f90 -o CMakeFiles/refmac5.dir/ridge.f90.o
+[ 25%] Building Fortran object CMakeFiles/refmac5.dir/rigid_body.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/rigid_body.f90 -o CMakeFiles/refmac5.dir/rigid_body.f90.o
+[ 25%] Building Fortran object CMakeFiles/refmac5.dir/sfread_ng.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/sfread_ng.f90 -o CMakeFiles/refmac5.dir/sfread_ng.f90.o
+[ 26%] Building Fortran object CMakeFiles/refmac5.dir/tls.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/tls.f90 -o CMakeFiles/refmac5.dir/tls.f90.o
+[ 26%] Building Fortran object CMakeFiles/refmac5.dir/qnorm.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/qnorm.f -o CMakeFiles/refmac5.dir/qnorm.f.o
+[ 26%] Building Fortran object CMakeFiles/refmac5.dir/linalgebra.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/linalgebra.f -o CMakeFiles/refmac5.dir/linalgebra.f.o
+[ 26%] Building Fortran object CMakeFiles/refmac5.dir/density_routines.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/density_routines.f -o CMakeFiles/refmac5.dir/density_routines.f.o
+[ 27%] Building Fortran object CMakeFiles/refmac5.dir/subvag1.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/subvag1.f -o CMakeFiles/refmac5.dir/subvag1.f.o
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/subvag1.f:171:72:
+
+  171 |             CALL MDHFT(DENS(1,1,IZ,idens),IDIM,IERR)
+      |                                                                        1
+Warning: Type mismatch in argument 'x' at (1); passed COMPLEX(4) to REAL(4)
+[ 27%] Building Fortran object CMakeFiles/refmac5.dir/interpolate_mod.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/interpolate_mod.f -o CMakeFiles/refmac5.dir/interpolate_mod.f.o
+[ 28%] Building Fortran object CMakeFiles/refmac5.dir/gaussian_int.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/gaussian_int.f -o CMakeFiles/refmac5.dir/gaussian_int.f.o
+[ 28%] Building Fortran object CMakeFiles/refmac5.dir/subnumrec.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/subnumrec.f -o CMakeFiles/refmac5.dir/subnumrec.f.o
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/subnumrec.f:448:47:
+
+  448 |          call q3qd_move_double( n, c, 1, 1, d, f )
+      |                                               1
+Warning: Rank mismatch in argument 'r0' at (1) (rank-1 and scalar)
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/subnumrec.f:488:47:
+
+  488 |          call q3qd_move_double( n, c, 1, 1, d, f )
+      |                                               1
+Warning: Rank mismatch in argument 'r0' at (1) (rank-1 and scalar)
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/subnumrec.f:916:47:
+
+  916 |          call q3qd_move_single( n, c, 1, 1, d, f )
+      |                                               1
+Warning: Rank mismatch in argument 'r0' at (1) (rank-1 and scalar)
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/subnumrec.f:956:47:
+
+  956 |          call q3qd_move_single( n, c, 1, 1, d, f )
+      |                                               1
+Warning: Rank mismatch in argument 'r0' at (1) (rank-1 and scalar)
+[ 28%] Building Fortran object CMakeFiles/refmac5.dir/errwrt.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/errwrt.f -o CMakeFiles/refmac5.dir/errwrt.f.o
+[ 30%] Building Fortran object CMakeFiles/refmac5.dir/xml_writer.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/xml_writer.f -o CMakeFiles/refmac5.dir/xml_writer.f.o
+[ 31%] Building Fortran object CMakeFiles/refmac5.dir/cell_symm_subrs.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/cell_symm_subrs.f -o CMakeFiles/refmac5.dir/cell_symm_subrs.f.o
+[ 31%] Building Fortran object CMakeFiles/refmac5.dir/iheap_sort.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/iheap_sort.f -o CMakeFiles/refmac5.dir/iheap_sort.f.o
+[ 32%] Building Fortran object CMakeFiles/refmac5.dir/wave2f2prime.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/wave2f2prime.f -o CMakeFiles/refmac5.dir/wave2f2prime.f.o
+[ 32%] Building Fortran object CMakeFiles/refmac5.dir/lnumrec.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/lnumrec.f -o CMakeFiles/refmac5.dir/lnumrec.f.o
+[ 34%] Building Fortran object CMakeFiles/refmac5.dir/block_organization.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/block_organization.f -o CMakeFiles/refmac5.dir/block_organization.f.o
+[ 34%] Building Fortran object CMakeFiles/refmac5.dir/read_data.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/read_data.f -o CMakeFiles/refmac5.dir/read_data.f.o
+[ 34%] Building Fortran object CMakeFiles/refmac5.dir/libT.f.o
+[ 34%] Building CXX object CMakeFiles/refmac5.dir/bridge.cpp.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/libT.f -o CMakeFiles/refmac5.dir/libT.f.o
+/usr/bin/clang++  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -MD -MT CMakeFiles/refmac5.dir/bridge.cpp.o -MF CMakeFiles/refmac5.dir/bridge.cpp.o.d -o CMakeFiles/refmac5.dir/bridge.cpp.o -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/bridge.cpp
+[ 34%] Building C object CMakeFiles/refmac5.dir/i0.c.o
+/usr/bin/clang  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -MD -MT CMakeFiles/refmac5.dir/i0.c.o -MF CMakeFiles/refmac5.dir/i0.c.o.d -o CMakeFiles/refmac5.dir/i0.c.o -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/i0.c
+clang: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
+clang++: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
+[ 35%] Building C object CMakeFiles/refmac5.dir/i1.c.o
+/usr/bin/clang  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -MD -MT CMakeFiles/refmac5.dir/i1.c.o -MF CMakeFiles/refmac5.dir/i1.c.o.d -o CMakeFiles/refmac5.dir/i1.c.o -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/i1.c
+clang: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
+[ 35%] Building C object CMakeFiles/refmac5.dir/chbevl.c.o
+/usr/bin/clang  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -MD -MT CMakeFiles/refmac5.dir/chbevl.c.o -MF CMakeFiles/refmac5.dir/chbevl.c.o.d -o CMakeFiles/refmac5.dir/chbevl.c.o -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/chbevl.c
+clang: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod agreem.mod CMakeFiles/refmac5.dir/agreem.mod.stamp GNU
+[ 36%] Building Fortran object CMakeFiles/refmac5.dir/make_unix_ccp4.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_unix_ccp4.f -o CMakeFiles/refmac5.dir/make_unix_ccp4.f.o
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod cellandsymmetry.mod CMakeFiles/refmac5.dir/cellandsymmetry.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod linalgebra_f90.mod CMakeFiles/refmac5.dir/linalgebra_f90.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod random.mod CMakeFiles/refmac5.dir/random.mod.stamp GNU
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/agreem.f90.o.provides.build
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod align_refmac.mod CMakeFiles/refmac5.dir/align_refmac.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod atomcom0.mod CMakeFiles/refmac5.dir/atomcom0.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod makecif_pars.mod CMakeFiles/refmac5.dir/makecif_pars.mod.stamp GNU
+[ 38%] Building Fortran object CMakeFiles/refmac5.dir/models.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/models.f90 -o CMakeFiles/refmac5.dir/models.f90.o
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod ncs_constraints.mod CMakeFiles/refmac5.dir/ncs_constraints.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod ncs_rest.mod CMakeFiles/refmac5.dir/ncs_rest.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod atom_grads.mod CMakeFiles/refmac5.dir/atom_grads.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod automorphism.mod CMakeFiles/refmac5.dir/automorphism.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod monitor.mod CMakeFiles/refmac5.dir/monitor.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod refi_flags.mod CMakeFiles/refmac5.dir/refi_flags.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod restr_files.mod CMakeFiles/refmac5.dir/restr_files.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod rharvest.mod CMakeFiles/refmac5.dir/rharvest.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod consts.mod CMakeFiles/refmac5.dir/consts.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod vitals.mod CMakeFiles/refmac5.dir/vitals.mod.stamp GNU
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/celsym.f90.o.provides.build
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod ccif_info.mod CMakeFiles/refmac5.dir/ccif_info.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod conformers_refmac.mod CMakeFiles/refmac5.dir/conformers_refmac.mod.stamp GNU
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/const.f90.o.provides.build
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod crdcom.mod CMakeFiles/refmac5.dir/crdcom.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod twin_refmac.mod CMakeFiles/refmac5.dir/twin_refmac.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod weights.mod CMakeFiles/refmac5.dir/weights.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod dists_routines.mod CMakeFiles/refmac5.dir/dists_routines.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod elements.mod CMakeFiles/refmac5.dir/elements.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod map_routines.mod CMakeFiles/refmac5.dir/map_routines.mod.stamp GNU
+In file included from /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/bridge.cpp:1:
+In file included from /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/llhood.h:4:
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/tabfunc.h:303:21: warning: ISO C++11 does not allow conversion from string literal to 'char *' [-Wwritable-strings]
+  303 |   char* func_name = "TabFunc::ReadTab";
+      |                     ^
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod hkl_pack.mod CMakeFiles/refmac5.dir/hkl_pack.mod.stamp GNU
+In file included from /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/bridge.cpp:1:
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/llhood.h:65:54: warning: ISO C++11 does not allow conversion from string literal to 'char *' [-Wwritable-strings]
+   65 |   inline void alloc_test(void* name, char* func_name="") { if (!name) likelihood<realnum>::Error( 101, func_name ); }
+      |                                                      ^
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/llhood.h:238:56: warning: ISO C++11 does not allow conversion from string literal to 'char *' [-Wwritable-strings]
+  238 |     inline void alloc_test(void* name, char* func_name="") { if (!name) Error( 101, func_name ); }
+      |                                                        ^
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/llhood.h:133:77: warning: if statement has empty body [-Wempty-body]
+  133 |         realnum GetFOM()                                                        { int v[2] = {0,0};                     if ( !checkOK || GetOK(v) ) ;  return FOM;  }
+      |                                                                                                                                                     ^
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/llhood.h:133:77: note: put the semicolon on a separate line to silence this warning
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/llhood.h:134:77: warning: if statement has empty body [-Wempty-body]
+  134 |         realnum GetHLA()                                                        { int v[2] = {4,0};                     if ( !checkOK || GetOK(v) ) ;  return HLA;  }
+      |                                                                                                                                                     ^
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/llhood.h:134:77: note: put the semicolon on a separate line to silence this warning
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/llhood.h:135:77: warning: if statement has empty body [-Wempty-body]
+  135 |         realnum GetHLB()                                                        { int v[2] = {4,0};                     if ( !checkOK || GetOK(v) ) ;  return HLB;  }
+      |                                                                                                                                                     ^
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/llhood.h:135:77: note: put the semicolon on a separate line to silence this warning
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/llhood.h:136:77: warning: if statement has empty body [-Wempty-body]
+  136 |         realnum GetHLC()                                                        { int v[2] = {4,0};                     if ( !checkOK || GetOK(v) ) ;  return HLC;  }
+      |                                                                                                                                                     ^
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/llhood.h:136:77: note: put the semicolon on a separate line to silence this warning
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/llhood.h:137:77: warning: if statement has empty body [-Wempty-body]
+  137 |         realnum GetHLD()                                                        { int v[2] = {4,0};                     if ( !checkOK || GetOK(v) ) ;  return HLD;  }
+      |                                                                                                                                                     ^
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/llhood.h:137:77: note: put the semicolon on a separate line to silence this warning
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/llhood.h:138:78: warning: if statement has empty body [-Wempty-body]
+  138 |         realnum GetPHIB()                                                       { int v[2] = {0,0};                     if ( !checkOK || GetOK(v) ) ;  return PHIB;  }
+      |                                                                                                                                                     ^
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/llhood.h:138:78: note: put the semicolon on a separate line to silence this warning
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/llhood.h:139:83: warning: if statement has empty body [-Wempty-body]
+  139 |         realnum GetDer_F( int i )                                       { int v[3] = {1,1,i};           if ( !checkOK || GetOK(v) ) ;  return der_F[i];  }
+      |                                                                                                                                     ^
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/llhood.h:139:83: note: put the semicolon on a separate line to silence this warning
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/llhood.h:140:84: warning: if statement has empty body [-Wempty-body]
+  140 |         realnum GetDer_ph( int i )                                      { int v[3] = {1,1,i};           if ( !checkOK || GetOK(v) ) ;  return der_ph[i];  }
+      |                                                                                                                                     ^
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/llhood.h:140:84: note: put the semicolon on a separate line to silence this warning
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/llhood.h:141:92: warning: if statement has empty body [-Wempty-body]
+  141 |         realnum GetDer2_FF( int i, int j )                      { int v[4] = {1,2,i,j};         if ( !checkOK || GetOK(v) [ 39%] Building Fortran object CMakeFiles/refmac5.dir/ener_pars.f90.o
+) ;  return der2_F2[i][j];  }
+      |                                                                                                                             ^
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/llhood.h:141:92: note: put the semicolon on a separate line to silence this warning
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/llhood.h:142:93: warning: if statement has empty body [-Wempty-body]
+  142 |         realnum GetDer2_phF( int i, int j )                     { int v[4] = {1,2,i,j};         if ( !checkOK || GetOK(v) ) ;  return der2_phF[i][j];  }
+      |                                                                                                                             ^
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/llhood.h:142:93: note: put the semicolon on a separate line to silence this warning
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/llhood.h:143:93: warning: if statement has empty body [-Wempty-body]
+  143 |         realnum GetDer2_phph( int/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ener_pars.f90 -o CMakeFiles/refmac5.dir/ener_pars.f90.o
+ i, int j )            { int v[4] = {1,2,i,j};         if ( !checkOK || GetOK(v) ) ;  return der2_ph2[i][j];  }
+      |                                                                                                                     ^
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/llhood.h:143:93: note: put the semicolon on a separate line to silence this warning
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/llhood.h:144:97: warning: if statement has empty body [-Wempty-body]
+  144 |         realnum GetDer_D( int p, int i, int j )         { int v[5] = {3,1,p,i,j};       if ( !checkOK || GetOK(v) ) ;  return der_D[p][i][j];  }
+      |                                                                                                                     ^
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/llhood.h:144:97: note: put the semicolon on a separate line to silence this warning
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod lib_com.mod CMakeFiles/refmac5.dir/lib_com.mod.stamp GNU
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/llhood.h:146:65: warning: if statement has empty body [-Wempty-body]
+  146 |           { int v[8] = {3,2,p,k,l,p2,m,n};      if ( !checkOK || GetOK(v) ) ; return der2_D[p][k][l][p2][m][n]; }
+      |                                                                             ^
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/llhood.h:146:65: note: put the semicolon on a separate line to silence this warning
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/llhood.h:1172:4: warning: add explicit braces to avoid dangling else [-Wdangling-else]
+ 1172 |           else                          vert_term = sqrt(Wmi0*Wmi0+Wmi1*Wmi1+2*Wmi0*Wmi1*cos(phw[maxw_ind[0]]-phw[maxw_ind[1]])) ;
+      |           ^
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/linalgebra_f90.f90.o.provides.build
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/llhood.h:1938:44: warning: add explicit braces to avoid dangling else [-Wdangling-else]
+ 1938 |                   if (i>j) d2R = -2*F[i]*PSmMC(j,i); else d2R = 2*F[i]*PSmMC(i,j);
+      |                                                      ^
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/llhood.h:2060:4: warning: add explicit braces to avoid dangling else [-Wdangling-else]
+ 2060 |           else   Aux_Bessel += F[last2]*F[last2]*a[0][last2]*a[0][last2] ;
+      |           ^
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/llhood.h:2219:4: warning: add explicit braces to avoid dangling else [-Wdangling-else]
+ 2219 |                         else                    contrib_n += exp(E23argtot[n][m]-E23argtot[Gauss_num_2_half][0]);
+      |                         ^
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/llhood.h:2489:7: warning: add explicit braces to avoid dangling else [-Wdangling-else]
+ 2489 |                   else  // N_meas == 3
+      |                   ^
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/makecif_pars.f90.o.provides.build
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/llhood.h:3048:25: warning: add explicit braces to avoid dangling else [-Wdangling-else]
+ 3048 |                                           if (pD>=N_meas)  add_d2invdiagD_r( der2D_cii, c, d, derD_c, derD_d, i, pm2, pD, qD, pm, k, l );
+      |                                                            ^
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/llhood.h:2669:2: note: expanded from macro 'add_d2invdiagD_r'
+ 2669 |         else if ( i == q )      \
+      |         ^
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod makecif_vrs.mod CMakeFiles/refmac5.dir/makecif_vrs.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod map_stats_mod.mod CMakeFiles/refmac5.dir/map_stats_mod.mod.stamp GNU
+In file included from /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/bridge.cpp:2:
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/covmat.h:1220:3: warning: add explicit braces to avoid dangling else [-Wdangling-else]
+ 1220 |   else
+      |   ^
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/monitor.f90.o.provides.build
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/bridge.cpp:711:5: warning: add explicit braces to avoid dangling else [-Wdangling-else]
+  711 |     else *PHIB = ph[num_mod] + PI;
+      |     ^
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod mtz_things.mod CMakeFiles/refmac5.dir/mtz_things.mod.stamp GNU
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/bridge.cpp:1359:5: warning: add explicit braces to avoid dangling else [-Wdangling-else]
+ 1359 |     else *PHIB = ph[Nm2] + PI;
+      |     ^
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/bridge.cpp:1432:4: warning: add explicit braces to avoid dangling else [-Wdangling-else]
+ 1432 |         else                  { YO_rice=YOM; SIGO_rice=SIGOM; }
+      |         ^
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/ncs_constr.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/ncs_rest_mod.f90.o.provides.build
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/bridge.cpp:2251:3: warning: add explicit braces to avoid dangling else [-Wdangling-else]
+ 2251 |   else
+      |   ^
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/bridge.cpp:2497:3: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+ 2497 |   sprintf(str_aux,"%i",(*i));
+      |   ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/usr/include/_stdio.h:278:1: note: 'sprintf' has been explicitly marked deprecated here
+  278 | __deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+      | ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/usr/include/sys/cdefs.h:227:48: note: expanded from macro '__deprecated_msg'
+  227 |         #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+      |                                                       ^
+[ 40%] Building Fortran object CMakeFiles/refmac5.dir/ncs_simil.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ncs_simil.f90 -o CMakeFiles/refmac5.dir/ncs_simil.f90.o
+[ 40%] Building Fortran object CMakeFiles/refmac5.dir/rotation_and_others.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/rotation_and_others.f90 -o CMakeFiles/refmac5.dir/rotation_and_others.f90.o
+28 warnings generated.
+[ 40%] Building Fortran object CMakeFiles/refmac5.dir/odb_files.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/odb_files.f90 -o CMakeFiles/refmac5.dir/odb_files.f90.o
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod sum_stats.mod CMakeFiles/refmac5.dir/sum_stats.mod.stamp GNU
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/random.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/refi_flags.f90.o.provides.build
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod protstruct_diagnostic_trace.mod CMakeFiles/refmac5.dir/protstruct_diagnostic_trace.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod hists.mod CMakeFiles/refmac5.dir/hists.mod.stamp GNU
+[ 42%] Building Fortran object CMakeFiles/refmac5.dir/refmac_signals.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/refmac_signals.f90 -o CMakeFiles/refmac5.dir/refmac_signals.f90.o
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/restr_files.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/rharvest_mod.f90.o.provides.build
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod ridge.mod CMakeFiles/refmac5.dir/ridge.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod rigidbody.mod CMakeFiles/refmac5.dir/rigidbody.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod sfreads.mod CMakeFiles/refmac5.dir/sfreads.mod.stamp GNU
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/stats_calc.f90.o.provides.build
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod tls_incs.mod CMakeFiles/refmac5.dir/tls_incs.mod.stamp GNU
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/trace_writer.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/twin_refmac.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/vitals.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/weights.f90.o.provides.build
+[ 43%] Building Fortran object CMakeFiles/refmac5.dir/make_lib11.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_lib11.f -o CMakeFiles/refmac5.dir/make_lib11.f.o
+[ 43%] Building Fortran object CMakeFiles/refmac5.dir/make_lib12.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_lib12.f -o CMakeFiles/refmac5.dir/make_lib12.f.o
+[ 44%] Building Fortran object CMakeFiles/refmac5.dir/make_new2.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_new2.f -o CMakeFiles/refmac5.dir/make_new2.f.o
+[ 44%] Building Fortran object CMakeFiles/refmac5.dir/set_num.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/set_num.f -o CMakeFiles/refmac5.dir/set_num.f.o
+[ 46%] Building Fortran object CMakeFiles/refmac5.dir/math_refmac.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/math_refmac.f -o CMakeFiles/refmac5.dir/math_refmac.f.o
+[ 47%] Building Fortran object CMakeFiles/refmac5.dir/inout_routines.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/inout_routines.f -o CMakeFiles/refmac5.dir/inout_routines.f.o
+[ 47%] Building Fortran object CMakeFiles/refmac5.dir/ls_scaling_twin_save.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ls_scaling_twin_save.f -o CMakeFiles/refmac5.dir/ls_scaling_twin_save.f.o
+[ 48%] Building Fortran object CMakeFiles/refmac5.dir/max_with_ints.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/max_with_ints.f -o CMakeFiles/refmac5.dir/max_with_ints.f.o
+[ 48%] Building Fortran object CMakeFiles/refmac5.dir/ml_params_refine.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ml_params_refine.f -o CMakeFiles/refmac5.dir/ml_params_refine.f.o
+[ 48%] Building Fortran object CMakeFiles/refmac5.dir/merohedr_twin.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/merohedr_twin.f -o CMakeFiles/refmac5.dir/merohedr_twin.f.o
+[ 50%] Building Fortran object CMakeFiles/refmac5.dir/asym_list.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/asym_list.f -o CMakeFiles/refmac5.dir/asym_list.f.o
+[ 51%] Building Fortran object CMakeFiles/refmac5.dir/gibbs_gm_sampler.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/gibbs_gm_sampler.f90 -o CMakeFiles/refmac5.dir/gibbs_gm_sampler.f90.o
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/align_refmac.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/atom_com.f90.o.provides.build
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod models.mod CMakeFiles/refmac5.dir/models.mod.stamp GNU
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/atom_grads.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/automorphism.f90.o.provides.build
+[ 52%] Building Fortran object CMakeFiles/refmac5.dir/basepair_paralell.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/basepair_paralell.f90 -o CMakeFiles/refmac5.dir/basepair_paralell.f90.o
+[ 53%] Building Fortran object CMakeFiles/refmac5.dir/local_tls.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/local_tls.f90 -o CMakeFiles/refmac5.dir/local_tls.f90.o
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/comcif_info.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/conf_select.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/crd_com.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/dist_routines.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/elements_module.f90.o.provides.build
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod energy_pars.mod CMakeFiles/refmac5.dir/energy_pars.mod.stamp GNU
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/filter_params.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/hkl_pack.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/lib_com.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/makecif_version.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/map_stats.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/models.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/mtz_things.f90.o.provides.build
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod ncs_simil.mod CMakeFiles/refmac5.dir/ncs_simil.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod rotations.mod CMakeFiles/refmac5.dir/rotations.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod odbfiles.mod CMakeFiles/refmac5.dir/odbfiles.mod.stamp GNU
+[ 53%] Building Fortran object CMakeFiles/refmac5.dir/trace_hooks.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/trace_hooks.f90 -o CMakeFiles/refmac5.dir/trace_hooks.f90.o
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/refmac_histograms.f90.o.provides.build
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod signals_refmac.mod CMakeFiles/refmac5.dir/signals_refmac.mod.stamp GNU
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/ridge.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/rigid_body.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/rotation_and_others.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/sfread_ng.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/tls.f90.o.provides.build
+[ 55%] Building Fortran object CMakeFiles/refmac5.dir/make_lib2.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_lib2.f -o CMakeFiles/refmac5.dir/make_lib2.f.o
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod gibbs_gm.mod CMakeFiles/refmac5.dir/gibbs_gm.mod.stamp GNU
+[ 55%] Building Fortran object CMakeFiles/refmac5.dir/atomf77mod.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/atomf77mod.f90 -o CMakeFiles/refmac5.dir/atomf77mod.f90.o
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod local_tls.mod CMakeFiles/refmac5.dir/local_tls.mod.stamp GNU
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/ener_pars.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/gibbs_gm_sampler.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/local_tls.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/ncs_simil.f90.o.provides.build
+[ 56%] Building Fortran object CMakeFiles/refmac5.dir/tensor_derivatives.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/tensor_derivatives.f90 -o CMakeFiles/refmac5.dir/tensor_derivatives.f90.o
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/odb_files.f90.o.provides.build
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod protstruct_diagnostic_hooks.mod CMakeFiles/refmac5.dir/protstruct_diagnostic_hooks.mod.stamp GNU
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/refmac_signals.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/trace_hooks.f90.o.provides.build
+[ 57%] Building Fortran object CMakeFiles/refmac5.dir/ls_scaling_double.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ls_scaling_double.f -o CMakeFiles/refmac5.dir/ls_scaling_double.f.o
+[ 57%] Building Fortran object CMakeFiles/refmac5.dir/integrate.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/integrate.f90 -o CMakeFiles/refmac5.dir/integrate.f90.o
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod atomcom.mod CMakeFiles/refmac5.dir/atomcom.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod bp_paralell.mod CMakeFiles/refmac5.dir/bp_paralell.mod.stamp GNU
+[ 59%] Building Fortran object CMakeFiles/refmac5.dir/cell_refine.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/cell_refine.f90 -o CMakeFiles/refmac5.dir/cell_refine.f90.o
+[ 60%] Building Fortran object CMakeFiles/refmac5.dir/coords.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/coords.f90 -o CMakeFiles/refmac5.dir/coords.f90.o
+[ 60%] Building Fortran object CMakeFiles/refmac5.dir/hessian_impl.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/hessian_impl.f90 -o CMakeFiles/refmac5.dir/hessian_impl.f90.o
+[ 61%] Building Fortran object CMakeFiles/refmac5.dir/optimise_solvent_all.f90.o
+[ 61%] Building Fortran object CMakeFiles/refmac5.dir/dna_rna_base.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/optimise_solvent_all.f90 -o CMakeFiles/refmac5.dir/optimise_solvent_all.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/dna_rna_base.f90 -o CMakeFiles/refmac5.dir/dna_rna_base.f90.o
+[ 61%] Building Fortran object CMakeFiles/refmac5.dir/external_dist_restraints.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/external_dist_restraints.f90 -o CMakeFiles/refmac5.dir/external_dist_restraints.f90.o
+[ 61%] Building Fortran object CMakeFiles/refmac5.dir/map_prepare.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/map_prepare.f90 -o CMakeFiles/refmac5.dir/map_prepare.f90.o
+[ 61%] Building Fortran object CMakeFiles/refmac5.dir/ncs_ncs_generate.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ncs_ncs_generate.f90 -o CMakeFiles/refmac5.dir/ncs_ncs_generate.f90.o
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod nmr_tensors.mod CMakeFiles/refmac5.dir/nmr_tensors.mod.stamp GNU
+[ 63%] Building Fortran object CMakeFiles/refmac5.dir/print_geom_params.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/print_geom_params.f90 -o CMakeFiles/refmac5.dir/print_geom_params.f90.o
+[ 63%] Building Fortran object CMakeFiles/refmac5.dir/puckers_rotamers_etc.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/puckers_rotamers_etc.f90 -o CMakeFiles/refmac5.dir/puckers_rotamers_etc.f90.o
+[ 64%] Building Fortran object CMakeFiles/refmac5.dir/refine_group_props.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/refine_group_props.f90 -o CMakeFiles/refmac5.dir/refine_group_props.f90.o
+[ 65%] Building Fortran object CMakeFiles/refmac5.dir/refmac_completeness.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/refmac_completeness.f90 -o CMakeFiles/refmac5.dir/refmac_completeness.f90.o
+[ 67%] Building Fortran object CMakeFiles/refmac5.dir/refmac_derivatives.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/refmac_derivatives.f90 -o CMakeFiles/refmac5.dir/refmac_derivatives.f90.o
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/tensor_derivatives.f90.o.provides.build
+[ 67%] Building Fortran object CMakeFiles/refmac5.dir/vdw_nosymm.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/vdw_nosymm.f90 -o CMakeFiles/refmac5.dir/vdw_nosymm.f90.o
+[ 67%] Building Fortran object CMakeFiles/refmac5.dir/rigid_allocate.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/rigid_allocate.f -o CMakeFiles/refmac5.dir/rigid_allocate.f.o
+[ 68%] Building Fortran object CMakeFiles/refmac5.dir/aniso_ref_eigen.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/aniso_ref_eigen.f -o CMakeFiles/refmac5.dir/aniso_ref_eigen.f.o
+[ 69%] Building Fortran object CMakeFiles/refmac5.dir/make_subr.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_subr.f -o CMakeFiles/refmac5.dir/make_subr.f.o
+[ 69%] Building Fortran object CMakeFiles/refmac5.dir/make_subr_refmac.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_subr_refmac.f -o CMakeFiles/refmac5.dir/make_subr_refmac.f.o
+[ 71%] Building Fortran object CMakeFiles/refmac5.dir/tls_allocate.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/tls_allocate.f -o CMakeFiles/refmac5.dir/tls_allocate.f.o
+[ 71%] Building Fortran object CMakeFiles/refmac5.dir/vdw_flexible.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/vdw_flexible.f -o CMakeFiles/refmac5.dir/vdw_flexible.f.o
+[ 71%] Building Fortran object CMakeFiles/refmac5.dir/make_crd1.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_crd1.f -o CMakeFiles/refmac5.dir/make_crd1.f.o
+[ 72%] Building Fortran object CMakeFiles/refmac5.dir/make_crd2.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_crd2.f -o CMakeFiles/refmac5.dir/make_crd2.f.o
+[ 72%] Building Fortran object CMakeFiles/refmac5.dir/make_new1.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_new1.f -o CMakeFiles/refmac5.dir/make_new1.f.o
+[ 73%] Building Fortran object CMakeFiles/refmac5.dir/make_rst1.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_rst1.f -o CMakeFiles/refmac5.dir/make_rst1.f.o
+[ 73%] Building Fortran object CMakeFiles/refmac5.dir/make_PDB.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_PDB.f -o CMakeFiles/refmac5.dir/make_PDB.f.o
+[ 75%] Building Fortran object CMakeFiles/refmac5.dir/makecif.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/makecif.f -o CMakeFiles/refmac5.dir/makecif.f.o
+[ 75%] Building Fortran object CMakeFiles/refmac5.dir/occupancy_only_refine.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/occupancy_only_refine.f -o CMakeFiles/refmac5.dir/occupancy_only_refine.f.o
+[ 76%] Building Fortran object CMakeFiles/refmac5.dir/decide_twin_opers_0.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/decide_twin_opers_0.f -o CMakeFiles/refmac5.dir/decide_twin_opers_0.f.o
+[ 76%] Building Fortran object CMakeFiles/refmac5.dir/calc_stats_twin.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/calc_stats_twin.f -o CMakeFiles/refmac5.dir/calc_stats_twin.f.o
+[ 77%] Building Fortran object CMakeFiles/refmac5.dir/mtz_write_twin.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/mtz_write_twin.f -o CMakeFiles/refmac5.dir/mtz_write_twin.f.o
+[ 77%] Building Fortran object CMakeFiles/refmac5.dir/messy_pdb.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/messy_pdb.f -o CMakeFiles/refmac5.dir/messy_pdb.f.o
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod numintegrate.mod CMakeFiles/refmac5.dir/numintegrate.mod.stamp GNU
+[ 77%] Building Fortran object CMakeFiles/refmac5.dir/atom_com_str.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/atom_com_str.f90 -o CMakeFiles/refmac5.dir/atom_com_str.f90.o
+[ 78%] Building Fortran object CMakeFiles/refmac5.dir/atom_select.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/atom_select.f90 -o CMakeFiles/refmac5.dir/atom_select.f90.o
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/atomf77mod.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/basepair_paralell.f90.o.provides.build
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod cellrefine.mod CMakeFiles/refmac5.dir/cellrefine.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod coords.mod CMakeFiles/refmac5.dir/coords.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod hessian_impl.mod CMakeFiles/refmac5.dir/hessian_impl.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod solvent_all.mod CMakeFiles/refmac5.dir/solvent_all.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod dnarna.mod CMakeFiles/refmac5.dir/dnarna.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod ext_distance.mod CMakeFiles/refmac5.dir/ext_distance.mod.stamp GNU
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/hessian_impl.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/integrate.f90.o.provides.build
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod refmac_maps.mod CMakeFiles/refmac5.dir/refmac_maps.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod ncs_generate.mod CMakeFiles/refmac5.dir/ncs_generate.mod.stamp GNU
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/optimise_solvent_all.f90.o.provides.build
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod report_geom.mod CMakeFiles/refmac5.dir/report_geom.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod pucker_rotamer.mod CMakeFiles/refmac5.dir/pucker_rotamer.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod refine_group.mod CMakeFiles/refmac5.dir/refine_group.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod complete_hkl.mod CMakeFiles/refmac5.dir/complete_hkl.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod refmac_ders.mod CMakeFiles/refmac5.dir/refmac_ders.mod.stamp GNU
+[ 78%] Building Fortran object CMakeFiles/refmac5.dir/nmr_targets.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/nmr_targets.f90 -o CMakeFiles/refmac5.dir/nmr_targets.f90.o
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod vdw_nosymm.mod CMakeFiles/refmac5.dir/vdw_nosymm.mod.stamp GNU
+[ 80%] Building Fortran object CMakeFiles/refmac5.dir/sfcalc_refmac.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/sfcalc_refmac.f90 -o CMakeFiles/refmac5.dir/sfcalc_refmac.f90.o
+[ 80%] Building Fortran object CMakeFiles/refmac5.dir/fast_hessian_tabulation.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/fast_hessian_tabulation.f -o CMakeFiles/refmac5.dir/fast_hessian_tabulation.f.o
+[ 81%] Building Fortran object CMakeFiles/refmac5.dir/subcf_scale1.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/subcf_scale1.f -o CMakeFiles/refmac5.dir/subcf_scale1.f.o
+[ 81%] Building Fortran object CMakeFiles/refmac5.dir/subag_scale_hessian.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/subag_scale_hessian.f -o CMakeFiles/refmac5.dir/subag_scale_hessian.f.o
+[ 81%] Building Fortran object CMakeFiles/refmac5.dir/make_refmac_dummy.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_refmac_dummy.f -o CMakeFiles/refmac5.dir/make_refmac_dummy.f.o
+[ 81%] Building Fortran object CMakeFiles/refmac5.dir/rharvest_subr.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/rharvest_subr.f -o CMakeFiles/refmac5.dir/rharvest_subr.f.o
+[ 81%] Building Fortran object CMakeFiles/refmac5.dir/ml_scaling_double.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ml_scaling_double.f -o CMakeFiles/refmac5.dir/ml_scaling_double.f.o
+[ 82%] Building Fortran object CMakeFiles/refmac5.dir/ncs_rest.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ncs_rest.f -o CMakeFiles/refmac5.dir/ncs_rest.f.o
+[ 84%] Building Fortran object CMakeFiles/refmac5.dir/refall_twin.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/refall_twin.f -o CMakeFiles/refmac5.dir/refall_twin.f.o
+[ 84%] Building Fortran object CMakeFiles/refmac5.dir/GS_scale.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/GS_scale.f90 -o CMakeFiles/refmac5.dir/GS_scale.f90.o
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod atomcom_str.mod CMakeFiles/refmac5.dir/atomcom_str.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod atom_select.mod CMakeFiles/refmac5.dir/atom_select.mod.stamp GNU
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/cell_refine.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/coords.f90.o.provides.build
+[ 85%] Building Fortran object CMakeFiles/refmac5.dir/derivs_form_all.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/derivs_form_all.f90 -o CMakeFiles/refmac5.dir/derivs_form_all.f90.o
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/dna_rna_base.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/external_dist_restraints.f90.o.provides.build
+[ 86%] Building Fortran object CMakeFiles/refmac5.dir/hd_mixture_refine.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/hd_mixture_refine.f90 -o CMakeFiles/refmac5.dir/hd_mixture_refine.f90.o
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/map_prepare.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/ncs_ncs_generate.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/print_geom_params.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/puckers_rotamers_etc.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/refine_group_props.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/refmac_completeness.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/refmac_derivatives.f90.o.provides.build
+[ 88%] Building Fortran object CMakeFiles/refmac5.dir/restr_params.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/restr_params.f90 -o CMakeFiles/refmac5.dir/restr_params.f90.o
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod sfcalc_ref.mod CMakeFiles/refmac5.dir/sfcalc_ref.mod.stamp GNU
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/vdw_nosymm.f90.o.provides.build
+[ 89%] Building Fortran object CMakeFiles/refmac5.dir/solvent_contr_mask.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/solvent_contr_mask.f -o CMakeFiles/refmac5.dir/solvent_contr_mask.f.o
+[ 90%] Building Fortran object CMakeFiles/refmac5.dir/extra_eigen.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/extra_eigen.f -o CMakeFiles/refmac5.dir/extra_eigen.f.o
+[ 90%] Building Fortran object CMakeFiles/refmac5.dir/make_CIF.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_CIF.f -o CMakeFiles/refmac5.dir/make_CIF.f.o
+[ 92%] Building Fortran object CMakeFiles/refmac5.dir/vdw_and_contacts.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/vdw_and_contacts.f -o CMakeFiles/refmac5.dir/vdw_and_contacts.f.o
+[ 93%] Building Fortran object CMakeFiles/refmac5.dir/make_rst2.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_rst2.f -o CMakeFiles/refmac5.dir/make_rst2.f.o
+[ 93%] Building Fortran object CMakeFiles/refmac5.dir/read_extra_restraints.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/read_extra_restraints.f -o CMakeFiles/refmac5.dir/read_extra_restraints.f.o
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod glebsasha.mod CMakeFiles/refmac5.dir/glebsasha.mod.stamp GNU
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/atom_com_str.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/atom_select.f90.o.provides.build
+[ 93%] Building Fortran object CMakeFiles/refmac5.dir/bvalue_routines.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/bvalue_routines.f90 -o CMakeFiles/refmac5.dir/bvalue_routines.f90.o
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod formfactor_refs.mod CMakeFiles/refmac5.dir/formfactor_refs.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod hd_mixtures.mod CMakeFiles/refmac5.dir/hd_mixtures.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod nmrtargets.mod CMakeFiles/refmac5.dir/nmrtargets.mod.stamp GNU
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod restr_params.mod CMakeFiles/refmac5.dir/restr_params.mod.stamp GNU
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/sfcalc_refmac.f90.o.provides.build
+[ 94%] Building Fortran object CMakeFiles/refmac5.dir/write_atoms_mmcif.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/write_atoms_mmcif.f90 -o CMakeFiles/refmac5.dir/write_atoms_mmcif.f90.o
+[ 96%] Building Fortran object CMakeFiles/refmac5.dir/hkon_secder_tch.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/hkon_secder_tch.f -o CMakeFiles/refmac5.dir/hkon_secder_tch.f.o
+[ 96%] Building Fortran object CMakeFiles/refmac5.dir/lsq_exp2.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/lsq_exp2.f -o CMakeFiles/refmac5.dir/lsq_exp2.f.o
+[ 97%] Building Fortran object CMakeFiles/refmac5.dir/newentry_idealise.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/newentry_idealise.f -o CMakeFiles/refmac5.dir/newentry_idealise.f.o
+[ 97%] Building Fortran object CMakeFiles/refmac5.dir/refpre_twin.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/refpre_twin.f -o CMakeFiles/refmac5.dir/refpre_twin.f.o
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/GS_scale.f90.o.provides.build
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod bvalue_routines.mod CMakeFiles/refmac5.dir/bvalue_routines.mod.stamp GNU
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/derivs_form_all.f90.o.provides.build
+[ 97%] Building Fortran object CMakeFiles/refmac5.dir/form_factor_refine.f90.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/form_factor_refine.f90 -o CMakeFiles/refmac5.dir/form_factor_refine.f90.o
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/hd_mixture_refine.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/nmr_targets.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/restr_params.f90.o.provides.build
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod mmcif_writer.mod CMakeFiles/refmac5.dir/mmcif_writer.mod.stamp GNU
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/bvalue_routines.f90.o.provides.build
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/write_atoms_mmcif.f90.o.provides.build
+[ 98%] Building Fortran object CMakeFiles/refmac5.dir/oppro_allocate.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/oppro_allocate.f -o CMakeFiles/refmac5.dir/oppro_allocate.f.o
+[ 98%] Building Fortran object CMakeFiles/refmac5.dir/rcard_tor1.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/rcard_tor1.f -o CMakeFiles/refmac5.dir/rcard_tor1.f.o
+/opt/homebrew/bin/cmake -E cmake_copy_f90_mod form_factor_refine.mod CMakeFiles/refmac5.dir/form_factor_refine.mod.stamp GNU
+/opt/homebrew/bin/cmake -E touch CMakeFiles/refmac5.dir/form_factor_refine.f90.o.provides.build
+[ 98%] Building Fortran object CMakeFiles/refmac5.dir/refmac_xml.f.o
+/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/refmac_xml.f -o CMakeFiles/refmac5.dir/refmac_xml.f.o
+[100%] Linking CXX executable refmac5
+/opt/homebrew/bin/cmake -E cmake_link_script CMakeFiles/refmac5.dir/link.txt --verbose=1
+/usr/bin/clang++  -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -Wl,-search_paths_first -Wl,-headerpad_max_install_names -Wl,-headerpad_max_install_names CMakeFiles/refmac5.dir/trace_writer.f90.o CMakeFiles/refmac5.dir/trace_hooks.f90.o CMakeFiles/refmac5.dir/stats_calc.f90.o CMakeFiles/refmac5.dir/makecif_pars.f90.o CMakeFiles/refmac5.dir/vitals.f90.o CMakeFiles/refmac5.dir/const.f90.o CMakeFiles/refmac5.dir/refi_flags.f90.o CMakeFiles/refmac5.dir/comcif_info.f90.o CMakeFiles/refmac5.dir/ener_pars.f90.o CMakeFiles/refmac5.dir/makecif_version.f90.o CMakeFiles/refmac5.dir/lib_com.f90.o CMakeFiles/refmac5.dir/sfread_ng.f90.o CMakeFiles/refmac5.dir/tls.f90.o CMakeFiles/refmac5.dir/rigid_body.f90.o CMakeFiles/refmac5.dir/monitor.f90.o CMakeFiles/refmac5.dir/atom_grads.f90.o CMakeFiles/refmac5.dir/refmac_signals.f90.o CMakeFiles/refmac5.dir/weights.f90.o CMakeFiles/refmac5.dir/agreem.f90.o CMakeFiles/refmac5.dir/ncs_constr.f90.o CMakeFiles/refmac5.dir/atom_com.f90.o CMakeFiles/refmac5.dir/atom_com_str.f90.o CMakeFiles/refmac5.dir/map_stats.f90.o CMakeFiles/refmac5.dir/atomf77mod.f90.o CMakeFiles/refmac5.dir/models.f90.o CMakeFiles/refmac5.dir/hessian_impl.f90.o CMakeFiles/refmac5.dir/ncs_rest_mod.f90.o CMakeFiles/refmac5.dir/crd_com.f90.o CMakeFiles/refmac5.dir/rharvest_mod.f90.o CMakeFiles/refmac5.dir/twin_refmac.f90.o CMakeFiles/refmac5.dir/celsym.f90.o CMakeFiles/refmac5.dir/mtz_things.f90.o CMakeFiles/refmac5.dir/restr_params.f90.o CMakeFiles/refmac5.dir/conf_select.f90.o CMakeFiles/refmac5.dir/random.f90.o CMakeFiles/refmac5.dir/qnorm.f.o CMakeFiles/refmac5.dir/derivs_form_all.f90.o CMakeFiles/refmac5.dir/puckers_rotamers_etc.f90.o CMakeFiles/refmac5.dir/refmac_histograms.f90.o CMakeFiles/refmac5.dir/align_refmac.f90.o CMakeFiles/refmac5.dir/gibbs_gm_sampler.f90.o CMakeFiles/refmac5.dir/integrate.f90.o CMakeFiles/refmac5.dir/refmac_completeness.f90.o CMakeFiles/refmac5.dir/dna_rna_base.f90.o CMakeFiles/refmac5.dir/basepair_paralell.f90.o CMakeFiles/refmac5.dir/restr_files.f90.o CMakeFiles/refmac5.dir/hkl_pack.f90.o CMakeFiles/refmac5.dir/linalgebra.f.o CMakeFiles/refmac5.dir/atom_select.f90.o CMakeFiles/refmac5.dir/linalgebra_f90.f90.o CMakeFiles/refmac5.dir/rotation_and_others.f90.o CMakeFiles/refmac5.dir/tensor_derivatives.f90.o CMakeFiles/refmac5.dir/map_prepare.f90.o CMakeFiles/refmac5.dir/sfcalc_refmac.f90.o CMakeFiles/refmac5.dir/form_factor_refine.f90.o CMakeFiles/refmac5.dir/refine_group_props.f90.o CMakeFiles/refmac5.dir/bvalue_routines.f90.o CMakeFiles/refmac5.dir/optimise_solvent_all.f90.o CMakeFiles/refmac5.dir/refmac_xml.f.o CMakeFiles/refmac5.dir/solvent_contr_mask.f.o CMakeFiles/refmac5.dir/density_routines.f.o CMakeFiles/refmac5.dir/ncs_simil.f90.o CMakeFiles/refmac5.dir/nmr_targets.f90.o CMakeFiles/refmac5.dir/hkon_secder_tch.f.o CMakeFiles/refmac5.dir/fast_hessian_tabulation.f.o CMakeFiles/refmac5.dir/subvag1.f.o CMakeFiles/refmac5.dir/ridge.f90.o CMakeFiles/refmac5.dir/dist_routines.f90.o CMakeFiles/refmac5.dir/lsq_exp2.f.o CMakeFiles/refmac5.dir/local_tls.f90.o CMakeFiles/refmac5.dir/filter_params.f90.o CMakeFiles/refmac5.dir/oppro_allocate.f.o CMakeFiles/refmac5.dir/rcard_tor1.f.o CMakeFiles/refmac5.dir/subcf_scale1.f.o CMakeFiles/refmac5.dir/subag_scale_hessian.f.o CMakeFiles/refmac5.dir/extra_eigen.f.o CMakeFiles/refmac5.dir/rigid_allocate.f.o CMakeFiles/refmac5.dir/aniso_ref_eigen.f.o CMakeFiles/refmac5.dir/interpolate_mod.f.o CMakeFiles/refmac5.dir/write_atoms_mmcif.f90.o CMakeFiles/refmac5.dir/make_CIF.f.o CMakeFiles/refmac5.dir/make_subr.f.o CMakeFiles/refmac5.dir/make_subr_refmac.f.o CMakeFiles/refmac5.dir/tls_allocate.f.o CMakeFiles/refmac5.dir/vdw_nosymm.f90.o CMakeFiles/refmac5.dir/vdw_and_contacts.f.o CMakeFiles/refmac5.dir/vdw_flexible.f.o CMakeFiles/refmac5.dir/elements_module.f90.o CMakeFiles/refmac5.dir/odb_files.f90.o CMakeFiles/refmac5.dir/make_lib11.f.o CMakeFiles/refmac5.dir/make_lib12.f.o CMakeFiles/refmac5.dir/make_lib2.f.o CMakeFiles/refmac5.dir/make_crd1.f.o CMakeFiles/refmac5.dir/make_crd2.f.o CMakeFiles/refmac5.dir/make_new1.f.o CMakeFiles/refmclang++: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
+ac5.dir/make_new2.f.o CMakeFiles/refmac5.dir/set_num.f.o CMakeFiles/refmac5.dir/make_rst1.f.o CMakeFiles/refmac5.dir/make_rst2.f.o CMakeFiles/refmac5.dir/make_PDB.f.o CMakeFiles/refmac5.dir/makecif.f.o CMakeFiles/refmac5.dir/make_refmac_dummy.f.o CMakeFiles/refmac5.dir/ls_scaling_double.f.o CMakeFiles/refmac5.dir/rharvest_subr.f.o CMakeFiles/refmac5.dir/newentry_idealise.f.o CMakeFiles/refmac5.dir/ml_scaling_double.f.o CMakeFiles/refmac5.dir/gaussian_int.f.o CMakeFiles/refmac5.dir/subnumrec.f.o CMakeFiles/refmac5.dir/math_refmac.f.o CMakeFiles/refmac5.dir/read_extra_restraints.f.o CMakeFiles/refmac5.dir/inout_routines.f.o CMakeFiles/refmac5.dir/errwrt.f.o CMakeFiles/refmac5.dir/xml_writer.f.o CMakeFiles/refmac5.dir/ncs_ncs_generate.f90.o CMakeFiles/refmac5.dir/ncs_rest.f.o CMakeFiles/refmac5.dir/occupancy_only_refine.f.o CMakeFiles/refmac5.dir/cell_symm_subrs.f.o CMakeFiles/refmac5.dir/iheap_sort.f.o CMakeFiles/refmac5.dir/wave2f2prime.f.o CMakeFiles/refmac5.dir/lnumrec.f.o CMakeFiles/refmac5.dir/coords.f90.o CMakeFiles/refmac5.dir/refpre_twin.f.o CMakeFiles/refmac5.dir/refall_twin.f.o CMakeFiles/refmac5.dir/ls_scaling_twin_save.f.o CMakeFiles/refmac5.dir/max_with_ints.f.o CMakeFiles/refmac5.dir/ml_params_refine.f.o CMakeFiles/refmac5.dir/block_organization.f.o CMakeFiles/refmac5.dir/merohedr_twin.f.o CMakeFiles/refmac5.dir/decide_twin_opers_0.f.o CMakeFiles/refmac5.dir/read_data.f.o CMakeFiles/refmac5.dir/asym_list.f.o CMakeFiles/refmac5.dir/calc_stats_twin.f.o CMakeFiles/refmac5.dir/mtz_write_twin.f.o CMakeFiles/refmac5.dir/libT.f.o CMakeFiles/refmac5.dir/automorphism.f90.o CMakeFiles/refmac5.dir/messy_pdb.f.o CMakeFiles/refmac5.dir/print_geom_params.f90.o CMakeFiles/refmac5.dir/bridge.cpp.o CMakeFiles/refmac5.dir/cell_refine.f90.o CMakeFiles/refmac5.dir/i0.c.o CMakeFiles/refmac5.dir/i1.c.o CMakeFiles/refmac5.dir/chbevl.c.o CMakeFiles/refmac5.dir/make_unix_ccp4.f.o CMakeFiles/refmac5.dir/GS_scale.f90.o CMakeFiles/refmac5.dir/refmac_derivatives.f90.o CMakeFiles/refmac5.dir/external_dist_restraints.f90.o CMakeFiles/refmac5.dir/hd_mixture_refine.f90.o -o refmac5  -framework Accelerate -framework Accelerate /Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/librfftw.2.dylib /Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libfftw.2.dylib /Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libccp4f.8.0.dylib /Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libccp4c.8.0.dylib /Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libmmdb2.0.dylib /Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libgfortran.5.dylib /Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libgcc_s.2.dylib -lm
+[100%] Built target refmac5
+/opt/homebrew/bin/cmake -E cmake_progress_start /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build/CMakeFiles 0
+

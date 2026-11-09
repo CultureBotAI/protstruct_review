@@ -1,0 +1,53 @@
+{
+  "at": "2026-11-09T08:30:32.434788+00:00",
+  "completed_at": "2026-11-09T08:30:37.211740+00:00",
+  "argv": [
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/.venv/bin/python",
+    "-B",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector767-controls/collector_controls770.py",
+    "--scripts",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts",
+    "--pins",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01-source-inventory.json",
+    "--collector-sha256",
+    "98ce55f63c07881425bfade47b39e59e09f0224780b70b65ac4195193a9385a9",
+    "--fixture-sha256",
+    "a7be3772ceaa6702a0d73be4e26d362b2f334913193b8f769e470e13100a4b70",
+    "--archive",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/cdba2c07-daff-4f60-ae96-12452b3a5fbb_artifacts.zip",
+    "--archive-sha256",
+    "9fc5352284b7ffa7763c633a3eb4d3d0db96b8c25a1be9bcea361722d2c53054",
+    "--archive-size",
+    "5491709",
+    "--output",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01"
+  ],
+  "returncode": 0,
+  "input_pins": {
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/run-collector781-independent.py": {
+      "sha256": "8a19ad988cca8cd3025addc6fde75c1723dc2ec85b3ad78bf67dd5e5b3fe8aa2",
+      "size_bytes": 3021
+    },
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector767-controls/collector_controls770.py": {
+      "sha256": "4db067c752a8a1e335ce089231d7baa3e9764e4481e252247ff7b8b1ebbde12d",
+      "size_bytes": 36466
+    },
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01-source-inventory.json": {
+      "sha256": "f0a9b57a0e8662549203886d209979c2a69d6e4a245723da67278e09c0ede2fe",
+      "size_bytes": 26591
+    },
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/result.json": {
+      "sha256": "a187837b9ca566c392e052112f182c66d7e92f03cf2e6db4de063d0e50315afd",
+      "size_bytes": 31809
+    },
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/cdba2c07-daff-4f60-ae96-12452b3a5fbb_artifacts.zip": {
+      "sha256": "9fc5352284b7ffa7763c633a3eb4d3d0db96b8c25a1be9bcea361722d2c53054",
+      "size_bytes": 5491709
+    }
+  },
+  "source_closure_unchanged": true,
+  "passed": true,
+  "native_execution": false,
+  "scope": "six independent inert collector controls; no scientific/canary acceptance",
+  "result": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/results.json"
+}

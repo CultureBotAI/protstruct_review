@@ -1,0 +1,193 @@
+"""PRIMARY bounded synthetic checks of composer helpers; no producer execution."""
+import ast
+import copy
+import hashlib
+import json
+import os
+from pathlib import Path
+import stat
+import sys
+import types
+from unittest.mock import patch
+
+if sys.flags.optimize:
+    raise RuntimeError('Unoptimized self-check required')
+here=Path(__file__).resolve().parent
+source=here/'compose-diagnostic-profile.py'
+out=here/'profile-composer-selftest-02';out.mkdir(exist_ok=False)
+observer_source=here/'profile685-focused-01/scripts/refmac_diagnostic_profile.py'
+inventory_source=here/'planned-alias-inventory683/inventory.json'
+input_bytes={p:p.read_bytes() for p in (source,Path(__file__).resolve(),observer_source,inventory_source)}
+assert hashlib.sha256(input_bytes[observer_source]).hexdigest()=='0d25f3e01bb3a99bb35a740a112e5a9386ee45c175da92ce93aeb34edf8f0f80'
+for n,p in enumerate(input_bytes):
+    (out/('input-'+str(n)+'-'+p.name)).write_bytes(input_bytes[p])
+def guard(event,args):
+    if event.startswith(('subprocess.','os.exec','os.spawn','os.posix_spawn','os.fork','socket.','ctypes.')) or event in ('os.system','os.kill','os.killpg'):
+        raise RuntimeError('Forbidden selftest operation: '+event)
+sys.addaudithook(guard)
+tree=ast.parse(input_bytes[source])
+ns={'Path':Path,'os':os,'stat':stat,'hashlib':hashlib,'json':json,'types':types,'sys':sys,
+    'files':{},'by_path':{},'roles':{},'roots':{}}
+for node in tree.body:
+    if isinstance(node,ast.Assign) and len(node.targets)==1 and isinstance(node.targets[0],ast.Name):
+        key=node.targets[0].id
+        if key in {'ENV_KEYS','ABSENT_KEYS','SINGLE_ROLES','PAIR_ROLES','VARIABLE_ROLES','helper_names'}:
+            ns[key]=ast.literal_eval(node.value)
+functions=[node for node in tree.body if isinstance(node,ast.FunctionDef)]
+exec(compile(ast.Module(body=functions,type_ignores=[]),str(source),'exec'),ns)
+observer,observer_pin=ns['load_profile_observer'](observer_source)
+assert observer_pin=={'path':str(observer_source),'resolved_path':str(observer_source.resolve()),'sha256':hashlib.sha256(input_bytes[observer_source]).hexdigest(),'size_bytes':len(input_bytes[observer_source])}
+ns.update(profile_observer=observer,profile_observer_source_pin=observer_pin)
+checks=[{'case':'exact_captured_observer_source_pin','passed':True}]
+def must_reject(label,call):
+    try:
+        call()
+    except (AssertionError,ValueError,OSError,TypeError) as exc:
+        checks.append({'case':label,'passed':True,'exception_type':type(exc).__name__})
+    else:
+        raise RuntimeError('Expected rejection: '+label)
+
+build=out/'fake-build';build.mkdir();log=build/'select-clang.log';log.write_text('observed stream\n')
+assert ns['build_stream_path']('select-clang.log',build)==log
+checks.append({'case':'actual_relative_stream_shape','passed':True})
+must_reject('stream_parent_escape',lambda:ns['build_stream_path']('../select-clang.log',build))
+must_reject('absolute_stream',lambda:ns['build_stream_path'](str(log),build))
+one=out/'same-bytes-one';two=out/'same-bytes-two';one.write_text('same\n');two.write_text('same\n')
+alias=out/'alias';alias.symlink_to(one.name)
+pin={'sha256':ns['digest'](one),'size_bytes':one.stat().st_size,'resolved_path':str(one)}
+ns['register'](alias,expected=pin)
+alias.unlink();alias.symlink_to(two.name)
+must_reject('same_bytes_alias_retarget',lambda:ns['register'](alias,expected=pin))
+must_reject('contradictory_target_spellings',lambda:ns['register'](one,expected={**pin,'resolved':str(two)}))
+
+receipt=out/'mutable.json';receipt.write_text('{"x":1}\n')
+original_loads=json.loads
+def editing_loads(raw,**kw):
+    result=original_loads(raw,**kw);receipt.write_text(' {"x":1}\n');return result
+with patch('json.loads',editing_loads):
+    must_reject('parsed_bytes_changed_before_pin',lambda:ns['read_json'](receipt))
+bad=out/'nonstandard.json';bad.write_text('{"x":NaN}\n')
+must_reject('nonstandard_constant',lambda:ns['read_json'](bad))
+
+# Fresh isolated helper state for freeze checks; only synthetic files are mutated.
+ns.update(files={},by_path={},roles={},roots={})
+root=out/'closed-tree';root.mkdir();member=root/'one';member.write_text('one\n')
+ident=ns['register'](member)
+ns['roots']={'prepared':{'path':str(root),'file_ids':[ident]}}
+ns['recheck_registered_files_and_trees']()
+(root/'extra').write_text('extra\n')
+must_reject('new_tree_member_before_freeze',ns['recheck_registered_files_and_trees'])
+(root/'extra').unlink();member.write_text('changed\n')
+must_reject('changed_file_before_freeze',ns['recheck_registered_files_and_trees'])
+
+# Complete outer-shape example. Zero hashes/nonexistent files deliberately make
+# this a non-launchable documentation fixture, never measured producer evidence.
+base=out/'NON_LAUNCHABLE_SHAPE_ONLY'
+paths={k:base/k for k in ['vendor','prepared','build']}
+fs={};path_ids={};roles={}
+def add(path):
+    raw=str(path)
+    if raw in path_ids:
+        return path_ids[raw]
+    ident='file'+str(len(fs)+1)
+    fs[ident]={'path':raw,'resolved_path':raw,'sha256':'0'*64,'size_bytes':0,'symlinks':[]}
+    path_ids[raw]=ident
+    return ident
+add(paths['vendor']/'CMakeLists.txt');add(paths['prepared']/'CMakeLists.txt')
+for name in sorted(ns['SINGLE_ROLES']):
+    roles[name]=[add(base/'external'/name)]
+special={'source_manifest':paths['prepared']/'refmac_diagnostic_source_manifest.json',
+         'build_receipt':paths['build']/'build-receipt.json',
+         'linked_executable':paths['build']/'refmac5.linked-unrelocated',
+         'diagnostic_executable':paths['build']/'build/refmac5'}
+for name,path in special.items():
+    old=roles[name][0];del path_ids[fs[old]['path']];del fs[old]
+    # IDs do not rely on size after deletions.
+    ident='special:'+name;raw=str(path)
+    fs[ident]={'path':raw,'resolved_path':raw,'sha256':'0'*64,'size_bytes':0,'symlinks':[]};path_ids[raw]=ident;roles[name]=[ident]
+for name,pair in {'build_driver':['build-instrumented-v2.py','build-driver.py'],
+                  'build_journal':['build-journal.py','build-journal.py'],
+                  'build_runtime_config':['installed-runtime.cmake','installed-runtime.cmake']}.items():
+    roles[name]=[add(base/'originals'/pair[0]),add(paths['build']/pair[1])]
+roles['build_inventories']=[]
+for name in ['toolchain-inventory.json','effective-build-tools.json','assembler-tool.json','post-link-tools.json']:
+    roles['build_inventories'].extend([add(base/'originals'/name),add(paths['build']/name)])
+roles['collector_helpers']=[add(base/'helpers'/name) for name in ns['helper_names']]
+for name in ns['VARIABLE_ROLES']:
+    roles[name]=[add(base/'support'/name)]
+roots={name:{'path':str(path),'file_ids':[i for i,row in fs.items() if Path(row['path']).is_relative_to(path)]} for name,path in paths.items()}
+manifest={'schema_id':'protstruct_refmac_diagnostic_profile_v1','profile_id':'refmac_5_8_0431_instrumented_attempt4_v1','subject_id':'R4',
+    'upstream':{'commit':'be25e793829952f4f177d7dfd0c10a1eb6bbd180','tag':'5.8.0431'},
+    'roots':roots,'files':fs,'roles':roles,
+    'runtime_environment':{'observation_file_id':roles['runtime_observation'][0],
+        'expected_values':{key:'SYNTHETIC_NOT_OBSERVED' for key in ns['ENV_KEYS']},'expected_absent':ns['ABSENT_KEYS']}}
+ns['validate_closed_shape'](manifest)
+checks.append({'case':'complete_31_role_shape','passed':True})
+(out/'diagnostic-profile-shape-only.json').write_text(json.dumps(manifest,indent=2,sort_keys=True)+'\n')
+mutations={
+    'empty_runtime_images':lambda m:m['roles'].__setitem__('runtime_images',[]),
+    'duplicate_role_id':lambda m:m['roles'].__setitem__('runtime_images',m['roles']['runtime_images']*2),
+    'unknown_env_key':lambda m:m['runtime_environment']['expected_values'].__setitem__('UNEXPECTED','x'),
+    'nonstr_env_value':lambda m:m['runtime_environment']['expected_values'].__setitem__('PATH',None),
+    'wrong_helper_order':lambda m:m['roles']['collector_helpers'].reverse(),
+    'unknown_role':lambda m:m['roles'].__setitem__('extra',m['roles']['source_manifest']),
+    'wrong_size_type':lambda m:m['files'][m['roles']['source_manifest'][0]].__setitem__('size_bytes',False),
+}
+for label,mutate in mutations.items():
+    changed=copy.deepcopy(manifest);mutate(changed)
+    must_reject(label,lambda changed=changed:ns['validate_closed_shape'](changed))
+# New source-load checks have a successful empty-module control and exact causes.
+def reject_exact(label,call,kind,message):
+    try:
+        call()
+    except kind as exc:
+        assert message in str(exc),(label,type(exc).__name__,str(exc))
+        checks.append({'case':label,'passed':True,'exception_type':type(exc).__name__,'message':str(exc)})
+    else:
+        raise AssertionError('Expected rejection: '+label)
+blank=out/'blank-observer.py';blank.write_text('# inert positive source\n')
+loaded,blank_pin=ns['load_profile_observer'](blank)
+assert blank_pin['sha256']==hashlib.sha256(blank.read_bytes()).hexdigest()
+checks.append({'case':'inert_observer_load_positive','passed':True})
+changed=out/'changed-observer.py'
+changed.write_text('from pathlib import Path\nPath(__file__).write_text("# changed\\n")\n')
+reject_exact('observer_bytes_changed_during_import',lambda:ns['load_profile_observer'](changed),ValueError,'Profile observer changed during loading')
+target_a=out/'observer-a.py';target_b=out/'observer-b.py';load_alias=out/'observer-alias.py'
+stub='from pathlib import Path\np=Path(__file__)\np.unlink()\np.symlink_to("observer-b.py")\n'
+target_a.write_text(stub);target_b.write_text(stub);load_alias.symlink_to(target_a.name)
+reject_exact('same_bytes_observer_target_changed_during_import',lambda:ns['load_profile_observer'](load_alias),ValueError,'Profile observer changed during loading')
+# Bind loaded bytes to the same consumer role; no substitute same-byte path is accepted.
+ns.update(files={},by_path={},roles={},roots={},profile_observer=observer,profile_observer_source_pin=observer_pin)
+observer_id=ns['register'](observer_source,expected=observer_pin)
+ns['roles']['collector_helpers']=['unused']*len(ns['helper_names'])
+index=ns['helper_names'].index('refmac_diagnostic_profile.py')
+ns['roles']['collector_helpers'][index]=observer_id
+assert ns['bind_profile_observer_source']()==observer_id
+checks.append({'case':'loaded_source_consumer_role_join','passed':True})
+ns['roles']['collector_helpers'][index]='different-file-id'
+reject_exact('observer_role_mismatch',ns['bind_profile_observer_source'],AssertionError,'')
+ns['roles']['collector_helpers'][index]=observer_id
+ns['profile_observer_source_pin']={**observer_pin,'sha256':'0'*64}
+reject_exact('observer_source_hash_mismatch',ns['bind_profile_observer_source'],AssertionError,str(observer_source))
+ns['profile_observer_source_pin']=observer_pin
+assert ns['bind_profile_observer_source']()==observer_id
+# Explicit existing planned alias paths: all must use exactly the consumer's spelling.
+rows=[]
+for alias_path in json.loads(input_bytes[inventory_source])['summary']['aliased']:
+    emitted=ns['symlink_edges'](Path(alias_path))
+    observed=[edge.to_dict() for edge in observer._discover_symlink_edges(alias_path)]
+    assert emitted==observed
+    for edge in emitted:
+        edge_path=Path(edge['path'])
+        assert edge_path.is_symlink() and os.readlink(edge_path)==edge['target']
+    rows.append({'path':alias_path,'exact_edges':emitted,'kernel_resolved':str(Path(alias_path).resolve(strict=True))})
+assert len(rows)==11
+checks.append({'case':'all_11_planned_aliases_exact_edges','passed':True})
+(out/'actual-alias-edges.json').write_text(json.dumps(rows,indent=2)+'\n')
+assert all(p.read_bytes()==raw for p,raw in input_bytes.items())
+result={'passed':True,'checks':checks,'composer_sha256':hashlib.sha256(input_bytes[source]).hexdigest(),
+        'input_pins':[{'path':str(p),'sha256':hashlib.sha256(raw).hexdigest(),'size_bytes':len(raw)} for p,raw in input_bytes.items()],
+        'inputs_unchanged':True,'native_refmac_executed':False,'producer_executed':False,
+        'shape_example_not_launchable':True}
+(out/'result.json').write_text(json.dumps(result,indent=2)+'\n')
+print(json.dumps({'passed':True,'checks':len(checks),'composer_sha256':result['composer_sha256']}))

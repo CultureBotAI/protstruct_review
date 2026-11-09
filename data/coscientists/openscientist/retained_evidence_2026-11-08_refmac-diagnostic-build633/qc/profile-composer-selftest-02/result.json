@@ -1,0 +1,155 @@
+{
+  "passed": true,
+  "checks": [
+    {
+      "case": "exact_captured_observer_source_pin",
+      "passed": true
+    },
+    {
+      "case": "actual_relative_stream_shape",
+      "passed": true
+    },
+    {
+      "case": "stream_parent_escape",
+      "passed": true,
+      "exception_type": "AssertionError"
+    },
+    {
+      "case": "absolute_stream",
+      "passed": true,
+      "exception_type": "AssertionError"
+    },
+    {
+      "case": "same_bytes_alias_retarget",
+      "passed": true,
+      "exception_type": "AssertionError"
+    },
+    {
+      "case": "contradictory_target_spellings",
+      "passed": true,
+      "exception_type": "AssertionError"
+    },
+    {
+      "case": "parsed_bytes_changed_before_pin",
+      "passed": true,
+      "exception_type": "AssertionError"
+    },
+    {
+      "case": "nonstandard_constant",
+      "passed": true,
+      "exception_type": "ValueError"
+    },
+    {
+      "case": "new_tree_member_before_freeze",
+      "passed": true,
+      "exception_type": "AssertionError"
+    },
+    {
+      "case": "changed_file_before_freeze",
+      "passed": true,
+      "exception_type": "AssertionError"
+    },
+    {
+      "case": "complete_31_role_shape",
+      "passed": true
+    },
+    {
+      "case": "empty_runtime_images",
+      "passed": true,
+      "exception_type": "AssertionError"
+    },
+    {
+      "case": "duplicate_role_id",
+      "passed": true,
+      "exception_type": "AssertionError"
+    },
+    {
+      "case": "unknown_env_key",
+      "passed": true,
+      "exception_type": "AssertionError"
+    },
+    {
+      "case": "nonstr_env_value",
+      "passed": true,
+      "exception_type": "AssertionError"
+    },
+    {
+      "case": "wrong_helper_order",
+      "passed": true,
+      "exception_type": "AssertionError"
+    },
+    {
+      "case": "unknown_role",
+      "passed": true,
+      "exception_type": "AssertionError"
+    },
+    {
+      "case": "wrong_size_type",
+      "passed": true,
+      "exception_type": "AssertionError"
+    },
+    {
+      "case": "inert_observer_load_positive",
+      "passed": true
+    },
+    {
+      "case": "observer_bytes_changed_during_import",
+      "passed": true,
+      "exception_type": "ValueError",
+      "message": "Profile observer changed during loading"
+    },
+    {
+      "case": "same_bytes_observer_target_changed_during_import",
+      "passed": true,
+      "exception_type": "ValueError",
+      "message": "Profile observer changed during loading"
+    },
+    {
+      "case": "loaded_source_consumer_role_join",
+      "passed": true
+    },
+    {
+      "case": "observer_role_mismatch",
+      "passed": true,
+      "exception_type": "AssertionError",
+      "message": ""
+    },
+    {
+      "case": "observer_source_hash_mismatch",
+      "passed": true,
+      "exception_type": "AssertionError",
+      "message": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/profile685-focused-01/scripts/refmac_diagnostic_profile.py"
+    },
+    {
+      "case": "all_11_planned_aliases_exact_edges",
+      "passed": true
+    }
+  ],
+  "composer_sha256": "c712b315ac5dd4bdf896da8738db5f819b8a10be7d2c750113e1965ef797d565",
+  "input_pins": [
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/compose-diagnostic-profile.py",
+      "sha256": "c712b315ac5dd4bdf896da8738db5f819b8a10be7d2c750113e1965ef797d565",
+      "size_bytes": 25317
+    },
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/check-profile-composer.py",
+      "sha256": "0a68b1e9fd5446d3058ebc193262ad1d4a0f1f8fd403e799160de2c4514f36a8",
+      "size_bytes": 12125
+    },
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/profile685-focused-01/scripts/refmac_diagnostic_profile.py",
+      "sha256": "0d25f3e01bb3a99bb35a740a112e5a9386ee45c175da92ce93aeb34edf8f0f80",
+      "size_bytes": 126965
+    },
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/planned-alias-inventory683/inventory.json",
+      "sha256": "a927614d6d29c2a5463035598f8a96370d6a7c5c353bb747bf5f667fe7c2df7e",
+      "size_bytes": 1268679
+    }
+  ],
+  "inputs_unchanged": true,
+  "native_refmac_executed": false,
+  "producer_executed": false,
+  "shape_example_not_launchable": true
+}

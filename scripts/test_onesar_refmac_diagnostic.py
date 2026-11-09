@@ -1665,7 +1665,7 @@ class TestOnesarRefmacDiagnosticWiring(unittest.TestCase):
                 repinned_profile,
                 custom_fx.installed_record,
                 custom_fx.resolved_ccp4_env,
-                Path(tmp) / "dummy_ev",
+                custom_fx.root / "dummy_ev",
             )
             self.assertEqual(validated.profile_id, SUPPORTED_PROFILE_ID)
 

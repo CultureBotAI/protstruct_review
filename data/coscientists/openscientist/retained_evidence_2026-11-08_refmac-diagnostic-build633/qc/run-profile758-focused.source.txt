@@ -1,0 +1,42 @@
+from pathlib import Path
+import datetime,hashlib,json,os,subprocess,sys
+E=Path(__file__).resolve().parent
+# Resolve the sibling from the main checkout, without relying on caller cwd.
+W=E.parents[2].parent/"protstruct_review-wt-078"
+out=E/"profile758-focused-01"
+out.mkdir(exist_ok=False)
+(out/"scripts").mkdir();(out/"tmp").mkdir()
+names=["refmac_diagnostic_profile.py","test_refmac_diagnostic_profile.py"]
+def pin(p):
+ raw=p.read_bytes();return {"path":str(p),"sha256":hashlib.sha256(raw).hexdigest(),"size_bytes":len(raw)}
+driver_before=pin(Path(__file__))
+(out/"driver.source.txt").write_bytes(Path(__file__).read_bytes())
+before=[pin(W/"scripts"/n) for n in names]
+for n in names:(out/"scripts"/n).write_bytes((W/"scripts"/n).read_bytes())
+guard=out/"guarded-test.py"
+guard.write_text("import sys,runpy\nfrom pathlib import Path\ndef guard(event,args):\n if event.startswith(('subprocess.','os.exec','os.spawn','os.posix_spawn','os.fork','socket.')) or event=='os.system': raise RuntimeError('Forbidden process/network in synthetic profile test: '+event)\nsys.addaudithook(guard)\ntest=Path(__file__).parent/'scripts/test_refmac_diagnostic_profile.py'\nsys.argv=[str(test),'-v']\nrunpy.run_path(str(test),run_name='__main__')\n")
+frozen_before=[pin(out/"scripts"/n) for n in names]
+assert [(x["sha256"],x["size_bytes"]) for x in before]==[(x["sha256"],x["size_bytes"]) for x in frozen_before]
+guard_before=pin(guard)
+env=dict(os.environ)
+removed=sorted(k for k in env if k.startswith(("LD_","DYLD_","PROTSTRUCT_")) or k in {"BASH_ENV","ENV","SFOUT","FCFOUT","REFMAC_DIAGNOSTIC_TRACE"})
+for k in removed:env.pop(k)
+env.update(PATH="/usr/bin:/bin:/usr/sbin:/sbin",PYTHONDONTWRITEBYTECODE="1",TMPDIR=str(out/"tmp"))
+argv=[sys.executable,"-B",str(guard)]
+record={"at":datetime.datetime.now(datetime.timezone.utc).isoformat(),"argv":argv,"cwd":str(out),"python":sys.version,"inputs_before":before,"frozen_before":frozen_before,"driver_before":driver_before,"guard_before":guard_before,"environment":{"PATH":env['PATH'],"TMPDIR":env['TMPDIR'],"removed_keys":removed},"native_executed":False}
+(out/"started.json").write_text(json.dumps(record,indent=2)+"\n")
+with (out/"stdout.log").open("wb") as stdout,(out/"stderr.log").open("wb") as stderr:
+ proc=subprocess.run(argv,cwd=out,env=env,stdout=stdout,stderr=stderr)
+ruff_argv=[str(W/".venv/bin/ruff"),"check","--no-cache",str(out/"scripts")]
+with (out/"ruff-stdout.log").open("wb") as stdout,(out/"ruff-stderr.log").open("wb") as stderr:
+ ruff_proc=subprocess.run(ruff_argv,cwd=out,env=env,stdout=stdout,stderr=stderr)
+record["ruff"]={"argv":ruff_argv,"tool":pin(Path(ruff_argv[0])),"returncode":ruff_proc.returncode}
+after=[pin(W/"scripts"/n) for n in names]
+frozen=[pin(out/"scripts"/n) for n in names]
+frozen_unchanged=frozen_before==frozen
+driver_unchanged=driver_before==pin(Path(__file__)) and driver_before["sha256"]==pin(out/"driver.source.txt")["sha256"]
+guard_unchanged=guard_before==pin(guard)
+record.update(frozen_unchanged=frozen_unchanged,driver_unchanged=driver_unchanged,guard_unchanged=guard_unchanged,returncode=proc.returncode,inputs_after=after,live_unchanged=before==after,frozen=frozen,passed=proc.returncode==0 and ruff_proc.returncode==0 and before==after and frozen_unchanged and driver_unchanged and guard_unchanged,driver=pin(Path(__file__)),guard=pin(guard))
+(out/"result.json").write_text(json.dumps(record,indent=2)+"\n")
+print(json.dumps({"passed":record['passed'],"returncode":proc.returncode,"live_unchanged":record['live_unchanged'],"result":str(out/'result.json')}))
+sys.exit(0 if record['passed'] else 1)

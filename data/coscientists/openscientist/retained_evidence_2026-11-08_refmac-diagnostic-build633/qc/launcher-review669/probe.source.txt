@@ -1,0 +1,229 @@
+"""Task669 independent inert role-join probes; no producer imports or subprocesses."""
+import argparse
+import copy
+import hashlib
+import io
+import json
+import os
+from pathlib import Path
+import sys
+from contextlib import redirect_stdout
+from types import ModuleType, SimpleNamespace
+from unittest.mock import patch
+
+OUT = Path(__file__).resolve().parent
+E = OUT.parent
+SOURCE = E / 'launch-attempt04.py'
+CHECKER = E / 'check-launcher-04.py'
+EXPECTED = 'a2e2b92ffe05f6c984de87171352ad288333eb49ec82a7975fcfbe27f2663eb3'
+source_raw = SOURCE.read_bytes()
+checker_raw = CHECKER.read_bytes()
+assert hashlib.sha256(source_raw).hexdigest() == EXPECTED
+assert not sys.flags.optimize
+sys.dont_write_bytecode = True
+
+def guard(event, args):
+    if event in {'subprocess.Popen', 'os.system', 'os.posix_spawn', 'os.fork',
+                 'socket.connect', 'socket.bind'}:
+        raise AssertionError('Forbidden execution/network: ' + event)
+    if event == 'open':
+        filename, mode, flags = args
+        if isinstance(filename, (str, bytes, os.PathLike)) and flags & (
+                os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND):
+            assert Path(filename).resolve().is_relative_to(OUT), filename
+    if event == 'import' and args[0] in {
+            'onesar_refmac', 'onesar_rerun', 'refmac_diagnostic_profile'}:
+        raise AssertionError('Real product import forbidden: ' + args[0])
+
+sys.addaudithook(guard)
+m = ModuleType('review669_launcher')
+m.__file__ = str(SOURCE)
+exec(compile(source_raw, str(SOURCE), 'exec'), m.__dict__)
+
+# Replace all real-context constants before calling any launcher function.
+m.E = OUT
+m.WT = OUT / 'synthetic-worktree'
+m.ROOT = OUT / 'synthetic-output'
+m.CLAIM = OUT / 'synthetic-claim'
+checks = []
+
+class Validated:
+    def __init__(self, payload):
+        self.payload = copy.deepcopy(payload)
+
+    def to_provenance(self):
+        return copy.deepcopy(self.payload)
+
+def provenance(observations):
+    return {'profile_files_verified': True,
+            'roles': {'launcher': ['opaque-z9'], 'collection_interpreter': ['opaque-a7']},
+            'files': {'opaque-z9': copy.deepcopy(observations['launcher']),
+                      'opaque-a7': copy.deepcopy(observations['interpreter'])}}
+
+def expect_refusal(name, fn, message=None):
+    try:
+        fn()
+    except (ValueError, KeyError) as error:
+        if message:
+            assert message in str(error), str(error)
+    else:
+        raise AssertionError(name + ' accepted')
+    checks.append(name)
+
+first = OUT / 'synthetic-file-a'
+second = OUT / 'synthetic-file-b'
+first.write_bytes(b'identical inert bytes\n')
+second.write_bytes(first.read_bytes())
+observed = {'launcher': m.pin(first), 'interpreter': m.pin(first)}
+baseline = provenance(observed)
+validated = Validated(baseline)
+joins = m.join_execution_roles(validated, observed)
+assert joins['launcher']['file_id'] == 'opaque-z9'
+assert joins['interpreter']['file_id'] == 'opaque-a7'
+assert all(row['matches'] is True for row in joins.values())
+checks.append('opaque_file_ids_join_by_explicit_role')
+joins['launcher']['profile_observation']['path'] = 'mutated detached result'
+assert validated.payload == baseline
+assert observed['launcher']['path'] == str(first)
+checks.append('joined_receipt_does_not_mutate_profile_or_request')
+
+for request_name, file_id in [('launcher', 'opaque-z9'), ('interpreter', 'opaque-a7')]:
+    for field in ('path', 'resolved_path', 'sha256', 'size_bytes'):
+        changed = copy.deepcopy(baseline)
+        row = changed['files'][file_id]
+        row[field] = row[field] + 1 if field == 'size_bytes' else row[field] + 'x'
+        expect_refusal(request_name + '_' + field + '_mismatch',
+                       lambda: m.join_execution_roles(Validated(changed), observed),
+                       'Execution role mismatch')
+    changed = copy.deepcopy(baseline)
+    changed['files'][file_id] = m.pin(second)
+    assert changed['files'][file_id]['sha256'] == observed[request_name]['sha256']
+    expect_refusal(request_name + '_identical_bytes_distinct_file',
+                   lambda: m.join_execution_roles(Validated(changed), observed),
+                   'Execution role mismatch')
+
+for role in ('launcher', 'collection_interpreter'):
+    for malformed in ([], ['opaque-z9', 'opaque-a7'], 'opaque-z9', [1], ('opaque-z9',)):
+        changed = copy.deepcopy(baseline)
+        changed['roles'][role] = malformed
+        expect_refusal(role + '_invalid_cardinality_or_id_' + repr(malformed),
+                       lambda: m.join_execution_roles(Validated(changed), observed),
+                       'exactly one file')
+for verified in (False, None, 1, 'true'):
+    changed = copy.deepcopy(baseline)
+    changed['profile_files_verified'] = verified
+    expect_refusal('unadmitted_profile_' + repr(verified),
+                   lambda: m.join_execution_roles(Validated(changed), observed),
+                   'admitted profile')
+
+# Main is exercised with real local file pins and entirely synthetic producer,
+# environment, Git, destination and claim boundaries.
+prereg = m.WT / 'ref/research/1sar_rerun_2026_11_08_instrumented_attempt04_preregistration.md'
+prereg.parent.mkdir(parents=True)
+prereg.write_text('inert preregistration\n')
+isolation = OUT / 'runtime-configuration-preflight-01.json'
+isolation.write_text('{}\n')
+interpreter_alias = OUT / 'declared-python-alias'
+interpreter_alias.symlink_to(Path(sys.executable).resolve())
+launcher_alias = OUT / 'declared-launcher-alias.py'
+launcher_alias.symlink_to(SOURCE)
+
+def request_pin(path):
+    return {key: value for key, value in m.pin(path).items() if key != 'resolved_path'}
+
+request = {'contract': 'primary_instrumented_attempt04_request_v1', 'git_head': 'a' * 40,
+           'manifest': request_pin(first), 'executable': request_pin(second),
+           'launcher': request_pin(SOURCE), 'interpreter': request_pin(interpreter_alias),
+           'isolation_observation': request_pin(isolation), 'preregistration': request_pin(prereg)}
+request_path = OUT / 'synthetic-request.json'
+request_path.write_text(json.dumps(request))
+
+def main_case(name, mutate=None, reject=False):
+    events = []
+    actual = {key: m.checked_pin(request[key]) for key in ('launcher', 'interpreter')}
+    payload = provenance(actual)
+    if mutate:
+        mutate(payload)
+
+    def validate(*args):
+        events.append('validate_profile')
+        return Validated(payload)
+
+    def collector(*args, **kwargs):
+        raise AssertionError('Collector must never be entered')
+
+    def claim(start, callable_, profile):
+        events.append('claim')
+        retained = start['execution_role_joins']
+        assert set(retained) == {'launcher', 'interpreter'}
+        for key in retained:
+            assert retained[key]['request_observation'] == actual[key]
+            assert retained[key]['profile_observation'] == actual[key]
+            assert retained[key]['matches'] is True
+        assert retained['interpreter']['request_observation']['path'] == str(interpreter_alias)
+        assert events == ['validate_profile', 'claim']
+        return {'collector_returned': False}
+
+    dp = SimpleNamespace(reject_conflicting_environment=lambda env: None,
+                         RefmacDiagnosticProfile=lambda *args: object(),
+                         FilePin=lambda **kwargs: kwargs, validate_profile=validate)
+    col = SimpleNamespace(_resolve_ccp4_refmac_toolchain=lambda: ({}, {}, None),
+                          run_refmac_rfactor_operation=collector)
+    rerun = SimpleNamespace(_verify_no_protstruct_overrides=lambda: None)
+    argv = [str(SOURCE), '--request', str(request_path), '--request-sha256', m.digest(request_path),
+            '--request-size-bytes', str(request_path.stat().st_size)]
+    original_path = sys.path[:]
+    try:
+        with patch.object(sys, 'argv', argv), \
+             patch.object(sys, 'executable', str(Path(sys.executable).resolve())), \
+             patch.object(m, 'safe_fresh_paths', return_value=None), \
+             patch.object(m, 'isolate_environment', return_value={'synthetic': True}), \
+             patch.object(m, 'validate_reviewed_git_state', return_value={'synthetic': True}), \
+             patch.object(m, 'run_claimed_once', side_effect=claim) as mocked_claim, \
+             patch.dict(os.environ, {'TMUX_PANE': '%0'}), \
+             patch.dict(sys.modules, {'refmac_diagnostic_profile': dp, 'onesar_refmac': col,
+                                      'onesar_rerun': rerun}), redirect_stdout(io.StringIO()):
+            if reject:
+                expect_refusal(name, m.main, 'Execution role mismatch')
+                mocked_claim.assert_not_called()
+                assert events == ['validate_profile']
+            else:
+                m.main()
+                mocked_claim.assert_called_once()
+                checks.append(name)
+    finally:
+        sys.path[:] = original_path
+
+main_case('main_accepts_matching_declared_alias_and_retains_both_joins')
+for file_id in ('opaque-z9', 'opaque-a7'):
+    for field in ('path', 'resolved_path', 'sha256', 'size_bytes'):
+        def mutate(payload, file_id=file_id, field=field):
+            row = payload['files'][file_id]
+            row[field] = row[field] + 1 if field == 'size_bytes' else row[field] + 'x'
+        main_case('main_preclaim_reject_' + file_id + '_' + field, mutate, reject=True)
+
+def different_alias(payload):
+    payload['files']['opaque-a7'] = m.pin(Path(sys.executable).resolve())
+main_case('main_rejects_different_declared_alias_for_same_interpreter_target', different_alias, True)
+source_copy = OUT / 'same-content-launcher-copy.py'
+source_copy.write_bytes(source_raw)
+def different_launcher(payload):
+    payload['files']['opaque-z9'] = m.pin(source_copy)
+main_case('main_rejects_independently_pinned_same_content_launcher_copy', different_launcher, True)
+
+assert SOURCE.read_bytes() == source_raw
+assert CHECKER.read_bytes() == checker_raw
+retained = json.loads((E / 'launcher-selftest-04/result.json').read_text())
+assert retained['passed'] is True and len(retained['checks']) == 43
+assert retained['launcher_sha256'] == EXPECTED
+assert retained['checker_sha256'] == hashlib.sha256(checker_raw).hexdigest()
+checks.append('retained_43_check_result_matches_both_current_source_hashes')
+result = {'passed': True, 'checks': checks, 'check_count': len(checks),
+          'python_version': sys.version, 'launcher_sha256': EXPECTED,
+          'checker_sha256': hashlib.sha256(checker_raw).hexdigest(),
+          'probe_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+          'real_product_imports': False, 'collector_called': False,
+          'real_attempt_and_claim_roots_accessed': False,
+          'subprocess_or_network_calls': False, 'source_files_changed': False}
+(OUT / 'result.json').write_text(json.dumps(result, indent=2) + '\n')
+print(json.dumps({'passed': True, 'checks': len(checks)}))

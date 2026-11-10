@@ -24,12 +24,12 @@ instead of merely measured:
 | **C** | `gemmi rmsz` | CCP4 monomer library (E&H-derived) |
 
 - **A vs B** — pure **library** effect: one implementation, one code path, only the targets change.
-- **B vs C** — near-matched library, different implementations: mostly **implementation**.
+- **B vs C** — near-matched library, different implementations: combines **implementation** with residual non-identical dictionary and bond-population differences.
 - **A vs C** — the cross-library figure PR #28 published.
 
 "Near-matched" is load-bearing in B vs C: the CCP4 monomer library is E&H-derived but not identical
-to PHENIX's non-CDL targets, and the two tools may restrain different populations. B vs C is
-therefore an **upper bound** on the matched-library floor, not the floor itself.
+to PHENIX's non-CDL targets, and the two tools may restrain different populations. The B-vs-C
+contrast therefore includes non-identical dictionaries and potentially different populations; it does not isolate or bound an unmeasured matched-library contrast.
 
 ## Results
 
@@ -62,52 +62,52 @@ Bond RMSD (Å), sorted by the implementation term:
 | Cross-library (A vs C) | 0.00478 Å | 0.06666 Å | 0.519° | 1.122° |
 
 Restricted to the 6 models where PHENIX and gemmi restrain the **same number of bonds**:
-library median 0.00085 Å (max 0.00174), implementation median 0.00320 Å (max **0.00578**).
+within-PHENIX CDL→E&H switch (A vs B) median 0.00085 Å (max 0.00174), near-matched B-vs-C contrast median 0.00320 Å (max **0.00578**). *(Note: the historical table labels "library" and "implementation" above denote the A−B and B−C contrasts respectively and do not establish a pure causal decomposition.)*
 
 ## Findings
 
 **1. PR #28's attribution was wrong for bond lengths.** On the 6 models where PHENIX and gemmi
 restrain the **same number of bonds** — the only population where the bond-RMSD tolerance considers
-the comparison valid at all — the restraint library accounts for **21 %** of the gap (median
+the comparison valid at all — the within-PHENIX CDL→E&H switch (A vs B) accounts for **21 %** of the gap (median
 0.00085 of 0.00405 Å). Across all 17 models it is 9 %, but that figure is deflated by the
-count-mismatched models, whose implementation term is contaminated (30TW alone contributes
-+0.067 Å). Quote **21 %**; the conclusion is the same either way — the library is the minority
+count-mismatched models, whose B-vs-C contrast is contaminated by differing bond populations (30TW alone contributes
++0.067 Å). Quote **21 %**; the conclusion is the same either way — the within-PHENIX CDL→E&H switch is the minority
 term — but 9 % overstates the point by more than double.
 
-Switching PHENIX from CDL to Engh & Huber is the *whole* library difference, isolated inside one
-implementation, and it barely moves the number. The remaining ~79 % is implementation: how gemmi and
-PHENIX enumerate and sum bond restraints. The ±0.008 Å tolerance itself stands; only its stated
-*cause* was wrong, and that matters because "match the libraries" is useless advice if the library is
-not the problem.
+Switching PHENIX from CDL to Engh & Huber isolates the within-PHENIX library switch inside one
+implementation, and it barely moves the number. The remaining ~79 % in B vs C reflects cross-engine
+implementation (how gemmi and PHENIX enumerate and sum bond restraints) together with residual
+differences between non-identical Engh & Huber-derived dictionaries and restrained bond populations.
+The ±0.008 Å tolerance itself stands; only its stated *cause* was wrong, and that matters because
+switching PHENIX from CDL to Engh & Huber alone does not bring the two tools into agreement.
 
-**2. For bond angles the library-conditional framing is right.** The library accounts for **51 %** of
+**2. For bond angles the library-conditional framing is right.** The within-PHENIX CDL→E&H switch accounts for **51 %** of
 the cross-library angle gap (56 % on matched-count models — stable, unlike the bond-length share), with a median effect of **0.265°** and a max of 0.471° — an in-repo,
 independent confirmation of the review's "0.3–0.4° for library reasons alone", which until now was
 a literature claim the harness had never reproduced. Bond angles and bond lengths simply do not
 behave the same way, and the review's angle finding does not transfer.
 
-**3. The matched-library floor is barely tighter than the cross-library tolerance.** On matched bond
-counts the implementation term is median 0.0032 Å, max **0.0058 Å**, against the cross-library
-±0.008 Å. Matching libraries buys almost nothing for bond lengths, which follows directly from
+**3. The near-matched-library contrast is barely tighter than the cross-library tolerance.** On matched bond
+counts the observed B-vs-C contrast (with non-identical E&H-derived dictionaries and possible population differences) is median 0.0032 Å, max **0.0058 Å**, against the cross-library
+±0.008 Å. The within-PHENIX CDL→E&H switch alone did not eliminate the observed cross-tool gap, which follows directly from
 finding 1.
 
 ## Applied
 
 > **Bond-length RMSD keeps |Δ| ≤ 0.008 Å** across implementations, gated on equal bond count. The
-> **matched-library** case is *not* meaningfully tighter — use **|Δ| ≤ 0.006 Å** — because the
-> library contributes only ~21 % of the disagreement on valid (matched-count) comparisons. Do not expect matching libraries to bring two
-> implementations into agreement on bond lengths.
+> adopted conditional **matched-library** policy band remains **|Δ| ≤ 0.006 Å**; this study does not
+> directly measure or bound the truly matched cross-engine contrast, so its empirical tightness is not established by the ~21 % within-PHENIX CDL→E&H (A–B) observation on valid (matched-count) comparisons. The within-PHENIX CDL→E&H switch alone did not eliminate the observed cross-tool gap on bond lengths.
 >
 > **Bond-angle RMSD** keeps its library-conditional treatment, now with an in-repo magnitude: the
-> library alone shifts angle RMSD by a median **0.265°** (max 0.471°).
+> within-PHENIX CDL→E&H switch shifts angle RMSD by a median **0.265°** (max 0.471°).
 
 ## Scope limits
 
-- The library's share of the gap is subset-dependent for bond lengths (21 % on matched-count models,
-  9 % across all 17) because the count-mismatched models inflate the implementation term. It is
+- The within-PHENIX CDL→E&H switch's share of the gap is subset-dependent for bond lengths (21 % on matched-count models,
+  9 % across all 17) because the count-mismatched models inflate the B-vs-C contrast. It is
   stable for angles (51 %/56 %). Both readings support the same conclusion.
-- B vs C is an upper bound on the matched-library floor: E&H and the CCP4 monomer library are
-  related but not identical, so some library residue remains inside the "implementation" term.
+- B vs C is a near-matched contrast, not a direct measurement of a matched-library floor: E&H and the CCP4 monomer library are
+  related but not identical, and the two tools may restrain different populations, so residual library and population differences remain inside the historical "implementation" (B vs C) column.
 - The bond-count mismatch that dominates the tail (30TW, +0.067 Å) is unexplained beyond the
   inspection in `tolerance_benchmark_bond_rmsd.md` — the scripts record counts but do not diff the
   restraint lists.

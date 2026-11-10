@@ -1,0 +1,43 @@
+{
+  "checked_at": "2026-11-06T07:33:46.113132+00:00",
+  "method": "configured toolchain paths plus filesystem metadata only; no executable run",
+  "overrides": [],
+  "tools": [
+    {
+      "tool": "phenix.amber",
+      "configured_path": "/Users/marcin/phenix-2.0-5936/phenix_bin/phenix.amber",
+      "exists": false,
+      "executable": false,
+      "resolved_path": "/Users/marcin/phenix-2.0-5936/phenix_bin/phenix.amber"
+    },
+    {
+      "tool": "phenix.elbow",
+      "configured_path": "/Users/marcin/phenix-2.0-5936/phenix_bin/phenix.elbow",
+      "exists": true,
+      "executable": true,
+      "resolved_path": "/Users/marcin/phenix-2.0-5936/bin/phenix.elbow"
+    },
+    {
+      "tool": "phenix.ready_set",
+      "configured_path": "/Users/marcin/phenix-2.0-5936/phenix_bin/phenix.ready_set",
+      "exists": true,
+      "executable": true,
+      "resolved_path": "/Users/marcin/phenix-2.0-5936/bin/phenix.ready_set"
+    },
+    {
+      "tool": "acedrg",
+      "configured_path": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/bin/acedrg",
+      "exists": true,
+      "executable": true,
+      "resolved_path": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/bin/acedrg"
+    },
+    {
+      "tool": "libcheck",
+      "configured_path": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/bin/libcheck",
+      "exists": true,
+      "executable": true,
+      "resolved_path": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/bin/libcheck"
+    }
+  ],
+  "schrodinger_openeye": "User/XMechBay reports no installs; not inferred from catalog availability flags."
+}

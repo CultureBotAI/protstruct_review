@@ -11815,7 +11815,7 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            base = Path(tmp)
+            base = Path(tmp).resolve(strict=True)
 
             # Subcase A: post-link readback EIO after os.link succeeds
             ev_a = base / "case_a_postlink_readback"
@@ -12253,7 +12253,7 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
             # Subcase D: Post-publication _ensure_no_symlink_components_under_root os.lstat(root)
             # raises EIO wrapped in ValueError while child directory remains bound at lexical path;
             # lexical binding fields must be None (unknown), not False/True.
-            root_d = Path(tmp) / "subcase_d"
+            root_d = base / "subcase_d"
             child_d = root_d / "refmac_work"
             parent_d = root_d / "refmac_parent_retention"
             child_d.mkdir(parents=True)
@@ -12420,7 +12420,7 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
+            root = Path(tmp).resolve(strict=True)
             # 1. Direct-child positive control
             direct_target = root / "direct_receipt.json"
             direct_res = onesar_refmac._atomic_write_new_json_file(
@@ -12766,7 +12766,7 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
+            root = Path(tmp).resolve(strict=True)
             target = root / "receipt.json"
             tmp_name = f".{target.name}.tmp.{os.getpid()}"
             tmp_path = root / tmp_name
@@ -12840,7 +12840,7 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            base = Path(tmp)
+            base = Path(tmp).resolve(strict=True)
 
             # 1. Otherwise-valid publication with both os.unlink attempts denied (EACCES)
             root_1 = base / "case1_ok_pub_unlink_denied"
@@ -13896,7 +13896,7 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
 
             # 8. Retained payload sink equality and authoritative writer-owned cleanup fields
             # overriding stale incoming fields across collision + temp-cleanup failure and healthy counterpart
-            root_8 = Path(tmp) / "case8_sink_and_stale_fields"
+            root_8 = base / "case8_sink_and_stale_fields"
             child_8 = root_8 / "refmac"
             parent_8 = root_8 / "refmac_parent_retention"
             child_8.mkdir(parents=True)
@@ -14063,7 +14063,7 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
+            root = Path(tmp).resolve(strict=True)
             target = root / "receipt.json"
             factory_calls: list[str] = []
 

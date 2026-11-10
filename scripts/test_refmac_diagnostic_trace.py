@@ -117,8 +117,8 @@ def _write_and_pin(path: Path, raw_bytes: bytes) -> tuple[str, int]:
 class TestRefmacDiagnosticTraceReader(unittest.TestCase):
     def test_valid_zero_event_closed_envelope_and_compiler_specific_kinds(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            # Intentionally test both unresolved and resolved temporary paths
-            tmp_dir = Path(tmp)
+            # Canonicalize the fixture base before testing the valid trace envelope.
+            tmp_dir = Path(tmp).resolve(strict=True)
             trace_path = tmp_dir / "zero_event.jsonl"
             content = (_make_header_line(real_kind=101, int_kind=202) + "\n" + _make_close_line(0) + "\n").encode("ascii")
             sha256_pin, size_pin = _write_and_pin(trace_path, content)

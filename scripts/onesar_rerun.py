@@ -433,6 +433,201 @@ def _parse_mtz_int_token(token: str, *, card: str, field: str) -> int:
     return int(token, 10)
 
 
+def _parse_mtz_hkl_extrema_token(token: str) -> tuple[str, int | None]:
+    """Parse an MTZ ``COLUMN`` extrema token for an ``H``/``K``/``L`` column (#1189).
+
+    Uses exact :class:`~decimal.Decimal` tuple decomposition (independent of ambient
+    decimal context precision and binary float rounding) with bounded exponent/digit
+    span so ``0``, ``0.0``, ``-0.0``, ``+0.000``, ``1e0``, and ``2.0000`` evaluate to
+    their exact integer values while malformed, non-ASCII, underscore-containing,
+    non-finite (``NAN``, ``INF``, ``-INF``), or non-integral (``1.5``,
+    ``1.00000000000000000001``) tokens are classified as ``"invalid_metadata"``.
+    """
+    if (
+        not isinstance(token, str)
+        or not token
+        or len(token) > 80
+        or not token.isascii()
+        or "_" in token
+        or any(ch.isspace() for ch in token)
+    ):
+        return ("invalid_metadata", None)
+    try:
+        dec = Decimal(token)
+    except InvalidOperation:
+        return ("invalid_metadata", None)
+    if not dec.is_finite():
+        return ("invalid_metadata", None)
+    sign, digits, exponent = dec.as_tuple()
+    if not isinstance(exponent, int):
+        return ("invalid_metadata", None)
+    if all(dig == 0 for dig in digits):
+        return ("valid", 0)
+    sig_digits = list(digits)
+    eff_exp = int(exponent)
+    while len(sig_digits) > 1 and sig_digits[-1] == 0:
+        sig_digits.pop()
+        eff_exp += 1
+    while len(sig_digits) > 1 and sig_digits[0] == 0:
+        sig_digits.pop(0)
+    if eff_exp < 0 or len(sig_digits) + eff_exp > 39:
+        return ("invalid_metadata", None)
+    abs_val = int("".join(str(dig) for dig in sig_digits) + ("0" * eff_exp))
+    return ("valid", -abs_val if sign else abs_val)
+
+
+def inspect_mtz_hkl_header_extrema(mtz_bytes: bytes) -> dict[str, Any]:
+    """Compare ``COLUMN`` header min/max tokens against all-row data words for ``H, K, L`` (#1189).
+
+    Slices the raw 80-byte ``COLUMN`` cards directly from ``mtz_bytes`` at their exact
+    header byte offsets and independently decodes every 4-byte IEEE-754 word across all
+    ``nrows`` data rows (including observation-ineligible ``VALM NAN`` padding rows).
+    Reports ``"consistent"``, ``"mismatch"``, or ``"invalid_metadata"`` per axis and for
+    the artifact as a whole without mutating ``mtz_bytes`` or fabricating replacement bounds.
+    """
+    _require_supported_mtz(mtz_bytes)
+    header_byte_offset, headers = _mtz_headers(mtz_bytes)
+    count_rows = [line.split() for line in headers if line.startswith("NCOL ")]
+    if len(count_rows) != 1:
+        raise ValueError("MTZ requires exactly one NCOL header")
+    ncols, nrows, nbatches = map(int, count_rows[0][1:4])
+    if (
+        ncols < 3
+        or nrows <= 0
+        or nbatches != 0
+        or header_byte_offset != 80 + 4 * ncols * nrows
+    ):
+        raise ValueError(
+            "MTZ table dimensions, column identities, or header offset are inconsistent"
+        )
+
+    column_cards: list[dict[str, Any]] = []
+    for card_offset in range(header_byte_offset, len(mtz_bytes), 80):
+        raw_card_bytes = mtz_bytes[card_offset : card_offset + 80]
+        if len(raw_card_bytes) != 80:
+            raise ValueError("MTZ header contains truncated 80-byte record")
+        raw_card = raw_card_bytes.decode("ascii")
+        stripped = raw_card.strip()
+        if stripped == "END":
+            break
+        if not stripped:
+            continue
+        tokens = stripped.split()
+        if tokens[0] == "COLUMN":
+            if len(tokens) != 6:
+                raise ValueError(f"Malformed COLUMN card in MTZ header: {raw_card!r}")
+            column_cards.append(
+                {
+                    "column_index": len(column_cards),
+                    "label": tokens[1],
+                    "type": tokens[2],
+                    "min_token": tokens[3],
+                    "max_token": tokens[4],
+                    "dataset_token": tokens[5],
+                    "dataset_id": _parse_mtz_int_token(
+                        tokens[5], card=stripped, field="COLUMN dataset ID"
+                    ),
+                    "header_card_byte_offset": card_offset,
+                    "header_card_raw": raw_card,
+                    "header_card_hex": raw_card_bytes.hex(),
+                }
+            )
+
+    if (
+        len(column_cards) != ncols
+        or len({card["label"] for card in column_cards}) != ncols
+        or [card["label"] for card in column_cards[:3]] != ["H", "K", "L"]
+        or [card["type"] for card in column_cards[:3]] != ["H", "H", "H"]
+    ):
+        raise ValueError(
+            "MTZ table dimensions, column identities, or header offset are inconsistent"
+        )
+
+    data_start = 80
+    row_stride = ncols * 4
+    axes: dict[str, dict[str, Any]] = {}
+    for col_card in column_cards[:3]:
+        col_idx = col_card["column_index"]
+        axis_label = col_card["label"]
+        min_status, declared_min = _parse_mtz_hkl_extrema_token(
+            col_card["min_token"]
+        )
+        max_status, declared_max = _parse_mtz_hkl_extrema_token(
+            col_card["max_token"]
+        )
+        actual_min: int | None = None
+        actual_max: int | None = None
+        invalid_word_count = 0
+        for row_idx in range(nrows):
+            word_offset = data_start + row_idx * row_stride + col_idx * 4
+            fval = struct.unpack("<f", mtz_bytes[word_offset : word_offset + 4])[0]
+            ival = _integral_value(fval)
+            if ival is None:
+                invalid_word_count += 1
+            else:
+                if actual_min is None or ival < actual_min:
+                    actual_min = ival
+                if actual_max is None or ival > actual_max:
+                    actual_max = ival
+        if invalid_word_count > 0:
+            actual_min = None
+            actual_max = None
+
+        if (
+            min_status != "valid"
+            or max_status != "valid"
+            or invalid_word_count > 0
+            or actual_min is None
+            or actual_max is None
+        ):
+            axis_status = "invalid_metadata"
+        elif declared_min == actual_min and declared_max == actual_max:
+            axis_status = "consistent"
+        else:
+            axis_status = "mismatch"
+
+        axes[axis_label] = {
+            "column_index": col_idx,
+            "label": axis_label,
+            "type": col_card["type"],
+            "dataset_id": col_card["dataset_id"],
+            "dataset_token": col_card["dataset_token"],
+            "min_token": col_card["min_token"],
+            "max_token": col_card["max_token"],
+            "declared_min": declared_min,
+            "declared_max": declared_max,
+            "min_token_status": min_status,
+            "max_token_status": max_status,
+            "header_card_byte_offset": col_card["header_card_byte_offset"],
+            "header_card_raw": col_card["header_card_raw"],
+            "header_card_hex": col_card["header_card_hex"],
+            "row_count": nrows,
+            "invalid_word_count": invalid_word_count,
+            "actual_min": actual_min,
+            "actual_max": actual_max,
+            "status": axis_status,
+            "consistent": axis_status == "consistent",
+        }
+
+    axis_statuses = [axes[axis]["status"] for axis in ("H", "K", "L")]
+    if "invalid_metadata" in axis_statuses:
+        artifact_status = "invalid_metadata"
+    elif "mismatch" in axis_statuses:
+        artifact_status = "mismatch"
+    else:
+        artifact_status = "consistent"
+
+    return {
+        "sha256": _sha256_bytes(mtz_bytes),
+        "ncols": ncols,
+        "nrows": nrows,
+        "header_byte_offset": header_byte_offset,
+        "status": artifact_status,
+        "consistent": artifact_status == "consistent",
+        "axes": axes,
+    }
+
+
 def _parse_mtz_column_extension_card(rec: str) -> tuple[str, str, int]:
     """Validate a ``COLSRC`` or ``COLGRP`` card per CCP4 ``cmtzlib.c:688-754,2828-2844``.
 
@@ -790,6 +985,19 @@ def project_observation_mtz(
             f"Projected MTZ failed reflection-retention audit: {retention_audit}"
         )
 
+    input_hkl_extrema_diag = inspect_mtz_hkl_header_extrema(mtz_bytes)
+    projected_hkl_extrema_diag = inspect_mtz_hkl_header_extrema(projected_bytes)
+    pair_statuses = (
+        input_hkl_extrema_diag["status"],
+        projected_hkl_extrema_diag["status"],
+    )
+    if "invalid_metadata" in pair_statuses:
+        overall_extrema_status = "invalid_metadata"
+    elif "mismatch" in pair_statuses:
+        overall_extrema_status = "mismatch"
+    else:
+        overall_extrema_status = "consistent"
+
     summary = {
         "input_sha256": _sha256_bytes(mtz_bytes),
         "projected_sha256": _sha256_bytes(projected_bytes),
@@ -800,6 +1008,12 @@ def project_observation_mtz(
         "retained_dataset_ids": sorted(retained_dataset_ids),
         "crystallographic_context": copy.deepcopy(proj_context),
         "retention_audit": retention_audit,
+        "hkl_header_extrema_diagnostic": {
+            "status": overall_extrema_status,
+            "consistent": overall_extrema_status == "consistent",
+            "input": input_hkl_extrema_diag,
+            "projected": projected_hkl_extrema_diag,
+        },
     }
     return projected_bytes, summary
 

@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Primitive types, file/environment guards, outer profile validation, and inner receipt admission.
 
-Bounded slices (Tasks 653, 657, 663, 658, 668, 673, 677, 681, 685, 661, 734, 739, 744, 751, and 737):
+Bounded slices (Tasks 653, 657, 663, 658, 668, 673, 677, 681, 685, 661, 734, 739, 744, 751, 737, and 851):
 - Defines the frozen public dataclasses :class:`FilePin`,
   :class:`RefmacDiagnosticProfile`, :class:`FileObservation`,
-  :class:`RootObservation`, and :class:`ValidatedProfile`, and the public
-  validation failure exception :class:`ProfileValidationError`.
+  :class:`LookupStatObservation`, :class:`PreOpenLookupSnapshot`,
+  :class:`PartialFileReadObservation`, :class:`RootObservation`, and
+  :class:`ValidatedProfile`, and the public validation failure exception
+  :class:`ProfileValidationError`.
 - Provides :func:`reject_conflicting_environment` to reject conflicting
   inherited or sourced environment variables without mutating the input mapping
   or ambient environment.
@@ -677,6 +679,236 @@ class _ObservedFilePinError(ValueError):
 
 
 @dataclass(frozen=True)
+class LookupStatObservation:
+    """Immutable kernel stat/lstat observation captured during pre-open path lookup."""
+
+    dev: int
+    ino: int
+    mode: int
+    uid: int
+    gid: int
+    size_bytes: int
+    is_symlink: bool = False
+    is_regular: bool = True
+
+    def __post_init__(self) -> None:
+        for attr_name in ("dev", "ino", "mode", "uid", "gid", "size_bytes"):
+            val = getattr(self, attr_name)
+            if type(val) is not int:
+                raise ValueError(
+                    f"LookupStatObservation.{attr_name} must be a non-boolean int"
+                )
+        if (
+            (self.dev, self.ino, self.mode) == (0, 0, 0)
+            or self.dev <= 0
+            or self.ino <= 0
+        ):
+            raise ValueError(
+                "LookupStatObservation cannot use fabricated zero or non-positive dev/ino identity"
+            )
+        if (
+            self.mode < 0
+            or self.uid < 0
+            or self.gid < 0
+            or self.size_bytes < 0
+        ):
+            raise ValueError(
+                "LookupStatObservation mode/uid/gid/size_bytes must be non-negative"
+            )
+        if type(self.is_symlink) is not bool or type(self.is_regular) is not bool:
+            raise ValueError(
+                "LookupStatObservation.is_symlink and is_regular must be bool"
+            )
+        if self.is_symlink == self.is_regular:
+            raise ValueError(
+                "LookupStatObservation must be either a symlink or a regular file"
+            )
+
+    @classmethod
+    def from_stat_result(cls, st: os.stat_result) -> LookupStatObservation:
+        return cls(
+            dev=int(st.st_dev),
+            ino=int(st.st_ino),
+            mode=int(stat.S_IMODE(st.st_mode)),
+            uid=int(st.st_uid),
+            gid=int(st.st_gid),
+            size_bytes=int(st.st_size),
+            is_symlink=bool(stat.S_ISLNK(st.st_mode)),
+            is_regular=bool(stat.S_ISREG(st.st_mode)),
+        )
+
+    @property
+    def identity_tuple(self) -> tuple[int, int, int, int, int]:
+        return (self.dev, self.ino, self.mode, self.uid, self.gid)
+
+    def __getitem__(self, key: str) -> Any:
+        d = self.to_dict()
+        if key in d:
+            return d[key]
+        raise KeyError(key)
+
+    def keys(self):
+        return self.to_dict().keys()
+
+    def __contains__(self, item: object) -> bool:
+        return item in self.to_dict()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "dev": self.dev,
+            "ino": self.ino,
+            "mode": self.mode,
+            "uid": self.uid,
+            "gid": self.gid,
+            "size_bytes": self.size_bytes,
+            "is_symlink": self.is_symlink,
+            "is_regular": self.is_regular,
+        }
+
+
+@dataclass(frozen=True)
+class PreOpenLookupSnapshot:
+    """Immutable pre-open lookup and component-traversal snapshot retained before ``os.open``/``os.fstat``."""
+
+    lexical_path: str
+    resolved_path: str
+    lexical_lstat: LookupStatObservation
+    lexical_stat: LookupStatObservation
+    resolved_target_lstat: LookupStatObservation
+    symlinks: tuple[_SymlinkEdge, ...] = ()
+    symlink_identities: tuple[_ObservedSymlinkIdentity, ...] = ()
+    traversed_directories: tuple[_ObservedDirectoryIdentity, ...] = ()
+
+    def __post_init__(self) -> None:
+        _validate_lexical_abs_path(
+            self.lexical_path, field_name="PreOpenLookupSnapshot.lexical_path"
+        )
+        _validate_lexical_abs_path(
+            self.resolved_path, field_name="PreOpenLookupSnapshot.resolved_path"
+        )
+        if ".." in Path(self.resolved_path).parts:
+            raise ValueError(
+                f"PreOpenLookupSnapshot.resolved_path must not contain '..': {self.resolved_path!r}"
+            )
+        if type(self.lexical_lstat) is not LookupStatObservation:
+            raise ValueError(
+                "PreOpenLookupSnapshot.lexical_lstat must be a LookupStatObservation"
+            )
+        if type(self.lexical_stat) is not LookupStatObservation:
+            raise ValueError(
+                "PreOpenLookupSnapshot.lexical_stat must be a LookupStatObservation"
+            )
+        if type(self.resolved_target_lstat) is not LookupStatObservation:
+            raise ValueError(
+                "PreOpenLookupSnapshot.resolved_target_lstat must be a LookupStatObservation"
+            )
+        if not self.lexical_stat.is_regular or self.lexical_stat.is_symlink:
+            raise ValueError(
+                "PreOpenLookupSnapshot.lexical_stat must describe a regular file"
+            )
+        if (
+            not self.resolved_target_lstat.is_regular
+            or self.resolved_target_lstat.is_symlink
+        ):
+            raise ValueError(
+                "PreOpenLookupSnapshot.resolved_target_lstat must describe a regular file"
+            )
+        if (
+            self.lexical_stat.identity_tuple
+            != self.resolved_target_lstat.identity_tuple
+            or self.lexical_stat.size_bytes
+            != self.resolved_target_lstat.size_bytes
+        ):
+            raise ValueError(
+                "PreOpenLookupSnapshot lexical_stat and resolved_target_lstat must match"
+            )
+        if not isinstance(self.symlinks, tuple) or not all(
+            type(e) is _SymlinkEdge for e in self.symlinks
+        ):
+            raise ValueError(
+                "PreOpenLookupSnapshot.symlinks must be a tuple of _SymlinkEdge"
+            )
+        edge_paths = [e.path for e in self.symlinks]
+        if edge_paths != sorted(set(edge_paths)):
+            raise ValueError(
+                "PreOpenLookupSnapshot.symlinks must be strictly sorted by unique edge.path"
+            )
+        if not isinstance(self.symlink_identities, tuple) or not all(
+            type(s) is _ObservedSymlinkIdentity for s in self.symlink_identities
+        ):
+            raise ValueError(
+                "PreOpenLookupSnapshot.symlink_identities must be a tuple of _ObservedSymlinkIdentity"
+            )
+        expected_pairs = [(e.path, e.target) for e in self.symlinks]
+        observed_pairs = [(s.path, s.target) for s in self.symlink_identities]
+        it = iter(expected_pairs)
+        if not all(pair in it for pair in observed_pairs):
+            raise ValueError(
+                "PreOpenLookupSnapshot.symlink_identities must be an ordered subset of symlinks"
+            )
+        if (
+            not isinstance(self.traversed_directories, tuple)
+            or len(self.traversed_directories) == 0
+            or not all(
+                type(d) is _ObservedDirectoryIdentity
+                for d in self.traversed_directories
+            )
+        ):
+            raise ValueError(
+                "PreOpenLookupSnapshot.traversed_directories must be a non-empty tuple of _ObservedDirectoryIdentity"
+            )
+        dir_paths = [d.path for d in self.traversed_directories]
+        if len(dir_paths) != len(set(dir_paths)):
+            raise ValueError(
+                "PreOpenLookupSnapshot.traversed_directories must have unique paths"
+            )
+
+    @property
+    def path(self) -> str:
+        return self.lexical_path
+
+    @property
+    def target_lstat(self) -> LookupStatObservation:
+        return self.resolved_target_lstat
+
+    @property
+    def symlink_edges(self) -> tuple[_SymlinkEdge, ...]:
+        return self.symlinks
+
+    @property
+    def directory_identities(self) -> tuple[_ObservedDirectoryIdentity, ...]:
+        return self.traversed_directories
+
+    def __getitem__(self, key: str) -> Any:
+        d = self.to_dict()
+        if key in d:
+            return d[key]
+        raise KeyError(key)
+
+    def keys(self):
+        return self.to_dict().keys()
+
+    def __contains__(self, item: object) -> bool:
+        return item in self.to_dict()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "lexical_path": self.lexical_path,
+            "resolved_path": self.resolved_path,
+            "lexical_lstat": self.lexical_lstat.to_dict(),
+            "lexical_stat": self.lexical_stat.to_dict(),
+            "resolved_target_lstat": self.resolved_target_lstat.to_dict(),
+            "symlinks": [edge.to_dict() for edge in self.symlinks],
+            "symlink_identities": [
+                sym.to_dict() for sym in self.symlink_identities
+            ],
+            "traversed_directories": [
+                d.to_dict() for d in self.traversed_directories
+            ],
+        }
+
+
+@dataclass(frozen=True)
 class PartialFileReadObservation:
     """Immutable partial file-read observation retained when a regular-file read fails after lookup/fstat."""
 
@@ -698,6 +930,7 @@ class PartialFileReadObservation:
     dependencies_complete: bool = False
     verified: bool = False
     errors: tuple[str, ...] = ()
+    lookup_snapshot: PreOpenLookupSnapshot | None = None
 
     def __post_init__(self) -> None:
         _validate_lexical_abs_path(
@@ -762,6 +995,33 @@ class PartialFileReadObservation:
             if self.stat_size_bytes is None:
                 raise ValueError(
                     "PartialFileReadObservation.stat_size_bytes must be present when fstat identity is measured"
+                )
+        else:
+            if self.stat_size_bytes is not None:
+                raise ValueError(
+                    "PartialFileReadObservation.stat_size_bytes must be None when fstat identity was not measured"
+                )
+            if self.streamed_size_bytes != 0:
+                raise ValueError(
+                    "PartialFileReadObservation.streamed_size_bytes must be 0 when fstat identity was not measured"
+                )
+
+        if self.lookup_snapshot is not None:
+            if type(self.lookup_snapshot) is not PreOpenLookupSnapshot:
+                raise ValueError(
+                    "PartialFileReadObservation.lookup_snapshot must be a PreOpenLookupSnapshot or None"
+                )
+            if self.lookup_snapshot.lexical_path != self.path:
+                raise ValueError(
+                    "PartialFileReadObservation.lookup_snapshot.lexical_path must match path"
+                )
+            if self.resolved_path != self.lookup_snapshot.resolved_path:
+                raise ValueError(
+                    "PartialFileReadObservation.lookup_snapshot.resolved_path must match resolved_path"
+                )
+            if self.symlinks != self.lookup_snapshot.symlinks:
+                raise ValueError(
+                    "PartialFileReadObservation.lookup_snapshot.symlinks must match symlinks"
                 )
 
         if not isinstance(self.symlinks, tuple) or not all(
@@ -879,6 +1139,11 @@ class PartialFileReadObservation:
             "dependencies_complete": self.dependencies_complete,
             "verified": self.verified,
             "errors": list(self.errors),
+            "lookup_snapshot": (
+                self.lookup_snapshot.to_dict()
+                if self.lookup_snapshot is not None
+                else None
+            ),
         }
 
     def to_provenance(self) -> dict[str, Any]:
@@ -958,6 +1223,7 @@ class _PathTraversalResult:
     directory_paths: tuple[str, ...]
     target_lstat: os.stat_result
     directory_identities: tuple[_ObservedDirectoryIdentity, ...] = ()
+    symlink_identities: tuple[_ObservedSymlinkIdentity, ...] = ()
 
 
 def _traverse_path_components(raw_lexical: str) -> _PathTraversalResult:
@@ -1003,6 +1269,7 @@ def _traverse_path_components(raw_lexical: str) -> _PathTraversalResult:
         "/": root_dir_obs
     }
     edges: dict[str, str] = {}
+    symlink_identities_seen: dict[str, _ObservedSymlinkIdentity] = {}
     symlink_traversals = 0
     resolved_path: str | None = None
     target_lstat: os.stat_result | None = None
@@ -1067,7 +1334,23 @@ def _traverse_path_components(raw_lexical: str) -> _PathTraversalResult:
                     f"Symlink target changed during traversal at {cand_path!r}: "
                     f"before={prev_target!r}, after={target!r}"
                 )
+            cand_sym_obs = _ObservedSymlinkIdentity(
+                path=cand_path,
+                target=target,
+                dev=int(st.st_dev),
+                ino=int(st.st_ino),
+                mode=int(stat.S_IMODE(st.st_mode)),
+                uid=int(st.st_uid),
+                gid=int(st.st_gid),
+            )
+            prev_sym_obs = symlink_identities_seen.get(cand_path)
+            if prev_sym_obs is not None and prev_sym_obs != cand_sym_obs:
+                raise ValueError(
+                    f"Symlink identity changed during traversal at {cand_path!r}: "
+                    f"before={prev_sym_obs.to_dict()}, after={cand_sym_obs.to_dict()}"
+                )
             edges[cand_path] = target
+            symlink_identities_seen[cand_path] = cand_sym_obs
             if target.startswith("/"):
                 current_parts = []
                 dir_paths_seen["/"] = None
@@ -1136,9 +1419,15 @@ def _traverse_path_components(raw_lexical: str) -> _PathTraversalResult:
                 d_path, dir_identities_seen[d_path]
             )
 
+    sorted_edge_paths = sorted(edges)
     symlink_edges = tuple(
         _SymlinkEdge(path=edge_path, target=edges[edge_path])
-        for edge_path in sorted(edges)
+        for edge_path in sorted_edge_paths
+    )
+    symlink_identities = tuple(
+        symlink_identities_seen[edge_path]
+        for edge_path in sorted_edge_paths
+        if edge_path in symlink_identities_seen
     )
     return _PathTraversalResult(
         lexical_path=raw_lexical,
@@ -1147,6 +1436,7 @@ def _traverse_path_components(raw_lexical: str) -> _PathTraversalResult:
         directory_paths=tuple(dir_paths_seen.keys()),
         target_lstat=target_lstat,
         directory_identities=tuple(ordered_dir_identities.values()),
+        symlink_identities=symlink_identities,
     )
 
 
@@ -1231,6 +1521,19 @@ def _stream_observe_regular_file(
             f"Target size changed during pre-open resolution for {raw_lexical!r}"
         )
 
+    lookup_snapshot_before = PreOpenLookupSnapshot(
+        lexical_path=raw_lexical,
+        resolved_path=resolved_before,
+        lexical_lstat=LookupStatObservation.from_stat_result(lex_lstat_before),
+        lexical_stat=LookupStatObservation.from_stat_result(lex_stat_before),
+        resolved_target_lstat=LookupStatObservation.from_stat_result(
+            target_lstat_before
+        ),
+        symlinks=symlinks_before,
+        symlink_identities=traversal_before.symlink_identities,
+        traversed_directories=traversal_before.directory_identities,
+    )
+
     open_flags = (
         os.O_RDONLY
         | getattr(os, "O_NOFOLLOW", 0)
@@ -1246,40 +1549,53 @@ def _stream_observe_regular_file(
     )
 
     fstat_before: os.stat_result | None = None
+    in_open_or_initial_fstat = False
     pre_eof_after_fstat = False
 
     def _build_partial_read_obs(
         err_msg: str,
         *,
-        fstat_st: os.stat_result,
+        fstat_st: os.stat_result | None,
         streamed_bytes: int,
     ) -> PartialFileReadObservation:
         anc_tuple = traversal_before.directory_identities
-        deps_complete = len(anc_tuple) > 0 and len(symlinks_before) == 0
+        sym_ids = traversal_before.symlink_identities
+        deps_complete = (
+            len(anc_tuple) > 0 and len(sym_ids) == len(symlinks_before)
+        )
         return PartialFileReadObservation(
             path=raw_lexical,
             resolved_path=resolved_before,
             sha256=None,
             size_bytes=None,
-            stat_size_bytes=int(fstat_st.st_size),
+            stat_size_bytes=(
+                int(fstat_st.st_size) if fstat_st is not None else None
+            ),
             streamed_size_bytes=streamed_bytes,
             read_complete=False,
-            dev=int(fstat_st.st_dev),
-            ino=int(fstat_st.st_ino),
-            mode=int(stat.S_IMODE(fstat_st.st_mode)),
-            uid=int(fstat_st.st_uid),
-            gid=int(fstat_st.st_gid),
+            dev=int(fstat_st.st_dev) if fstat_st is not None else None,
+            ino=int(fstat_st.st_ino) if fstat_st is not None else None,
+            mode=(
+                int(stat.S_IMODE(fstat_st.st_mode))
+                if fstat_st is not None
+                else None
+            ),
+            uid=int(fstat_st.st_uid) if fstat_st is not None else None,
+            gid=int(fstat_st.st_gid) if fstat_st is not None else None,
             symlinks=symlinks_before,
-            symlink_identities=(),
+            symlink_identities=sym_ids,
             ancestors=anc_tuple,
             dependencies_complete=deps_complete,
             verified=False,
             errors=(err_msg,),
+            lookup_snapshot=lookup_snapshot_before,
         )
 
     try:
+        in_open_or_initial_fstat = True
         fd = os.open(resolved_before, open_flags)
         fstat_before = os.fstat(fd)
+        in_open_or_initial_fstat = False
         if not stat.S_ISREG(fstat_before.st_mode):
             raise ValueError(
                 f"Opened descriptor is not a regular file: {resolved_before!r}"
@@ -1347,11 +1663,24 @@ def _stream_observe_regular_file(
     except _PartialFileReadError:
         raise
     except Exception as exc:
-        if not pre_eof_after_fstat and isinstance(exc, ValueError):
+        if (
+            not in_open_or_initial_fstat
+            and not pre_eof_after_fstat
+            and isinstance(exc, ValueError)
+        ):
             raise
         err_msg = (
             f"Failed reading regular file {raw_lexical!r} ({type(exc).__name__}): {exc}"
         )
+        if in_open_or_initial_fstat:
+            raise _PartialFileReadError(
+                err_msg,
+                observation=_build_partial_read_obs(
+                    err_msg,
+                    fstat_st=None,
+                    streamed_bytes=0,
+                ),
+            ) from exc
         if pre_eof_after_fstat and fstat_before is not None:
             raise _PartialFileReadError(
                 err_msg,
@@ -3274,6 +3603,44 @@ def _record_symlink_identity(
     store[obs.path] = obs
 
 
+def _record_partial_read_dependencies(
+    partial_obs: PartialFileReadObservation,
+    *,
+    ancestors_out: dict[str, _ObservedDirectoryIdentity],
+    symlinks_out: dict[str, _ObservedSymlinkIdentity],
+) -> _ObservedFileDependencies:
+    """Record already-obtained traversal directory and symlink identities from a partial file read in memory."""
+    dep_errors: list[str] = []
+    canon_ancs: list[_ObservedDirectoryIdentity] = []
+    for dir_obs in partial_obs.ancestors:
+        if dir_obs.path != dir_obs.resolved_path:
+            dep_errors.append(
+                f"Traversed directory dependency {dir_obs.path!r} is not canonical ({dir_obs.resolved_path!r})"
+            )
+            continue
+        canon_ancs.append(dir_obs)
+        try:
+            _record_directory_identity(ancestors_out, dir_obs)
+        except ValueError as exc:
+            dep_errors.append(str(exc))
+    for sym_obs in partial_obs.symlink_identities:
+        try:
+            _record_symlink_identity(symlinks_out, sym_obs)
+        except ValueError as exc:
+            dep_errors.append(str(exc))
+    complete = (
+        len(dep_errors) == 0
+        and len(canon_ancs) > 0
+        and len(partial_obs.symlink_identities) == len(partial_obs.symlinks)
+    )
+    return _ObservedFileDependencies(
+        ancestors=tuple(canon_ancs),
+        symlink_identities=partial_obs.symlink_identities,
+        complete=complete,
+        errors=tuple(dep_errors),
+    )
+
+
 def _collect_file_dependencies(
     file_obs: _ObservedRegularFilePin,
     *,
@@ -3733,7 +4100,13 @@ def _validate_and_observe_outer_profile(
                 errors=tuple(manifest_error_messages),
             )
         if partial_manifest_observation is not None:
-            return partial_manifest_observation
+            return _build_partial_file_observation(
+                partial_manifest_observation,
+                observed_ancestors=observed_ancestors,
+                observed_symlinks=observed_symlinks,
+                file_dependencies=manifest_dependencies,
+                errors=tuple(manifest_error_messages),
+            )
         return None
 
     def _project_file_observations() -> dict[str, FileObservation]:
@@ -3756,7 +4129,13 @@ def _validate_and_observe_outer_profile(
             _project_file_observations()
         )
         for fid, pobs in partial_files.items():
-            merged[fid] = pobs
+            merged[fid] = _build_partial_file_observation(
+                pobs,
+                observed_ancestors=observed_ancestors,
+                observed_symlinks=observed_symlinks,
+                file_dependencies=file_dependencies.get(fid),
+                errors=tuple(per_file_error_messages.get(fid, ())),
+            )
         return dict(sorted(merged.items()))
 
     def _make_partial(errs: list[str]) -> _PartialProfileObservation:
@@ -3840,6 +4219,22 @@ def _validate_and_observe_outer_profile(
         partial_manifest_observation = exc.observation
         manifest_error_messages.append(str(exc))
         _record_err("manifest_pin", exc)
+        manifest_dependencies = _record_partial_read_dependencies(
+            partial_manifest_observation,
+            ancestors_out=observed_ancestors,
+            symlinks_out=observed_symlinks,
+        )
+        for d_err in manifest_dependencies.errors:
+            if d_err not in manifest_error_messages:
+                manifest_error_messages.append(d_err)
+            _record_err("manifest_pin", ValueError(d_err), message=d_err)
+        partial_manifest_observation = _build_partial_file_observation(
+            partial_manifest_observation,
+            observed_ancestors=observed_ancestors,
+            observed_symlinks=observed_symlinks,
+            file_dependencies=manifest_dependencies,
+            errors=tuple(manifest_error_messages),
+        )
         _raise_observation_error()
     except ValueError as exc:
         manifest_error_messages.append(str(exc))
@@ -4151,10 +4546,30 @@ def _validate_and_observe_outer_profile(
                 verified_files[file_id] = obtained_file_obs
         else:
             if obtained_partial_obs is not None:
-                partial_files[file_id] = obtained_partial_obs
+                dep_res = _record_partial_read_dependencies(
+                    obtained_partial_obs,
+                    ancestors_out=observed_ancestors,
+                    symlinks_out=observed_symlinks,
+                )
+                file_dependencies[file_id] = dep_res
+                for d_err in dep_res.errors:
+                    file_err_records.append(
+                        (
+                            "outer_profile_files_and_roots",
+                            d_err,
+                            ValueError(d_err),
+                        )
+                    )
                 per_file_error_messages[file_id] = [
                     m for _s, m, _e in file_err_records
                 ]
+                partial_files[file_id] = _build_partial_file_observation(
+                    obtained_partial_obs,
+                    observed_ancestors=observed_ancestors,
+                    observed_symlinks=observed_symlinks,
+                    file_dependencies=dep_res,
+                    errors=tuple(per_file_error_messages[file_id]),
+                )
             for st_name, m_str, exc_obj in file_err_records:
                 _record_err(st_name, exc_obj, message=m_str)
 
@@ -6196,6 +6611,113 @@ def _build_file_observation(
     )
 
 
+def _build_partial_file_observation(
+    partial_obs: PartialFileReadObservation,
+    *,
+    observed_ancestors: Mapping[str, _ObservedDirectoryIdentity] | None = None,
+    observed_symlinks: Mapping[str, _ObservedSymlinkIdentity] | None = None,
+    file_dependencies: _ObservedFileDependencies | None = None,
+    errors: Sequence[str] = (),
+) -> PartialFileReadObservation:
+    """Project a contextual :class:`PartialFileReadObservation` purely in memory from retained observations.
+
+    Preserves ``partial_obs.errors`` first so message-prefix size-mismatch classification
+    remains unchanged, retains per-owner measured ancestor/symlink/lookup facts without
+    filesystem access, and never upgrades incomplete dependency evidence.
+    """
+    err_list: list[str] = list(partial_obs.errors)
+    for m_str in errors:
+        if m_str not in err_list:
+            err_list.append(m_str)
+
+    file_ancs = (
+        file_dependencies.ancestors
+        if file_dependencies is not None and len(file_dependencies.ancestors) > 0
+        else partial_obs.ancestors
+    )
+    file_syms = (
+        file_dependencies.symlink_identities
+        if file_dependencies is not None
+        and len(file_dependencies.symlink_identities) > 0
+        else partial_obs.symlink_identities
+    )
+
+    if file_dependencies is not None:
+        for d_err in file_dependencies.errors:
+            if d_err not in err_list:
+                err_list.append(d_err)
+        deps_complete = bool(
+            partial_obs.dependencies_complete and file_dependencies.complete
+        )
+    else:
+        anc_conflict_errors: list[str] = []
+        if observed_ancestors is not None:
+            for dir_obs in partial_obs.ancestors:
+                if dir_obs.path != dir_obs.resolved_path:
+                    anc_conflict_errors.append(
+                        f"Traversed directory dependency {dir_obs.path!r} is not canonical ({dir_obs.resolved_path!r})"
+                    )
+                    continue
+                if (
+                    dir_obs.path in observed_ancestors
+                    and observed_ancestors[dir_obs.path] != dir_obs
+                ):
+                    anc_conflict_errors.append(
+                        f"Directory identity changed during observation at {dir_obs.path!r}: "
+                        f"before={observed_ancestors[dir_obs.path].to_dict()}, after={dir_obs.to_dict()}"
+                    )
+        sym_conflict_errors: list[str] = []
+        if observed_symlinks is not None:
+            for sym_obs in partial_obs.symlink_identities:
+                if (
+                    sym_obs.path in observed_symlinks
+                    and observed_symlinks[sym_obs.path] != sym_obs
+                ):
+                    sym_conflict_errors.append(
+                        f"Symlink identity changed during observation at {sym_obs.path!r}: "
+                        f"before={observed_symlinks[sym_obs.path].to_dict()}, after={sym_obs.to_dict()}"
+                    )
+        for c_err in (*anc_conflict_errors, *sym_conflict_errors):
+            if c_err not in err_list:
+                err_list.append(c_err)
+        deps_complete = bool(
+            partial_obs.dependencies_complete
+            and len(anc_conflict_errors) == 0
+            and len(sym_conflict_errors) == 0
+        )
+
+    err_tuple = tuple(err_list)
+    if (
+        file_ancs == partial_obs.ancestors
+        and file_syms == partial_obs.symlink_identities
+        and deps_complete == partial_obs.dependencies_complete
+        and err_tuple == partial_obs.errors
+    ):
+        return partial_obs
+
+    return PartialFileReadObservation(
+        path=partial_obs.path,
+        resolved_path=partial_obs.resolved_path,
+        sha256=partial_obs.sha256,
+        size_bytes=partial_obs.size_bytes,
+        stat_size_bytes=partial_obs.stat_size_bytes,
+        streamed_size_bytes=partial_obs.streamed_size_bytes,
+        read_complete=partial_obs.read_complete,
+        dev=partial_obs.dev,
+        ino=partial_obs.ino,
+        mode=partial_obs.mode,
+        uid=partial_obs.uid,
+        gid=partial_obs.gid,
+        symlinks=partial_obs.symlinks,
+        symlink_identities=file_syms,
+        ancestors=file_ancs,
+        dependencies_complete=deps_complete,
+        verified=False,
+        errors=err_tuple,
+        lookup_snapshot=partial_obs.lookup_snapshot,
+    )
+
+
 def _build_root_observation(
     root_inv: _ObservedRootInventory,
     outer_manifest: _CheckedOuterManifest | None,
@@ -7175,7 +7697,12 @@ def validate_profile(
                     verified=False,
                 )
             elif partial.partial_manifest_observation is not None:
-                manifest_obs_public = partial.partial_manifest_observation
+                manifest_obs_public = _build_partial_file_observation(
+                    partial.partial_manifest_observation,
+                    observed_ancestors=partial.observed_ancestors,
+                    observed_symlinks=partial.observed_symlinks,
+                    file_dependencies=partial.manifest_dependencies,
+                )
         merged_files_public: dict[
             str, FileObservation | PartialFileReadObservation
         ] = {}
@@ -7191,7 +7718,15 @@ def validate_profile(
                     verified=(fid in partial.verified_files),
                 )
         for fid, pobs in sorted(partial.partial_files.items()):
-            merged_files_public.setdefault(fid, pobs)
+            merged_files_public.setdefault(
+                fid,
+                _build_partial_file_observation(
+                    pobs,
+                    observed_ancestors=partial.observed_ancestors,
+                    observed_symlinks=partial.observed_symlinks,
+                    file_dependencies=partial.file_dependencies.get(fid),
+                ),
+            )
         partial_files_public = tuple(sorted(merged_files_public.items()))
         partial_roots_public = tuple(
             (

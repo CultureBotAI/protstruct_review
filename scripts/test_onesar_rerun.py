@@ -69,6 +69,7 @@ def _build_synthetic_mtz(
     ),
     valm: str = "VALM NAN",
     extra_header_cards: tuple[str, ...] | list[str] = (),
+    column_extrema: dict[str, tuple[str, str]] | None = None,
 ) -> bytes:
     """Construct a synthetic little-endian MTZ byte stream for pure unit testing."""
     if columns is None:
@@ -120,7 +121,23 @@ def _build_synthetic_mtz(
         )
         cards.append(_card(f"DWAVEL {d_id:8d}    1.00000"))
     for name, ctype, d_id in columns:
-        cards.append(_card(f"COLUMN {name:<30s} {ctype} 0.0 100.0 {d_id}"))
+        min_tok, max_tok = (
+            column_extrema[name]
+            if column_extrema is not None and name in column_extrema
+            else ("0.0", "100.0")
+        )
+        col_card_text = f"COLUMN {name:<30s} {ctype} {min_tok} {max_tok} {d_id}"
+        if (
+            column_extrema is not None
+            and name in column_extrema
+            and len(col_card_text) > 80
+        ):
+            col_card_text = f"COLUMN {name} {ctype} {min_tok} {max_tok} {d_id}"
+        if len(col_card_text) > 80:
+            raise ValueError(
+                f"Synthetic COLUMN card exceeds 80 characters ({len(col_card_text)}): {col_card_text!r}"
+            )
+        cards.append(_card(col_card_text))
     for extra_card in extra_header_cards:
         cards.append(_card(extra_card))
     cards.append(_card("END"))
@@ -970,6 +987,111 @@ class TestMtzProjectionAndHklLedger(unittest.TestCase):
             expected_proj_data,
         )
 
+        # #1189: Verify H/K/L header extrema diagnostic on committed 1SAR input and projected MTZ.
+        self.assertEqual(
+            proj_summary["input_sha256"],
+            "f36d5fe685a3e524e8809d17d19ce12073acdf339eba2cfd3b0347a818850ab2",
+        )
+        self.assertEqual(
+            proj_summary["projected_sha256"],
+            "6edbe54b2ec7b815f30b6bd20a7264a7c978721189670e39e20d876d9b4fece7",
+        )
+        raw_hkl_rows = [
+            struct.unpack_from("<fff", mtz_bytes, 80 + row_idx * 64)
+            for row_idx in range(7248)
+        ]
+        proj_hkl_rows = [
+            struct.unpack_from("<fff", projected_bytes, 80 + row_idx * 24)
+            for row_idx in range(7248)
+        ]
+        self.assertEqual(raw_hkl_rows, proj_hkl_rows)
+        expected_actual_bounds = {
+            "H": (
+                min(int(r[0]) for r in raw_hkl_rows),
+                max(int(r[0]) for r in raw_hkl_rows),
+            ),
+            "K": (
+                min(int(r[1]) for r in raw_hkl_rows),
+                max(int(r[1]) for r in raw_hkl_rows),
+            ),
+            "L": (
+                min(int(r[2]) for r in raw_hkl_rows),
+                max(int(r[2]) for r in raw_hkl_rows),
+            ),
+        }
+        self.assertEqual(
+            expected_actual_bounds,
+            {"H": (0, 25), "K": (0, 31), "L": (0, 15)},
+        )
+        extrema_diag = proj_summary["hkl_header_extrema_diagnostic"]
+        self.assertEqual(extrema_diag["status"], "mismatch")
+        self.assertFalse(extrema_diag["consistent"])
+        expected_hex_by_axis = {
+            "H": "434f4c554d4e2048202020202020202020202020202020202020202020202020202020202020482020202020202020202020202020202020302020202020202020202020202020202020302020202031",
+            "K": "434f4c554d4e204b202020202020202020202020202020202020202020202020202020202020482020202020202020202020202020202020302020202020202020202020202020202020302020202031",
+            "L": "434f4c554d4e204c202020202020202020202020202020202020202020202020202020202020482020202020202020202020202020202020322020202020202020202020202020202020322020202031",
+        }
+        expected_declared_by_axis = {
+            "H": ("0", "0", 0, 0),
+            "K": ("0", "0", 0, 0),
+            "L": ("2", "2", 2, 2),
+        }
+        expected_offsets = {
+            "input": {"H": 464912, "K": 465072, "L": 465232},
+            "projected": {"H": 174992, "K": 175072, "L": 175152},
+        }
+        for artifact_key, artifact_bytes, exp_ncols, exp_hdr_off in (
+            ("input", mtz_bytes, 16, 463952),
+            ("projected", projected_bytes, 6, 174032),
+        ):
+            art_diag = extrema_diag[artifact_key]
+            self.assertEqual(
+                art_diag["sha256"],
+                hashlib.sha256(artifact_bytes).hexdigest(),
+            )
+            self.assertEqual(art_diag["ncols"], exp_ncols)
+            self.assertEqual(art_diag["nrows"], 7248)
+            self.assertEqual(art_diag["header_byte_offset"], exp_hdr_off)
+            self.assertEqual(art_diag["status"], "mismatch")
+            self.assertFalse(art_diag["consistent"])
+            self.assertEqual(list(art_diag["axes"].keys()), ["H", "K", "L"])
+            for col_idx, axis in enumerate(("H", "K", "L")):
+                ax_rec = art_diag["axes"][axis]
+                min_tok, max_tok, dec_min, dec_max = expected_declared_by_axis[
+                    axis
+                ]
+                act_min, act_max = expected_actual_bounds[axis]
+                exp_card_off = expected_offsets[artifact_key][axis]
+                self.assertEqual(ax_rec["column_index"], col_idx)
+                self.assertEqual(ax_rec["label"], axis)
+                self.assertEqual(ax_rec["type"], "H")
+                self.assertEqual(ax_rec["dataset_id"], 1)
+                self.assertEqual(ax_rec["dataset_token"], "1")
+                self.assertEqual(ax_rec["min_token"], min_tok)
+                self.assertEqual(ax_rec["max_token"], max_tok)
+                self.assertEqual(ax_rec["declared_min"], dec_min)
+                self.assertEqual(ax_rec["declared_max"], dec_max)
+                self.assertEqual(ax_rec["min_token_status"], "valid")
+                self.assertEqual(ax_rec["max_token_status"], "valid")
+                self.assertEqual(
+                    ax_rec["header_card_byte_offset"], exp_card_off
+                )
+                self.assertEqual(
+                    ax_rec["header_card_raw"],
+                    artifact_bytes[exp_card_off : exp_card_off + 80].decode(
+                        "ascii"
+                    ),
+                )
+                self.assertEqual(
+                    ax_rec["header_card_hex"], expected_hex_by_axis[axis]
+                )
+                self.assertEqual(ax_rec["row_count"], 7248)
+                self.assertEqual(ax_rec["invalid_word_count"], 0)
+                self.assertEqual(ax_rec["actual_min"], act_min)
+                self.assertEqual(ax_rec["actual_max"], act_max)
+                self.assertEqual(ax_rec["status"], "mismatch")
+                self.assertFalse(ax_rec["consistent"])
+
     def test_synthetic_mtz_eligibility_zero_negative_nan_and_failure_modes(
         self,
     ) -> None:
@@ -1374,6 +1496,339 @@ class TestMtzProjectionAndHklLedger(unittest.TestCase):
                     onesar_rerun._parse_mtz_column_extension_card(
                         non_ascii_card
                     )
+
+    def test_hkl_header_extrema_diagnostic_synthetic_matrix(self) -> None:
+        nan = float("nan")
+        # 1. Mixed negative, zero, and positive HKL rows in arbitrary non-sorted row
+        # order where true extrema occur in interior rows, with coherent header bounds.
+        unsorted_rows = [
+            (2, -1, 4, 50.0, 2.0, 0.0),
+            (-7, 12, 0, 60.0, 2.5, 1.0),
+            (0, -9, 11, 45.0, 1.8, 0.0),
+            (5, 3, -6, 30.0, 1.2, 1.0),
+            (1, 0, 2, 40.0, 1.5, 0.0),
+        ]
+        expected_min_h = min(int(r[0]) for r in unsorted_rows)
+        expected_max_h = max(int(r[0]) for r in unsorted_rows)
+        expected_min_k = min(int(r[1]) for r in unsorted_rows)
+        expected_max_k = max(int(r[1]) for r in unsorted_rows)
+        expected_min_l = min(int(r[2]) for r in unsorted_rows)
+        expected_max_l = max(int(r[2]) for r in unsorted_rows)
+        self.assertEqual((expected_min_h, expected_max_h), (-7, 5))
+        self.assertEqual((expected_min_k, expected_max_k), (-9, 12))
+        self.assertEqual((expected_min_l, expected_max_l), (-6, 11))
+
+        coherent_mtz = _build_synthetic_mtz(
+            unsorted_rows,
+            column_extrema={
+                "H": ("-7", "5"),
+                "K": ("-9", "12"),
+                "L": ("-6", "11"),
+            },
+        )
+        coherent_proj, coherent_summary = onesar_rerun.project_observation_mtz(
+            coherent_mtz
+        )
+        coherent_diag = coherent_summary["hkl_header_extrema_diagnostic"]
+        self.assertEqual(coherent_diag["status"], "consistent")
+        self.assertTrue(coherent_diag["consistent"])
+        for side, side_bytes in (
+            ("input", coherent_mtz),
+            ("projected", coherent_proj),
+        ):
+            side_diag = coherent_diag[side]
+            self.assertEqual(side_diag["status"], "consistent")
+            self.assertTrue(side_diag["consistent"])
+            self.assertEqual(side_diag["nrows"], len(unsorted_rows))
+            for axis, exp_bounds in (
+                ("H", (-7, 5)),
+                ("K", (-9, 12)),
+                ("L", (-6, 11)),
+            ):
+                ax = side_diag["axes"][axis]
+                self.assertEqual(ax["status"], "consistent")
+                self.assertTrue(ax["consistent"])
+                self.assertEqual(
+                    (ax["declared_min"], ax["declared_max"]), exp_bounds
+                )
+                self.assertEqual(
+                    (ax["actual_min"], ax["actual_max"]), exp_bounds
+                )
+                self.assertEqual(ax["row_count"], len(unsorted_rows))
+                self.assertEqual(ax["invalid_word_count"], 0)
+                card_off = ax["header_card_byte_offset"]
+                self.assertEqual(
+                    ax["header_card_raw"],
+                    side_bytes[card_off : card_off + 80].decode("ascii"),
+                )
+                self.assertEqual(
+                    ax["header_card_hex"],
+                    side_bytes[card_off : card_off + 80].hex(),
+                )
+
+        # 2. Issue-shaped stale 0..0, 0..0, 2..2 header bounds on differing data extrema.
+        stale_mtz = _build_synthetic_mtz(
+            unsorted_rows,
+            column_extrema={
+                "H": ("0", "0"),
+                "K": ("0", "0"),
+                "L": ("2", "2"),
+            },
+        )
+        stale_proj, stale_summary = onesar_rerun.project_observation_mtz(
+            stale_mtz
+        )
+        stale_diag = stale_summary["hkl_header_extrema_diagnostic"]
+        self.assertEqual(stale_diag["status"], "mismatch")
+        self.assertFalse(stale_diag["consistent"])
+        for side in ("input", "projected"):
+            self.assertEqual(stale_diag[side]["status"], "mismatch")
+            self.assertFalse(stale_diag[side]["consistent"])
+            self.assertEqual(
+                (
+                    stale_diag[side]["axes"]["H"]["declared_min"],
+                    stale_diag[side]["axes"]["H"]["declared_max"],
+                    stale_diag[side]["axes"]["H"]["actual_min"],
+                    stale_diag[side]["axes"]["H"]["actual_max"],
+                    stale_diag[side]["axes"]["H"]["status"],
+                ),
+                (0, 0, -7, 5, "mismatch"),
+            )
+            self.assertEqual(
+                (
+                    stale_diag[side]["axes"]["K"]["declared_min"],
+                    stale_diag[side]["axes"]["K"]["declared_max"],
+                    stale_diag[side]["axes"]["K"]["actual_min"],
+                    stale_diag[side]["axes"]["K"]["actual_max"],
+                    stale_diag[side]["axes"]["K"]["status"],
+                ),
+                (0, 0, -9, 12, "mismatch"),
+            )
+            self.assertEqual(
+                (
+                    stale_diag[side]["axes"]["L"]["declared_min"],
+                    stale_diag[side]["axes"]["L"]["declared_max"],
+                    stale_diag[side]["axes"]["L"]["actual_min"],
+                    stale_diag[side]["axes"]["L"]["actual_max"],
+                    stale_diag[side]["axes"]["L"]["status"],
+                ),
+                (2, 2, -6, 11, "mismatch"),
+            )
+        # Projected COLUMN cards preserve raw stale tokens without rewriting them.
+        stale_proj_raw = _parse_raw_mtz_header_and_trailer(stale_proj)
+        stale_proj_col_tokens = [
+            card.split()
+            for card in stale_proj_raw["main_cards_text"]
+            if card.split() and card.split()[0] == "COLUMN"
+        ]
+        self.assertEqual(
+            [toks[1:5] for toks in stale_proj_col_tokens[:3]],
+            [
+                ["H", "H", "0", "0"],
+                ["K", "H", "0", "0"],
+                ["L", "H", "2", "2"],
+            ],
+        )
+
+        # 3. Observation-ineligible padding row (VALM NAN) supplies true axis extrema
+        # absent from all eligible rows.
+        padding_extrema_rows = [
+            (0, 1, 2, 50.0, 2.0, 0.0),
+            (3, 4, 5, 60.0, 2.5, 1.0),
+            (-14, 29, -18, nan, nan, nan),
+            (1, 2, 0, 40.0, 1.5, 0.0),
+        ]
+        eligible_only_header_mtz = _build_synthetic_mtz(
+            padding_extrema_rows,
+            column_extrema={
+                "H": ("0", "3"),
+                "K": ("1", "4"),
+                "L": ("0", "5"),
+            },
+        )
+        _, pad_mismatch_summary = onesar_rerun.project_observation_mtz(
+            eligible_only_header_mtz
+        )
+        pad_mismatch_diag = pad_mismatch_summary["hkl_header_extrema_diagnostic"]
+        self.assertEqual(pad_mismatch_diag["status"], "mismatch")
+        for side in ("input", "projected"):
+            axes = pad_mismatch_diag[side]["axes"]
+            self.assertEqual(
+                (axes["H"]["actual_min"], axes["H"]["actual_max"], axes["H"]["row_count"]),
+                (-14, 3, 4),
+            )
+            self.assertEqual(
+                (axes["K"]["actual_min"], axes["K"]["actual_max"], axes["K"]["row_count"]),
+                (1, 29, 4),
+            )
+            self.assertEqual(
+                (axes["L"]["actual_min"], axes["L"]["actual_max"], axes["L"]["row_count"]),
+                (-18, 5, 4),
+            )
+            self.assertEqual(axes["H"]["status"], "mismatch")
+            self.assertEqual(axes["K"]["status"], "mismatch")
+            self.assertEqual(axes["L"]["status"], "mismatch")
+
+        all_row_header_mtz = _build_synthetic_mtz(
+            padding_extrema_rows,
+            column_extrema={
+                "H": ("-14", "3"),
+                "K": ("1", "29"),
+                "L": ("-18", "5"),
+            },
+        )
+        _, pad_ok_summary = onesar_rerun.project_observation_mtz(
+            all_row_header_mtz
+        )
+        self.assertEqual(
+            pad_ok_summary["hkl_header_extrema_diagnostic"]["status"],
+            "consistent",
+        )
+
+        # 4. Numeric-equivalent formatting tokens (-0.0, +0.000, 0.0, 1e0, 2.0000, -1.4e1).
+        fmt_rows = [
+            (0, -14, 0, 50.0, 2.0, 0.0),
+            (2, 1, 10, 60.0, 2.5, 1.0),
+        ]
+        fmt_mtz = _build_synthetic_mtz(
+            fmt_rows,
+            column_extrema={
+                "H": ("-0.0", "2.0000"),
+                "K": ("-1.4e1", "1e0"),
+                "L": ("+0.000", "1.0e1"),
+            },
+        )
+        _, fmt_summary = onesar_rerun.project_observation_mtz(fmt_mtz)
+        fmt_diag = fmt_summary["hkl_header_extrema_diagnostic"]
+        self.assertEqual(fmt_diag["status"], "consistent")
+        self.assertTrue(fmt_diag["consistent"])
+        for side in ("input", "projected"):
+            axes = fmt_diag[side]["axes"]
+            self.assertEqual(
+                (
+                    axes["H"]["min_token"],
+                    axes["H"]["max_token"],
+                    axes["H"]["declared_min"],
+                    axes["H"]["declared_max"],
+                    axes["H"]["status"],
+                ),
+                ("-0.0", "2.0000", 0, 2, "consistent"),
+            )
+            self.assertEqual(
+                (
+                    axes["K"]["min_token"],
+                    axes["K"]["max_token"],
+                    axes["K"]["declared_min"],
+                    axes["K"]["declared_max"],
+                    axes["K"]["status"],
+                ),
+                ("-1.4e1", "1e0", -14, 1, "consistent"),
+            )
+            self.assertEqual(
+                (
+                    axes["L"]["min_token"],
+                    axes["L"]["max_token"],
+                    axes["L"]["declared_min"],
+                    axes["L"]["declared_max"],
+                    axes["L"]["status"],
+                ),
+                ("+0.000", "1.0e1", 0, 10, "consistent"),
+            )
+
+        # 5. Malformed, non-finite (NAN, INF, -INF), fractional (1.5), high-precision
+        # non-integral (1.00000000000000000001 and 36-digit 1.000...001), underscore (1_0),
+        # and huge-exponent (1e9999) header tokens are reported as invalid_metadata
+        # without failing projection or fabricating replacement numbers.
+        invalid_token_cases = [
+            ("H", ("1.00000000000000000001", "2"), "invalid_metadata", "valid", None, 2),
+            ("H", ("1." + ("0" * 35) + "1", "2"), "invalid_metadata", "valid", None, 2),
+            ("H", ("0", "1.5"), "valid", "invalid_metadata", 0, None),
+            ("K", ("NAN", "1"), "invalid_metadata", "valid", None, 1),
+            ("K", ("-14", "INF"), "valid", "invalid_metadata", -14, None),
+            ("L", ("-INF", "10"), "invalid_metadata", "valid", None, 10),
+            ("L", ("abc", "1_0"), "invalid_metadata", "invalid_metadata", None, None),
+            ("L", ("0", "1e9999"), "valid", "invalid_metadata", 0, None),
+        ]
+        base_valid_extrema = {
+            "H": ("0", "2"),
+            "K": ("-14", "1"),
+            "L": ("0", "10"),
+        }
+        for (
+            target_axis,
+            bad_pair,
+            exp_min_status,
+            exp_max_status,
+            exp_dec_min,
+            exp_dec_max,
+        ) in invalid_token_cases:
+            with self.subTest(target_axis=target_axis, bad_pair=bad_pair):
+                extrema_override = dict(base_valid_extrema)
+                extrema_override[target_axis] = bad_pair
+                bad_tok_mtz = _build_synthetic_mtz(
+                    fmt_rows, column_extrema=extrema_override
+                )
+                raw_check = _parse_raw_mtz_header_and_trailer(bad_tok_mtz)
+                self.assertEqual(
+                    (len(bad_tok_mtz) - raw_check["header_byte_offset"]) % 80,
+                    0,
+                )
+                for raw_card_bytes in raw_check["raw_cards_bytes"]:
+                    self.assertEqual(len(raw_card_bytes), 80)
+                _, bad_tok_summary = onesar_rerun.project_observation_mtz(
+                    bad_tok_mtz
+                )
+                bad_diag = bad_tok_summary["hkl_header_extrema_diagnostic"]
+                self.assertEqual(bad_diag["status"], "invalid_metadata")
+                self.assertFalse(bad_diag["consistent"])
+                for side in ("input", "projected"):
+                    self.assertEqual(
+                        bad_diag[side]["status"], "invalid_metadata"
+                    )
+                    ax = bad_diag[side]["axes"][target_axis]
+                    self.assertEqual(ax["status"], "invalid_metadata")
+                    self.assertFalse(ax["consistent"])
+                    self.assertEqual(ax["min_token"], bad_pair[0])
+                    self.assertEqual(ax["max_token"], bad_pair[1])
+                    self.assertEqual(ax["min_token_status"], exp_min_status)
+                    self.assertEqual(ax["max_token_status"], exp_max_status)
+                    self.assertEqual(ax["declared_min"], exp_dec_min)
+                    self.assertEqual(ax["declared_max"], exp_dec_max)
+                    for other_axis in ("H", "K", "L"):
+                        if other_axis != target_axis:
+                            self.assertEqual(
+                                bad_diag[side]["axes"][other_axis]["status"],
+                                "consistent",
+                            )
+
+        # 6. Direct inspection of an MTZ with a non-integral or non-finite HKL data word
+        # reports invalid_word_count > 0 and status == "invalid_metadata", while
+        # project_observation_mtz and build_input_hkl_ledger still fail closed.
+        bad_hkl_word_mtz = _build_synthetic_mtz(
+            [
+                (1.5, 0, 0, 50.0, 2.0, 0.0),
+                (0, 1, 0, 60.0, 2.5, 1.0),
+            ],
+            column_extrema={"H": ("0", "1"), "K": ("0", "1"), "L": ("0", "0")},
+        )
+        direct_bad_word_diag = onesar_rerun.inspect_mtz_hkl_header_extrema(
+            bad_hkl_word_mtz
+        )
+        self.assertEqual(direct_bad_word_diag["status"], "invalid_metadata")
+        self.assertEqual(
+            direct_bad_word_diag["axes"]["H"]["invalid_word_count"], 1
+        )
+        self.assertIsNone(direct_bad_word_diag["axes"]["H"]["actual_min"])
+        self.assertIsNone(direct_bad_word_diag["axes"]["H"]["actual_max"])
+        self.assertEqual(
+            direct_bad_word_diag["axes"]["H"]["status"], "invalid_metadata"
+        )
+        self.assertEqual(direct_bad_word_diag["axes"]["K"]["status"], "consistent")
+        self.assertEqual(direct_bad_word_diag["axes"]["L"]["status"], "consistent")
+        with self.assertRaisesRegex(ValueError, "non-integral reflection index"):
+            onesar_rerun.project_observation_mtz(bad_hkl_word_mtz)
+        with self.assertRaisesRegex(ValueError, "Non-integral Miller index"):
+            onesar_rerun.build_input_hkl_ledger(bad_hkl_word_mtz)
 
 
 class TestPhenixReconciliationAndPureHelpers(unittest.TestCase):
@@ -2964,6 +3419,39 @@ class TestPhenixReconciliationAndPureHelpers(unittest.TestCase):
             )
             self.assertEqual(len(persisted_ledger["ineligible_rows"]), 20)
             self.assertEqual(len(persisted_ledger["raw_rows"]), 7248)
+
+            # #1189: Verify stage_subject_inputs persists hkl_header_extrema_diagnostic
+            # into staged["admission_record"]["projection"] and input_admission.json.
+            persisted_admission = json.loads(
+                staged["admission_json_path"].read_text(encoding="utf-8")
+            )
+            _, direct_proj_summary = onesar_rerun.project_observation_mtz(
+                staged["original_mtz_path"].read_bytes()
+            )
+            self.assertIn(
+                "hkl_header_extrema_diagnostic",
+                staged["admission_record"]["projection"],
+            )
+            self.assertEqual(
+                staged["admission_record"]["projection"][
+                    "hkl_header_extrema_diagnostic"
+                ],
+                direct_proj_summary["hkl_header_extrema_diagnostic"],
+            )
+            self.assertEqual(
+                persisted_admission["projection"][
+                    "hkl_header_extrema_diagnostic"
+                ],
+                staged["admission_record"]["projection"][
+                    "hkl_header_extrema_diagnostic"
+                ],
+            )
+            self.assertEqual(
+                persisted_admission["projection"][
+                    "hkl_header_extrema_diagnostic"
+                ]["status"],
+                "mismatch",
+            )
 
             # Rejects unmeasured PHENIX build dictionary before invoking subprocess (#1014).
             unmeasured_build = {

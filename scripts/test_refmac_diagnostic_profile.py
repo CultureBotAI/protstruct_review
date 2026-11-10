@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Focused synthetic unit tests for scripts/refmac_diagnostic_profile.py (Tasks 653, 657, 663, 658, 668, 673, 677, 681, 685, 661, 734, 739, 742, 744, 749, 751, and 737)."""
+"""Focused synthetic unit tests for scripts/refmac_diagnostic_profile.py (Tasks 653, 657, 663, 658, 668, 673, 677, 681, 685, 661, 734, 739, 742, 744, 749, 751, 737, and 851)."""
 
 from __future__ import annotations
 
@@ -33,7 +33,9 @@ from refmac_diagnostic_profile import (  # noqa: E402
     UPSTREAM_TAG,
     FileObservation,
     FilePin,
+    LookupStatObservation,
     PartialFileReadObservation,
+    PreOpenLookupSnapshot,
     ProfileValidationError,
     RefmacDiagnosticProfile,
     RootObservation,
@@ -8027,6 +8029,1551 @@ class TestTask737PublicRecheckProfile(unittest.TestCase):
             self.assertIsNone(rep_2["mutations"][other_idx]["error"])
             self.assertIsNone(causes_2[other_idx])
             json.dumps(rep_2, allow_nan=False)
+
+
+class TestTask851Issue1168PreOpenObservations(unittest.TestCase):
+    """Focused synthetic tests for #1168 pre-open/initial-fstat lookup and traversal observation retention (Task 851)."""
+
+    def _assert_pre_fstat_partial_obs(
+        self,
+        obs: PartialFileReadObservation,
+        *,
+        expected_lexical: str,
+        expected_resolved: str,
+        expected_lex_lstat: os.stat_result,
+        expected_lex_stat: os.stat_result,
+        expected_target_lstat: os.stat_result,
+        expected_symlinks: tuple[_SymlinkEdge, ...],
+        expected_ancestors_subset: set[str],
+    ) -> None:
+        self.assertIsInstance(obs, PartialFileReadObservation)
+        self.assertEqual(obs.path, expected_lexical)
+        self.assertEqual(obs.resolved_path, expected_resolved)
+        self.assertIsNone(obs.sha256)
+        self.assertIsNone(obs.size_bytes)
+        self.assertIsNone(obs.stat_size_bytes)
+        self.assertEqual(obs.streamed_size_bytes, 0)
+        self.assertFalse(obs.read_complete)
+        self.assertFalse(obs.complete)
+        self.assertFalse(obs.verified)
+        self.assertIsNone(obs.dev)
+        self.assertIsNone(obs.ino)
+        self.assertIsNone(obs.mode)
+        self.assertIsNone(obs.uid)
+        self.assertIsNone(obs.gid)
+        self.assertIsNone(obs.identity_tuple)
+        self.assertEqual(obs.symlinks, expected_symlinks)
+        self.assertEqual(len(obs.symlink_identities), len(expected_symlinks))
+        self.assertEqual(obs.unavailable_symlinks, ())
+        self.assertEqual(
+            [(s.path, s.target) for s in obs.symlink_identities],
+            [(e.path, e.target) for e in expected_symlinks],
+        )
+        self.assertGreaterEqual(len(obs.ancestors), 1)
+        self.assertTrue(
+            expected_ancestors_subset.issubset({d.path for d in obs.ancestors})
+        )
+        self.assertTrue(obs.dependencies_complete)
+        self.assertGreaterEqual(len(obs.errors), 1)
+
+        snap = obs.lookup_snapshot
+        self.assertIsInstance(snap, PreOpenLookupSnapshot)
+        assert isinstance(snap, PreOpenLookupSnapshot)
+        self.assertEqual(snap.lexical_path, expected_lexical)
+        self.assertEqual(snap.path, expected_lexical)
+        self.assertEqual(snap.resolved_path, expected_resolved)
+        self.assertEqual(
+            snap.lexical_lstat,
+            LookupStatObservation.from_stat_result(expected_lex_lstat),
+        )
+        self.assertEqual(
+            snap.lexical_stat,
+            LookupStatObservation.from_stat_result(expected_lex_stat),
+        )
+        self.assertEqual(
+            snap.resolved_target_lstat,
+            LookupStatObservation.from_stat_result(expected_target_lstat),
+        )
+        self.assertEqual(snap.target_lstat, snap.resolved_target_lstat)
+        self.assertEqual(snap.symlinks, expected_symlinks)
+        self.assertEqual(snap.symlink_edges, expected_symlinks)
+        self.assertEqual(snap.symlink_identities, obs.symlink_identities)
+        self.assertEqual(snap.traversed_directories, obs.ancestors)
+        self.assertEqual(snap.directory_identities, obs.ancestors)
+
+        with self.assertRaisesRegex(
+            ValueError, "cannot be converted to a FilePin"
+        ):
+            obs.as_file_pin()
+
+    def test_1168_open_and_initial_fstat_failures_across_ordinary_intermediate_and_terminal_symlink_paths(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fx = _build_synthetic_outer_profile_fixture(Path(tmpdir))
+            root = fx["root"]
+            assert isinstance(root, Path)
+            support_dir = root / "support"
+            installed_record = fx["installed_record"]
+            assert isinstance(installed_record, dict)
+            ccp4_env = fx["ccp4_env"]
+            assert isinstance(ccp4_env, dict)
+            ev_root = fx["evidence_root"]
+            assert isinstance(ev_root, Path)
+            alias_symlink = fx["alias_symlink"]
+            assert isinstance(alias_symlink, Path)
+            base_payload = copy.deepcopy(fx["manifest_payload"])
+            assert isinstance(base_payload, dict)
+
+            # Prepare three declared external paths:
+            # (a) ordinary regular-file path (launcher)
+            launcher_fid = base_payload["roles"]["launcher"][0]  # type: ignore[index]
+            launcher_lexical = str(base_payload["files"][launcher_fid]["path"])  # type: ignore[index]
+            launcher_resolved = str(
+                Path(launcher_lexical).resolve(strict=True)
+            )
+
+            # (b) intermediate symlink + '..' path: support/inter-link/sub/../inter-target.txt
+            inter_real_dir = support_dir / "inter-real"
+            inter_sub_dir = inter_real_dir / "sub"
+            inter_sub_dir.mkdir(parents=True)
+            inter_target = inter_real_dir / "inter-target.txt"
+            inter_target.write_bytes(b"intermediate symlink dotdot payload\n")
+            inter_link = support_dir / "inter-link"
+            os.symlink("inter-real", inter_link)
+            inter_lexical = f"{inter_link}/sub/../inter-target.txt"
+            inter_resolved = str(inter_target.resolve(strict=True))
+            inter_fid = "task851_inter_dotdot"
+
+            # (c) terminal symlink path: alias_symlink -> collection-python
+            alias_fid = next(
+                fid
+                for fid, row in base_payload["files"].items()  # type: ignore[union-attr]
+                if row["path"] == str(alias_symlink)
+            )
+            alias_lexical = str(alias_symlink)
+            alias_resolved = str(alias_symlink.resolve(strict=True))
+
+            payload = copy.deepcopy(base_payload)
+            inter_obs_init = _observe_regular_file_pin(inter_lexical)
+            payload["files"][inter_fid] = inter_obs_init.to_manifest_row()  # type: ignore[index]
+            payload["roles"]["qc_evidence"] = sorted(  # type: ignore[index]
+                [*payload["roles"]["qc_evidence"], inter_fid]  # type: ignore[index]
+            )
+            profile = _rewrite_manifest_and_profile(fx, payload)
+
+            validated = validate_profile(
+                profile, installed_record, ccp4_env, ev_root
+            )
+            state = validated._outer_state
+            assert state is not None
+            baseline_prov = copy.deepcopy(validated.to_provenance())
+
+            path_cases = (
+                (
+                    "ordinary",
+                    launcher_fid,
+                    launcher_lexical,
+                    launcher_resolved,
+                    (),
+                    {str(root), str(support_dir)},
+                    False,
+                ),
+                (
+                    "intermediate_symlink_dotdot",
+                    inter_fid,
+                    inter_lexical,
+                    inter_resolved,
+                    (_SymlinkEdge(path=str(inter_link), target="inter-real"),),
+                    {
+                        str(root),
+                        str(support_dir),
+                        str(inter_real_dir),
+                        str(inter_sub_dir),
+                    },
+                    False,
+                ),
+                (
+                    "terminal_symlink",
+                    alias_fid,
+                    alias_lexical,
+                    alias_resolved,
+                    (
+                        _SymlinkEdge(
+                            path=str(alias_symlink),
+                            target=os.readlink(alias_symlink),
+                        ),
+                    ),
+                    {str(root), str(support_dir)},
+                    True,
+                ),
+            )
+
+            real_open = os.open
+            real_fstat = os.fstat
+            real_close = os.close
+
+            for (
+                case_name,
+                target_fid,
+                lexical_str,
+                resolved_str,
+                exp_symlinks,
+                exp_anc_subset,
+                expect_symlink_lstat,
+            ) in path_cases:
+                exp_lex_lstat = os.lstat(lexical_str)
+                exp_lex_stat = os.stat(lexical_str)
+                exp_target_lstat = os.lstat(resolved_str)
+                self.assertEqual(
+                    stat.S_ISLNK(exp_lex_lstat.st_mode), expect_symlink_lstat
+                )
+                self.assertTrue(stat.S_ISREG(exp_lex_stat.st_mode))
+                self.assertTrue(stat.S_ISREG(exp_target_lstat.st_mode))
+                if expect_symlink_lstat:
+                    self.assertNotEqual(
+                        int(exp_lex_lstat.st_ino), int(exp_lex_stat.st_ino)
+                    )
+
+                for stage_kind in ("open_fail", "initial_fstat_fail"):
+                    with self.subTest(path_case=case_name, stage=stage_kind):
+                        bystander_fd = real_open(launcher_resolved, os.O_RDONLY)
+                        try:
+                            if stage_kind == "open_fail":
+                                injected_exc: OSError = PermissionError(
+                                    errno.EACCES,
+                                    f"synthetic #1168 open EACCES for {case_name}",
+                                    resolved_str,
+                                )
+                            else:
+                                injected_exc = OSError(
+                                    errno.EIO,
+                                    f"synthetic #1168 initial fstat EIO for {case_name}",
+                                    resolved_str,
+                                )
+
+                            active_state = {
+                                "in_target_lexical": False,
+                                "target_fd": -1,
+                                "opened_target_fds": [],
+                                "closed_fds": [],
+                                "injections": 0,
+                            }
+                            real_obs_pin = profile_mod._observe_regular_file_pin
+
+                            def track_obs_pin(path, *args, **kwargs):
+                                is_target = str(path) == lexical_str
+                                if is_target:
+                                    active_state["in_target_lexical"] = True
+                                try:
+                                    return real_obs_pin(path, *args, **kwargs)
+                                finally:
+                                    if is_target:
+                                        active_state["in_target_lexical"] = False
+
+                            def hooked_open(path, flags, *args, **kwargs):
+                                if (
+                                    active_state["in_target_lexical"]
+                                    and active_state["injections"] == 0
+                                    and str(path) == resolved_str
+                                ):
+                                    if stage_kind == "open_fail":
+                                        active_state["injections"] += 1
+                                        raise injected_exc
+                                    fd = real_open(path, flags, *args, **kwargs)
+                                    active_state["target_fd"] = fd
+                                    active_state["opened_target_fds"].append(fd)
+                                    return fd
+                                return real_open(path, flags, *args, **kwargs)
+
+                            def hooked_fstat(fd, *args, **kwargs):
+                                if (
+                                    stage_kind == "initial_fstat_fail"
+                                    and active_state["in_target_lexical"]
+                                    and active_state["injections"] == 0
+                                    and fd == active_state["target_fd"]
+                                ):
+                                    active_state["injections"] += 1
+                                    raise injected_exc
+                                return real_fstat(fd, *args, **kwargs)
+
+                            def hooked_close(fd):
+                                active_state["closed_fds"].append(fd)
+                                return real_close(fd)
+
+                            # 1. Admission via validate_profile
+                            with (
+                                mock.patch(
+                                    "refmac_diagnostic_profile._observe_regular_file_pin",
+                                    side_effect=track_obs_pin,
+                                ),
+                                mock.patch(
+                                    "refmac_diagnostic_profile.os.open",
+                                    side_effect=hooked_open,
+                                ),
+                                mock.patch(
+                                    "refmac_diagnostic_profile.os.fstat",
+                                    side_effect=hooked_fstat,
+                                ),
+                                mock.patch(
+                                    "refmac_diagnostic_profile.os.close",
+                                    side_effect=hooked_close,
+                                ),
+                            ):
+                                with self.assertRaises(
+                                    ProfileValidationError
+                                ) as adm_ctx:
+                                    validate_profile(
+                                        profile,
+                                        installed_record,
+                                        ccp4_env,
+                                        ev_root,
+                                    )
+
+                            self.assertEqual(active_state["injections"], 1)
+                            self.assertNotIn(
+                                bystander_fd, active_state["closed_fds"]
+                            )
+                            self.assertEqual(
+                                real_fstat(bystander_fd).st_ino,
+                                os.lstat(launcher_resolved).st_ino,
+                            )
+                            if stage_kind == "open_fail":
+                                self.assertEqual(
+                                    active_state["opened_target_fds"], []
+                                )
+                            else:
+                                self.assertEqual(
+                                    len(active_state["opened_target_fds"]), 1
+                                )
+                                closed_target_fd = active_state[
+                                    "opened_target_fds"
+                                ][0]
+                                self.assertIn(
+                                    closed_target_fd, active_state["closed_fds"]
+                                )
+                                with self.assertRaises(OSError) as ebadf_ctx:
+                                    real_fstat(closed_target_fd)
+                                self.assertEqual(
+                                    ebadf_ctx.exception.errno, errno.EBADF
+                                )
+
+                            adm_err = adm_ctx.exception
+                            self.assertEqual(
+                                adm_err.failed_check,
+                                "outer_profile_files_and_roots",
+                            )
+                            self.assertIs(adm_err.cause_exception, injected_exc)
+                            self.assertEqual(
+                                adm_err.error_type, type(injected_exc).__name__
+                            )
+                            self.assertEqual(
+                                adm_err.error_errno, injected_exc.errno
+                            )
+                            self.assertIsNone(adm_err.selected_executable)
+                            self.assertFalse(adm_err.profile_files_verified)
+                            self.assertEqual(len(adm_err.roots), 3)
+                            self.assertEqual(
+                                len(adm_err.files), len(payload["files"])  # type: ignore[arg-type]
+                            )
+                            adm_fobs = adm_err.files[target_fid]
+                            assert isinstance(
+                                adm_fobs, PartialFileReadObservation
+                            )
+                            self._assert_pre_fstat_partial_obs(
+                                adm_fobs,
+                                expected_lexical=lexical_str,
+                                expected_resolved=resolved_str,
+                                expected_lex_lstat=exp_lex_lstat,
+                                expected_lex_stat=exp_lex_stat,
+                                expected_target_lstat=exp_target_lstat,
+                                expected_symlinks=exp_symlinks,
+                                expected_ancestors_subset=exp_anc_subset,
+                            )
+                            if expect_symlink_lstat:
+                                assert adm_fobs.lookup_snapshot is not None
+                                self.assertTrue(
+                                    adm_fobs.lookup_snapshot.lexical_lstat.is_symlink
+                                )
+                                self.assertFalse(
+                                    adm_fobs.lookup_snapshot.lexical_lstat.is_regular
+                                )
+                                self.assertTrue(
+                                    adm_fobs.lookup_snapshot.lexical_stat.is_regular
+                                )
+                                self.assertNotEqual(
+                                    adm_fobs.lookup_snapshot.lexical_lstat.ino,
+                                    adm_fobs.lookup_snapshot.lexical_stat.ino,
+                                )
+
+                            for fid, fobs in adm_err.files:
+                                if fid == target_fid:
+                                    self.assertIsInstance(
+                                        fobs, PartialFileReadObservation
+                                    )
+                                else:
+                                    self.assertIsInstance(fobs, FileObservation)
+                                    self.assertTrue(fobs.verified)
+
+                            adm_priv = adm_err.partial_observation
+                            assert adm_priv is not None
+                            self.assertNotIn(
+                                target_fid, adm_priv.observed_files
+                            )
+                            self.assertNotIn(
+                                target_fid, adm_priv.verified_files
+                            )
+                            self.assertNotIn(
+                                target_fid, adm_priv.unverified_files
+                            )
+                            self.assertIn(target_fid, adm_priv.partial_files)
+                            self.assertIs(
+                                adm_priv.partial_files[target_fid], adm_fobs
+                            )
+                            for sym_edge in exp_symlinks:
+                                self.assertIn(
+                                    sym_edge.path, adm_priv.observed_symlinks
+                                )
+
+                            # Pure in-memory provenance serialization
+                            with (
+                                mock.patch(
+                                    "refmac_diagnostic_profile.os.lstat",
+                                    side_effect=AssertionError("no lstat"),
+                                ),
+                                mock.patch(
+                                    "refmac_diagnostic_profile.os.stat",
+                                    side_effect=AssertionError("no stat"),
+                                ),
+                                mock.patch(
+                                    "refmac_diagnostic_profile.os.open",
+                                    side_effect=AssertionError("no open"),
+                                ),
+                                mock.patch(
+                                    "refmac_diagnostic_profile.os.readlink",
+                                    side_effect=AssertionError("no readlink"),
+                                ),
+                            ):
+                                adm_prov = adm_err.to_provenance()
+                                adm_dict = adm_fobs.to_dict()
+                            json.dumps(adm_prov, allow_nan=False)
+                            self.assertEqual(
+                                adm_prov["files"][target_fid], adm_dict
+                            )
+                            self.assertIsNone(adm_dict["dev"])
+                            self.assertIsNone(adm_dict["ino"])
+                            self.assertIsNone(adm_dict["mode"])
+                            self.assertIsNone(adm_dict["uid"])
+                            self.assertIsNone(adm_dict["gid"])
+                            self.assertIsNone(adm_dict["stat_size_bytes"])
+                            self.assertIsNone(adm_dict["sha256"])
+                            self.assertIsNone(adm_dict["size_bytes"])
+                            self.assertEqual(
+                                adm_dict["streamed_size_bytes"], 0
+                            )
+                            self.assertFalse(adm_dict["read_complete"])
+                            self.assertFalse(adm_dict["verified"])
+                            self.assertIsNotNone(adm_dict["lookup_snapshot"])
+                            self.assertEqual(
+                                adm_dict["lookup_snapshot"]["lexical_path"],
+                                lexical_str,
+                            )
+                            self.assertEqual(
+                                adm_dict["lookup_snapshot"]["resolved_path"],
+                                resolved_str,
+                            )
+
+                            # 2. Private _reobserve_outer_profile_state and public recheck_profile
+                            active_state["target_fd"] = -1
+                            active_state["opened_target_fds"].clear()
+                            active_state["closed_fds"].clear()
+                            active_state["injections"] = 0
+
+                            recheck_causes: list[Exception | None] = []
+                            with (
+                                mock.patch(
+                                    "refmac_diagnostic_profile._observe_regular_file_pin",
+                                    side_effect=track_obs_pin,
+                                ),
+                                mock.patch(
+                                    "refmac_diagnostic_profile.os.open",
+                                    side_effect=hooked_open,
+                                ),
+                                mock.patch(
+                                    "refmac_diagnostic_profile.os.fstat",
+                                    side_effect=hooked_fstat,
+                                ),
+                                mock.patch(
+                                    "refmac_diagnostic_profile.os.close",
+                                    side_effect=hooked_close,
+                                ),
+                            ):
+                                priv_recheck = _reobserve_outer_profile_state(
+                                    state
+                                )
+                                active_state["target_fd"] = -1
+                                active_state["injections"] = 0
+                                pub_report = recheck_profile(
+                                    validated,
+                                    mutation_causes_out=recheck_causes,
+                                )
+
+                            self.assertFalse(priv_recheck.verified)
+                            self.assertNotIn(
+                                target_fid, priv_recheck.observed_files
+                            )
+                            self.assertIn(
+                                target_fid, priv_recheck.partial_files
+                            )
+                            priv_pobs = priv_recheck.partial_files[target_fid]
+                            self.assertIs(
+                                priv_recheck.file_observations[target_fid],
+                                priv_pobs,
+                            )
+                            self._assert_pre_fstat_partial_obs(
+                                priv_pobs,
+                                expected_lexical=lexical_str,
+                                expected_resolved=resolved_str,
+                                expected_lex_lstat=exp_lex_lstat,
+                                expected_lex_stat=exp_lex_stat,
+                                expected_target_lstat=exp_target_lstat,
+                                expected_symlinks=exp_symlinks,
+                                expected_ancestors_subset=exp_anc_subset,
+                            )
+                            self.assertIs(
+                                priv_recheck.file_causes[target_fid],
+                                injected_exc,
+                            )
+                            self.assertIs(
+                                priv_recheck.observation_causes[
+                                    f"profile:file:{target_fid}"
+                                ],
+                                injected_exc,
+                            )
+
+                            self.assertFalse(pub_report["verified"])
+                            frow = pub_report["files"][target_fid]
+                            self.assertFalse(frow["matches_baseline"])
+                            self.assertEqual(
+                                frow["expected"],
+                                baseline_prov["files"][target_fid],
+                            )
+                            self.assertIsNotNone(frow["observed"])
+                            self.assertIsNone(frow["observed"]["dev"])
+                            self.assertIsNone(frow["observed"]["ino"])
+                            self.assertIsNone(
+                                frow["observed"]["stat_size_bytes"]
+                            )
+                            self.assertIsNotNone(
+                                frow["observed"]["lookup_snapshot"]
+                            )
+                            self.assertEqual(
+                                frow["errors"],
+                                [
+                                    {
+                                        "key": f"profile:file:{target_fid}",
+                                        "type": type(injected_exc).__name__,
+                                        "message": str(injected_exc),
+                                        "errno": injected_exc.errno,
+                                    }
+                                ],
+                            )
+                            self.assertEqual(len(pub_report["mutations"]), 1)
+                            self.assertEqual(recheck_causes, [injected_exc])
+                            self.assertIs(recheck_causes[0], injected_exc)
+                            json.dumps(pub_report, allow_nan=False)
+                        finally:
+                            real_close(bystander_fd)
+
+    def test_1168_manifest_open_and_initial_fstat_failures_across_admission_and_recheck(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fx = _build_synthetic_outer_profile_fixture(Path(tmpdir))
+            root = fx["root"]
+            assert isinstance(root, Path)
+            installed_record = fx["installed_record"]
+            assert isinstance(installed_record, dict)
+            ccp4_env = fx["ccp4_env"]
+            assert isinstance(ccp4_env, dict)
+            ev_root = fx["evidence_root"]
+            assert isinstance(ev_root, Path)
+            manifest_path = fx["manifest_path"]
+            assert isinstance(manifest_path, Path)
+            profile = fx["profile"]
+            assert isinstance(profile, RefmacDiagnosticProfile)
+
+            # Create a terminal symlink to the manifest as well so we test both direct and symlinked manifest pins
+            manifest_symlink = root / "manifest-link.json"
+            os.symlink(manifest_path.name, manifest_symlink)
+            symlink_profile = RefmacDiagnosticProfile(
+                profile_id=profile.profile_id,
+                manifest=FilePin(
+                    path=str(manifest_symlink),
+                    sha256=profile.manifest.sha256,
+                    size_bytes=profile.manifest.size_bytes,
+                ),
+                executable=profile.executable,
+            )
+            validated_sym = validate_profile(
+                symlink_profile, installed_record, ccp4_env, ev_root
+            )
+            state_sym = validated_sym._outer_state
+            assert state_sym is not None
+
+            real_open = os.open
+            real_fstat = os.fstat
+            manifest_resolved = str(manifest_path.resolve(strict=True))
+            exp_lex_lstat = os.lstat(manifest_symlink)
+            exp_lex_stat = os.stat(manifest_symlink)
+            exp_target_lstat = os.lstat(manifest_resolved)
+            exp_symlinks = (
+                _SymlinkEdge(
+                    path=str(manifest_symlink), target=manifest_path.name
+                ),
+            )
+
+            for stage_kind in ("open_fail", "initial_fstat_fail"):
+                with self.subTest(stage=stage_kind):
+                    if stage_kind == "open_fail":
+                        injected_exc: OSError = PermissionError(
+                            errno.EACCES,
+                            "synthetic #1168 manifest open EACCES",
+                            manifest_resolved,
+                        )
+                    else:
+                        injected_exc = OSError(
+                            errno.EIO,
+                            "synthetic #1168 manifest initial fstat EIO",
+                            manifest_resolved,
+                        )
+
+                    m_state = {
+                        "target_fd": -1,
+                        "opened_fds": [],
+                        "injections": 0,
+                    }
+
+                    def hooked_open_m(path, flags, *args, **kwargs):
+                        if (
+                            m_state["injections"] == 0
+                            and str(path) == manifest_resolved
+                        ):
+                            if stage_kind == "open_fail":
+                                m_state["injections"] += 1
+                                raise injected_exc
+                            fd = real_open(path, flags, *args, **kwargs)
+                            m_state["target_fd"] = fd
+                            m_state["opened_fds"].append(fd)
+                            return fd
+                        return real_open(path, flags, *args, **kwargs)
+
+                    def hooked_fstat_m(fd, *args, **kwargs):
+                        if (
+                            stage_kind == "initial_fstat_fail"
+                            and m_state["injections"] == 0
+                            and fd == m_state["target_fd"]
+                        ):
+                            m_state["injections"] += 1
+                            raise injected_exc
+                        return real_fstat(fd, *args, **kwargs)
+
+                    with (
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.open",
+                            side_effect=hooked_open_m,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.fstat",
+                            side_effect=hooked_fstat_m,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile._parse_verified_json_bytes",
+                            side_effect=AssertionError("must not parse JSON"),
+                        ) as mocked_parse,
+                        mock.patch(
+                            "refmac_diagnostic_profile._validate_outer_manifest_shape",
+                            side_effect=AssertionError(
+                                "must not validate shape"
+                            ),
+                        ) as mocked_shape,
+                        mock.patch(
+                            "refmac_diagnostic_profile._observe_controlled_root",
+                            side_effect=AssertionError(
+                                "must not inspect roots"
+                            ),
+                        ) as mocked_root,
+                    ):
+                        with self.assertRaises(
+                            ProfileValidationError
+                        ) as m_ctx:
+                            validate_profile(
+                                symlink_profile,
+                                installed_record,
+                                ccp4_env,
+                                ev_root,
+                            )
+                        mocked_parse.assert_not_called()
+                        mocked_shape.assert_not_called()
+                        mocked_root.assert_not_called()
+
+                    if stage_kind == "initial_fstat_fail":
+                        self.assertEqual(len(m_state["opened_fds"]), 1)
+                        with self.assertRaises(OSError) as ebadf_ctx:
+                            real_fstat(m_state["opened_fds"][0])
+                        self.assertEqual(ebadf_ctx.exception.errno, errno.EBADF)
+
+                    m_err = m_ctx.exception
+                    self.assertEqual(m_err.failed_check, "manifest_pin")
+                    self.assertIs(m_err.cause_exception, injected_exc)
+                    self.assertEqual(
+                        m_err.error_type, type(injected_exc).__name__
+                    )
+                    self.assertEqual(m_err.error_errno, injected_exc.errno)
+                    self.assertEqual(len(m_err.files), 0)
+                    self.assertEqual(len(m_err.roots), 0)
+                    assert isinstance(
+                        m_err.manifest_identity, PartialFileReadObservation
+                    )
+                    self._assert_pre_fstat_partial_obs(
+                        m_err.manifest_identity,
+                        expected_lexical=str(manifest_symlink),
+                        expected_resolved=manifest_resolved,
+                        expected_lex_lstat=exp_lex_lstat,
+                        expected_lex_stat=exp_lex_stat,
+                        expected_target_lstat=exp_target_lstat,
+                        expected_symlinks=exp_symlinks,
+                        expected_ancestors_subset={str(root)},
+                    )
+                    assert m_err.manifest_identity.lookup_snapshot is not None
+                    self.assertTrue(
+                        m_err.manifest_identity.lookup_snapshot.lexical_lstat.is_symlink
+                    )
+
+                    # Also verify postflight recheck on symlink_profile
+                    m_state["target_fd"] = -1
+                    m_state["opened_fds"].clear()
+                    m_state["injections"] = 0
+                    causes_m: list[Exception | None] = []
+                    with (
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.open",
+                            side_effect=hooked_open_m,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.fstat",
+                            side_effect=hooked_fstat_m,
+                        ),
+                    ):
+                        priv_m = _reobserve_outer_profile_state(state_sym)
+                        m_state["target_fd"] = -1
+                        m_state["injections"] = 0
+                        rep_m = recheck_profile(
+                            validated_sym, mutation_causes_out=causes_m
+                        )
+
+                    self.assertFalse(priv_m.verified)
+                    self.assertIsNone(priv_m.manifest_observation)
+                    assert isinstance(
+                        priv_m.partial_manifest_observation,
+                        PartialFileReadObservation,
+                    )
+                    self._assert_pre_fstat_partial_obs(
+                        priv_m.partial_manifest_observation,
+                        expected_lexical=str(manifest_symlink),
+                        expected_resolved=manifest_resolved,
+                        expected_lex_lstat=exp_lex_lstat,
+                        expected_lex_stat=exp_lex_stat,
+                        expected_target_lstat=exp_target_lstat,
+                        expected_symlinks=exp_symlinks,
+                        expected_ancestors_subset={str(root)},
+                    )
+                    self.assertIs(priv_m.manifest_cause, injected_exc)
+                    self.assertFalse(rep_m["verified"])
+                    self.assertFalse(rep_m["manifest"]["matches_baseline"])
+                    self.assertIsNone(rep_m["manifest"]["observed"]["dev"])
+                    self.assertIsNone(
+                        rep_m["manifest"]["observed"]["stat_size_bytes"]
+                    )
+                    self.assertIsNotNone(
+                        rep_m["manifest"]["observed"]["lookup_snapshot"]
+                    )
+                    self.assertEqual(causes_m, [injected_exc])
+                    self.assertIs(causes_m[0], injected_exc)
+                    json.dumps(rep_m, allow_nan=False)
+
+    def test_1168_shared_dependency_failure_association_and_guardrail_boundaries(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fx = _build_synthetic_outer_profile_fixture(Path(tmpdir))
+            root = fx["root"]
+            assert isinstance(root, Path)
+            support_dir = root / "support"
+            installed_record = fx["installed_record"]
+            assert isinstance(installed_record, dict)
+            ccp4_env = fx["ccp4_env"]
+            assert isinstance(ccp4_env, dict)
+            ev_root = fx["evidence_root"]
+            assert isinstance(ev_root, Path)
+            alias_symlink = fx["alias_symlink"]
+            assert isinstance(alias_symlink, Path)
+            profile = fx["profile"]
+            assert isinstance(profile, RefmacDiagnosticProfile)
+            base_payload = fx["manifest_payload"]
+            assert isinstance(base_payload, dict)
+
+            validated = validate_profile(
+                profile, installed_record, ccp4_env, ev_root
+            )
+            alias_fid = next(
+                fid
+                for fid, row in base_payload["files"].items()  # type: ignore[union-attr]
+                if row["path"] == str(alias_symlink)
+            )
+            alias_resolved = str(alias_symlink.resolve(strict=True))
+            last_fid = sorted(validated.files.keys())[-1]
+            last_fpath = validated.files[last_fid].path
+
+            open_eacces = PermissionError(
+                errno.EACCES,
+                "synthetic #1168 open EACCES on alias_symlink target",
+                alias_resolved,
+            )
+            step4_support_perm = PermissionError(
+                errno.EACCES,
+                "synthetic #1168 Step 4 support_dir PermissionError",
+                str(support_dir),
+            )
+
+            real_open = os.open
+            real_obs_pin = profile_mod._observe_regular_file_pin
+            real_dir_obs = profile_mod._observe_directory_identity
+            step_state = {
+                "current_lexical": None,
+                "open_injected": False,
+                "files_done": False,
+            }
+
+            def track_pin(path, *args, **kwargs):
+                prev = step_state["current_lexical"]
+                step_state["current_lexical"] = str(path)
+                try:
+                    return real_obs_pin(path, *args, **kwargs)
+                finally:
+                    step_state["current_lexical"] = prev
+                    if str(path) == str(last_fpath):
+                        step_state["files_done"] = True
+
+            def open_fail_on_alias(path, flags, *args, **kwargs):
+                if (
+                    not step_state["open_injected"]
+                    and step_state["current_lexical"] == str(alias_symlink)
+                    and str(path) == alias_resolved
+                ):
+                    step_state["open_injected"] = True
+                    raise open_eacces
+                return real_open(path, flags, *args, **kwargs)
+
+            def dir_obs_fail_support_in_step4(
+                dir_path_str: str,
+                *,
+                require_no_symlink_ancestors: bool = False,
+            ):
+                if (
+                    step_state["files_done"]
+                    and str(dir_path_str) == str(support_dir)
+                ):
+                    raise ValueError(
+                        f"Cannot lstat directory {dir_path_str!r} (PermissionError): {step4_support_perm}"
+                    ) from step4_support_perm
+                return real_dir_obs(
+                    dir_path_str,
+                    require_no_symlink_ancestors=require_no_symlink_ancestors,
+                )
+
+            causes: list[Exception | None] = []
+            with (
+                mock.patch(
+                    "refmac_diagnostic_profile._observe_regular_file_pin",
+                    side_effect=track_pin,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.open",
+                    side_effect=open_fail_on_alias,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile._observe_directory_identity",
+                    side_effect=dir_obs_fail_support_in_step4,
+                ),
+            ):
+                rep = recheck_profile(validated, mutation_causes_out=causes)
+
+            self.assertTrue(step_state["open_injected"])
+            self.assertFalse(rep["verified"])
+            alias_row = rep["files"][alias_fid]
+            self.assertFalse(alias_row["matches_baseline"])
+            self.assertIsNotNone(alias_row["observed"])
+            self.assertIsNone(alias_row["observed"]["dev"])
+            self.assertIsNone(alias_row["observed"]["stat_size_bytes"])
+            self.assertIsNotNone(alias_row["observed"]["lookup_snapshot"])
+            self.assertEqual(len(alias_row["errors"]), 2)
+            alias_muts = [
+                (idx, m)
+                for idx, m in enumerate(rep["mutations"])
+                if m["key"] == f"profile:file:{alias_fid}"
+            ]
+            self.assertEqual(len(alias_muts), 2)
+            self.assertIs(causes[alias_muts[0][0]], open_eacces)
+            self.assertIs(causes[alias_muts[1][0]], step4_support_perm)
+
+            # Verify validation guardrails on LookupStatObservation, PreOpenLookupSnapshot, and PartialFileReadObservation
+            valid_stat = LookupStatObservation.from_stat_result(
+                os.stat(alias_resolved)
+            )
+            with self.assertRaises(FrozenInstanceError):
+                valid_stat.size_bytes = 0  # type: ignore[misc]
+            with self.assertRaises(ValueError):
+                LookupStatObservation(
+                    dev=1,
+                    ino=1,
+                    mode=0o644,
+                    uid=0,
+                    gid=0,
+                    size_bytes=1,
+                    is_symlink=True,
+                    is_regular=True,
+                )
+            with self.assertRaises(ValueError):
+                PartialFileReadObservation(
+                    path=alias_resolved,
+                    resolved_path=alias_resolved,
+                    stat_size_bytes=10,
+                    dev=None,
+                    ino=None,
+                    mode=None,
+                    uid=None,
+                    gid=None,
+                    errors=("stat_size without fstat identity must fail",),
+                )
+
+            # Verify out-of-scope boundaries stay plain ValueError (NOT _PartialFileReadError):
+            # 1) Initial lookup failure before traversal completes
+            with mock.patch(
+                "refmac_diagnostic_profile.os.lstat",
+                side_effect=FileNotFoundError(
+                    errno.ENOENT, "missing", str(alias_symlink)
+                ),
+            ):
+                with self.assertRaises(ValueError) as lstat_ctx:
+                    profile_mod._stream_observe_regular_file(str(alias_symlink))
+                self.assertNotIsInstance(
+                    lstat_ctx.exception, profile_mod._PartialFileReadError
+                )
+
+            # 2) Incomplete traversal failure
+            with mock.patch(
+                "refmac_diagnostic_profile._traverse_path_components",
+                side_effect=ValueError("synthetic mid-traversal failure"),
+            ):
+                with self.assertRaises(ValueError) as trav_ctx:
+                    profile_mod._stream_observe_regular_file(str(alias_symlink))
+                self.assertNotIsInstance(
+                    trav_ctx.exception, profile_mod._PartialFileReadError
+                )
+
+            # 3) Descriptor identity mismatch after initial fstat succeeds
+            real_fstat = os.fstat
+            base_st = os.stat(alias_resolved)
+            mismatch_st = os.stat_result(
+                (
+                    base_st.st_mode,
+                    base_st.st_ino + 999999,
+                    base_st.st_dev,
+                    base_st.st_nlink,
+                    base_st.st_uid,
+                    base_st.st_gid,
+                    base_st.st_size,
+                    base_st.st_atime,
+                    base_st.st_mtime,
+                    base_st.st_ctime,
+                )
+            )
+            with mock.patch(
+                "refmac_diagnostic_profile.os.fstat",
+                side_effect=lambda fd: mismatch_st,
+            ):
+                with self.assertRaises(ValueError) as id_mismatch_ctx:
+                    profile_mod._stream_observe_regular_file(str(alias_symlink))
+                self.assertNotIsInstance(
+                    id_mismatch_ctx.exception, profile_mod._PartialFileReadError
+                )
+
+            # 4) Post-EOF fstat_after failure
+            fstat_calls = {"count": 0}
+
+            def fstat_fail_second(fd: int):
+                fstat_calls["count"] += 1
+                if fstat_calls["count"] == 2:
+                    raise OSError(errno.EIO, "synthetic fstat_after EIO")
+                return real_fstat(fd)
+
+            with mock.patch(
+                "refmac_diagnostic_profile.os.fstat",
+                side_effect=fstat_fail_second,
+            ):
+                with self.assertRaises(ValueError) as post_eof_ctx:
+                    profile_mod._stream_observe_regular_file(str(alias_symlink))
+                self.assertNotIsInstance(
+                    post_eof_ctx.exception, profile_mod._PartialFileReadError
+                )
+
+    def test_1168_partial_owner_dependency_conflicts_across_declared_file_and_manifest_stages(
+        self,
+    ) -> None:
+        # 1. Declared-file partial owner (open and initial_fstat) with shared-symlink inode conflict
+        for stage in ("open", "initial_fstat"):
+            with self.subTest(owner="declared_file", stage=stage):
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    fx = _build_synthetic_outer_profile_fixture(Path(tmpdir))
+                    root = fx["root"]
+                    assert isinstance(root, Path)
+                    alias_symlink = fx["alias_symlink"]
+                    assert isinstance(alias_symlink, Path)
+                    installed_record = fx["installed_record"]
+                    assert isinstance(installed_record, dict)
+                    ccp4_env = fx["ccp4_env"]
+                    assert isinstance(ccp4_env, dict)
+                    ev_root = fx["evidence_root"]
+                    assert isinstance(ev_root, Path)
+                    payload = copy.deepcopy(fx["manifest_payload"])
+                    assert isinstance(payload, dict)
+
+                    first_fid = next(
+                        fid
+                        for fid, row in payload["files"].items()  # type: ignore[union-attr]
+                        if row["path"] == str(alias_symlink)
+                    )
+                    second_fid = "zz_second_shared_symlink_user"
+                    second_path = f"{root}/support/bin/../python-alias"
+                    payload["files"][second_fid] = (  # type: ignore[index]
+                        _observe_regular_file_pin(second_path).to_manifest_row()
+                    )
+                    payload["roles"]["qc_evidence"] = sorted(  # type: ignore[index]
+                        [*payload["roles"]["qc_evidence"], second_fid]  # type: ignore[index]
+                    )
+                    profile = _rewrite_manifest_and_profile(fx, payload)
+
+                    positive = validate_profile(
+                        profile, installed_record, ccp4_env, ev_root
+                    )
+                    self.assertEqual(len(positive.files), 60)
+                    self.assertEqual(len(positive.roots), 3)
+
+                    target_resolved = str(alias_symlink.resolve(strict=True))
+                    park_link = alias_symlink.with_name(
+                        "python-alias.owned-old"
+                    )
+                    real_deps = profile_mod._collect_file_dependencies
+                    real_observe = profile_mod._observe_regular_file_pin
+                    real_open = os.open
+                    real_fstat = os.fstat
+                    armed: list[bool] = []
+                    inodes: list[int] = []
+                    fds: list[int] = []
+                    fired: list[bool] = []
+                    injected = OSError(
+                        errno.EIO, f"owned late-alias {stage}"
+                    )
+
+                    def deps_replace_link(file_obs, **kw):
+                        res = real_deps(file_obs, **kw)
+                        if file_obs.path == str(alias_symlink):
+                            inodes.append(os.lstat(alias_symlink).st_ino)
+                            alias_symlink.rename(park_link)
+                            alias_symlink.symlink_to("collection-python")
+                            inodes.append(os.lstat(alias_symlink).st_ino)
+                        return res
+
+                    def observe_track_second(path, *a, **kw):
+                        if path != second_path:
+                            return real_observe(path, *a, **kw)
+                        armed.append(True)
+                        try:
+                            return real_observe(path, *a, **kw)
+                        finally:
+                            armed.pop()
+
+                    def open_inject(path, flags, *a, **kw):
+                        if (
+                            armed
+                            and str(path) == target_resolved
+                            and stage == "open"
+                            and not fired
+                        ):
+                            fired.append(True)
+                            raise injected
+                        fd = real_open(path, flags, *a, **kw)
+                        if armed and str(path) == target_resolved:
+                            fds.append(fd)
+                        return fd
+
+                    def fstat_inject(fd):
+                        if (
+                            armed
+                            and fd in fds
+                            and stage == "initial_fstat"
+                            and not fired
+                        ):
+                            fired.append(True)
+                            raise injected
+                        return real_fstat(fd)
+
+                    with (
+                        mock.patch(
+                            "refmac_diagnostic_profile._collect_file_dependencies",
+                            side_effect=deps_replace_link,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile._observe_regular_file_pin",
+                            side_effect=observe_track_second,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.open",
+                            side_effect=open_inject,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.fstat",
+                            side_effect=fstat_inject,
+                        ),
+                    ):
+                        with self.assertRaises(
+                            ProfileValidationError
+                        ) as fail_ctx:
+                            validate_profile(
+                                profile, installed_record, ccp4_env, ev_root
+                            )
+
+                    self.assertEqual(fired, [True])
+                    self.assertEqual(len(inodes), 2)
+                    self.assertNotEqual(inodes[0], inodes[1])
+                    if stage == "initial_fstat":
+                        self.assertEqual(len(fds), 1)
+                        with self.assertRaises(OSError) as ebadf_ctx:
+                            real_fstat(fds[0])
+                        self.assertEqual(
+                            ebadf_ctx.exception.errno, errno.EBADF
+                        )
+
+                    failure = fail_ctx.exception
+                    self.assertEqual(
+                        failure.failed_check, "outer_profile_files_and_roots"
+                    )
+                    self.assertIs(failure.cause_exception, injected)
+                    self.assertEqual(failure.error_type, "OSError")
+                    self.assertEqual(failure.error_errno, errno.EIO)
+                    self.assertIsNone(failure.selected_executable)
+                    self.assertFalse(failure.profile_files_verified)
+                    self.assertEqual(len(failure.roots), 3)
+                    self.assertEqual(len(failure.files), 60)
+
+                    for fid, fobs in failure.files:
+                        if fid == second_fid:
+                            self.assertIsInstance(
+                                fobs, PartialFileReadObservation
+                            )
+                        else:
+                            self.assertIsInstance(fobs, FileObservation)
+                            self.assertTrue(fobs.verified)
+                            self.assertTrue(fobs.dependencies_complete)
+
+                    fobs_first = failure.files[first_fid]
+                    self.assertEqual(
+                        fobs_first.symlink_identities[0].ino, inodes[0]
+                    )
+                    fobs_second = failure.files[second_fid]
+                    assert isinstance(fobs_second, PartialFileReadObservation)
+                    partial = failure.partial_observation
+                    assert partial is not None
+                    self.assertIs(partial.partial_files[second_fid], fobs_second)
+                    self.assertIs(
+                        partial.file_observations[second_fid], fobs_second
+                    )
+                    self.assertEqual(
+                        partial.observed_symlinks[str(alias_symlink)].ino,
+                        inodes[0],
+                    )
+                    dep = partial.file_dependencies[second_fid]
+                    self.assertFalse(dep.complete)
+                    self.assertEqual(len(dep.errors), 1)
+                    self.assertIn(
+                        "Symlink identity changed during observation",
+                        dep.errors[0],
+                    )
+
+                    self.assertFalse(fobs_second.dependencies_complete)
+                    self.assertFalse(fobs_second.complete)
+                    self.assertFalse(fobs_second.verified)
+                    self.assertFalse(fobs_second.read_complete)
+                    self.assertIsNone(fobs_second.sha256)
+                    self.assertIsNone(fobs_second.size_bytes)
+                    self.assertIsNone(fobs_second.stat_size_bytes)
+                    self.assertEqual(fobs_second.streamed_size_bytes, 0)
+                    self.assertIsNone(fobs_second.dev)
+                    self.assertIsNone(fobs_second.ino)
+                    self.assertIsNone(fobs_second.mode)
+                    self.assertIsNone(fobs_second.uid)
+                    self.assertIsNone(fobs_second.gid)
+                    self.assertIsNone(fobs_second.identity_tuple)
+                    self.assertEqual(
+                        fobs_second.symlink_identities[0].ino, inodes[1]
+                    )
+                    self.assertEqual(fobs_second.unavailable_symlinks, ())
+                    assert fobs_second.lookup_snapshot is not None
+                    self.assertEqual(
+                        fobs_second.lookup_snapshot.symlink_identities[0].ino,
+                        inodes[1],
+                    )
+                    self.assertEqual(len(fobs_second.errors), 2)
+                    self.assertTrue(
+                        fobs_second.errors[0].startswith(
+                            "Failed reading regular file "
+                        )
+                    )
+                    self.assertFalse(
+                        profile_mod._is_size_mismatch_partial_observation(
+                            fobs_second
+                        )
+                    )
+                    self.assertEqual(fobs_second.errors[1], dep.errors[0])
+                    self.assertEqual(
+                        list(failure.errors), list(fobs_second.errors)
+                    )
+                    self.assertEqual(len(failure.error_records), 2)
+                    self.assertIs(
+                        failure.error_records[0].exception.__cause__, injected
+                    )
+                    self.assertEqual(
+                        failure.error_records[0].error_type, "OSError"
+                    )
+                    self.assertEqual(
+                        failure.error_records[0].error_errno, errno.EIO
+                    )
+                    self.assertEqual(
+                        failure.error_records[1].error_type, "ValueError"
+                    )
+                    self.assertIsNone(failure.error_records[1].error_errno)
+                    self.assertIsNone(
+                        failure.error_records[1].exception.__cause__
+                    )
+
+                    # Pure in-memory projection with poisoned filesystem entry points
+                    with (
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.lstat",
+                            side_effect=AssertionError("no lstat"),
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.stat",
+                            side_effect=AssertionError("no stat"),
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.readlink",
+                            side_effect=AssertionError("no readlink"),
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.open",
+                            side_effect=AssertionError("no open"),
+                        ),
+                    ):
+                        public = failure.to_provenance()
+                        reproj_with_deps = (
+                            profile_mod._build_partial_file_observation(
+                                fobs_second,
+                                observed_ancestors=partial.observed_ancestors,
+                                observed_symlinks=partial.observed_symlinks,
+                                file_dependencies=dep,
+                            )
+                        )
+                        reproj_from_maps = (
+                            profile_mod._build_partial_file_observation(
+                                PartialFileReadObservation(
+                                    path=fobs_second.path,
+                                    resolved_path=fobs_second.resolved_path,
+                                    symlinks=fobs_second.symlinks,
+                                    symlink_identities=fobs_second.symlink_identities,
+                                    ancestors=fobs_second.ancestors,
+                                    dependencies_complete=True,
+                                    errors=(fobs_second.errors[0],),
+                                    lookup_snapshot=fobs_second.lookup_snapshot,
+                                ),
+                                observed_ancestors=partial.observed_ancestors,
+                                observed_symlinks=partial.observed_symlinks,
+                            )
+                        )
+                        incomplete_preserved = (
+                            profile_mod._build_partial_file_observation(
+                                PartialFileReadObservation(
+                                    path=fobs_second.path,
+                                    resolved_path=fobs_second.resolved_path,
+                                    symlinks=fobs_second.symlinks,
+                                    symlink_identities=(),
+                                    ancestors=fobs_second.ancestors,
+                                    dependencies_complete=False,
+                                    errors=(fobs_second.errors[0],),
+                                ),
+                                observed_ancestors=partial.observed_ancestors,
+                                observed_symlinks=partial.observed_symlinks,
+                            )
+                        )
+
+                    self.assertIs(reproj_with_deps, fobs_second)
+                    self.assertEqual(reproj_from_maps, fobs_second)
+                    self.assertFalse(
+                        incomplete_preserved.dependencies_complete
+                    )
+                    pub_fobs = public["files"][second_fid]
+                    self.assertFalse(pub_fobs["dependencies_complete"])
+                    self.assertFalse(pub_fobs["verified"])
+                    self.assertEqual(
+                        pub_fobs["symlink_identities"][0]["ino"], inodes[1]
+                    )
+                    self.assertEqual(
+                        public["files"][first_fid]["symlink_identities"][0][
+                            "ino"
+                        ],
+                        inodes[0],
+                    )
+                    self.assertEqual(
+                        pub_fobs["errors"], list(fobs_second.errors)
+                    )
+                    self.assertEqual(
+                        public["errors"], list(fobs_second.errors)
+                    )
+
+        # 2. Manifest partial owner (open and initial_fstat) with shared ancestor-directory mode conflict
+        for stage in ("open", "initial_fstat"):
+            with self.subTest(owner="manifest", stage=stage):
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    owned = Path(tmpdir).resolve(strict=True)
+                    fx = _build_synthetic_outer_profile_fixture(owned)
+                    installed_record = fx["installed_record"]
+                    assert isinstance(installed_record, dict)
+                    ccp4_env = fx["ccp4_env"]
+                    assert isinstance(ccp4_env, dict)
+                    ev_root = fx["evidence_root"]
+                    assert isinstance(ev_root, Path)
+                    manifest_path = fx["manifest_path"]
+                    assert isinstance(manifest_path, Path)
+                    profile = fx["profile"]
+                    assert isinstance(profile, RefmacDiagnosticProfile)
+
+                    positive_m = validate_profile(
+                        profile, installed_record, ccp4_env, ev_root
+                    )
+                    self.assertEqual(len(positive_m.files), 59)
+                    self.assertEqual(len(positive_m.roots), 3)
+
+                    target_m = str(manifest_path.resolve(strict=True))
+                    oldmode = stat.S_IMODE(owned.stat().st_mode)
+                    newmode = oldmode ^ stat.S_IXOTH
+                    real_ev = profile_mod._validate_and_observe_evidence_root
+                    real_open = os.open
+                    real_fstat = os.fstat
+                    changed_m: list[bool] = []
+                    fired_m: list[bool] = []
+                    fds_m: list[int] = []
+                    injected_m = OSError(
+                        errno.EIO, f"owned manifest {stage}"
+                    )
+
+                    def ev_chmod_after(*a, **kw):
+                        res = real_ev(*a, **kw)
+                        self.assertTrue(
+                            any(x.path == str(owned) for x in res[1])
+                        )
+                        owned.chmod(newmode)
+                        changed_m.append(True)
+                        return res
+
+                    def open_m_inject(path, flags, *a, **kw):
+                        if (
+                            str(path) == target_m
+                            and stage == "open"
+                            and not fired_m
+                        ):
+                            fired_m.append(True)
+                            raise injected_m
+                        fd = real_open(path, flags, *a, **kw)
+                        if str(path) == target_m:
+                            fds_m.append(fd)
+                        return fd
+
+                    def fstat_m_inject(fd):
+                        if (
+                            fd in fds_m
+                            and stage == "initial_fstat"
+                            and not fired_m
+                        ):
+                            fired_m.append(True)
+                            raise injected_m
+                        return real_fstat(fd)
+
+                    try:
+                        with (
+                            mock.patch(
+                                "refmac_diagnostic_profile._validate_and_observe_evidence_root",
+                                side_effect=ev_chmod_after,
+                            ),
+                            mock.patch(
+                                "refmac_diagnostic_profile.os.open",
+                                side_effect=open_m_inject,
+                            ),
+                            mock.patch(
+                                "refmac_diagnostic_profile.os.fstat",
+                                side_effect=fstat_m_inject,
+                            ),
+                            mock.patch(
+                                "refmac_diagnostic_profile._parse_verified_json_bytes",
+                                side_effect=AssertionError(
+                                    "must not parse unverified manifest"
+                                ),
+                            ) as mocked_parse,
+                            mock.patch(
+                                "refmac_diagnostic_profile._observe_controlled_root",
+                                side_effect=AssertionError(
+                                    "must not inspect controlled roots"
+                                ),
+                            ) as mocked_root,
+                        ):
+                            with self.assertRaises(
+                                ProfileValidationError
+                            ) as m_ctx:
+                                validate_profile(
+                                    profile,
+                                    installed_record,
+                                    ccp4_env,
+                                    ev_root,
+                                )
+                            mocked_parse.assert_not_called()
+                            mocked_root.assert_not_called()
+                    finally:
+                        owned.chmod(oldmode)
+
+                    self.assertEqual(changed_m, [True])
+                    self.assertEqual(fired_m, [True])
+                    if stage == "initial_fstat":
+                        self.assertEqual(len(fds_m), 1)
+                        with self.assertRaises(OSError) as ebadf_m_ctx:
+                            real_fstat(fds_m[0])
+                        self.assertEqual(
+                            ebadf_m_ctx.exception.errno, errno.EBADF
+                        )
+
+                    m_fail = m_ctx.exception
+                    self.assertEqual(m_fail.failed_check, "manifest_pin")
+                    self.assertIs(m_fail.cause_exception, injected_m)
+                    self.assertEqual(m_fail.error_type, "OSError")
+                    self.assertEqual(m_fail.error_errno, errno.EIO)
+                    self.assertEqual(len(m_fail.files), 0)
+                    self.assertEqual(len(m_fail.roots), 0)
+                    self.assertIsNone(m_fail.selected_executable)
+                    self.assertFalse(m_fail.profile_files_verified)
+
+                    m_partial = m_fail.partial_observation
+                    assert m_partial is not None
+                    self.assertEqual(
+                        m_partial.observed_ancestors[str(owned)].mode, oldmode
+                    )
+                    m_dep = m_partial.manifest_dependencies
+                    assert m_dep is not None
+                    self.assertFalse(m_dep.complete)
+                    self.assertEqual(len(m_dep.errors), 1)
+                    self.assertIn(
+                        "Directory identity changed during observation",
+                        m_dep.errors[0],
+                    )
+
+                    m_obs = m_fail.manifest_identity
+                    assert isinstance(m_obs, PartialFileReadObservation)
+                    self.assertIs(m_partial.partial_manifest_observation, m_obs)
+                    self.assertIs(m_partial.manifest_file_observation, m_obs)
+                    self.assertFalse(m_obs.dependencies_complete)
+                    self.assertFalse(m_obs.complete)
+                    self.assertFalse(m_obs.verified)
+                    self.assertFalse(m_obs.read_complete)
+                    self.assertIsNone(m_obs.sha256)
+                    self.assertIsNone(m_obs.size_bytes)
+                    self.assertIsNone(m_obs.stat_size_bytes)
+                    self.assertEqual(m_obs.streamed_size_bytes, 0)
+                    self.assertIsNone(m_obs.dev)
+                    self.assertIsNone(m_obs.ino)
+                    self.assertIsNone(m_obs.mode)
+                    self.assertIsNone(m_obs.uid)
+                    self.assertIsNone(m_obs.gid)
+                    owned_anc_obs = next(
+                        d for d in m_obs.ancestors if d.path == str(owned)
+                    )
+                    self.assertEqual(owned_anc_obs.mode, newmode)
+                    assert m_obs.lookup_snapshot is not None
+                    owned_snap_obs = next(
+                        d
+                        for d in m_obs.lookup_snapshot.traversed_directories
+                        if d.path == str(owned)
+                    )
+                    self.assertEqual(owned_snap_obs.mode, newmode)
+                    self.assertEqual(len(m_obs.errors), 2)
+                    self.assertTrue(
+                        m_obs.errors[0].startswith(
+                            "Failed reading regular file "
+                        )
+                    )
+                    self.assertEqual(m_obs.errors[1], m_dep.errors[0])
+                    self.assertEqual(list(m_fail.errors), list(m_obs.errors))
+                    self.assertEqual(len(m_fail.error_records), 2)
+                    self.assertIs(
+                        m_fail.error_records[0].exception.__cause__, injected_m
+                    )
+                    self.assertEqual(
+                        m_fail.error_records[1].error_type, "ValueError"
+                    )
+                    self.assertIsNone(m_fail.error_records[1].error_errno)
+                    self.assertIsNone(
+                        m_fail.error_records[1].exception.__cause__
+                    )
+
+                    # Pure in-memory provenance serialization after fixture restoration
+                    with (
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.lstat",
+                            side_effect=AssertionError("no lstat"),
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.stat",
+                            side_effect=AssertionError("no stat"),
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.readlink",
+                            side_effect=AssertionError("no readlink"),
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.open",
+                            side_effect=AssertionError("no open"),
+                        ),
+                    ):
+                        m_pub = m_fail.to_provenance()
+
+                    self.assertFalse(
+                        m_pub["manifest"]["dependencies_complete"]
+                    )
+                    self.assertFalse(m_pub["manifest"]["verified"])
+                    self.assertEqual(
+                        m_pub["manifest"]["errors"], list(m_obs.errors)
+                    )
+                    self.assertEqual(m_pub["errors"], list(m_obs.errors))
+                    self.assertEqual(m_pub["files"], {})
+                    self.assertEqual(m_pub["roots"], {})
+                    self.assertFalse(m_pub["profile_files_verified"])
 
 
 if __name__ == "__main__":

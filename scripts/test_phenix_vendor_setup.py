@@ -403,6 +403,210 @@ class PhenixVendorSetupTests(unittest.TestCase):
         self.assertIsNone(bare_impostor["reported_version_source"])
         self.assertFalse(impostor_marker.exists())
 
+    def test_dispatcher_path_component_validity_across_vendor_and_bare_routes(
+        self,
+    ) -> None:
+        # Configure the synthetic dispatcher to emit a valid 2.0-5936 banner even on
+        # bare invocations so both vendor and bare routes succeed when the path is
+        # valid and would falsely succeed on old code if an ENOTDIR path is accepted.
+        self.real_dispatcher.write_text(
+            f"#!{sys.executable}\n"
+            "import os\n"
+            "rule = '-' * 79\n"
+            "title = 'Phenix: Python-based Hierarchical ENvironment for Integrated Xtallography'\n"
+            "version = os.environ.get('PHENIX_VERSION') or '2.0-5936'\n"
+            "release_tag = os.environ.get('PHENIX_RELEASE_TAG')\n"
+            "if '-' in version and release_tag is None:\n"
+            "    version, release_tag = version.split('-', 1)\n"
+            "print(rule)\n"
+            "print('  ' + title)\n"
+            "print('  Version: ' + version)\n"
+            "if release_tag is not None:\n"
+            "    print('  Release tag: ' + release_tag)\n"
+            "print('  User: marcin')\n"
+            "print(rule)\n"
+            "print()\n"
+        )
+        self.real_dispatcher.chmod(0o755)
+
+        subdir = self.prefix / "subdir"
+        subdir.mkdir()
+        dir_hop = self.phenix_bin / "dir_hop"
+        dir_hop.symlink_to("../subdir")
+        resolved_prefix = self.prefix.resolve()
+
+        for valid_label, link_target in (
+            ("normal-vendor-symlink", "../bin/phenix.version"),
+            ("in-prefix-directory-dotdot", "../subdir/../bin/phenix.version"),
+            ("in-prefix-dir-symlink-dotdot", "dir_hop/../bin/phenix.version"),
+            (
+                "absolute-configured-prefix-with-dot",
+                f"{self.prefix.parent}/./{self.prefix.name}/bin/phenix.version",
+            ),
+            (
+                "absolute-resolved-prefix-with-dot",
+                f"{resolved_prefix.parent}/./{resolved_prefix.name}/bin/phenix.version",
+            ),
+        ):
+            with self.subTest(valid_case=valid_label):
+                self.configured_dispatcher.unlink(missing_ok=True)
+                self.configured_dispatcher.symlink_to(link_target)
+                self.assertEqual(
+                    os.readlink(self.configured_dispatcher), link_target
+                )
+                self.assertTrue(
+                    os.path.samefile(self.configured_dispatcher, self.real_dispatcher)
+                )
+                vendor_valid = toolchain.phenix_build_evidence()
+                bare_valid = toolchain.phenix_bare_build_evidence()
+                self.assertEqual(
+                    vendor_valid["reported_version_source"],
+                    "vendor_setup_environment",
+                )
+                self.assertEqual(vendor_valid["parsed_build"], "2.0-5936")
+                self.assertTrue(_build_is_measured(vendor_valid))
+                self.assertEqual(
+                    bare_valid["reported_version_source"],
+                    "command_output",
+                )
+                self.assertEqual(bare_valid["parsed_build"], "2.0-5936")
+                self.assertTrue(_build_is_measured(bare_valid))
+
+        file_hop = self.phenix_bin / "file_hop"
+        file_hop.symlink_to("../bin/phenix.version")
+        hop1 = self.phenix_bin / "hop1"
+        hop2 = self.phenix_bin / "hop2"
+        hop1.symlink_to("hop2")
+        hop2.symlink_to("../bin/phenix.version/../phenix.version")
+        hop_a = self.phenix_bin / "hop_a"
+        hop_b = self.phenix_bin / "hop_b"
+        hop_a.symlink_to("hop_b")
+        hop_b.symlink_to("../bin/phenix.version")
+
+        for invalid_label, link_target, custom_bin in (
+            (
+                "direct-file-dotdot-file",
+                "../bin/phenix.version/../phenix.version",
+                None,
+            ),
+            (
+                "intermediate-symlink-to-file-dotdot-file",
+                "file_hop/../phenix.version",
+                None,
+            ),
+            (
+                "multi-hop-chain-to-file-dotdot",
+                "hop1",
+                None,
+            ),
+            (
+                "multi-hop-file-symlink-then-dotdot",
+                "hop_a/../bin/phenix.version",
+                None,
+            ),
+            (
+                "absolute-dot-prefix-with-file-dotdot-suffix",
+                f"{self.prefix.parent}/./{self.prefix.name}/bin/phenix.version/../phenix.version",
+                None,
+            ),
+            (
+                "configured-path-regular-file-dotdot",
+                "../bin/phenix.version",
+                Path(f"{self.prefix}/bin/phenix.version/../../phenix_bin"),
+            ),
+        ):
+            with self.subTest(invalid_case=invalid_label):
+                self.configured_dispatcher.unlink(missing_ok=True)
+                self.configured_dispatcher.symlink_to(link_target)
+                probe_bin = self.phenix_bin if custom_bin is None else custom_bin
+                raw_dispatcher_path = os.fspath(probe_bin / "phenix.version")
+                with self.assertRaises(NotADirectoryError):
+                    os.stat(raw_dispatcher_path)
+                with (
+                    mock.patch.object(
+                        toolchain,
+                        "_run_phenix_setup",
+                        wraps=toolchain._run_phenix_setup,
+                    ) as setup_spy,
+                    mock.patch.object(
+                        toolchain,
+                        "run_capture",
+                        wraps=toolchain.run_capture,
+                    ) as capture_spy,
+                ):
+                    vendor_invalid = toolchain.phenix_build_evidence(
+                        configured_bin=probe_bin
+                    )
+                    bare_invalid = toolchain.phenix_bare_build_evidence(
+                        configured_bin=probe_bin
+                    )
+                for invalid_ev in (vendor_invalid, bare_invalid):
+                    self.assertIsNone(invalid_ev["reported_version_source"])
+                    self.assertIsNone(invalid_ev["reported_version"])
+                    self.assertIsNone(invalid_ev["parsed_build"])
+                    self.assertIsNone(invalid_ev["version_probe"]["resolved_path"])
+                    self.assertFalse(_build_is_measured(invalid_ev))
+                    self.assertIn(
+                        "NotADirectoryError",
+                        invalid_ev["version_probe"]["error"],
+                    )
+                setup_spy.assert_not_called()
+                capture_spy.assert_not_called()
+
+        # Verify external_tool_report also treats a file/.. dispatcher symlink as unavailable.
+        self.configured_dispatcher.unlink(missing_ok=True)
+        self.configured_dispatcher.symlink_to(
+            "../bin/phenix.version/../phenix.version"
+        )
+        spec = {
+            "expected_version": "2.0-5936",
+            "configured_path": self.phenix_bin,
+            "executables": ("phenix.version", "phenix.refine"),
+            "version_args": (),
+        }
+        with mock.patch.object(toolchain, "EXTERNAL_TOOL_SPECS", {"PHENIX": spec}):
+            malformed_report = toolchain.external_tool_report()["PHENIX"]
+        self.assertFalse(malformed_report["available"])
+        self.assertIsNone(malformed_report["discovered_executable"])
+        self.assertIsNone(malformed_report["reported_version"])
+        self.assertIsNone(malformed_report["reported_version_source"])
+        self.assertIsNone(malformed_report["version_divergence"])
+
+        # #1207: Explicit root prefix Path("/") matches valid absolute targets without
+        # touching / or invoking setup/dispatcher, while still rejecting regular-file/..
+        root_prefix = Path("/")
+        raw_root_target = os.fspath(self.real_dispatcher)
+        expected_root_suffix = tuple(
+            part for part in raw_root_target.split("/") if part
+        )
+        self.assertEqual(
+            toolchain._match_absolute_prefix_parts(
+                expected_root_suffix, root_prefix, root_prefix
+            ),
+            expected_root_suffix,
+        )
+        self.configured_dispatcher.unlink(missing_ok=True)
+        self.configured_dispatcher.symlink_to(raw_root_target)
+        resolved_from_root = toolchain._resolve_within_prefix(
+            self.phenix_bin.resolve(),
+            Path("phenix.version"),
+            root_prefix,
+            root_prefix,
+        )
+        self.assertEqual(resolved_from_root, self.real_dispatcher.resolve())
+        self.assertTrue(os.path.samefile(resolved_from_root, self.real_dispatcher))
+
+        malformed_root_target = f"{raw_root_target}/../phenix.version"
+        with self.assertRaises(NotADirectoryError):
+            os.stat(malformed_root_target)
+        with self.assertRaises(NotADirectoryError):
+            toolchain._resolve_within_prefix(
+                self.phenix_bin.resolve(),
+                malformed_root_target,
+                root_prefix,
+                root_prefix,
+            )
+
     def test_spoofed_inherited_vars_and_shell_hook_tripwires_are_neutralized(self) -> None:
         tripwire_marker = self.root / "tripwire-triggered"
         tripwire_script = self.root / "tripwire.sh"

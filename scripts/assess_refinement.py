@@ -1646,12 +1646,17 @@ def assess_1sar_case_study(
             "id": "1sar_round7_coordinates_absent_from_archive",
             "severity": "critical_provenance_boundary",
             "description": (
-                "The trajectory log (claude_iterations.log:510, :752) reports a "
-                "round-7 model with R-work = 0.1488, R-free = 0.1989, 159 waters "
-                "(1,654 heavy atoms), and restored B:97:SO4, but that coordinate "
-                "file was never packaged into cdba2c07-daff-4f60-ae96-12452b3a5fbb_artifacts.zip. "
-                "Instead, data/1sar_final.pdb is the round-4 PHENIX model "
-                "(SHA-256 8cbc1650f8be5a3833f98833fa514ec7d490c2c3bb9aa930413abac05e2a510b, "
+                "The trajectory log (claude_iterations.log:510, :752) claims an "
+                "unarchived round-7 model with R-work = 0.1488, R-free = 0.1989, "
+                "1,654 atoms reported in the log (192 residues, 159 waters, 1 Ca2+, "
+                "1 Na+, and 1 SO4), and final_report.md:70, :150 describes removal "
+                "of the disordered chain-B sulfate (ligand SO4 count 2 -> 1), not a "
+                "restored B:97:SO4; because that round-7 coordinate file was never "
+                "packaged into cdba2c07-daff-4f60-ae96-12452b3a5fbb_artifacts.zip, "
+                "all round-7 counts remain unverified log/report claims rather than "
+                "measured coordinate inventory. Instead, data/1sar_final.pdb is the "
+                "round-4 PHENIX model (SHA-256 "
+                "8cbc1650f8be5a3833f98833fa514ec7d490c2c3bb9aa930413abac05e2a510b, "
                 "146 waters, 1,641 heavy atoms), while intermediate rounds 5 and 6 "
                 "were saved separately as data/1sar_round5.pdb and data/1sar_round6.pdb."
             ),
@@ -2310,6 +2315,25 @@ def evaluate_control_cohorts(
         ),
     }
 
+    null_2vxn = next((r for r in null_rows if r["pdb_id"] == "2VXN"), None)
+    if (
+        null_2vxn is None
+        or null_2vxn.get("d_phenix") is None
+        or null_2vxn.get("d_gemmi") is None
+        or null_2vxn.get("d_refmac") is None
+        or not (
+            null_2vxn["d_phenix"] > 0.0
+            and null_2vxn["d_gemmi"] > 0.0
+            and null_2vxn["d_refmac"] < 0.0
+        )
+    ):
+        raise ValueError(
+            "Expected 2VXN null-control row with positive PHENIX/gemmi deltas and negative REFMAC delta"
+        )
+    null_2vxn_d_phenix = f"{null_2vxn['d_phenix']:+.4f}"
+    null_2vxn_d_gemmi = f"{null_2vxn['d_gemmi']:+.4f}"
+    null_2vxn_d_refmac = f"{null_2vxn['d_refmac']:+.4f}"
+
     return {
         "cohorts": cohorts,
         "cross_cohort_findings": {
@@ -2319,8 +2343,8 @@ def evaluate_control_cohorts(
                 "(evaluable on 19/22 targets; 3/22 two-path-only: 9YGW, 8R5K, 8QXQ) "
                 "shows smaller deltas (median d_refmac = +0.0018 vs median d_phenix = +0.0035) "
                 "and triggers solver-disagreement notes on 2/22 targets (2VXN on F-data, "
-                "where PHENIX/gemmi are positive (+0.0053 / +0.0067) while REFMAC sign is "
-                "negative (-0.0122); 9TXE on F-geom, where cctbx worsening stands down "
+                f"where PHENIX/gemmi are positive ({null_2vxn_d_phenix} / {null_2vxn_d_gemmi}) while REFMAC sign is "
+                f"negative ({null_2vxn_d_refmac}); 9TXE on F-geom, where cctbx worsening stands down "
                 "against improved REFMAC zBOND (-0.043)). Separating Question 1 "
                 "(implementation agreement) from Question 3 (change relative to input) "
                 "keeps solver-convention differences distinct from physical model changes."

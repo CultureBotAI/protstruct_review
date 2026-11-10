@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import copy
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -64,8 +66,39 @@ ASSESSMENT_JSON_PATH = (
     / "data"
     / "refinement_assessment_1sar_and_controls_2026-10-18.json"
 )
+EXPECTED_FROZEN_ASSESSMENT_JSON_SHA256 = (
+    "db100e926bfcf6331c303087846c4d51117a4411c6afdf58877aada5dbf14245"
+)
+EXPECTED_CLAUDE_LOG_SHA256 = (
+    "9ba0fddf49e97f0725de084167a640563473b750d7a7fff78782af207c9fcd1c"
+)
+EXPECTED_FINAL_REPORT_MD_SHA256 = (
+    "a296f07513a5e05c085b1639632a0a2f48e1c7ab0cce1b7596b230cae110b5a2"
+)
+ROUND2_ENROLLED_JSON_PATH = (
+    REPO_ROOT / "ref" / "research" / "data" / "negative_control_round2_enrolled.json"
+)
+EXPECTED_ROUND2_ENROLLED_SHA256 = (
+    "02fc974da9d1f8a2d8fb3c496c13196c200b31d182f1b7323cb25dcc59cbe7da"
+)
+ROUND2_SCREEN_JSON_PATH = (
+    REPO_ROOT / "ref" / "research" / "data" / "negative_control_round2_screen.json"
+)
+EXPECTED_ROUND2_SCREEN_SHA256 = (
+    "dfebc4b131a8df1ceac4190c00bc1d60eeaba00846167530e5a4d1a2152cb313"
+)
+ROUND9_ANIS_JSON_PATH = (
+    REPO_ROOT / "ref" / "research" / "data" / "negative_control_round9_anis.json"
+)
+ROUND2_MD_PATH = REPO_ROOT / "ref" / "research" / "negative_control_round2.md"
 CASE_STUDY_MD_PATH = (
     REPO_ROOT / "ref" / "research" / "refinement_assessment_case_study_2026-10-18.md"
+)
+SOURCE_CORRECTIONS_MD_PATH = (
+    REPO_ROOT
+    / "ref"
+    / "research"
+    / "refinement_assessment_source_corrections_2026-11-09.md"
 )
 
 
@@ -80,6 +113,54 @@ class AssessRefinementTests(unittest.TestCase):
             cls.final_pdb_text = zf.read("data/1sar_final.pdb").decode("utf-8")
             cls.start_mtz_bytes = zf.read("data/1sar.mtz")
             cls.final_mtz_bytes = zf.read("data/1sar_final.mtz")
+
+    def _expected_current_report(self) -> dict:
+        """Return a deep copy of the frozen JSON with only the two source-verified narrative corrections applied."""
+        self.assertEqual(
+            sha256_file(ASSESSMENT_JSON_PATH),
+            EXPECTED_FROZEN_ASSESSMENT_JSON_SHA256,
+        )
+        round3_doc = json.loads(DEFAULT_ROUND3_BENCH.read_text(encoding="utf-8"))
+        row_2vxn = round3_doc["rows"][2]
+        self.assertEqual(row_2vxn["pdb_id"], "2VXN")
+        self.assertEqual(row_2vxn["subject"], "null")
+        d_phenix = f"{row_2vxn['numbers']['d_phenix']:+.4f}"
+        d_gemmi = f"{row_2vxn['numbers']['d_gemmi']:+.4f}"
+        d_refmac = f"{row_2vxn['numbers']['d_refmac']:+.4f}"
+
+        expected = copy.deepcopy(self.saved_report)
+        expected["case_study_1sar"][
+            "missing_conflicting_and_inapplicable_evidence"
+        ][0]["description"] = (
+            "The trajectory log (claude_iterations.log:510, :752) claims an "
+            "unarchived round-7 model with R-work = 0.1488, R-free = 0.1989, "
+            "1,654 atoms reported in the log (192 residues, 159 waters, 1 Ca2+, "
+            "1 Na+, and 1 SO4), and final_report.md:70, :150 describes removal "
+            "of the disordered chain-B sulfate (ligand SO4 count 2 -> 1), not a "
+            "restored B:97:SO4; because that round-7 coordinate file was never "
+            "packaged into cdba2c07-daff-4f60-ae96-12452b3a5fbb_artifacts.zip, "
+            "all round-7 counts remain unverified log/report claims rather than "
+            "measured coordinate inventory. Instead, data/1sar_final.pdb is the "
+            "round-4 PHENIX model (SHA-256 "
+            "8cbc1650f8be5a3833f98833fa514ec7d490c2c3bb9aa930413abac05e2a510b, "
+            "146 waters, 1,641 heavy atoms), while intermediate rounds 5 and 6 "
+            "were saved separately as data/1sar_round5.pdb and data/1sar_round6.pdb."
+        )
+        expected["control_cohorts_evaluation"]["cross_cohort_findings"][
+            "unchanged_control_invariance"
+        ] = (
+            "In unchanged_null (subject='null', n=22), phenix and gemmi delta R-free "
+            "agree tightly (median |d_phenix - d_gemmi| = 0.0007), while REFMAC5 "
+            "(evaluable on 19/22 targets; 3/22 two-path-only: 9YGW, 8R5K, 8QXQ) "
+            "shows smaller deltas (median d_refmac = +0.0018 vs median d_phenix = +0.0035) "
+            "and triggers solver-disagreement notes on 2/22 targets (2VXN on F-data, "
+            f"where PHENIX/gemmi are positive ({d_phenix} / {d_gemmi}) while REFMAC sign is "
+            f"negative ({d_refmac}); 9TXE on F-geom, where cctbx worsening stands down "
+            "against improved REFMAC zBOND (-0.043)). Separating Question 1 "
+            "(implementation agreement) from Question 3 (change relative to input) "
+            "keeps solver-convention differences distinct from physical model changes."
+        )
+        return expected
 
     def test_resolve_verdict_status_uncalibrated_and_bound(self) -> None:
         """Verify pass_criterion_bindings policy rejects unevaluated bindings and unknown statuses."""
@@ -333,7 +414,7 @@ class AssessRefinementTests(unittest.TestCase):
                 eval_path=alt_eval,
                 coord_audit_path=alt_audit,
             )
-            default_case = self.saved_report["case_study_1sar"]
+            default_case = self._expected_current_report()["case_study_1sar"]
 
             self.assertEqual(alt_case["provenance"]["archive_path"], str(alt_archive))
             self.assertEqual(
@@ -466,7 +547,8 @@ class AssessRefinementTests(unittest.TestCase):
 
         default_controls = evaluate_control_cohorts()
         self.assertEqual(
-            default_controls, self.saved_report["control_cohorts_evaluation"]
+            default_controls,
+            self._expected_current_report()["control_cohorts_evaluation"],
         )
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -815,11 +897,48 @@ class AssessRefinementTests(unittest.TestCase):
         self.assertEqual(zero_shifts["inventory_deltas"]["added_non_water_atoms"], [])
 
     def test_saved_json_matches_fresh_build_and_separates_three_questions(self) -> None:
-        """Verify saved JSON report matches build_full_assessment_report() and separates the 3 questions."""
-        fresh_report = build_full_assessment_report()
-        self.assertEqual(self.saved_report, fresh_report)
+        """Verify frozen JSON matches build_full_assessment_report() outside the two dated narrative corrections and separates the 3 questions."""
+        self.assertEqual(
+            sha256_file(ASSESSMENT_JSON_PATH),
+            EXPECTED_FROZEN_ASSESSMENT_JSON_SHA256,
+        )
+        self.assertIn(
+            "159 waters (1,654 heavy atoms), and restored B:97:SO4",
+            self.saved_report["case_study_1sar"][
+                "missing_conflicting_and_inapplicable_evidence"
+            ][0]["description"],
+        )
+        self.assertIn(
+            "(+0.0053 / +0.0067)",
+            self.saved_report["control_cohorts_evaluation"]["cross_cohort_findings"][
+                "unchanged_control_invariance"
+            ],
+        )
 
-        case_1sar = self.saved_report["case_study_1sar"]
+        fresh_report = build_full_assessment_report()
+        expected_report = self._expected_current_report()
+        self.assertEqual(expected_report, fresh_report)
+
+        # Prove that unrelated field drift in either case_study_1sar or control_cohorts_evaluation is never masked
+        mutated_case_report = copy.deepcopy(fresh_report)
+        mutated_case_report["case_study_1sar"]["final_model_quality_support"][
+            "domains"
+        ]["experimental_fit_and_data_completeness"]["r_free_phenix"] = 0.9999
+        self.assertNotEqual(expected_report, mutated_case_report)
+
+        mutated_evidence_report = copy.deepcopy(fresh_report)
+        mutated_evidence_report["case_study_1sar"][
+            "missing_conflicting_and_inapplicable_evidence"
+        ][1]["description"] = "mutated_unrelated_evidence"
+        self.assertNotEqual(expected_report, mutated_evidence_report)
+
+        mutated_control_report = copy.deepcopy(fresh_report)
+        mutated_control_report["control_cohorts_evaluation"]["cohorts"][
+            "unchanged_null"
+        ]["per_target_rows"][2]["d_phenix"] = 0.9999
+        self.assertNotEqual(expected_report, mutated_control_report)
+
+        case_1sar = fresh_report["case_study_1sar"]
         self.assertEqual(case_1sar["pass_criterion_bindings"], [])
         self.assertEqual(case_1sar["assessment_verdict_status"], "informational")
         for key in (
@@ -930,19 +1049,285 @@ class AssessRefinementTests(unittest.TestCase):
             if r["conflict_count"] > 0
         ]
         self.assertEqual(unchanged_conflicts, ["2VXN", "9TXE"])
-        invariance_note = self.saved_report["control_cohorts_evaluation"][
+        invariance_note = fresh_report["control_cohorts_evaluation"][
             "cross_cohort_findings"
         ]["unchanged_control_invariance"]
         self.assertIn("2VXN", invariance_note)
+        self.assertIn("(+0.0214 / +0.0220)", invariance_note)
+        self.assertIn("(-0.0122)", invariance_note)
+        self.assertNotIn("+0.0053", invariance_note)
+        self.assertNotIn("+0.0067", invariance_note)
         self.assertIn("9TXE", invariance_note)
         self.assertNotIn("8RFF", invariance_note)
 
-        protonation_note = self.saved_report["control_cohorts_evaluation"][
+        protonation_note = fresh_report["control_cohorts_evaluation"][
             "cross_cohort_findings"
         ]["recovered_control_protonation_contrast"]
         self.assertIn("multi-factor protocol change", protonation_note)
         self.assertIn("BREF ANIS", protonation_note)
         self.assertNotIn("isolates the effect", protonation_note)
+
+    def test_null_control_2vxn_narrative_derived_from_source_row_and_case_study_sync(
+        self,
+    ) -> None:
+        """Verify #964: 2VXN null-control deltas are derived from negative_control_round3_bench.json rows[2] and synced in case study."""
+        self.assertEqual(
+            sha256_file(DEFAULT_ROUND3_BENCH), EXPECTED_ROUND3_BENCH_SHA256
+        )
+        round3_doc = json.loads(DEFAULT_ROUND3_BENCH.read_text(encoding="utf-8"))
+        row_2vxn = round3_doc["rows"][2]
+        self.assertEqual(row_2vxn["pdb_id"], "2VXN")
+        self.assertEqual(row_2vxn["subject"], "null")
+        self.assertAlmostEqual(row_2vxn["numbers"]["d_phenix"], 0.0214, places=4)
+        self.assertAlmostEqual(row_2vxn["numbers"]["d_gemmi"], 0.0220, places=4)
+        self.assertAlmostEqual(row_2vxn["numbers"]["d_refmac"], -0.0122, places=4)
+        self.assertAlmostEqual(row_2vxn["pre"]["rfree_phenix"], 0.1043, places=4)
+        self.assertAlmostEqual(row_2vxn["post"]["rfree_phenix"], 0.1257, places=4)
+        self.assertAlmostEqual(row_2vxn["pre"]["rfree_gemmi"], 0.1059, places=4)
+        self.assertAlmostEqual(row_2vxn["post"]["rfree_gemmi"], 0.1279, places=4)
+        self.assertAlmostEqual(
+            row_2vxn["pre"]["refmac"]["r_free"], 0.1712, places=4
+        )
+        self.assertAlmostEqual(
+            row_2vxn["post"]["refmac"]["r_free"], 0.1590, places=4
+        )
+
+        # Verify historical BREF ISOT (-0.0122) vs regenerated BREF ANIS (+0.0130) in round9_anis.json
+        round9_doc = json.loads(ROUND9_ANIS_JSON_PATH.read_text(encoding="utf-8"))
+        r9_2vxn = next(r for r in round9_doc["rows"] if r["pdb_id"] == "2VXN")
+        self.assertAlmostEqual(r9_2vxn["paths"]["phenix"]["delta"], 0.0214, places=4)
+        self.assertAlmostEqual(r9_2vxn["paths"]["gemmi"]["delta"], 0.0220, places=4)
+        self.assertAlmostEqual(r9_2vxn["refmac"]["isot"]["delta"], -0.0122, places=4)
+        self.assertAlmostEqual(r9_2vxn["refmac"]["anis"]["delta"], 0.0130, places=4)
+
+        controls = evaluate_control_cohorts()
+        invariance = controls["cross_cohort_findings"]["unchanged_control_invariance"]
+        self.assertIn("(+0.0214 / +0.0220)", invariance)
+        self.assertIn("(-0.0122)", invariance)
+        self.assertNotIn("0.0053", invariance)
+        self.assertNotIn("0.0067", invariance)
+
+        # Prove generator dynamically formats the 2VXN null row rather than using a hardcoded narrative copy
+        round4_doc = json.loads(DEFAULT_ROUND4_RECOVER.read_text(encoding="utf-8"))
+        round10_doc = json.loads(DEFAULT_ROUND10_RECOVER.read_text(encoding="utf-8"))
+        synthetic_round3 = copy.deepcopy(round3_doc)
+        synthetic_round3["rows"][2]["numbers"]["d_phenix"] = 0.0315
+        synthetic_round3["rows"][2]["numbers"]["d_gemmi"] = 0.0325
+        synthetic_round3["rows"][2]["numbers"]["d_refmac"] = -0.0199
+        with mock.patch(
+            "assess_refinement._read_verified_control_json",
+            side_effect=[
+                (synthetic_round3, EXPECTED_ROUND3_BENCH_SHA256),
+                (round4_doc, EXPECTED_ROUND4_RECOVER_SHA256),
+                (round10_doc, EXPECTED_ROUND10_RECOVER_SHA256),
+            ],
+        ):
+            synthetic_controls = evaluate_control_cohorts()
+        synthetic_invariance = synthetic_controls["cross_cohort_findings"][
+            "unchanged_control_invariance"
+        ]
+        self.assertIn("(+0.0315 / +0.0325)", synthetic_invariance)
+        self.assertIn("(-0.0199)", synthetic_invariance)
+
+        # Violating the sign-conflict invariant on 2VXN null row must raise ValueError
+        bad_sign_round3 = copy.deepcopy(round3_doc)
+        bad_sign_round3["rows"][2]["numbers"]["d_refmac"] = 0.0122
+        with mock.patch(
+            "assess_refinement._read_verified_control_json",
+            side_effect=[
+                (bad_sign_round3, EXPECTED_ROUND3_BENCH_SHA256),
+                (round4_doc, EXPECTED_ROUND4_RECOVER_SHA256),
+                (round10_doc, EXPECTED_ROUND10_RECOVER_SHA256),
+            ],
+        ):
+            with self.assertRaisesRegex(
+                ValueError, "Expected 2VXN null-control row"
+            ):
+                evaluate_control_cohorts()
+
+        # Case-study markdown must cite the source-backed 2VXN values and ISOT vs ANIS context
+        case_study_text = CASE_STUDY_MD_PATH.read_text(encoding="utf-8")
+        self.assertIn("+0.0214 / +0.0220", case_study_text)
+        self.assertIn("0.1043 -> 0.1257", case_study_text)
+        self.assertIn("0.1059 -> 0.1279", case_study_text)
+        self.assertIn("0.1712 -> 0.1590", case_study_text)
+        self.assertIn("+0.0130", case_study_text)
+        self.assertNotIn("0.0053", case_study_text)
+        self.assertNotIn("0.0067", case_study_text)
+
+    def test_round7_archive_attribution_and_dated_correction_audit_trail(self) -> None:
+        """Verify #1003: archive log/report hashes and lines, corrected Round 7 narrative, and dated correction note."""
+        self.assertEqual(
+            sha256_file(ASSESSMENT_JSON_PATH),
+            EXPECTED_FROZEN_ASSESSMENT_JSON_SHA256,
+        )
+        self.assertEqual(sha256_file(DEFAULT_ARCHIVE), EXPECTED_1SAR_ARCHIVE_SHA256)
+
+        with zipfile.ZipFile(DEFAULT_ARCHIVE, "r") as zf:
+            names = zf.namelist()
+            self.assertEqual(
+                [n for n in names if "round7" in n.lower()],
+                [],
+            )
+            log_bytes = zf.read("claude_iterations.log")
+            report_bytes = zf.read("final_report.md")
+
+        self.assertEqual(
+            hashlib.sha256(log_bytes).hexdigest(), EXPECTED_CLAUDE_LOG_SHA256
+        )
+        self.assertEqual(
+            hashlib.sha256(report_bytes).hexdigest(),
+            EXPECTED_FINAL_REPORT_MD_SHA256,
+        )
+        log_lines = log_bytes.decode("utf-8").splitlines()
+        report_lines = report_bytes.decode("utf-8").splitlines()
+
+        self.assertIn("159 waters, 1 Ca²⁺, 1 Na⁺, 1 SO4.", log_lines[509])
+        self.assertIn(
+            "(1654 atoms, 192 residues, 159 waters, 1 Ca²⁺, 1 Na⁺, 1 SO₄)",
+            log_lines[751],
+        )
+        self.assertNotIn("heavy atoms", log_lines[751])
+        self.assertIn(
+            "removal of the disordered chain B sulfate",
+            report_lines[69],
+        )
+        self.assertEqual(
+            report_lines[149].strip(),
+            "| **Ligands (SO₄)** | 2 | 1 | −1 (removed disordered) |",
+        )
+
+        case_1sar = assess_1sar_case_study()
+        r7_traj = case_1sar["change_relative_to_input"][
+            "model_composition_and_experimental_fit_trajectory"
+        ]["r_factor_trajectory_across_retained_eval_and_logs"][
+            "round7_log_reported_unarchived"
+        ]
+        self.assertIsNone(r7_traj["archive_member"])
+        self.assertEqual(
+            r7_traj["source"],
+            "claude_iterations.log:510 (coordinate file absent from archive)",
+        )
+
+        r7_boundary = case_1sar[
+            "missing_conflicting_and_inapplicable_evidence"
+        ][0]
+        self.assertEqual(
+            r7_boundary["id"], "1sar_round7_coordinates_absent_from_archive"
+        )
+        desc = r7_boundary["description"]
+        self.assertIn("1,654 atoms reported in the log", desc)
+        self.assertIn("1 SO4", desc)
+        self.assertIn(
+            "final_report.md:70, :150 describes removal of the disordered chain-B sulfate (ligand SO4 count 2 -> 1), not a restored B:97:SO4",
+            desc,
+        )
+        self.assertIn(
+            "unverified log/report claims rather than measured coordinate inventory",
+            desc,
+        )
+        self.assertNotIn("1,654 heavy atoms", desc)
+        self.assertNotIn("and restored B:97:SO4", desc)
+
+        self.assertTrue(SOURCE_CORRECTIONS_MD_PATH.is_file())
+        corr_text = SOURCE_CORRECTIONS_MD_PATH.read_text(encoding="utf-8")
+        provenance_boundary_line = next(
+            line
+            for line in corr_text.splitlines()
+            if line.startswith("- **Provenance boundary:**")
+        )
+        self.assertIn(
+            "the claimed `1SAR` Round 7 coordinate file is absent from the retained archive, so its reported inventory cannot be independently verified from retained coordinates",
+            provenance_boundary_line,
+        )
+        self.assertNotIn(
+            "no unarchived coordinate file exists",
+            provenance_boundary_line,
+        )
+        for required_token in (
+            "ref/research/data/refinement_assessment_1sar_and_controls_2026-10-18.json",
+            EXPECTED_FROZEN_ASSESSMENT_JSON_SHA256,
+            "/case_study_1sar/missing_conflicting_and_inapplicable_evidence/0/description",
+            "1sar_round7_coordinates_absent_from_archive",
+            "/control_cohorts_evaluation/cross_cohort_findings/unchanged_control_invariance",
+            EXPECTED_1SAR_ARCHIVE_SHA256,
+            EXPECTED_CLAUDE_LOG_SHA256,
+            EXPECTED_FINAL_REPORT_MD_SHA256,
+            EXPECTED_ROUND3_BENCH_SHA256,
+            "1,654 atoms reported in the log",
+            "#1000",
+            "PR #998",
+        ):
+            self.assertIn(required_token, corr_text)
+
+    def test_round2_enrolled_and_screened_stratum_vs_actual_resolution_counts(
+        self,
+    ) -> None:
+        """Verify #987: negative_control_round2.md distinguishes inherited strata (21/2 screened, 20/2 enrolled) from actual d_min (15 <=0.90, 7 >0.90)."""
+        self.assertEqual(
+            sha256_file(ROUND2_ENROLLED_JSON_PATH),
+            EXPECTED_ROUND2_ENROLLED_SHA256,
+        )
+        self.assertEqual(
+            sha256_file(ROUND2_SCREEN_JSON_PATH),
+            EXPECTED_ROUND2_SCREEN_SHA256,
+        )
+        screen_doc = json.loads(ROUND2_SCREEN_JSON_PATH.read_text(encoding="utf-8"))
+        screened_rows = [
+            r for r in screen_doc["rows"] if r.get("status") == "screened"
+        ]
+        self.assertEqual(len(screened_rows), 23)
+        self.assertEqual(
+            sum(1 for r in screened_rows if r["stratum"] is True), 21
+        )
+        self.assertEqual(
+            sum(1 for r in screened_rows if r["stratum"] is False), 2
+        )
+
+        enrolled_doc = json.loads(
+            ROUND2_ENROLLED_JSON_PATH.read_text(encoding="utf-8")
+        )
+        entries = enrolled_doc["entries"]
+        self.assertEqual(len(entries), 22)
+        self.assertEqual(sum(1 for e in entries if e["stratum"] is True), 20)
+        self.assertEqual(sum(1 for e in entries if e["stratum"] is False), 2)
+        self.assertEqual(sum(1 for e in entries if e["d_min"] <= 0.90), 15)
+        self.assertEqual(sum(1 for e in entries if e["d_min"] > 0.90), 7)
+        self.assertTrue(all(e["d_min"] <= 1.00 for e in entries))
+
+        above_with_true = [
+            (e["pdb_id"], e["d_min"])
+            for e in entries
+            if e["stratum"] is True and e["d_min"] > 0.90
+        ]
+        self.assertEqual(
+            above_with_true,
+            [
+                ("7ATV", 0.96),
+                ("6ZWY", 1.00),
+                ("8QXQ", 0.94),
+                ("6F1O", 0.96),
+                ("5KXV", 0.98),
+            ],
+        )
+
+        round2_md = ROUND2_MD_PATH.read_text(encoding="utf-8")
+        for token in (
+            "Inherited registered strata (`stratum = true` vs. `stratum = false`)",
+            "**21** screened, **20**",
+            "**2**\n  screened, **2** enrolled",
+            EXPECTED_ROUND2_SCREEN_SHA256,
+            EXPECTED_ROUND2_ENROLLED_SHA256,
+            "scripts/screen_round1.py:402, 668–669",
+            "**15** enrolled entries have `d_min <= 0.90 Å`",
+            "**7** enrolled entries have\n  `d_min > 0.90 Å`",
+            "`7ATV` (`0.96 Å`)",
+            "`6ZWY`\n  (`1.00 Å`)",
+            "`8QXQ` (`0.94 Å`)",
+            "`6F1O` (`0.96 Å`)",
+            "`5KXV` (`0.98 Å`)",
+        ):
+            self.assertIn(token, round2_md)
 
     def test_case_study_markdown_exists_and_documents_required_findings(self) -> None:
         """Verify case study markdown report exists, cites existing repo paths, and documents 1SAR and the 5 control cohorts."""
@@ -983,6 +1368,7 @@ class AssessRefinementTests(unittest.TestCase):
             "scripts/assess_refinement.py",
             "scripts/test_assess_refinement.py",
             "ref/research/data/refinement_assessment_1sar_and_controls_2026-10-18.json",
+            "ref/research/refinement_assessment_source_corrections_2026-11-09.md",
             "data/coscientists/openscientist/cdba2c07-daff-4f60-ae96-12452b3a5fbb_artifacts.zip",
             "data/pdb_mtz/1sar_deposited.pdb",
             "data/coscientists/openscientist/EVAL_1sar_cdba2c07_2026-09-23.yaml",

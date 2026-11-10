@@ -65,9 +65,26 @@ positive shift the negative-control premise predicts from gold-standard starts.
 
 ## Stratum-specific reporting (registered estimand)
 
-Stratum (≤ 0.9 Å): 21 screened, 20 enrolled. Band (0.9, 1.0]: 2 screened, 2
-enrolled. Per the registered estimand statement these results characterize the
-extreme-resolution stress set; band coverage remains thin by design.
+- **Inherited registered strata (`stratum = true` vs. `stratum = false`):**
+  Initial ≤ 0.9 Å registered stratum (`stratum = true`): **21** screened, **20**
+  enrolled. Initial (0.9, 1.0] Å registered band (`stratum = false`): **2**
+  screened, **2** enrolled (`ref/research/data/negative_control_round2_screen.json`
+  `status = "screened"`, `23` rows, SHA-256
+  `dfebc4b131a8df1ceac4190c00bc1d60eeaba00846167530e5a4d1a2152cb313`;
+  `ref/research/data/negative_control_round2_enrolled.json` `entries`, `22` rows,
+  SHA-256 `02fc974da9d1f8a2d8fb3c496c13196c200b31d182f1b7323cb25dcc59cbe7da`).
+  Under D4 cluster replacement (`scripts/screen_round1.py:402, 668–669`), each
+  replacement inherits the initial representative's `stratum` boolean while
+  recording the replacement's own `d_min`.
+- **Actual enrolled resolution (`d_min`) counts (`negative_control_round2_enrolled.json#/entries`):**
+  **15** enrolled entries have `d_min <= 0.90 Å` and **7** enrolled entries have
+  `d_min > 0.90 Å` (all `<= 1.00 Å`), because **5** D4 replacements in
+  `stratum = true` clusters have `d_min > 0.90 Å`: `7ATV` (`0.96 Å`), `6ZWY`
+  (`1.00 Å`), `8QXQ` (`0.94 Å`), `6F1O` (`0.96 Å`), and `5KXV` (`0.98 Å`).
+- **Registered estimand preserved:** Per the registered estimand statement these
+  results characterize the extreme-resolution stress set; `(0.9, 1.0] Å` band
+  coverage remains thin by design and does not imply wider resolution
+  representativeness.
 
 ## The enrolled set (22)
 

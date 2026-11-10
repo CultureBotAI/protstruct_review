@@ -1,0 +1,1835 @@
+{
+  "package": "data/coscientists/openscientist/slides_2026-11-06",
+  "source_revision": "f3cfad326f28ddbf652dcdb0c5858443bee6e413",
+  "canvas": {
+    "logical_px": [
+      1664,
+      680
+    ],
+    "render_scale": 2,
+    "rendered_px": [
+      3328,
+      1360
+    ],
+    "dpi": 200,
+    "font_family": "DejaVu Sans",
+    "min_font_pt_at_100dpi": 18.0,
+    "min_font_px_at_1x": 25.0,
+    "palette": {
+      "background": "#fbfbf8",
+      "panel_background": "#f4f4ee",
+      "ink": "#1a1a2e",
+      "muted": "#5a6071",
+      "accent": "#1f4e8c",
+      "PHENIX": {
+        "color": "#0072B2",
+        "marker": "circle (o)"
+      },
+      "Gemmi": {
+        "color": "#E69F00",
+        "marker": "diamond (D)"
+      },
+      "REFMAC": {
+        "color": "#009E73",
+        "marker": "triangle (^ / v)"
+      },
+      "wwPDB": {
+        "color": "#CC79A7",
+        "marker": "square (s)"
+      },
+      "reference_cohort": {
+        "color": "#1a1a2e",
+        "marker": "circle (o)"
+      }
+    }
+  },
+  "source_blobs": [
+    {
+      "path": "ref/research/data/negative_control_round10_recover.json",
+      "revision": "f3cfad326f28ddbf652dcdb0c5858443bee6e413",
+      "sha256": "1c6e710e87bb08c23d77b1fa3a7aea2fe18a136b00cec6d35d40e2d171b78bb7"
+    },
+    {
+      "path": "ref/research/data/negative_control_round2_enrolled.json",
+      "revision": "f3cfad326f28ddbf652dcdb0c5858443bee6e413",
+      "sha256": "02fc974da9d1f8a2d8fb3c496c13196c200b31d182f1b7323cb25dcc59cbe7da"
+    },
+    {
+      "path": "ref/research/data/negative_control_round2_screen.json",
+      "revision": "f3cfad326f28ddbf652dcdb0c5858443bee6e413",
+      "sha256": "dfebc4b131a8df1ceac4190c00bc1d60eeaba00846167530e5a4d1a2152cb313"
+    },
+    {
+      "path": "ref/research/data/negative_control_round3_bench.json",
+      "revision": "f3cfad326f28ddbf652dcdb0c5858443bee6e413",
+      "sha256": "3635bd878d160c770594c2c5ed92a1139dbbd8d63daa28a48aa249656d7f6dee"
+    },
+    {
+      "path": "ref/research/data/negative_control_round6_hygiene.json",
+      "revision": "f3cfad326f28ddbf652dcdb0c5858443bee6e413",
+      "sha256": "603ac6d7891c8013942a1bbf368a6960a85bc94edfddcfee5e373584e1d4264f"
+    },
+    {
+      "path": "ref/research/data/negative_control_round9_anis.json",
+      "revision": "f3cfad326f28ddbf652dcdb0c5858443bee6e413",
+      "sha256": "d323cdf1ccbb02d5a131b7f1a0912a31fd607e78c63618adb5c9bafb39ebbb46"
+    },
+    {
+      "path": "ref/research/data/round46_vs_deposited.json",
+      "revision": "f3cfad326f28ddbf652dcdb0c5858443bee6e413",
+      "sha256": "53df0c9a43883969e5583edc44414483ac49429a22ae336714ccef4ce362a829"
+    },
+    {
+      "path": "ref/research/negative_control_round4_preregistration.md",
+      "revision": "f3cfad326f28ddbf652dcdb0c5858443bee6e413",
+      "sha256": "2caaca4f4061665dc953162f0b3643701f605500a07bedf95133eb11e96cb494"
+    },
+    {
+      "path": "ref/research/tolerance_benchmark_bond_rmsd.md",
+      "revision": "f3cfad326f28ddbf652dcdb0c5858443bee6e413",
+      "sha256": "d08bf39912cdd382f0e3eafad1d15154c05b36824b8b9661c6e5793d2e90ba3d"
+    },
+    {
+      "path": "ref/research/tolerance_benchmark_restraint_library.md",
+      "revision": "f3cfad326f28ddbf652dcdb0c5858443bee6e413",
+      "sha256": "d4309bfb3a2b891cf6cd8ad2948348392982defbb3afbeb111119dbf19c768b2"
+    },
+    {
+      "path": "ref/threshold_evidence_status.yaml",
+      "revision": "f3cfad326f28ddbf652dcdb0c5858443bee6e413",
+      "sha256": "adc91d21fc554d97f57412698899a3bdcf8d613b7358fa13206ccc81e9b97cb8"
+    },
+    {
+      "path": "ref/thresholds_and_standards.md",
+      "revision": "f3cfad326f28ddbf652dcdb0c5858443bee6e413",
+      "sha256": "5ba9b0c057e41a82bd7fad8bd16625f101a5362f7e4d183b561b5930f59c0a2e"
+    },
+    {
+      "path": "scripts/bench_recover_leg.py",
+      "revision": "f3cfad326f28ddbf652dcdb0c5858443bee6e413",
+      "sha256": "b5686def212d890e4678d041dedce425a18f60a66128e1f958f88d3ccab3726f"
+    }
+  ],
+  "figures": [
+    {
+      "id": "fig01_cohort_resolution",
+      "file": "figures/fig01_cohort_resolution.png",
+      "sha256": "3c59dd434fa8f8de19491ea629c114c1868ee951d5a207d5cd0feee723e6e1eb",
+      "dimensions_px": [
+        3328,
+        1360
+      ],
+      "what_it_shows": "Diffraction resolution d_min (Å) distribution of the 22 enrolled extreme-resolution X-ray control proteins, comparing actual d_min <= 0.90 Å (n=15) vs (0.90, 1.00] Å (n=7) against the stored cluster-inherited stratum flag (stratum=true n=20 vs false n=2).",
+      "unit": "Å",
+      "selection": "22 enrolled cluster representatives surviving Round-2 D3 (>=50 unmasked residues) and D6 two-path headroom screening out of 58 attempts (30 initial + 28 replacements).",
+      "n_groups": {
+        "all_enrolled": 22,
+        "actual_d_min_le_0_90": 15,
+        "actual_d_min_gt_0_90": 7,
+        "stored_stratum_true": 20,
+        "stored_stratum_false": 2,
+        "inherited_stratum_true_above_0_90": 5
+      },
+      "pdb_ids": [
+        "4M7G",
+        "7R2H",
+        "2VXN",
+        "7ATV",
+        "6Q01",
+        "6ZWY",
+        "5XS6",
+        "8ERE",
+        "3ZOJ",
+        "9YGW",
+        "9P25",
+        "8R5K",
+        "7TVL",
+        "8QXQ",
+        "6F1O",
+        "7TWR",
+        "6XVM",
+        "9TEU",
+        "5R32",
+        "5KXV",
+        "7OYN",
+        "9TXE"
+      ],
+      "inherited_stratum_true_above_0_90_pdb_ids": [
+        "7ATV",
+        "6ZWY",
+        "8QXQ",
+        "6F1O",
+        "5KXV"
+      ],
+      "record_selectors": [
+        "ref/research/data/negative_control_round2_enrolled.json#/entries[*]/pdb_id",
+        "ref/research/data/negative_control_round2_enrolled.json#/entries[*]/d_min",
+        "ref/research/data/negative_control_round2_enrolled.json#/entries[*]/stratum",
+        "ref/research/data/negative_control_round2_screen.json#/rows[*]/status",
+        "ref/research/data/negative_control_round2_screen.json#/d6"
+      ],
+      "sources": [
+        {
+          "path": "ref/research/data/negative_control_round2_enrolled.json",
+          "revision": "f3cfad326f28ddbf652dcdb0c5858443bee6e413",
+          "sha256": "02fc974da9d1f8a2d8fb3c496c13196c200b31d182f1b7323cb25dcc59cbe7da"
+        },
+        {
+          "path": "ref/research/data/negative_control_round2_screen.json",
+          "revision": "f3cfad326f28ddbf652dcdb0c5858443bee6e413",
+          "sha256": "dfebc4b131a8df1ceac4190c00bc1d60eeaba00846167530e5a4d1a2152cb313"
+        }
+      ],
+      "thresholds_used": [
+        {
+          "label": "Subatomic stratum boundary",
+          "value": 0.9,
+          "unit": "Å",
+          "kind": "selection_stratum_boundary",
+          "source": "ref/research/negative_control_round2_preregistration.md:105-119"
+        }
+      ],
+      "derived_summaries": {
+        "all_enrolled_d_min_a": {
+          "n": 22,
+          "min": 0.79,
+          "q25": 0.8725,
+          "median": 0.895,
+          "q75": 0.9475,
+          "max": 1.0,
+          "mean": 0.899545
+        },
+        "actual_le_0_90_d_min_a": {
+          "n": 15,
+          "min": 0.79,
+          "q25": 0.86,
+          "median": 0.88,
+          "q75": 0.895,
+          "max": 0.9,
+          "mean": 0.868
+        },
+        "actual_gt_0_90_d_min_a": {
+          "n": 7,
+          "min": 0.94,
+          "q25": 0.955,
+          "median": 0.96,
+          "q75": 0.98,
+          "max": 1.0,
+          "mean": 0.967143
+        },
+        "stored_stratum_true_d_min_a": {
+          "n": 20,
+          "min": 0.79,
+          "q25": 0.87,
+          "median": 0.89,
+          "q75": 0.91,
+          "max": 1.0,
+          "mean": 0.893
+        },
+        "stored_stratum_false_d_min_a": {
+          "n": 2,
+          "min": 0.95,
+          "q25": 0.9575,
+          "median": 0.965,
+          "q75": 0.9725,
+          "max": 0.98,
+          "mean": 0.965
+        },
+        "screen_attrition": {
+          "n_attempts": 58,
+          "n_initial": 30,
+          "n_replacements": 28,
+          "n_floor_excluded": 3,
+          "n_data_defects": 32,
+          "n_screened": 23,
+          "n_headroom_excluded": 1,
+          "n_enrolled": 22
+        }
+      }
+    },
+    {
+      "id": "fig02_r9_null_delta_rfree",
+      "file": "figures/fig02_r9_null_delta_rfree.png",
+      "sha256": "271f86e2937fb042803a5bc91bc72237d59ecc48973765214b8ac6fa3da7c7b8",
+      "dimensions_px": [
+        3328,
+        1360
+      ],
+      "what_it_shows": "Distribution of Round-9 regenerated null-refinement ΔR-free (post minus deposited baseline) across PHENIX model_vs_data (n=22), Gemmi sfcalc (n=22), and CCP4 REFMAC5 BREF ANIS (n=21, 9YGW absent).",
+      "unit": "dimensionless fraction (ΔR-free)",
+      "selection": "22 enrolled extreme-resolution control structures; 9YGW absent in REFMAC5 (n=21).",
+      "n_groups": {
+        "phenix_native": 22,
+        "gemmi_native": 22,
+        "refmac_anis_native": 21,
+        "common_subset": 21
+      },
+      "pdb_ids": [
+        "4M7G",
+        "7R2H",
+        "2VXN",
+        "7ATV",
+        "6Q01",
+        "6ZWY",
+        "5XS6",
+        "8ERE",
+        "3ZOJ",
+        "9YGW",
+        "9P25",
+        "8R5K",
+        "7TVL",
+        "8QXQ",
+        "6F1O",
+        "7TWR",
+        "6XVM",
+        "9TEU",
+        "5R32",
+        "5KXV",
+        "7OYN",
+        "9TXE"
+      ],
+      "refmac_pdb_ids": [
+        "4M7G",
+        "7R2H",
+        "2VXN",
+        "7ATV",
+        "6Q01",
+        "6ZWY",
+        "5XS6",
+        "8ERE",
+        "3ZOJ",
+        "9P25",
+        "8R5K",
+        "7TVL",
+        "8QXQ",
+        "6F1O",
+        "7TWR",
+        "6XVM",
+        "9TEU",
+        "5R32",
+        "5KXV",
+        "7OYN",
+        "9TXE"
+      ],
+      "record_selectors": [
+        "ref/research/data/negative_control_round9_anis.json#/rows[*]/paths/phenix/delta",
+        "ref/research/data/negative_control_round9_anis.json#/rows[*]/paths/gemmi/delta",
+        "ref/research/data/negative_control_round9_anis.json#/rows[*]/refmac/anis/delta",
+        "ref/research/data/negative_control_round9_anis.json#/j2_anis"
+      ],
+      "sources": [
+        {
+          "path": "ref/research/data/negative_control_round9_anis.json",
+          "revision": "f3cfad326f28ddbf652dcdb0c5858443bee6e413",
+          "sha256": "d323cdf1ccbb02d5a131b7f1a0912a31fd607e78c63618adb5c9bafb39ebbb46"
+        },
+        {
+          "path": "ref/thresholds_and_standards.md",
+          "revision": "f3cfad326f28ddbf652dcdb0c5858443bee6e413",
+          "sha256": "5ba9b0c057e41a82bd7fad8bd16625f101a5362f7e4d183b561b5930f59c0a2e"
+        }
+      ],
+      "thresholds_used": [
+        {
+          "label": "§6 FIT refinement-change benchmark threshold (d_phenix)",
+          "value": 0.012,
+          "unit": "dimensionless fraction",
+          "kind": "refinement_change_benchmark_threshold",
+          "source": "ref/thresholds_and_standards.md:263"
+        },
+        {
+          "label": "§6 FIT refinement-change benchmark threshold (d_gemmi)",
+          "value": 0.01025,
+          "unit": "dimensionless fraction",
+          "kind": "refinement_change_benchmark_threshold",
+          "source": "ref/thresholds_and_standards.md:263"
+        },
+        {
+          "label": "§6 FIT refinement-change benchmark threshold (d_refmac, ANIS)",
+          "value": 0.0115,
+          "unit": "dimensionless fraction",
+          "kind": "refinement_change_benchmark_threshold",
+          "source": "ref/thresholds_and_standards.md:263"
+        }
+      ],
+      "derived_summaries": {
+        "phenix_native_n22": {
+          "n": 22,
+          "min": -0.0051,
+          "q25": 0.0009,
+          "median": 0.0033,
+          "q75": 0.00645,
+          "max": 0.0214,
+          "mean": 0.004418
+        },
+        "gemmi_native_n22": {
+          "n": 22,
+          "min": -0.0054,
+          "q25": 0.00185,
+          "median": 0.00365,
+          "q75": 0.00625,
+          "max": 0.022,
+          "mean": 0.004709
+        },
+        "refmac_anis_native_n21": {
+          "n": 21,
+          "min": -0.0052,
+          "q25": 0.0015,
+          "median": 0.0037,
+          "q75": 0.0078,
+          "max": 0.0154,
+          "mean": 0.0048
+        },
+        "phenix_common_n21": {
+          "n": 21,
+          "min": -0.0051,
+          "q25": 0.0009,
+          "median": 0.0032,
+          "q75": 0.0063,
+          "max": 0.0214,
+          "mean": 0.004319
+        },
+        "gemmi_common_n21": {
+          "n": 21,
+          "min": -0.0054,
+          "q25": 0.0018,
+          "median": 0.003,
+          "q75": 0.0055,
+          "max": 0.022,
+          "mean": 0.004624
+        }
+      }
+    },
+    {
+      "id": "fig03_r9_isot_vs_anis_paired",
+      "file": "figures/fig03_r9_isot_vs_anis_paired.png",
+      "sha256": "a9530c947983c7816ab8d89a7be7cc3dc959a900e3e45a0cedd4167d700b9367",
+      "dimensions_px": [
+        3328,
+        1360
+      ],
+      "what_it_shows": "Paired per-PDB comparison on the common 21-structure subset (9YGW absent in REFMAC5) between REFMAC5 BREF ISOT (collapsing deposited ANISOU) and REFMAC5 BREF ANIS (preserving ANISOU on both sides), alongside common-subset PHENIX and Gemmi ΔR-free.",
+      "unit": "dimensionless fraction (ΔR-free)",
+      "selection": "21 REFMAC-measurable structures from the 22-entry cohort (9YGW excluded due to REFMAC absence).",
+      "n_groups": {
+        "phenix_common": 21,
+        "gemmi_common": 21,
+        "refmac_isot_paired": 21,
+        "refmac_anis_paired": 21
+      },
+      "pdb_ids": [
+        "4M7G",
+        "7R2H",
+        "2VXN",
+        "7ATV",
+        "6Q01",
+        "6ZWY",
+        "5XS6",
+        "8ERE",
+        "3ZOJ",
+        "9P25",
+        "8R5K",
+        "7TVL",
+        "8QXQ",
+        "6F1O",
+        "7TWR",
+        "6XVM",
+        "9TEU",
+        "5R32",
+        "5KXV",
+        "7OYN",
+        "9TXE"
+      ],
+      "record_selectors": [
+        "ref/research/data/negative_control_round9_anis.json#/rows[*]/refmac/isot/delta",
+        "ref/research/data/negative_control_round9_anis.json#/rows[*]/refmac/anis/delta",
+        "ref/research/data/negative_control_round9_anis.json#/x3_direction_agreement"
+      ],
+      "sources": [
+        {
+          "path": "ref/research/data/negative_control_round9_anis.json",
+          "revision": "f3cfad326f28ddbf652dcdb0c5858443bee6e413",
+          "sha256": "d323cdf1ccbb02d5a131b7f1a0912a31fd607e78c63618adb5c9bafb39ebbb46"
+        }
+      ],
+      "thresholds_used": [],
+      "derived_summaries": {
+        "phenix_common_n21": {
+          "n": 21,
+          "min": -0.0051,
+          "q25": 0.0009,
+          "median": 0.0032,
+          "q75": 0.0063,
+          "max": 0.0214,
+          "mean": 0.004319
+        },
+        "gemmi_common_n21": {
+          "n": 21,
+          "min": -0.0054,
+          "q25": 0.0018,
+          "median": 0.003,
+          "q75": 0.0055,
+          "max": 0.022,
+          "mean": 0.004624
+        },
+        "phenix_native_n22": {
+          "n": 22,
+          "min": -0.0051,
+          "q25": 0.0009,
+          "median": 0.0033,
+          "q75": 0.00645,
+          "max": 0.0214,
+          "mean": 0.004418
+        },
+        "gemmi_native_n22": {
+          "n": 22,
+          "min": -0.0054,
+          "q25": 0.00185,
+          "median": 0.00365,
+          "q75": 0.00625,
+          "max": 0.022,
+          "mean": 0.004709
+        },
+        "refmac_isot_n21": {
+          "n": 21,
+          "min": -0.0122,
+          "q25": 0.0006,
+          "median": 0.0018,
+          "q75": 0.0033,
+          "max": 0.0071,
+          "mean": 0.001552
+        },
+        "refmac_anis_n21": {
+          "n": 21,
+          "min": -0.0052,
+          "q25": 0.0015,
+          "median": 0.0037,
+          "q75": 0.0078,
+          "max": 0.0154,
+          "mean": 0.0048
+        },
+        "direction_agreement": {
+          "anis": {
+            "agree": 20,
+            "population": 21,
+            "excluded_sign_split": 0
+          },
+          "isot": {
+            "agree": 17,
+            "population": 21,
+            "excluded_sign_split": 0
+          }
+        },
+        "highlight_2VXN": {
+          "phenix_delta": 0.0214,
+          "gemmi_delta": 0.022,
+          "refmac_isot_delta": -0.0122,
+          "refmac_anis_delta": 0.013
+        }
+      }
+    },
+    {
+      "id": "fig04_r10_recovery_delta_rfree",
+      "file": "figures/fig04_r10_recovery_delta_rfree.png",
+      "sha256": "2ab9b2bbdc61eb6398cfbf3494c0c70bfb15269324d553f2b0dd5b66721cbd00",
+      "dimensions_px": [
+        3328,
+        1360
+      ],
+      "what_it_shows": "Distribution of Round-10 multi-factor recovery (osol_h) ΔR-free relative to the deposited baseline across PHENIX (n=22), Gemmi (n=22), and REFMAC5 BREF ANIS (n=21, 9YGW absent). JSON retains delta values only.",
+      "unit": "dimensionless fraction (ΔR-free)",
+      "selection": "22 enrolled extreme-resolution control structures under Round-10 osol_h regimen (regenerated phenix.dynamics stop_at_diff=0.5 seed=42 + phenix.ready_set hydrogens + phenix.refine ordered_solvent=True hydrogens.refine=riding + REFMAC5 ANIS).",
+      "n_groups": {
+        "phenix_native": 22,
+        "gemmi_native": 22,
+        "refmac_anis_native": 21,
+        "common_subset": 21
+      },
+      "pdb_ids": [
+        "4M7G",
+        "7R2H",
+        "2VXN",
+        "7ATV",
+        "6Q01",
+        "6ZWY",
+        "5XS6",
+        "8ERE",
+        "3ZOJ",
+        "9YGW",
+        "9P25",
+        "8R5K",
+        "7TVL",
+        "8QXQ",
+        "6F1O",
+        "7TWR",
+        "6XVM",
+        "9TEU",
+        "5R32",
+        "5KXV",
+        "7OYN",
+        "9TXE"
+      ],
+      "refmac_pdb_ids": [
+        "4M7G",
+        "7R2H",
+        "2VXN",
+        "7ATV",
+        "6Q01",
+        "6ZWY",
+        "5XS6",
+        "8ERE",
+        "3ZOJ",
+        "9P25",
+        "8R5K",
+        "7TVL",
+        "8QXQ",
+        "6F1O",
+        "7TWR",
+        "6XVM",
+        "9TEU",
+        "5R32",
+        "5KXV",
+        "7OYN",
+        "9TXE"
+      ],
+      "record_selectors": [
+        "ref/research/data/negative_control_round10_recover.json#/rows[*]/recovered/numbers/d_phenix",
+        "ref/research/data/negative_control_round10_recover.json#/rows[*]/recovered/numbers/d_gemmi",
+        "ref/research/data/negative_control_round10_recover.json#/rows[*]/recovered/numbers/d_refmac",
+        "ref/research/data/negative_control_round10_recover.json#/run/fit_thresholds"
+      ],
+      "sources": [
+        {
+          "path": "ref/research/data/negative_control_round10_recover.json",
+          "revision": "f3cfad326f28ddbf652dcdb0c5858443bee6e413",
+          "sha256": "1c6e710e87bb08c23d77b1fa3a7aea2fe18a136b00cec6d35d40e2d171b78bb7"
+        },
+        {
+          "path": "ref/thresholds_and_standards.md",
+          "revision": "f3cfad326f28ddbf652dcdb0c5858443bee6e413",
+          "sha256": "5ba9b0c057e41a82bd7fad8bd16625f101a5362f7e4d183b561b5930f59c0a2e"
+        }
+      ],
+      "thresholds_used": [
+        {
+          "label": "§6 FIT refinement-change benchmark threshold (d_phenix)",
+          "value": 0.012,
+          "unit": "dimensionless fraction",
+          "kind": "refinement_change_benchmark_threshold",
+          "source": "ref/research/data/negative_control_round10_recover.json#/run/fit_thresholds/d_phenix"
+        },
+        {
+          "label": "§6 FIT refinement-change benchmark threshold (d_gemmi)",
+          "value": 0.01025,
+          "unit": "dimensionless fraction",
+          "kind": "refinement_change_benchmark_threshold",
+          "source": "ref/research/data/negative_control_round10_recover.json#/run/fit_thresholds/d_gemmi"
+        },
+        {
+          "label": "§6 FIT refinement-change benchmark threshold (d_refmac, ANIS)",
+          "value": 0.0115,
+          "unit": "dimensionless fraction",
+          "kind": "refinement_change_benchmark_threshold",
+          "source": "ref/research/data/negative_control_round10_recover.json#/run/fit_thresholds/d_refmac"
+        }
+      ],
+      "derived_summaries": {
+        "phenix_native_n22": {
+          "n": 22,
+          "min": -0.01,
+          "q25": -0.002925,
+          "median": 0.0063,
+          "q75": 0.021475,
+          "max": 0.0312,
+          "mean": 0.008618
+        },
+        "gemmi_native_n22": {
+          "n": 22,
+          "min": -0.0096,
+          "q25": -0.0037,
+          "median": 0.008,
+          "q75": 0.0208,
+          "max": 0.0324,
+          "mean": 0.008591
+        },
+        "refmac_anis_native_n21": {
+          "n": 21,
+          "min": -0.0095,
+          "q25": 0.0023,
+          "median": 0.0073,
+          "q75": 0.0137,
+          "max": 0.0318,
+          "mean": 0.009238
+        },
+        "phenix_common_n21": {
+          "n": 21,
+          "min": -0.01,
+          "q25": -0.0035,
+          "median": 0.0055,
+          "q75": 0.0196,
+          "max": 0.0312,
+          "mean": 0.00789
+        },
+        "gemmi_common_n21": {
+          "n": 21,
+          "min": -0.0096,
+          "q25": -0.0044,
+          "median": 0.0073,
+          "q75": 0.0199,
+          "max": 0.0324,
+          "mean": 0.007857
+        },
+        "highlight_2VXN": {
+          "d_phenix": 0.0221,
+          "d_gemmi": 0.0211,
+          "d_refmac": -0.0095
+        }
+      }
+    },
+    {
+      "id": "fig05_bond_rmsd_abc",
+      "file": "figures/fig05_bond_rmsd_abc.png",
+      "sha256": "8029688a9e1b035488bb333727baa0d3b482cf35dbaf8bba58efd75b03307ac0",
+      "dimensions_px": [
+        3328,
+        1360
+      ],
+      "what_it_shows": "Bond-length RMSD (Å, not RMSZ) reconstructed from the committed 17-model benchmark table at published precision across A (phenix.model_statistics CDL), B (phenix.model_statistics E&H), and C (gemmi rmsz CCP4 monomer library, historical gemmi 0.7.4 per #502 disclosure), separating the n=6 equal-bond-count subset from the n=11 different-bond-count subset.",
+      "unit": "Å",
+      "selection": "17 deposited X-ray structures from tolerance_benchmark_restraint_library.md:38-56; 6 with equal restrained bond counts (9LLR, 9PN7, 30IZ, 12LO, 37AP, 37AS) and 11 with differing bond counts.",
+      "n_groups": {
+        "all_models": 17,
+        "equal_bond_count_subset": 6,
+        "different_bond_count_subset": 11
+      },
+      "pdb_ids": [
+        "30TW",
+        "9PLB",
+        "28SX",
+        "28SW",
+        "28SV",
+        "9LLR",
+        "11AF",
+        "9HW2",
+        "9PN7",
+        "28SZ",
+        "12LO",
+        "9HX9",
+        "30IZ",
+        "24MR",
+        "37BG",
+        "37AS",
+        "37AP"
+      ],
+      "equal_bond_count_pdb_ids": [
+        "9LLR",
+        "9PN7",
+        "12LO",
+        "30IZ",
+        "37AS",
+        "37AP"
+      ],
+      "different_bond_count_pdb_ids": [
+        "30TW",
+        "9PLB",
+        "28SX",
+        "28SW",
+        "28SV",
+        "11AF",
+        "9HW2",
+        "28SZ",
+        "9HX9",
+        "24MR",
+        "37BG"
+      ],
+      "record_selectors": [
+        "ref/research/tolerance_benchmark_restraint_library.md:38-56",
+        "ref/research/tolerance_benchmark_bond_rmsd.md:35-53"
+      ],
+      "sources": [
+        {
+          "path": "ref/research/tolerance_benchmark_restraint_library.md",
+          "revision": "f3cfad326f28ddbf652dcdb0c5858443bee6e413",
+          "sha256": "d4309bfb3a2b891cf6cd8ad2948348392982defbb3afbeb111119dbf19c768b2"
+        },
+        {
+          "path": "ref/research/tolerance_benchmark_bond_rmsd.md",
+          "revision": "f3cfad326f28ddbf652dcdb0c5858443bee6e413",
+          "sha256": "d08bf39912cdd382f0e3eafad1d15154c05b36824b8b9661c6e5793d2e90ba3d"
+        }
+      ],
+      "thresholds_used": [],
+      "derived_summaries": {
+        "a_phenix_cdl_all_n17": {
+          "n": 17,
+          "min": 0.0018,
+          "q25": 0.004,
+          "median": 0.00872,
+          "q75": 0.0122,
+          "max": 0.01753,
+          "mean": 0.008744
+        },
+        "b_phenix_eh_all_n17": {
+          "n": 17,
+          "min": 0.00354,
+          "q25": 0.00522,
+          "median": 0.00914,
+          "q75": 0.01238,
+          "max": 0.01783,
+          "mean": 0.009256
+        },
+        "c_gemmi_ccp4_all_n17": {
+          "n": 17,
+          "min": 0.007,
+          "q25": 0.01,
+          "median": 0.011,
+          "q75": 0.021,
+          "max": 0.081,
+          "mean": 0.018
+        },
+        "abs_b_minus_a_equal_count_n6": {
+          "n": 6,
+          "min": 0.00036,
+          "q25": 0.00046,
+          "median": 0.00085,
+          "q75": 0.001195,
+          "max": 0.00174,
+          "mean": 0.000907
+        },
+        "abs_c_minus_b_equal_count_n6": {
+          "n": 6,
+          "min": 0.00086,
+          "q25": 0.001507,
+          "median": 0.003205,
+          "q75": 0.003425,
+          "max": 0.00578,
+          "mean": 0.002915
+        },
+        "abs_b_minus_a_diff_count_n11": {
+          "n": 11,
+          "min": 0.0,
+          "q25": 0.00014,
+          "median": 0.00035,
+          "q75": 0.000465,
+          "max": 0.00135,
+          "mean": 0.000442
+        },
+        "abs_c_minus_b_diff_count_n11": {
+          "n": 11,
+          "min": 0.00205,
+          "q25": 0.0033,
+          "median": 0.00495,
+          "q75": 0.01044,
+          "max": 0.06673,
+          "mean": 0.011924
+        }
+      }
+    },
+    {
+      "id": "fig06_round46_rotamer_outlier_pct",
+      "file": "figures/fig06_round46_rotamer_outlier_pct.png",
+      "sha256": "d7c0c9567934d86ec080cb52ea9bcdfbf7068418d00d15e3a112708cd1060e68",
+      "dimensions_px": [
+        3328,
+        1360
+      ],
+      "what_it_shows": "Paired comparison of PHENIX rotalyze vs wwPDB validation report rotamer outlier percentage across the n=41 protein entries in Round 46 (12CI nucleic-acid entry excluded for zero shared protein denominator), contrasting altloc denominator shifts on 14ZZ (-1.52 pp) and 2YOL (+0.57 pp) against 1.0000 shared-key binary OUTLIER agreement across all 41 proteins (38,744/38,744 residues).",
+      "unit": "percentage (%) and percentage points (pp)",
+      "selection": "41 protein entries with positive shared rotamer denominators out of 42 total entries in ref/research/data/round46_vs_deposited.json (12CI excluded: rotamer_n_shared = 0).",
+      "n_groups": {
+        "total_json_rows": 42,
+        "excluded_nucleic_acid_rows": 1,
+        "phenix_proteins": 41,
+        "wwpdb_proteins": 41
+      },
+      "pdb_ids": [
+        "12OC",
+        "14ZZ",
+        "15C8",
+        "1A0C",
+        "1B9B",
+        "1BDJ",
+        "1OWJ",
+        "1RH7",
+        "1TIJ",
+        "1VYJ",
+        "1W1I",
+        "1ZY2",
+        "2I4M",
+        "2IEF",
+        "2IY0",
+        "2QIZ",
+        "2QTU",
+        "2YOL",
+        "3A01",
+        "3G7M",
+        "3MIU",
+        "3ZM5",
+        "4DYT",
+        "4FN9",
+        "4MH1",
+        "4NJD",
+        "4Q9R",
+        "4W7P",
+        "5DZK",
+        "5MAC",
+        "5T9A",
+        "5URQ",
+        "5X6C",
+        "6ABT",
+        "6LE5",
+        "6QGY",
+        "6TPW",
+        "7D6N",
+        "7LMC",
+        "7P4U",
+        "7PLN"
+      ],
+      "excluded_pdb_ids": [
+        "12CI"
+      ],
+      "record_selectors": [
+        "ref/research/data/round46_vs_deposited.json#/rows[*]/phenix_rota_outlier_pct",
+        "ref/research/data/round46_vs_deposited.json#/rows[*]/wwpdb_rota_outlier_pct",
+        "ref/research/data/round46_vs_deposited.json#/rows[*]/rota_outlier_delta_pp",
+        "ref/research/data/round46_vs_deposited.json#/rows[*]/rotamer_rotamer_agreement",
+        "ref/research/data/round46_vs_deposited.json#/summary"
+      ],
+      "sources": [
+        {
+          "path": "ref/research/data/round46_vs_deposited.json",
+          "revision": "f3cfad326f28ddbf652dcdb0c5858443bee6e413",
+          "sha256": "53df0c9a43883969e5583edc44414483ac49429a22ae336714ccef4ce362a829"
+        }
+      ],
+      "thresholds_used": [],
+      "derived_summaries": {
+        "phenix_rota_outlier_pct_n41": {
+          "n": 41,
+          "min": 0.18,
+          "q25": 2.56,
+          "median": 6.54,
+          "q75": 10.17,
+          "max": 23.25,
+          "mean": 6.585366
+        },
+        "wwpdb_rota_outlier_pct_n41": {
+          "n": 41,
+          "min": 0.18,
+          "q25": 2.56,
+          "median": 6.54,
+          "q75": 9.94,
+          "max": 23.25,
+          "mean": 6.608537
+        },
+        "rota_outlier_delta_pp_n41": {
+          "n": 41,
+          "min": -1.52,
+          "q25": 0.0,
+          "median": 0.0,
+          "q75": 0.0,
+          "max": 0.57,
+          "mean": -0.023171
+        },
+        "exact_zero_delta_count": 39,
+        "shared_rotamer_keys_total": 38744,
+        "shared_rotamer_exact_name_matches": 38741,
+        "shared_rotamer_outlier_verdict_agreement_all_41": 1.0,
+        "shared_ramachandran_keys_total": 46677,
+        "shared_ramachandran_verdict_agreement_all_41": 1.0,
+        "rotamer_name_agreement_n41": {
+          "n": 41,
+          "min": 0.9919,
+          "q25": 1.0,
+          "median": 1.0,
+          "q75": 1.0,
+          "max": 1.0,
+          "mean": 0.999802
+        }
+      }
+    },
+    {
+      "id": "fig07_threshold_evidence_history",
+      "file": "figures/fig07_threshold_evidence_history.png",
+      "sha256": "fe71d6e95647f66d8cb61368c076076211f0456028506a4abc3d4f641ae24dad",
+      "dimensions_px": [
+        3328,
+        1360
+      ],
+      "what_it_shows": "Orthogonal evidence-state (8 states, n=41) and policy-state (7 states, n=41) counts across the 21 rendered threshold-registry rows (17 in §3 + 4 in §4) in ref/threshold_evidence_status.yaml, paired with the §6 FIT ΔR-free threshold registration history (unitless fraction, median_null + 3*max(MAD_null, 0.0005)) across R4 retired (ISOT, n=22/22/19), R7 history (ISOT with 8R5K clean null, n=22/22/20), and R9 current (REFI BREF ANIS, n=22/22/21).",
+      "unit": "component count (n = 41) and unitless fraction (ΔR-free threshold)",
+      "selection": "All 21 rows (41 components) in ref/threshold_evidence_status.yaml (§3 and §4 scope) and all benched null ΔR-free observations in negative_control_round3_bench.json, negative_control_round6_hygiene.json (g3_8r5k_rescreen.clean_null_deltas), and negative_control_round9_anis.json (§6 scope).",
+      "n_groups": {
+        "ledger_rows_total": 21,
+        "ledger_rows_section_3": 17,
+        "ledger_rows_section_4": 4,
+        "ledger_components_total": 41,
+        "r4_null_phenix": 22,
+        "r4_null_gemmi": 22,
+        "r4_null_refmac_isot": 19,
+        "r7_null_phenix": 22,
+        "r7_null_gemmi": 22,
+        "r7_null_refmac_isot": 20,
+        "r9_null_refmac_anis": 21
+      },
+      "pdb_ids": [
+        "4M7G",
+        "7R2H",
+        "2VXN",
+        "7ATV",
+        "6Q01",
+        "6ZWY",
+        "5XS6",
+        "8ERE",
+        "3ZOJ",
+        "9YGW",
+        "9P25",
+        "8R5K",
+        "7TVL",
+        "8QXQ",
+        "6F1O",
+        "7TWR",
+        "6XVM",
+        "9TEU",
+        "5R32",
+        "5KXV",
+        "7OYN",
+        "9TXE"
+      ],
+      "record_selectors": [
+        "ref/threshold_evidence_status.yaml#/rows[*]/components[*]/evidence_state",
+        "ref/threshold_evidence_status.yaml#/rows[*]/components[*]/policy_state",
+        "ref/research/data/negative_control_round3_bench.json#/rows[*]/numbers",
+        "ref/research/data/negative_control_round6_hygiene.json#/g3_8r5k_rescreen/clean_null_deltas",
+        "ref/research/data/negative_control_round9_anis.json#/rows[*]/refmac/anis/delta",
+        "ref/research/data/negative_control_round9_anis.json#/j2_anis",
+        "scripts/bench_recover_leg.py:44-55,82-129",
+        "ref/thresholds_and_standards.md:261-263",
+        "ref/research/negative_control_round4_preregistration.md:20-28"
+      ],
+      "sources": [
+        {
+          "path": "ref/threshold_evidence_status.yaml",
+          "revision": "f3cfad326f28ddbf652dcdb0c5858443bee6e413",
+          "sha256": "adc91d21fc554d97f57412698899a3bdcf8d613b7358fa13206ccc81e9b97cb8"
+        },
+        {
+          "path": "ref/research/data/negative_control_round3_bench.json",
+          "revision": "f3cfad326f28ddbf652dcdb0c5858443bee6e413",
+          "sha256": "3635bd878d160c770594c2c5ed92a1139dbbd8d63daa28a48aa249656d7f6dee"
+        },
+        {
+          "path": "ref/research/data/negative_control_round6_hygiene.json",
+          "revision": "f3cfad326f28ddbf652dcdb0c5858443bee6e413",
+          "sha256": "603ac6d7891c8013942a1bbf368a6960a85bc94edfddcfee5e373584e1d4264f"
+        },
+        {
+          "path": "ref/research/data/negative_control_round9_anis.json",
+          "revision": "f3cfad326f28ddbf652dcdb0c5858443bee6e413",
+          "sha256": "d323cdf1ccbb02d5a131b7f1a0912a31fd607e78c63618adb5c9bafb39ebbb46"
+        },
+        {
+          "path": "scripts/bench_recover_leg.py",
+          "revision": "f3cfad326f28ddbf652dcdb0c5858443bee6e413",
+          "sha256": "b5686def212d890e4678d041dedce425a18f60a66128e1f958f88d3ccab3726f"
+        },
+        {
+          "path": "ref/thresholds_and_standards.md",
+          "revision": "f3cfad326f28ddbf652dcdb0c5858443bee6e413",
+          "sha256": "5ba9b0c057e41a82bd7fad8bd16625f101a5362f7e4d183b561b5930f59c0a2e"
+        },
+        {
+          "path": "ref/research/negative_control_round4_preregistration.md",
+          "revision": "f3cfad326f28ddbf652dcdb0c5858443bee6e413",
+          "sha256": "2caaca4f4061665dc953162f0b3643701f605500a07bedf95133eb11e96cb494"
+        }
+      ],
+      "thresholds_used": [
+        {
+          "label": "R4 retired §6 FIT thresholds (d_phenix / d_gemmi / d_refmac ISOT)",
+          "value": {
+            "d_phenix": 0.0122,
+            "d_gemmi": 0.0109,
+            "d_refmac": 0.0054
+          },
+          "unit": "dimensionless fraction",
+          "kind": "retired_refinement_change_benchmark_threshold",
+          "source": "ref/research/negative_control_round4_preregistration.md:24-28; ref/thresholds_and_standards.md:262"
+        },
+        {
+          "label": "R7 history §6 FIT thresholds (d_phenix / d_gemmi / d_refmac ISOT)",
+          "value": {
+            "d_phenix": 0.012,
+            "d_gemmi": 0.01025,
+            "d_refmac": 0.0056
+          },
+          "unit": "dimensionless fraction",
+          "kind": "historical_isot_refinement_change_benchmark_threshold",
+          "source": "scripts/bench_recover_leg.py:44-45; ref/thresholds_and_standards.md:262"
+        },
+        {
+          "label": "R9 current §6 FIT thresholds (d_phenix / d_gemmi / d_refmac ANIS)",
+          "value": {
+            "d_phenix": 0.012,
+            "d_gemmi": 0.01025,
+            "d_refmac": 0.0115
+          },
+          "unit": "dimensionless fraction",
+          "kind": "current_anis_refinement_change_benchmark_threshold",
+          "source": "scripts/bench_recover_leg.py:53-54; ref/thresholds_and_standards.md:263"
+        }
+      ],
+      "derived_summaries": {
+        "ledger_metadata": {
+          "as_of_date": "2026-09-27",
+          "scope": "Rendered table rows in registry sections 3 and 4 only; not all sections or every numerical statement.",
+          "policy_state_definition": "Describes current prose policy or an explicitly unresolved interpretation. Does not authorize QDS grading or substitute for pass-criterion bindings.",
+          "evidence_state_definition": "retained_record means identifiable retained evidence for the scoped claim, not complete execution provenance, independent calibration, or correctness of every number in the row.",
+          "historical_inventory_definition": "Recounts the through-round48 authors' reported 18/2 classification. It is not today's certification."
+        },
+        "n_rows": 21,
+        "rows_by_section": {
+          "3": 17,
+          "4": 4
+        },
+        "n_components": 41,
+        "evidence_state": {
+          "retained_record": 23,
+          "unmeasured": 9,
+          "partial_record": 4,
+          "denominator_unproven": 1,
+          "external_standard_cited": 1,
+          "limited_controls": 1,
+          "producer_mismatch": 1,
+          "unverified_ancillary": 1
+        },
+        "policy_state": {
+          "active_conditional": 29,
+          "informational": 6,
+          "provisional_informational": 2,
+          "not_evaluable": 1,
+          "policy_unresolved": 1,
+          "provisional_conditional": 1,
+          "suspended": 1
+        },
+        "components": [
+          {
+            "component_key": "ca_rmsd.agreement",
+            "row_id": "ca_rmsd",
+            "section": 3,
+            "component_id": "agreement",
+            "evidence_state": "retained_record",
+            "policy_state": "active_conditional",
+            "scope": "Matched-count rigid-body CA RMSD comparison"
+          },
+          {
+            "component_key": "aligned_count.agreement",
+            "row_id": "aligned_count",
+            "section": 3,
+            "component_id": "agreement",
+            "evidence_state": "retained_record",
+            "policy_state": "active_conditional",
+            "scope": "Aligned-residue count within a matched aligner class"
+          },
+          {
+            "component_key": "clashscore.historical_pipeline",
+            "row_id": "clashscore",
+            "section": 3,
+            "component_id": "historical_pipeline",
+            "evidence_state": "retained_record",
+            "policy_state": "active_conditional",
+            "scope": "Registered historical version/convention pipeline only"
+          },
+          {
+            "component_key": "clashscore.changed_pipeline",
+            "row_id": "clashscore",
+            "section": 3,
+            "component_id": "changed_pipeline",
+            "evidence_state": "unmeasured",
+            "policy_state": "not_evaluable",
+            "scope": "New dictionary-loaded or otherwise changed H-build pipeline"
+          },
+          {
+            "component_key": "favored_percent.shared_classification",
+            "row_id": "favored_percent",
+            "section": 3,
+            "component_id": "shared_classification",
+            "evidence_state": "retained_record",
+            "policy_state": "active_conditional",
+            "scope": "Shared-residue Ramachandran classification rule"
+          },
+          {
+            "component_key": "favored_percent.raw_rama_percent",
+            "row_id": "favored_percent",
+            "section": 3,
+            "component_id": "raw_rama_percent",
+            "evidence_state": "retained_record",
+            "policy_state": "informational",
+            "scope": "Raw Ramachandran favored-percent delta"
+          },
+          {
+            "component_key": "favored_percent.rotamer_favored",
+            "row_id": "favored_percent",
+            "section": 3,
+            "component_id": "rotamer_favored",
+            "evidence_state": "unmeasured",
+            "policy_state": "policy_unresolved",
+            "scope": "Rotamer favored-percent expectation"
+          },
+          {
+            "component_key": "outlier_percent.shared_classification",
+            "row_id": "outlier_percent",
+            "section": 3,
+            "component_id": "shared_classification",
+            "evidence_state": "retained_record",
+            "policy_state": "active_conditional",
+            "scope": "Shared-residue Ramachandran and rotamer OUTLIER verdict agreement"
+          },
+          {
+            "component_key": "outlier_percent.raw_percent",
+            "row_id": "outlier_percent",
+            "section": 3,
+            "component_id": "raw_percent",
+            "evidence_state": "retained_record",
+            "policy_state": "informational",
+            "scope": "Raw Ramachandran and rotamer outlier-percent deltas"
+          },
+          {
+            "component_key": "bond_length.agreement",
+            "row_id": "bond_length",
+            "section": 3,
+            "component_id": "agreement",
+            "evidence_state": "retained_record",
+            "policy_state": "active_conditional",
+            "scope": "Matched-count bond-length RMSD comparison"
+          },
+          {
+            "component_key": "bond_angle.agreement",
+            "row_id": "bond_angle",
+            "section": 3,
+            "component_id": "agreement",
+            "evidence_state": "retained_record",
+            "policy_state": "active_conditional",
+            "scope": "Registry library-qualified angle RMSD comparison"
+          },
+          {
+            "component_key": "bond_angle.matched_count_share",
+            "row_id": "bond_angle",
+            "section": 3,
+            "component_id": "matched_count_share",
+            "evidence_state": "unverified_ancillary",
+            "policy_state": "informational",
+            "scope": "Ancillary library-share figure on matched-count subset"
+          },
+          {
+            "component_key": "wilson_b.agreement",
+            "row_id": "wilson_b",
+            "section": 3,
+            "component_id": "agreement",
+            "evidence_state": "retained_record",
+            "policy_state": "active_conditional",
+            "scope": "Same-dataset Wilson-B estimator comparison"
+          },
+          {
+            "component_key": "l_test.twin_call",
+            "row_id": "l_test",
+            "section": 3,
+            "component_id": "twin_call",
+            "evidence_state": "partial_record",
+            "policy_state": "active_conditional",
+            "scope": "Same twin/no-twin call on named subset"
+          },
+          {
+            "component_key": "l_test.numeric_delta",
+            "row_id": "l_test",
+            "section": 3,
+            "component_id": "numeric_delta",
+            "evidence_state": "partial_record",
+            "policy_state": "informational",
+            "scope": "L-statistic numeric difference with agreeing twin call"
+          },
+          {
+            "component_key": "completeness.agreement",
+            "row_id": "completeness",
+            "section": 3,
+            "component_id": "agreement",
+            "evidence_state": "retained_record",
+            "policy_state": "active_conditional",
+            "scope": "Overall completeness versus validation-report DataCompleteness"
+          },
+          {
+            "component_key": "secondary_structure.agent_vs_dssp",
+            "row_id": "secondary_structure",
+            "section": 3,
+            "component_id": "agent_vs_dssp",
+            "evidence_state": "unmeasured",
+            "policy_state": "active_conditional",
+            "scope": "Agent-versus-DSSP agreement clause"
+          },
+          {
+            "component_key": "secondary_structure.two_assigner_expectation",
+            "row_id": "secondary_structure",
+            "section": 3,
+            "component_id": "two_assigner_expectation",
+            "evidence_state": "denominator_unproven",
+            "policy_state": "provisional_informational",
+            "scope": "DSSP-versus-biotite reporting expectation"
+          },
+          {
+            "component_key": "secondary_structure.content_precondition",
+            "row_id": "secondary_structure",
+            "section": 3,
+            "component_id": "content_precondition",
+            "evidence_state": "limited_controls",
+            "policy_state": "provisional_informational",
+            "scope": "DSSP H+E interpretability precondition"
+          },
+          {
+            "component_key": "dockq.numeric_tolerance",
+            "row_id": "dockq",
+            "section": 3,
+            "component_id": "numeric_tolerance",
+            "evidence_state": "unmeasured",
+            "policy_state": "active_conditional",
+            "scope": "DockQ cross-tool agreement tolerance"
+          },
+          {
+            "component_key": "dockq.mapping_precondition",
+            "row_id": "dockq",
+            "section": 3,
+            "component_id": "mapping_precondition",
+            "evidence_state": "retained_record",
+            "policy_state": "active_conditional",
+            "scope": "Declared chain-mapping hard gate"
+          },
+          {
+            "component_key": "dockq.class_waiver",
+            "row_id": "dockq",
+            "section": 3,
+            "component_id": "class_waiver",
+            "evidence_state": "unmeasured",
+            "policy_state": "active_conditional",
+            "scope": "CAPRI-class boundary waiver"
+          },
+          {
+            "component_key": "interface_bsa.agreement",
+            "row_id": "interface_bsa",
+            "section": 3,
+            "component_id": "agreement",
+            "evidence_state": "retained_record",
+            "policy_state": "active_conditional",
+            "scope": "Same-model BSA comparison with benchmarked asymmetric selections"
+          },
+          {
+            "component_key": "nmr_precision.numeric_tolerance",
+            "row_id": "nmr_precision",
+            "section": 3,
+            "component_id": "numeric_tolerance",
+            "evidence_state": "unmeasured",
+            "policy_state": "active_conditional",
+            "scope": "Mean C-alpha RMSF cross-tool tolerance"
+          },
+          {
+            "component_key": "nmr_precision.selection_precondition",
+            "row_id": "nmr_precision",
+            "section": 3,
+            "component_id": "selection_precondition",
+            "evidence_state": "retained_record",
+            "policy_state": "active_conditional",
+            "scope": "Matched ordered-core cutoff and whole-chain disclosure"
+          },
+          {
+            "component_key": "r_free.deposited_reference",
+            "row_id": "r_free",
+            "section": 3,
+            "component_id": "deposited_reference",
+            "evidence_state": "retained_record",
+            "policy_state": "active_conditional",
+            "scope": "R-free compared with depositor-reported value"
+          },
+          {
+            "component_key": "r_free.recomputed_reference",
+            "row_id": "r_free",
+            "section": 3,
+            "component_id": "recomputed_reference",
+            "evidence_state": "retained_record",
+            "policy_state": "active_conditional",
+            "scope": "R-free compared with wwPDB recomputation"
+          },
+          {
+            "component_key": "r_work_offset.direct_work_estimator",
+            "row_id": "r_work_offset",
+            "section": 3,
+            "component_id": "direct_work_estimator",
+            "evidence_state": "retained_record",
+            "policy_state": "active_conditional",
+            "scope": "Directly summed globally scaled Gemmi R-work estimator"
+          },
+          {
+            "component_key": "r_work_offset.other_estimators",
+            "row_id": "r_work_offset",
+            "section": 3,
+            "component_id": "other_estimators",
+            "evidence_state": "unmeasured",
+            "policy_state": "informational",
+            "scope": "R-free and additional bin-wise-rescaled Gemmi estimator"
+          },
+          {
+            "component_key": "h_placement.flip_conflict",
+            "row_id": "h_placement",
+            "section": 3,
+            "component_id": "flip_conflict",
+            "evidence_state": "producer_mismatch",
+            "policy_state": "suspended",
+            "scope": "Standalone confident-flip conflict rule at every scope"
+          },
+          {
+            "component_key": "h_placement.h_count",
+            "row_id": "h_placement",
+            "section": 3,
+            "component_id": "h_count",
+            "evidence_state": "retained_record",
+            "policy_state": "active_conditional",
+            "scope": "Protein-only H-count dispatcher/distribution check"
+          },
+          {
+            "component_key": "h_placement.historical_clashscore",
+            "row_id": "h_placement",
+            "section": 3,
+            "component_id": "historical_clashscore",
+            "evidence_state": "retained_record",
+            "policy_state": "active_conditional",
+            "scope": "Clashscore clause for the registered historical pipeline"
+          },
+          {
+            "component_key": "h_placement.changed_h_build",
+            "row_id": "h_placement",
+            "section": 3,
+            "component_id": "changed_h_build",
+            "evidence_state": "unmeasured",
+            "policy_state": "informational",
+            "scope": "Changed dictionary-loaded or distinct-builder clashscore context"
+          },
+          {
+            "component_key": "delta_rmsd.high_resolution",
+            "row_id": "delta_rmsd",
+            "section": 4,
+            "component_id": "high_resolution",
+            "evidence_state": "retained_record",
+            "policy_state": "active_conditional",
+            "scope": "High-resolution refinement-shift branch"
+          },
+          {
+            "component_key": "delta_rmsd.low_resolution",
+            "row_id": "delta_rmsd",
+            "section": 4,
+            "component_id": "low_resolution",
+            "evidence_state": "retained_record",
+            "policy_state": "active_conditional",
+            "scope": "Low-resolution named-cohort coverage-bound branch"
+          },
+          {
+            "component_key": "geometry_delta.favored_rotamer",
+            "row_id": "geometry_delta",
+            "section": 4,
+            "component_id": "favored_rotamer",
+            "evidence_state": "retained_record",
+            "policy_state": "active_conditional",
+            "scope": "Favored/rotamer change clauses within declared refinement protocol"
+          },
+          {
+            "component_key": "geometry_delta.bounded_clash_ratio",
+            "row_id": "geometry_delta",
+            "section": 4,
+            "component_id": "bounded_clash_ratio",
+            "evidence_state": "retained_record",
+            "policy_state": "active_conditional",
+            "scope": "Bounded clashscore-ratio clause"
+          },
+          {
+            "component_key": "geometry_delta.exact_lower_bound",
+            "row_id": "geometry_delta",
+            "section": 4,
+            "component_id": "exact_lower_bound",
+            "evidence_state": "unmeasured",
+            "policy_state": "provisional_conditional",
+            "scope": "Approximate lower applicability boundary for clashscore ratio"
+          },
+          {
+            "component_key": "absolute_floors.quality_bars",
+            "row_id": "absolute_floors",
+            "section": 4,
+            "component_id": "quality_bars",
+            "evidence_state": "external_standard_cited",
+            "policy_state": "active_conditional",
+            "scope": "Absolute geometry quality bars, separately reported"
+          },
+          {
+            "component_key": "map_model_delta.cc_mask",
+            "row_id": "map_model_delta",
+            "section": 4,
+            "component_id": "cc_mask",
+            "evidence_state": "partial_record",
+            "policy_state": "active_conditional",
+            "scope": "Resolution-qualified CC_mask degradation clause"
+          },
+          {
+            "component_key": "map_model_delta.dfsc_model",
+            "row_id": "map_model_delta",
+            "section": 4,
+            "component_id": "dfsc_model",
+            "evidence_state": "partial_record",
+            "policy_state": "active_conditional",
+            "scope": "One-sided d_FSC_model degradation clause"
+          }
+        ],
+        "formula": "median(signed null deltas)+3*max(MAD,.0005)",
+        "mad_floor": 0.0005,
+        "R4": {
+          "d_phenix": {
+            "n": 22,
+            "median": 0.0035,
+            "mad": 0.0029,
+            "floored_mad": 0.0029,
+            "threshold": 0.0122
+          },
+          "d_gemmi": {
+            "n": 22,
+            "median": 0.00385,
+            "mad": 0.0023499999999999997,
+            "floored_mad": 0.0023499999999999997,
+            "threshold": 0.0109
+          },
+          "d_refmac": {
+            "n": 19,
+            "median": 0.0018,
+            "mad": 0.0012000000000000001,
+            "floored_mad": 0.0012000000000000001,
+            "threshold": 0.0054
+          }
+        },
+        "R7": {
+          "d_phenix": {
+            "n": 22,
+            "median": 0.003300000000000007,
+            "mad": 0.0029,
+            "floored_mad": 0.0029,
+            "threshold": 0.012
+          },
+          "d_gemmi": {
+            "n": 22,
+            "median": 0.003649999999999999,
+            "mad": 0.0021999999999999997,
+            "floored_mad": 0.0021999999999999997,
+            "threshold": 0.01025
+          },
+          "d_refmac": {
+            "n": 20,
+            "median": 0.00185,
+            "mad": 0.0012500000000000002,
+            "floored_mad": 0.0012500000000000002,
+            "threshold": 0.0056
+          }
+        },
+        "R9": {
+          "d_phenix": {
+            "n": 22,
+            "median": 0.003300000000000007,
+            "mad": 0.0029,
+            "floored_mad": 0.0029,
+            "threshold": 0.012
+          },
+          "d_gemmi": {
+            "n": 22,
+            "median": 0.003649999999999999,
+            "mad": 0.0021999999999999997,
+            "floored_mad": 0.0021999999999999997,
+            "threshold": 0.01025
+          },
+          "d_refmac": {
+            "n": 21,
+            "median": 0.0037,
+            "mad": 0.0026,
+            "floored_mad": 0.0026,
+            "threshold": 0.0115
+          }
+        },
+        "R9_ANIS_REF": {
+          "n": 21,
+          "median": 0.0037,
+          "mad": 0.0026,
+          "floored_mad": 0.0026,
+          "threshold": 0.0115
+        },
+        "registered_thresholds_ast": {
+          "REGISTERED_FIT_THRESHOLDS": {
+            "d_phenix": 0.012,
+            "d_gemmi": 0.01025,
+            "d_refmac": 0.0056
+          },
+          "REGISTERED_FIT_THRESHOLDS_ANIS": {
+            "d_phenix": 0.012,
+            "d_gemmi": 0.01025,
+            "d_refmac": 0.0115
+          }
+        },
+        "parsed_registrations": {
+          "r4_preregistration_c1": {
+            "source": "ref/research/negative_control_round4_preregistration.md:24-28",
+            "section": "## C1 — the fit verdict, re-registered and NULL-CENTERED",
+            "rows": {
+              "phenix path": "d_phenix",
+              "gemmi path": "d_gemmi",
+              "REFMAC": "d_refmac"
+            },
+            "thresholds": {
+              "d_phenix": 0.0122,
+              "d_gemmi": 0.0109,
+              "d_refmac": 0.0054
+            }
+          },
+          "registry_section_6_isot_history": {
+            "source": "ref/thresholds_and_standards.md:262",
+            "section": "## 6. Negative-control verdict rules",
+            "rule_row": "FIT thresholds — ISOT convention (history, rounds 3–8)",
+            "thresholds": {
+              "d_phenix": 0.012,
+              "d_gemmi": 0.01025,
+              "d_refmac": 0.0056
+            },
+            "retired_r4_thresholds": {
+              "d_phenix": 0.0122,
+              "d_gemmi": 0.0109,
+              "d_refmac": 0.0054
+            }
+          },
+          "registry_section_6_anis_current": {
+            "source": "ref/thresholds_and_standards.md:263",
+            "section": "## 6. Negative-control verdict rules",
+            "rule_row": "FIT thresholds — ANIS convention (current, round 9 on)",
+            "thresholds": {
+              "d_phenix": 0.012,
+              "d_gemmi": 0.01025,
+              "d_refmac": 0.0115
+            }
+          },
+          "bench_recover_leg_ast": {
+            "source": "scripts/bench_recover_leg.py:44-55,63",
+            "REGISTERED_FIT_THRESHOLDS": {
+              "d_phenix": 0.012,
+              "d_gemmi": 0.01025,
+              "d_refmac": 0.0056
+            },
+            "REGISTERED_FIT_THRESHOLDS_ANIS": {
+              "d_phenix": 0.012,
+              "d_gemmi": 0.01025,
+              "d_refmac": 0.0115
+            },
+            "MAD_FLOOR": 0.0005
+          },
+          "r9_j2_anis_summary": {
+            "source": "ref/research/data/negative_control_round9_anis.json#/j2_anis",
+            "n": 21,
+            "median_abs_delta": 0.0051,
+            "d_refmac_anis": 0.0115
+          }
+        },
+        "research_file_inventory": {
+          "source_revision": "f3cfad326f28ddbf652dcdb0c5858443bee6e413",
+          "count_patterns": {
+            "tolerance_glob": "ref/research/tolerance_benchmark_round[^/]*\\.md",
+            "tolerance_numbered_reports": "ref/research/tolerance_benchmark_round\\d+\\.md",
+            "tolerance_preregistrations": "ref/research/tolerance_benchmark_round\\d+_preregistration\\.md",
+            "negative_control_numbered_reports": "ref/research/negative_control_round\\d+\\.md",
+            "preregistration_named_markdown": "ref/research/[^/]*preregistration[^/]*\\.md"
+          },
+          "file_counts": {
+            "tolerance_glob": 60,
+            "tolerance_numbered_reports": 40,
+            "tolerance_preregistrations": 20,
+            "negative_control_numbered_reports": 11,
+            "preregistration_named_markdown": 34
+          },
+          "counted_paths": {
+            "tolerance_glob": [
+              "ref/research/tolerance_benchmark_round10.md",
+              "ref/research/tolerance_benchmark_round11.md",
+              "ref/research/tolerance_benchmark_round12.md",
+              "ref/research/tolerance_benchmark_round13.md",
+              "ref/research/tolerance_benchmark_round14.md",
+              "ref/research/tolerance_benchmark_round15.md",
+              "ref/research/tolerance_benchmark_round16.md",
+              "ref/research/tolerance_benchmark_round17.md",
+              "ref/research/tolerance_benchmark_round18.md",
+              "ref/research/tolerance_benchmark_round19.md",
+              "ref/research/tolerance_benchmark_round20.md",
+              "ref/research/tolerance_benchmark_round21.md",
+              "ref/research/tolerance_benchmark_round22.md",
+              "ref/research/tolerance_benchmark_round23.md",
+              "ref/research/tolerance_benchmark_round24.md",
+              "ref/research/tolerance_benchmark_round25.md",
+              "ref/research/tolerance_benchmark_round26.md",
+              "ref/research/tolerance_benchmark_round26_preregistration.md",
+              "ref/research/tolerance_benchmark_round27.md",
+              "ref/research/tolerance_benchmark_round28.md",
+              "ref/research/tolerance_benchmark_round28_preregistration.md",
+              "ref/research/tolerance_benchmark_round29.md",
+              "ref/research/tolerance_benchmark_round29_preregistration.md",
+              "ref/research/tolerance_benchmark_round30.md",
+              "ref/research/tolerance_benchmark_round30_preregistration.md",
+              "ref/research/tolerance_benchmark_round31.md",
+              "ref/research/tolerance_benchmark_round31_preregistration.md",
+              "ref/research/tolerance_benchmark_round32.md",
+              "ref/research/tolerance_benchmark_round32_preregistration.md",
+              "ref/research/tolerance_benchmark_round33.md",
+              "ref/research/tolerance_benchmark_round33_preregistration.md",
+              "ref/research/tolerance_benchmark_round34.md",
+              "ref/research/tolerance_benchmark_round35.md",
+              "ref/research/tolerance_benchmark_round36_preregistration.md",
+              "ref/research/tolerance_benchmark_round37.md",
+              "ref/research/tolerance_benchmark_round37_preregistration.md",
+              "ref/research/tolerance_benchmark_round38.md",
+              "ref/research/tolerance_benchmark_round38_preregistration.md",
+              "ref/research/tolerance_benchmark_round39.md",
+              "ref/research/tolerance_benchmark_round39_preregistration.md",
+              "ref/research/tolerance_benchmark_round40.md",
+              "ref/research/tolerance_benchmark_round40_preregistration.md",
+              "ref/research/tolerance_benchmark_round41.md",
+              "ref/research/tolerance_benchmark_round41_preregistration.md",
+              "ref/research/tolerance_benchmark_round42.md",
+              "ref/research/tolerance_benchmark_round42_preregistration.md",
+              "ref/research/tolerance_benchmark_round43_preregistration.md",
+              "ref/research/tolerance_benchmark_round44.md",
+              "ref/research/tolerance_benchmark_round44_preregistration.md",
+              "ref/research/tolerance_benchmark_round45.md",
+              "ref/research/tolerance_benchmark_round45_preregistration.md",
+              "ref/research/tolerance_benchmark_round46.md",
+              "ref/research/tolerance_benchmark_round46_preregistration.md",
+              "ref/research/tolerance_benchmark_round47.md",
+              "ref/research/tolerance_benchmark_round47_preregistration.md",
+              "ref/research/tolerance_benchmark_round48.md",
+              "ref/research/tolerance_benchmark_round48_preregistration.md",
+              "ref/research/tolerance_benchmark_round6.md",
+              "ref/research/tolerance_benchmark_round7.md",
+              "ref/research/tolerance_benchmark_round8.md"
+            ],
+            "tolerance_numbered_reports": [
+              "ref/research/tolerance_benchmark_round10.md",
+              "ref/research/tolerance_benchmark_round11.md",
+              "ref/research/tolerance_benchmark_round12.md",
+              "ref/research/tolerance_benchmark_round13.md",
+              "ref/research/tolerance_benchmark_round14.md",
+              "ref/research/tolerance_benchmark_round15.md",
+              "ref/research/tolerance_benchmark_round16.md",
+              "ref/research/tolerance_benchmark_round17.md",
+              "ref/research/tolerance_benchmark_round18.md",
+              "ref/research/tolerance_benchmark_round19.md",
+              "ref/research/tolerance_benchmark_round20.md",
+              "ref/research/tolerance_benchmark_round21.md",
+              "ref/research/tolerance_benchmark_round22.md",
+              "ref/research/tolerance_benchmark_round23.md",
+              "ref/research/tolerance_benchmark_round24.md",
+              "ref/research/tolerance_benchmark_round25.md",
+              "ref/research/tolerance_benchmark_round26.md",
+              "ref/research/tolerance_benchmark_round27.md",
+              "ref/research/tolerance_benchmark_round28.md",
+              "ref/research/tolerance_benchmark_round29.md",
+              "ref/research/tolerance_benchmark_round30.md",
+              "ref/research/tolerance_benchmark_round31.md",
+              "ref/research/tolerance_benchmark_round32.md",
+              "ref/research/tolerance_benchmark_round33.md",
+              "ref/research/tolerance_benchmark_round34.md",
+              "ref/research/tolerance_benchmark_round35.md",
+              "ref/research/tolerance_benchmark_round37.md",
+              "ref/research/tolerance_benchmark_round38.md",
+              "ref/research/tolerance_benchmark_round39.md",
+              "ref/research/tolerance_benchmark_round40.md",
+              "ref/research/tolerance_benchmark_round41.md",
+              "ref/research/tolerance_benchmark_round42.md",
+              "ref/research/tolerance_benchmark_round44.md",
+              "ref/research/tolerance_benchmark_round45.md",
+              "ref/research/tolerance_benchmark_round46.md",
+              "ref/research/tolerance_benchmark_round47.md",
+              "ref/research/tolerance_benchmark_round48.md",
+              "ref/research/tolerance_benchmark_round6.md",
+              "ref/research/tolerance_benchmark_round7.md",
+              "ref/research/tolerance_benchmark_round8.md"
+            ],
+            "tolerance_preregistrations": [
+              "ref/research/tolerance_benchmark_round26_preregistration.md",
+              "ref/research/tolerance_benchmark_round28_preregistration.md",
+              "ref/research/tolerance_benchmark_round29_preregistration.md",
+              "ref/research/tolerance_benchmark_round30_preregistration.md",
+              "ref/research/tolerance_benchmark_round31_preregistration.md",
+              "ref/research/tolerance_benchmark_round32_preregistration.md",
+              "ref/research/tolerance_benchmark_round33_preregistration.md",
+              "ref/research/tolerance_benchmark_round36_preregistration.md",
+              "ref/research/tolerance_benchmark_round37_preregistration.md",
+              "ref/research/tolerance_benchmark_round38_preregistration.md",
+              "ref/research/tolerance_benchmark_round39_preregistration.md",
+              "ref/research/tolerance_benchmark_round40_preregistration.md",
+              "ref/research/tolerance_benchmark_round41_preregistration.md",
+              "ref/research/tolerance_benchmark_round42_preregistration.md",
+              "ref/research/tolerance_benchmark_round43_preregistration.md",
+              "ref/research/tolerance_benchmark_round44_preregistration.md",
+              "ref/research/tolerance_benchmark_round45_preregistration.md",
+              "ref/research/tolerance_benchmark_round46_preregistration.md",
+              "ref/research/tolerance_benchmark_round47_preregistration.md",
+              "ref/research/tolerance_benchmark_round48_preregistration.md"
+            ],
+            "negative_control_numbered_reports": [
+              "ref/research/negative_control_round1.md",
+              "ref/research/negative_control_round10.md",
+              "ref/research/negative_control_round11.md",
+              "ref/research/negative_control_round2.md",
+              "ref/research/negative_control_round3.md",
+              "ref/research/negative_control_round4.md",
+              "ref/research/negative_control_round5.md",
+              "ref/research/negative_control_round6.md",
+              "ref/research/negative_control_round7.md",
+              "ref/research/negative_control_round8.md",
+              "ref/research/negative_control_round9.md"
+            ],
+            "preregistration_named_markdown": [
+              "ref/research/negative_control_round10_preregistration.md",
+              "ref/research/negative_control_round11_preregistration.md",
+              "ref/research/negative_control_round1_preregistration.md",
+              "ref/research/negative_control_round2_preregistration.md",
+              "ref/research/negative_control_round3_preregistration.md",
+              "ref/research/negative_control_round4_preregistration.md",
+              "ref/research/negative_control_round5_preregistration.md",
+              "ref/research/negative_control_round6_preregistration.md",
+              "ref/research/negative_control_round7_preregistration.md",
+              "ref/research/negative_control_round8_preregistration.md",
+              "ref/research/negative_control_round9_preregistration.md",
+              "ref/research/standalone_dictionary_rerun_preregistration_2026-09-28.md",
+              "ref/research/t13_t15_canaries_preregistration_2026-09-27.md",
+              "ref/research/t15_failed_attempt_diagnostic_preregistration_2026-09-27.md",
+              "ref/research/tolerance_benchmark_round26_preregistration.md",
+              "ref/research/tolerance_benchmark_round28_preregistration.md",
+              "ref/research/tolerance_benchmark_round29_preregistration.md",
+              "ref/research/tolerance_benchmark_round30_preregistration.md",
+              "ref/research/tolerance_benchmark_round31_preregistration.md",
+              "ref/research/tolerance_benchmark_round32_preregistration.md",
+              "ref/research/tolerance_benchmark_round33_preregistration.md",
+              "ref/research/tolerance_benchmark_round36_preregistration.md",
+              "ref/research/tolerance_benchmark_round37_preregistration.md",
+              "ref/research/tolerance_benchmark_round38_preregistration.md",
+              "ref/research/tolerance_benchmark_round39_preregistration.md",
+              "ref/research/tolerance_benchmark_round40_preregistration.md",
+              "ref/research/tolerance_benchmark_round41_preregistration.md",
+              "ref/research/tolerance_benchmark_round42_preregistration.md",
+              "ref/research/tolerance_benchmark_round43_preregistration.md",
+              "ref/research/tolerance_benchmark_round44_preregistration.md",
+              "ref/research/tolerance_benchmark_round45_preregistration.md",
+              "ref/research/tolerance_benchmark_round46_preregistration.md",
+              "ref/research/tolerance_benchmark_round47_preregistration.md",
+              "ref/research/tolerance_benchmark_round48_preregistration.md"
+            ]
+          },
+          "overlap_note": "Counts overlap: tolerance_glob (60) is the union of tolerance_numbered_reports (40) and tolerance_preregistrations (20), and tolerance_preregistrations (20) are also counted inside preregistration_named_markdown (34)."
+        }
+      }
+    }
+  ]
+}

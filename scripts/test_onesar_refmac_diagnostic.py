@@ -2818,6 +2818,742 @@ class TestOnesarRefmacDiagnosticWiring(unittest.TestCase):
             ):
                 self.assertIs(doc[flag], False)
 
+    def test_diagnostic_main_captured_byte_handoffs_and_unavailable_snapshots_877(
+        self,
+    ) -> None:
+        """Task 877 + 900: 5-output diagnostic integration handoff and per-output unavailable snapshot refusals without post-scan disk reopen."""
+        import builtins
+        import io
+
+        valid_xml_bytes = (
+            b"<Overall_stats><stats_vs_cycle><new_cycle>"
+            b"<cycle>0</cycle><r_factor>0.1912</r_factor><r_free>0.2315</r_free>"
+            b"</new_cycle></stats_vs_cycle></Overall_stats>"
+        )
+        valid_trace_bytes = _build_valid_native_trace_bytes(include_events=True)
+        real_inspect = onesar_refmac._inspect_output_artifact
+        real_scan = onesar_refmac._scan_refmac_directory_entries
+        real_extract_native = onesar_refmac._extract_native_log_diagnostics
+        real_parse_log = onesar_refmac.onesar_refmac_log.parse_refmac_log
+        real_audit_xml = onesar_refmac._audit_refmac_xmlout
+        real_audit_hkl = onesar_refmac._export_and_audit_refmac_hklout
+        real_audit_xyz = onesar_refmac._audit_refmac_xyzout
+        real_inspect_trace = (
+            onesar_refmac._inspect_retained_native_trace_envelope
+        )
+        real_atomic = onesar_refmac._atomic_write_new_json_file
+        real_path_read_bytes = Path.read_bytes
+        real_path_read_text = Path.read_text
+        real_builtins_open = builtins.open
+        real_io_open = io.open
+        real_os_open = os.open
+        real_os_fstat = os.fstat
+        real_os_lstat = os.lstat
+
+        for mode in (
+            "captured_present",
+            "missing_log",
+            "missing_xml",
+            "missing_mtz",
+            "missing_pdb",
+            "missing_trace",
+        ):
+            with self.subTest(mode=mode):
+                evidence_root = (
+                    self.repo_root / "runs" / f"diag_handoff_{mode}_877"
+                )
+                parked = self.base_dir / f"diag_parked_{mode}_877"
+                parked.mkdir(parents=True, exist_ok=True)
+                runner_calls: list[bool] = []
+                fired: list[bool] = []
+                paths_by_kind: dict[str, Path] = {}
+                originals: dict[str, bytes] = {}
+                orig_identities: dict[str, tuple[int, int]] = {}
+                replacements: dict[str, bytes] = {}
+                repl_identities: dict[str, tuple[int, int]] = {}
+                sink_refs: list[dict[str, bytes]] = []
+                sink_keys_before_fault: list[set[str]] = []
+                sink_snapshot_matches_before_fault: dict[str, bool] = {}
+                popped_snapshots: dict[str, bytes] = {}
+                refmac_identity: list[tuple[int, int]] = []
+                after_scan = False
+                output_reads_after_scan: list[dict[str, Any]] = []
+                handoff_events: list[dict[str, Any]] = []
+
+                def _runner(
+                    xyzin: Path,
+                    hklin: Path,
+                    xyzout: Path,
+                    hklout: Path,
+                    log_path: Path,
+                    keywords: str,
+                    **kw: Any,
+                ) -> subprocess.CompletedProcess[str]:
+                    runner_calls.append(True)
+                    trace_path = Path(kw["env"]["REFMAC_DIAGNOSTIC_TRACE"])
+                    self._write_standard_outputs(
+                        xyzin,
+                        hklin,
+                        xyzout,
+                        hklout,
+                        log_path,
+                        trace_path=trace_path,
+                        trace_bytes=valid_trace_bytes,
+                    )
+                    xml_path = Path(kw["xml_output"])
+                    xml_path.write_bytes(valid_xml_bytes)
+                    paths_by_kind.update(
+                        log=log_path,
+                        xml=xml_path,
+                        mtz=hklout,
+                        pdb=xyzout,
+                        trace=trace_path,
+                    )
+                    for kind, p in paths_by_kind.items():
+                        originals[kind] = real_path_read_bytes(p)
+                        st_orig = real_os_lstat(p)
+                        orig_identities[kind] = (
+                            int(st_orig.st_dev),
+                            int(st_orig.st_ino),
+                        )
+                    return subprocess.CompletedProcess(
+                        args=self._expected_argv(
+                            self.fx.diagnostic_executable_path, evidence_root
+                        ),
+                        returncode=0,
+                        stdout=SYNTHETIC_SINGLE_CYCLE_NCYC0_LOG,
+                        stderr="",
+                    )
+
+                def _match_target(
+                    file_arg: Any, dir_fd: int | None = None
+                ) -> str | None:
+                    if isinstance(file_arg, int):
+                        return None
+                    try:
+                        raw = os.fsdecode(os.fspath(file_arg))
+                    except Exception:
+                        return None
+                    for kind, p in paths_by_kind.items():
+                        if raw == str(p):
+                            return kind
+                        if (
+                            raw == p.name
+                            and dir_fd is not None
+                            and refmac_identity
+                        ):
+                            try:
+                                st_d = real_os_fstat(dir_fd)
+                                if (
+                                    int(st_d.st_dev),
+                                    int(st_d.st_ino),
+                                ) == refmac_identity[-1]:
+                                    return kind
+                            except OSError:
+                                pass
+                    return None
+
+                def _wrapped_inspect(
+                    *args: Any, **kw: Any
+                ) -> dict[str, Any]:
+                    sink = onesar_refmac._INSPECT_RAW_BYTES_SINK_CTX.get()
+                    if sink is not None and not any(
+                        x is sink for x in sink_refs
+                    ):
+                        sink_refs.append(sink)
+                    return real_inspect(*args, **kw)
+
+                def _wrapped_scan(
+                    refmac_dir_arg: Path, *args: Any, **kw: Any
+                ) -> dict[str, Any]:
+                    nonlocal after_scan
+                    res_scan = real_scan(refmac_dir_arg, *args, **kw)
+                    if not fired:
+                        fired.append(True)
+                        st = real_os_lstat(refmac_dir_arg)
+                        refmac_identity.append((int(st.st_dev), int(st.st_ino)))
+                        if len(sink_refs) == 1:
+                            sink_keys_before_fault.append(
+                                set(sink_refs[0].keys())
+                            )
+                            for kind, p in paths_by_kind.items():
+                                sink_snapshot_matches_before_fault[kind] = (
+                                    sink_refs[0].get(str(p)) == originals[kind]
+                                )
+                        for kind, p in paths_by_kind.items():
+                            p.rename(parked / p.name)
+                            repl_data = (
+                                f"owned replacement {kind}\n".encode("utf-8")
+                            )
+                            p.write_bytes(repl_data)
+                            st_repl = real_os_lstat(p)
+                            replacements[kind] = repl_data
+                            repl_identities[kind] = (
+                                int(st_repl.st_dev),
+                                int(st_repl.st_ino),
+                            )
+                            if mode == f"missing_{kind}" and sink_refs:
+                                popped_snapshots[kind] = sink_refs[0].pop(
+                                    str(p)
+                                )
+                        after_scan = True
+                    return res_scan
+
+                def _guard_read_bytes(self_path: Path) -> bytes:
+                    kind = _match_target(self_path)
+                    if after_scan and kind is not None:
+                        output_reads_after_scan.append(
+                            {
+                                "via": "Path.read_bytes",
+                                "kind": kind,
+                                "path": str(self_path),
+                            }
+                        )
+                    return real_path_read_bytes(self_path)
+
+                def _guard_read_text(
+                    self_path: Path, *args: Any, **kw: Any
+                ) -> str:
+                    kind = _match_target(self_path)
+                    if after_scan and kind is not None:
+                        output_reads_after_scan.append(
+                            {
+                                "via": "Path.read_text",
+                                "kind": kind,
+                                "path": str(self_path),
+                            }
+                        )
+                    return real_path_read_text(self_path, *args, **kw)
+
+                def _guard_builtins_open(
+                    file_arg: Any, mode_arg: str = "r", *args: Any, **kw: Any
+                ) -> Any:
+                    kind = _match_target(file_arg)
+                    if (
+                        after_scan
+                        and kind is not None
+                        and ("r" in mode_arg or "+" in mode_arg)
+                    ):
+                        output_reads_after_scan.append(
+                            {
+                                "via": "builtins.open",
+                                "kind": kind,
+                                "path": str(file_arg),
+                            }
+                        )
+                    return real_builtins_open(file_arg, mode_arg, *args, **kw)
+
+                def _guard_io_open(
+                    file_arg: Any, mode_arg: str = "r", *args: Any, **kw: Any
+                ) -> Any:
+                    kind = _match_target(file_arg)
+                    if (
+                        after_scan
+                        and kind is not None
+                        and ("r" in mode_arg or "+" in mode_arg)
+                    ):
+                        output_reads_after_scan.append(
+                            {
+                                "via": "io.open",
+                                "kind": kind,
+                                "path": str(file_arg),
+                            }
+                        )
+                    return real_io_open(file_arg, mode_arg, *args, **kw)
+
+                def _guard_os_open(
+                    path_arg: Any,
+                    flags: int,
+                    mode_arg: int = 0o777,
+                    *args: Any,
+                    **kw: Any,
+                ) -> int:
+                    kind = _match_target(path_arg, kw.get("dir_fd"))
+                    if after_scan and kind is not None:
+                        output_reads_after_scan.append(
+                            {
+                                "via": "os.open",
+                                "kind": kind,
+                                "path": str(path_arg),
+                            }
+                        )
+                    return real_os_open(path_arg, flags, mode_arg, *args, **kw)
+
+                def _record_handoff(kind: str, value: Any) -> None:
+                    raw = (
+                        value.encode("utf-8")
+                        if isinstance(value, str)
+                        else (
+                            bytes(value)
+                            if isinstance(value, (bytes, bytearray, memoryview))
+                            else None
+                        )
+                    )
+                    orig_key = "log" if kind == "log_parse" else kind
+                    handoff_events.append(
+                        {
+                            "kind": kind,
+                            "mode": (
+                                "bytes"
+                                if raw is not None
+                                else (
+                                    "unavailable"
+                                    if value is None
+                                    else "legacy_sentinel"
+                                )
+                            ),
+                            "size": len(raw) if raw is not None else None,
+                            "sha256": (
+                                _sha256_bytes(raw) if raw is not None else None
+                            ),
+                            "matches_original": (
+                                raw == originals[orig_key]
+                                if raw is not None
+                                else False
+                            ),
+                        }
+                    )
+
+                def _wrap_extract_native(
+                    raw_log_text: str, *args: Any, **kw: Any
+                ) -> dict[str, Any]:
+                    _record_handoff("log", raw_log_text)
+                    return real_extract_native(raw_log_text, *args, **kw)
+
+                def _wrap_parse_log(
+                    raw_log_text: str, *args: Any, **kw: Any
+                ) -> dict[str, Any]:
+                    _record_handoff("log_parse", raw_log_text)
+                    return real_parse_log(raw_log_text, *args, **kw)
+
+                def _wrap_xml(
+                    *args: Any, **kw: Any
+                ) -> dict[str, Any]:
+                    _record_handoff(
+                        "xml",
+                        kw.get("raw_bytes", onesar_refmac._UNSET_RAW_BYTES),
+                    )
+                    return real_audit_xml(*args, **kw)
+
+                def _wrap_hkl(
+                    *args: Any, **kw: Any
+                ) -> tuple[dict[str, Any], dict[str, Any]]:
+                    _record_handoff(
+                        "mtz",
+                        kw.get(
+                            "hklout_raw_bytes", onesar_refmac._UNSET_RAW_BYTES
+                        ),
+                    )
+                    return real_audit_hkl(*args, **kw)
+
+                def _wrap_xyz(
+                    *args: Any, **kw: Any
+                ) -> dict[str, Any]:
+                    _record_handoff(
+                        "pdb",
+                        kw.get(
+                            "xyzout_raw_bytes", onesar_refmac._UNSET_RAW_BYTES
+                        ),
+                    )
+                    return real_audit_xyz(*args, **kw)
+
+                def _wrap_trace(
+                    *args: Any, **kw: Any
+                ) -> tuple[dict[str, Any], Exception | None]:
+                    _record_handoff(
+                        "trace",
+                        kw.get("raw_bytes", onesar_refmac._UNSET_RAW_BYTES),
+                    )
+                    return real_inspect_trace(*args, **kw)
+
+                written_receipts_by_path: dict[str, dict[str, Any]] = {}
+
+                def _wrap_atomic_handoff(
+                    *args: Any, **kw: Any
+                ) -> dict[str, Any]:
+                    receipt = real_atomic(*args, **kw)
+                    if isinstance(receipt, Mapping) and isinstance(
+                        receipt.get("path"), str
+                    ):
+                        written_receipts_by_path[str(receipt["path"])] = (
+                            copy.deepcopy(dict(receipt))
+                        )
+                    return receipt
+
+                result: dict[str, Any] | None = None
+                error: onesar_refmac.RefmacCollectorError | None = None
+                with (
+                    patch.object(
+                        onesar_refmac,
+                        "_atomic_write_new_json_file",
+                        side_effect=_wrap_atomic_handoff,
+                    ),
+                    patch.object(
+                        onesar_refmac,
+                        "_inspect_output_artifact",
+                        side_effect=_wrapped_inspect,
+                    ),
+                    patch.object(
+                        onesar_refmac,
+                        "_scan_refmac_directory_entries",
+                        side_effect=_wrapped_scan,
+                    ),
+                    patch.object(
+                        onesar_refmac,
+                        "_extract_native_log_diagnostics",
+                        side_effect=_wrap_extract_native,
+                    ),
+                    patch.object(
+                        onesar_refmac.onesar_refmac_log,
+                        "parse_refmac_log",
+                        side_effect=_wrap_parse_log,
+                    ),
+                    patch.object(
+                        onesar_refmac,
+                        "_audit_refmac_xmlout",
+                        side_effect=_wrap_xml,
+                    ),
+                    patch.object(
+                        onesar_refmac,
+                        "_export_and_audit_refmac_hklout",
+                        side_effect=_wrap_hkl,
+                    ),
+                    patch.object(
+                        onesar_refmac,
+                        "_audit_refmac_xyzout",
+                        side_effect=_wrap_xyz,
+                    ),
+                    patch.object(
+                        onesar_refmac,
+                        "_inspect_retained_native_trace_envelope",
+                        side_effect=_wrap_trace,
+                    ),
+                    patch.object(
+                        Path,
+                        "read_bytes",
+                        autospec=True,
+                        side_effect=_guard_read_bytes,
+                    ),
+                    patch.object(
+                        Path,
+                        "read_text",
+                        autospec=True,
+                        side_effect=_guard_read_text,
+                    ),
+                    patch("builtins.open", side_effect=_guard_builtins_open),
+                    patch("io.open", side_effect=_guard_io_open),
+                    patch("onesar_refmac.os.open", side_effect=_guard_os_open),
+                ):
+                    try:
+                        result = self._run_collector(
+                            f"diag_handoff_{mode}_877",
+                            _runner,
+                            diagnostic_profile=self.fx.profile,
+                            evidence_root=evidence_root,
+                        )
+                    except onesar_refmac.RefmacCollectorError as exc:
+                        error = exc
+
+                self.assertEqual(runner_calls, [True])
+                self.assertEqual(fired, [True])
+                self.assertEqual(len(sink_refs), 1)
+                self.assertEqual(len(sink_keys_before_fault), 1)
+                self.assertTrue(
+                    set(map(str, paths_by_kind.values())).issubset(
+                        sink_keys_before_fault[0]
+                    )
+                )
+                self.assertEqual(
+                    sink_snapshot_matches_before_fault,
+                    {
+                        "log": True,
+                        "xml": True,
+                        "mtz": True,
+                        "pdb": True,
+                        "trace": True,
+                    },
+                )
+                self.assertEqual(output_reads_after_scan, [])
+                for kind, p in paths_by_kind.items():
+                    parked_p = parked / p.name
+                    st_parked = real_os_lstat(parked_p)
+                    st_cur = real_os_lstat(p)
+                    self.assertEqual(
+                        (int(st_parked.st_dev), int(st_parked.st_ino)),
+                        orig_identities[kind],
+                    )
+                    self.assertEqual(
+                        real_path_read_bytes(parked_p), originals[kind]
+                    )
+                    self.assertEqual(
+                        (int(st_cur.st_dev), int(st_cur.st_ino)),
+                        repl_identities[kind],
+                    )
+                    self.assertNotEqual(
+                        repl_identities[kind], orig_identities[kind]
+                    )
+                    self.assertEqual(
+                        real_path_read_bytes(p), replacements[kind]
+                    )
+
+                missing_kind = (
+                    mode.removeprefix("missing_")
+                    if mode.startswith("missing_")
+                    else None
+                )
+                if missing_kind is not None:
+                    self.assertEqual(
+                        popped_snapshots,
+                        {missing_kind: originals[missing_kind]},
+                    )
+                else:
+                    self.assertEqual(popped_snapshots, {})
+
+                observed_handoffs = {h["kind"]: h for h in handoff_events}
+                self.assertEqual(len(observed_handoffs), len(handoff_events))
+                raw_keys_map = {
+                    "log": "log",
+                    "log_parse": "log",
+                    "xml": "xmlout",
+                    "mtz": "hklout",
+                    "pdb": "xyzout",
+                    "trace": "native_trace",
+                }
+                expected_kinds = set(raw_keys_map) - (
+                    {"log", "log_parse"}
+                    if missing_kind == "log"
+                    else set()
+                )
+                self.assertEqual(set(observed_handoffs), expected_kinds)
+
+                manifest_payload = (
+                    error.manifest_payload
+                    if error is not None
+                    else result
+                )
+                assert isinstance(manifest_payload, Mapping)
+                for kind, h in observed_handoffs.items():
+                    if kind == missing_kind:
+                        self.assertEqual(h["mode"], "unavailable")
+                        self.assertIsNone(h["sha256"])
+                        self.assertIsNone(h["size"])
+                    else:
+                        raw_rec = manifest_payload["raw_outputs"][
+                            raw_keys_map[kind]
+                        ]
+                        self.assertEqual(h["mode"], "bytes")
+                        self.assertIs(h["matches_original"], True)
+                        self.assertEqual(h["sha256"], raw_rec["sha256"])
+                        self.assertEqual(h["size"], raw_rec["size_bytes"])
+
+                self.assertIs(
+                    manifest_payload["scientific_admission_proven"], False
+                )
+                self.assertIs(
+                    manifest_payload["all_preregistered_gates_passed"], False
+                )
+                self.assertEqual(
+                    manifest_payload["status"],
+                    "failed"
+                    if missing_kind is not None
+                    else "diagnostic_captured_gates_unproven",
+                )
+
+                if error is None:
+                    self.assertIn("manifest_json", manifest_payload)
+                    manifest_receipt = dict(manifest_payload["manifest_json"])
+                    self.assertIn(
+                        str(manifest_receipt["path"]), written_receipts_by_path
+                    )
+                    self.assertEqual(
+                        manifest_receipt,
+                        written_receipts_by_path[str(manifest_receipt["path"])],
+                    )
+                else:
+                    self.assertNotIn("manifest_json", manifest_payload)
+                    self.assertIsNotNone(error.manifest_path)
+                    self.assertIn(
+                        str(error.manifest_path), written_receipts_by_path
+                    )
+                    manifest_receipt = written_receipts_by_path[
+                        str(error.manifest_path)
+                    ]
+                disk_manifest = self._reopen_json(manifest_receipt)
+                if error is None:
+                    self.assertNotIn("manifest_json", disk_manifest)
+                    self.assertEqual(
+                        disk_manifest,
+                        {
+                            k: v
+                            for k, v in manifest_payload.items()
+                            if k != "manifest_json"
+                        },
+                    )
+                else:
+                    self.assertEqual(disk_manifest, manifest_payload)
+                reopened_refs: dict[str, dict[str, Any]] = {}
+                for key, ref in manifest_payload.items():
+                    if (
+                        key.endswith("_json")
+                        and isinstance(ref, Mapping)
+                        and ref.get("path")
+                    ):
+                        reopened_refs[key] = self._reopen_json(dict(ref))
+                self.assertEqual(
+                    reopened_refs["xmlout_audit_json"],
+                    disk_manifest["audits"]["xmlout_audit"],
+                )
+                self.assertEqual(
+                    reopened_refs["hklout_audit_json"],
+                    disk_manifest["audits"]["hklout_mtz_audit"],
+                )
+                self.assertEqual(
+                    reopened_refs["xyzout_audit_json"],
+                    disk_manifest["audits"]["xyzout_pdb_audit"],
+                )
+                if missing_kind == "log":
+                    self.assertIsNone(disk_manifest["parsed_log_json"])
+                    self.assertIsNone(disk_manifest["parsed_log"])
+                    self.assertNotIn("parsed_log_json", reopened_refs)
+                else:
+                    self.assertIsNotNone(disk_manifest["parsed_log"])
+                    self.assertEqual(
+                        reopened_refs["parsed_log_json"],
+                        disk_manifest["parsed_log"],
+                    )
+
+                audits = disk_manifest["audits"]
+                xml_audit = audits["xmlout_audit"]
+                if missing_kind == "xml":
+                    self.assertIs(xml_audit["valid"], False)
+                    self.assertEqual(
+                        xml_audit["status"], "rejected_unavailable_snapshot"
+                    )
+                else:
+                    self.assertIs(xml_audit["valid"], True)
+                    self.assertEqual(
+                        xml_audit["status"],
+                        "supported_parsed_log_unavailable"
+                        if missing_kind == "log"
+                        else "supported_cycle_association_unproven",
+                    )
+                    self.assertEqual(
+                        xml_audit["raw_text"],
+                        originals["xml"].decode("utf-8"),
+                    )
+                    self.assertEqual(
+                        xml_audit["raw_bytes_hex"], originals["xml"].hex()
+                    )
+                    self.assertEqual(
+                        xml_audit["sha256"], observed_handoffs["xml"]["sha256"]
+                    )
+
+                export_ref = audits["hklout_mtz_audit"]["raw_export_json"]
+                exported_mtz = self._reopen_json(export_ref)
+                if missing_kind == "mtz":
+                    self.assertIn(
+                        "unavailable", str(exported_mtz["raw_export_error"])
+                    )
+                else:
+                    self.assertEqual(
+                        exported_mtz["sha256"],
+                        observed_handoffs["mtz"]["sha256"],
+                    )
+                    self.assertEqual(
+                        exported_mtz["byte_length"],
+                        observed_handoffs["mtz"]["size"],
+                    )
+
+                xyz_audit = audits["xyzout_pdb_audit"]
+                if missing_kind == "pdb":
+                    self.assertEqual(
+                        xyz_audit["status"], "rejected_invalid_or_unreadable"
+                    )
+                    self.assertIs(xyz_audit["valid"], False)
+                    self.assertIs(
+                        xyz_audit["model_preservation_proven"], False
+                    )
+                    self.assertTrue(
+                        any(
+                            "in-memory byte snapshot is unavailable" in e
+                            for e in xyz_audit["errors"]
+                        )
+                    )
+                else:
+                    self.assertEqual(
+                        xyz_audit["xyzout_sha256"],
+                        observed_handoffs["pdb"]["sha256"],
+                    )
+                    self.assertEqual(
+                        xyz_audit["xyzout_size_bytes"],
+                        observed_handoffs["pdb"]["size"],
+                    )
+                    self.assertIs(xyz_audit["model_preservation_proven"], True)
+
+                trace_env = audits["native_trace_envelope"]
+                self.assertEqual(
+                    trace_env["input_mode"], "retained_bytes_snapshot"
+                )
+                self.assertIs(trace_env["filesystem_descriptor_opened"], False)
+                self.assertIs(trace_env["scientific_coverage_proven"], False)
+                if missing_kind == "trace":
+                    self.assertIs(trace_env["valid"], False)
+                    self.assertIs(trace_env["closed"], False)
+                    self.assertEqual(trace_env["event_count"], 0)
+                    self.assertEqual(
+                        trace_env["first_failure"]["code"],
+                        "retained_trace_snapshot_unavailable",
+                    )
+                else:
+                    self.assertIs(trace_env["valid"], True)
+                    self.assertIs(trace_env["closed"], True)
+                    self.assertEqual(trace_env["event_count"], 2)
+                    self.assertEqual(
+                        trace_env["observed_sha256"],
+                        observed_handoffs["trace"]["sha256"],
+                    )
+                    self.assertEqual(
+                        trace_env["observed_size_bytes"],
+                        observed_handoffs["trace"]["size"],
+                    )
+
+                if missing_kind is None:
+                    self.assertIsNone(error)
+                else:
+                    self.assertIsNotNone(error)
+                    assert error is not None
+                    expected_stage = {
+                        "log": "parse_refmac_log",
+                        "xml": "audit_refmac_xmlout",
+                        "mtz": "audit_refmac_hklout",
+                        "pdb": "audit_refmac_xyzout",
+                        "trace": "refmac_raw_outputs",
+                    }[missing_kind]
+                    self.assertEqual(error.failed_stage, expected_stage)
+                    if missing_kind == "log":
+                        parse_log_failures = [
+                            row
+                            for row in manifest_payload["failures"]
+                            if row.get("failed_stage") == "parse_refmac_log"
+                        ]
+                        self.assertEqual(len(parse_log_failures), 1)
+                        self.assertEqual(
+                            parse_log_failures[0]["exception_type"],
+                            "ValueError",
+                        )
+                        self.assertIn(
+                            "in-memory byte snapshot is unavailable",
+                            str(parse_log_failures[0]["exception_message"]),
+                        )
+                        self.assertIn(
+                            "in-memory byte snapshot is unavailable",
+                            str(
+                                reopened_refs["diagnostics_json"][
+                                    "log_parse_error"
+                                ]["exception_message"]
+                            ),
+                        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,60 @@
+# Order-5 Directory-Descriptor Retention & Audit Review (`#1050`, `#1044`, `#1045`, `#1157`, `#1213`–`#1217`)
+
+- **Date:** 2026-11-09 (updated 2026-11-10)
+- **Issues:** `#1050`, `#1044`, `#1045`, `#1157`, `#1213`, `#1214`, `#1215`, `#1216`, `#1217`
+- **Branch:** `analysis/1sar-rerun-2026-11-06`
+- **Source Modules:** `scripts/onesar_refmac.py`, `scripts/refmac_diagnostic_trace.py`
+- **Test Suites:** `scripts/test_onesar_refmac.py`, `scripts/test_onesar_refmac_diagnostic.py`, `scripts/test_refmac_diagnostic_trace.py`
+
+## 1. Purpose and Operational Scope
+
+Order-5 hardens post-run directory admission, output artifact capture, directory scanning, pre-execution checkpoint re-verification, and collector JSON publication in `scripts/onesar_refmac.py` and `scripts/refmac_diagnostic_trace.py`. Single-owner attempt directories are the operational scope. The helpers bound check-to-use windows using directory descriptors and descriptor-relative operations; they do not provide timeless namespace immutability, atomic cross-directory transactions, or competing-writer immunity.
+
+## 2. Bounded Read and Write Contract
+
+1. **Descriptor-pinned directory admission (`_open_admitted_directory`, `_reverify_admitted_directory_binding`, `_reverify_full_destination_parent_chain`)**:
+   - Admitted directories (`evidence_root`, `refmac_dir`, `parent_retention_dir`, exclusive fallback directories under `evidence_root`, and the pre-execution checkpoint's parent directory) are checked for non-symlink ancestors, inspected with `os.lstat`, opened with `O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC`, verified immediately with `os.fstat(fd)` against pre-open `(st_dev, st_ino)` and baseline identity, and re-verified against live path binding. Intermediate directory hops under an admitted root are opened and verified hop-by-hop.
+2. **Capture stability and nonblocking regular-file readback (`_inspect_output_artifact`, `_atomic_write_new_json_file`, `_verify_saved_snapshot_on_disk`)**:
+   - Output capture and JSON readback open leaf descriptors relative to the admitted directory descriptor using `O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC` and verify `stat.S_ISREG` via `os.fstat` before reading so a substituted FIFO cannot block readback.
+   - `_inspect_output_artifact` compares pre-read and post-EOF `os.fstat(leaf_fd)` regular-file mode, `(st_dev, st_ino)`, `st_size`, and `st_mtime_ns`, re-stats the relative leaf name against the open directory descriptor after EOF, and closes the leaf descriptor and all owned intermediate and root directory descriptors in reverse order before admitting captured bytes into `_INSPECT_RAW_BYTES_SINK_CTX` (and `_raw_bytes_out`). Direct filesystem trace inspection in `refmac_diagnostic_trace.inspect_native_trace_envelope` applies the same pre-/post-read descriptor and path identity checks.
+   - Measured read progress (`observed_read_bytes` / `observed_readback_size_bytes` / `observed_size_bytes`, digest, and EOF state) is preserved across read and post-read `os.fstat` failures, distinguishing partial prefix reads from complete EOF reads, while unverified or failed captures never populate the in-memory snapshot sink.
+3. **In-memory snapshot handoffs (`run_refmac_rfactor_operation`, `_inspect_retained_native_trace_envelope`, `inspect_native_trace_envelope`)**:
+   - Downstream output consumers (`_extract_native_log_diagnostics`, `onesar_refmac_log.parse_refmac_log`, `_audit_refmac_xmlout`, `_export_and_audit_refmac_hklout` / `_raw_export_mtz_file`, `_audit_refmac_xyzout`, and `_inspect_retained_native_trace_envelope`) consume only the verified in-memory byte snapshot from `raw_output_bytes_by_path` and fail closed if the snapshot is unavailable, without re-opening output files on disk.
+   - `_preverified_trace_bytes_scope` always binds a snapshot frame on `_PREVERIFIED_TRACE_BYTES_CTX` and distinguishes `"retained_bytes_snapshot"` provenance from `"filesystem_path"` inspection.
+4. **Publication, readback, and temporary-file cleanup (`_atomic_write_new_json_file`, `_write_json_with_sibling_collision_fallback`, `_persist_collector_json_with_fallback`)**:
+   - `os.link(..., src_dir_fd=parent_fd, dst_dir_fd=parent_fd, follow_symlinks=False)` atomically creates the destination entry without overwriting an existing target, but the temporary name can change after its pre-link check; subsequent nonblocking readback of the linked target verifies regular-file mode, `(st_dev, st_ino)`, byte size, and SHA-256, followed by full parent-chain re-verification, `dir_fd`-relative final-leaf `os.stat` matching the readback target's `(st_dev, st_ino)`, and owned directory-descriptor close before returning a writer receipt.
+   - Before unlinking a temporary file after `os.link` (or in `finally:` cleanup), `_atomic_write_new_json_file` checks `os.stat(tmp_name, dir_fd=parent_fd, follow_symlinks=False)` and unlinks only when the entry is a regular file matching the created temporary `(tmp_dev, tmp_ino)` (refusing cleanup if initial temporary `fstat` failed before identity was known). If the temporary path is already absent (`FileNotFoundError`), it records observed absence (`reason="temp_path_already_absent"`, `cleanup_verified=True`, `unlinked=False`) rather than an executed unlink (`unlinked=True`). If a foreign entry occupies `tmp_name`, it leaves the entry untouched (`unlinked=False`, `unlink_attempted=False`, `reason="temp_path_identity_mismatch"`) and marks temporary cleanup failed.
+   - Callable payload-factory `FileExistsError` propagates without sibling retry, and sibling collision / exclusive fallback-directory loops (`_ensure_verified_root_exclusive_fallback_dir`) enforce finite attempt bounds (`MAX_SIBLING_COLLISION_ATTEMPTS = 64`, `MAX_FALLBACK_DIR_ATTEMPTS = 64`).
+
+## 3. Error and Observation Preservation
+
+1. **Original readback exceptions vs post-publication namespace wrapper**:
+   - In `_atomic_write_new_json_file`, a failure during post-link readback attaches a partial `published_receipt` onto the original exception and re-raises that original exception directly; only subsequent post-readback parent-chain or final-leaf namespace re-verification wraps the failure in `_PostPublicationBindingError`.
+2. **Observed binding facts vs overall verification completion (`_verify_saved_snapshot_on_disk`, `_is_observed_namespace_detachment`)**:
+   - When historical snapshot readback and final-leaf `os.stat` succeed before closing the admitted parent descriptor fails, the observed binding facts remain `True` (`post_readback_leaf_verified=True`) while overall verification fails (`verified_on_disk=False`) and records the parent close error.
+   - `_is_observed_namespace_detachment` traverses the exception's `.cause` / `.__cause__` chain—distinguishing observed lexical detachment (`ValueError` from identity/symlink mismatch or `ENOENT`/`ENOTDIR`/`ELOOP`) from uninformative `OSError`s (such as `EIO`, descriptor `fstat` errors marked `_from_descriptor_fstat`, or close errors) and in-place content corruption (exceptions marked with the `_is_content_mismatch_error` attribute)—without inspecting temporary-cleanup markers.
+3. **Separate initial admission facts, nullable failure observations, and live namespace refresh**:
+   - `_open_admitted_directory` and `_verify_refmac_directory_post_run` keep initial `lookup` and `descriptor` observations separate from post-open revalidation (`post_open_lookup`) or post-open-error recovery lookups (`post_open_error_lookup`). When an `OSError` other than `ENOENT` prevents inspection, `exists`, `is_symlink`, and `is_directory` remain `None` rather than being coerced to `False`.
+   - `_update_dir_status_preserving_write_failure` and `_persist_collector_json_with_fallback` restore live namespace availability (`identity_verified=True`, `writable_post_run=True`, `error=None`) when a current post-run verification succeeds after an earlier transient lookup or open error, while preserving historical admission failure records and keeping prior write failures (`writable_post_run=False`, `write_error`) denied so fallback artifacts route to an exclusive child directory under `evidence_root`.
+   - In `run_refmac_rfactor_operation`, `_refresh_selected_parent_dir_status` and `_persist_collector_json_with_fallback` preserve obtained admission, descriptor, and directory-close observations across live namespace refreshes of `parent_retention_directory_post_run`.
+4. **Primary vs secondary cause attribution**:
+   - Across output capture, directory scanning (`_scan_refmac_directory_entries`), pre-execution checkpoint verification (`_verify_immutable_baselines_post_run`), atomic writing, fallback anchor creation, and historical snapshot verification, an active read/write/fstat/open failure remains the primary cause while secondary leaf or directory close `OSError`s are attached (`cleanup_close_error`, `directory_close_error`, `parent_close_error`) and appended chronologically only when an actual descriptor close fails (never by list index position when a recovery lookup fails after an open error).
+
+## 4. Explicit Limitations and Separate Follow-Ups
+
+- **Pre-unlink `os.stat`-to-`os.unlink` interval (`#1045`)**: Standard POSIX `unlinkat` acts on the directory entry name without an expected `(st_dev, st_ino)` precondition; eliminating the kernel interval strictly between pre-unlink `os.stat` and `os.unlink` requires a separately designed exclusion or retained-temp policy.
+- **Pre-execution checkpoint leaf open and final-name check**: `_verify_immutable_baselines_post_run` admits and verifies the checkpoint's parent directory descriptor, but opening the checkpoint leaf without `O_NONBLOCK` and adding a post-readback relative leaf-name `os.stat` check remain separate follow-ups.
+- **Legacy directory-scan error projections**: Bounded directory-admission helpers preserve nullable (`None`) `exists`/`is_symlink` fields on non-`ENOENT` `lstat` failure, whereas two older scan error projections in `onesar_refmac.py` still bool-coerce those fields and remain a separate follow-up.
+
+## 5. Scientific Conservation, Changes, and Regression Coverage
+
+- **Scientific conservation**: Scientific calculations, parsers, numeric/binary32 decoders, tolerances, and the six `preregistered_gates` (`gate_1_immutable_input_and_toolchain_admission`, `gate_2_native_log_extraction_and_internal_reconciliation`, `gate_3_effective_hkls_proven`, `gate_4_native_bin_membership_proven`, `gate_5_native_residual_reconstruction_proven`, `gate_6_model_preservation_proven`) are unchanged; all scientific admission flags remain `False` on failed collector runs.
+- **Changes and regression coverage**:
+  - `scripts/test_onesar_refmac.py`: `test_late_publication_first_d0_and_m0_child_write_failures`, `test_saved_checkpoint_parent_admission_876`, `test_main_post_link_child_replacement_and_four_consumer_handoffs_877`, `test_atomic_writer_and_history_verifier_final_leaf_temp_ownership_and_close_boundaries`, `test_output_reader_and_scanner_directory_close_retention_and_collector_main`, `test_final_retention_boundaries_task_909`, and `test_parent_refresh_close_provenance_and_namespace_recovery_task_918`.
+  - `scripts/test_onesar_refmac_diagnostic.py`: `test_diagnostic_main_captured_byte_handoffs_and_unavailable_snapshots_877`.
+  - `scripts/test_refmac_diagnostic_trace.py`: `test_retained_bytes_snapshot_mode_provenance_parity_and_missing_snapshot_contract`.
+
+## 6. Authoring vs PRIMARY Validation Boundary
+
+- **Authored changes (Secondary)**: Updates to `scripts/onesar_refmac.py`, `scripts/refmac_diagnostic_trace.py`, `scripts/test_onesar_refmac.py`, `scripts/test_onesar_refmac_diagnostic.py`, `scripts/test_refmac_diagnostic_trace.py`, and this note were authored with file tools only; authored tests are not execution results.
+- **Execution and QC (PRIMARY)**: Test execution, standalone reproduction probes, conservation checks, and the hermetic gate (`uv run --locked --extra benchmark -- bash scripts/validate.sh`) are executed and verified exclusively by PRIMARY.

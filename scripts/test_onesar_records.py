@@ -287,7 +287,8 @@ class TestRetainedReferenceFirstSlice(unittest.TestCase):
 
             # Usable-child sibling collision fallback shape (#1057):
             # onesar_refmac._write_json_with_sibling_collision_fallback returns
-            # {"path", "sha256", "size_bytes", "fallback_for_preexisting_path"}.
+            # {"path", "sha256", "size_bytes", "temp_cleanup_succeeded",
+            #  "temp_cleanup_status", "fallback_for_preexisting_path"}.
             usable_child_dir = attempt_root / "refmac_child" / "refmac"
             intended_target = usable_child_dir / "refmac_manifest.json"
             _, _, preexisting_bytes = _write_json_with_digest(
@@ -306,7 +307,29 @@ class TestRetainedReferenceFirstSlice(unittest.TestCase):
             )
             self.assertEqual(
                 set(sibling_ref.keys()),
-                {"path", "sha256", "size_bytes", "fallback_for_preexisting_path"},
+                {
+                    "path",
+                    "sha256",
+                    "size_bytes",
+                    "temp_cleanup_succeeded",
+                    "temp_cleanup_status",
+                    "fallback_for_preexisting_path",
+                },
+            )
+            self.assertIs(sibling_ref["temp_cleanup_succeeded"], True)
+            cleanup_status = sibling_ref["temp_cleanup_status"]
+            self.assertIsInstance(cleanup_status, Mapping)
+            self.assertIs(cleanup_status["temp_identity_known"], True)
+            self.assertIs(cleanup_status["unlink_attempted"], True)
+            self.assertIs(cleanup_status["unlinked"], True)
+            self.assertIs(cleanup_status["cleanup_verified"], True)
+            self.assertIs(cleanup_status["temp_present_after_cleanup"], False)
+            self.assertIsNone(cleanup_status["error"])
+            self.assertEqual(cleanup_status["errors"], [])
+            temp_name = cleanup_status["temp_name"]
+            self.assertIsInstance(temp_name, str)
+            self.assertFalse(
+                os.path.lexists(usable_child_dir / str(temp_name))
             )
             self.assertEqual(
                 sibling_ref["fallback_for_preexisting_path"],
@@ -314,6 +337,15 @@ class TestRetainedReferenceFirstSlice(unittest.TestCase):
             )
             sibling_path = Path(sibling_ref["path"])
             sibling_bytes = sibling_path.read_bytes()
+            self.assertEqual(
+                hashlib.sha256(sibling_bytes).hexdigest(),
+                sibling_ref["sha256"],
+            )
+            self.assertEqual(len(sibling_bytes), sibling_ref["size_bytes"])
+            self.assertEqual(
+                json.loads(sibling_bytes.decode("utf-8")),
+                sibling_payload,
+            )
 
             sibling_loaded = load_retained_reference(
                 attempt_root,
@@ -323,6 +355,11 @@ class TestRetainedReferenceFirstSlice(unittest.TestCase):
             )
             sibling_vref = sibling_loaded["verified_reference"]
             self.assertEqual(sibling_vref["path"], str(sibling_path))
+            self.assertEqual(sibling_vref["sha256"], sibling_ref["sha256"])
+            self.assertEqual(
+                sibling_vref["size_bytes"], sibling_ref["size_bytes"]
+            )
+            self.assertEqual(sibling_loaded["json"], sibling_payload)
             self.assertTrue(sibling_vref["is_fallback"])
             self.assertIsNone(sibling_vref["fallback_anchor_dir"])
             self.assertTrue(sibling_vref["integrity_verified"])

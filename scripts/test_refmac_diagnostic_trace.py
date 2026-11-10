@@ -1262,6 +1262,244 @@ class TestRefmacDiagnosticTraceReader(unittest.TestCase):
 
             self.assertEqual(valid_path.read_bytes(), valid_raw)
 
+    def test_retained_bytes_snapshot_mode_provenance_parity_and_missing_snapshot_contract(
+        self,
+    ) -> None:
+        """Verify #1050 comment 6758720832 and #1213: byte-mode vs pathname-mode parity, poisoned-FS provenance, unavailable snapshot refusal, and nested scope restoration."""
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp).resolve()
+            refmac_dir = tmp_path / "refmac"
+            refmac_dir.mkdir(parents=True)
+            trace_path = refmac_dir / "refmac_native_trace.jsonl"
+
+            rec1 = {
+                "sequence": 1,
+                "event": "lsq_coef_entry",
+                "ncyc": 0,
+                "r_val": _writer_exact_real_obj(0x3E4CCCCD),
+            }
+            valid_raw = (
+                _make_header_line()
+                + "\n"
+                + json.dumps(rec1, separators=(",", ":"))
+                + "\n"
+                + _make_close_line(1)
+                + "\n"
+            ).encode("ascii")
+            sha_pin, sz_pin = _write_and_pin(trace_path, valid_raw)
+
+            # 1. Legacy pathname-mode baseline
+            fs_res = rdt.inspect_native_trace_envelope(
+                trace_path,
+                expected_sha256=sha_pin,
+                expected_size_bytes=sz_pin,
+            )
+            self.assertTrue(fs_res["valid"])
+            self.assertTrue(fs_res["closed"])
+            self.assertEqual(
+                fs_res["input_mode"], rdt.TRACE_INPUT_MODE_FILESYSTEM_PATH
+            )
+            self.assertTrue(fs_res["filesystem_descriptor_opened"])
+            self.assertTrue(fs_res["filesystem_identity_verified_by_trace_reader"])
+            self.assertEqual(
+                fs_res["descriptor_binding_note"],
+                rdt._FILESYSTEM_VERIFIED_BINDING_NOTE,
+            )
+
+            # 2. Poisoned-filesystem supplied-byte mode (direct keyword, inspect_native_trace_bytes, and scope)
+            calls = {"open": 0, "read": 0, "lstat": 0, "fstat": 0}
+
+            def poison(name: str):
+                def _fn(*args: Any, **kwargs: Any) -> Any:
+                    calls[name] += 1
+                    raise AssertionError(f"unexpected os.{name}")
+
+                return _fn
+
+            with (
+                mock.patch.object(rdt.os, "open", side_effect=poison("open")),
+                mock.patch.object(rdt.os, "read", side_effect=poison("read")),
+                mock.patch.object(rdt.os, "lstat", side_effect=poison("lstat")),
+                mock.patch.object(rdt.os, "fstat", side_effect=poison("fstat")),
+            ):
+                kw_res = rdt.inspect_native_trace_envelope(
+                    trace_path,
+                    expected_sha256=sha_pin,
+                    expected_size_bytes=sz_pin,
+                    raw_bytes=valid_raw,
+                )
+                bytes_fn_res = rdt.inspect_native_trace_bytes(
+                    trace_path,
+                    valid_raw,
+                    expected_sha256=sha_pin,
+                    expected_size_bytes=sz_pin,
+                )
+                with rdt._preverified_trace_bytes_scope(trace_path, valid_raw):
+                    scope_res = rdt.inspect_native_trace_envelope(
+                        trace_path,
+                        expected_sha256=sha_pin,
+                        expected_size_bytes=sz_pin,
+                    )
+
+            self.assertEqual(calls, {"open": 0, "read": 0, "lstat": 0, "fstat": 0})
+            self.assertEqual(kw_res, bytes_fn_res)
+            self.assertEqual(kw_res, scope_res)
+
+            # Parity across all envelope/header/content/hash/size keys
+            provenance_keys = {
+                "input_mode",
+                "filesystem_descriptor_opened",
+                "filesystem_identity_verified_by_trace_reader",
+                "descriptor_binding_note",
+            }
+            self.assertEqual(
+                {k: v for k, v in kw_res.items() if k not in provenance_keys},
+                {k: v for k, v in fs_res.items() if k not in provenance_keys},
+            )
+            self.assertEqual(
+                kw_res["input_mode"],
+                rdt.TRACE_INPUT_MODE_RETAINED_BYTES_SNAPSHOT,
+            )
+            self.assertFalse(kw_res["filesystem_descriptor_opened"])
+            self.assertFalse(
+                kw_res["filesystem_identity_verified_by_trace_reader"]
+            )
+            self.assertEqual(
+                kw_res["descriptor_binding_note"],
+                rdt._RETAINED_SNAPSHOT_PARSED_BINDING_NOTE,
+            )
+            self.assertNotIn(
+                "Opened with O_RDONLY", kw_res["descriptor_binding_note"]
+            )
+            json.dumps(kw_res)
+
+            # 3. Missing snapshot (None) in retained mode with replacement directory/file on disk
+            displaced_dir = tmp_path / "refmac_displaced"
+            refmac_dir.rename(displaced_dir)
+            refmac_dir.mkdir(parents=True)
+            trace_path.write_bytes(valid_raw)
+
+            open_calls = 0
+            real_open = os.open
+
+            def count_open(path: Any, flags: int, *args: Any, **kwargs: Any) -> int:
+                nonlocal open_calls
+                open_calls += 1
+                return real_open(path, flags, *args, **kwargs)
+
+            with (
+                mock.patch.object(rdt.os, "open", side_effect=count_open),
+                mock.patch.object(
+                    rdt.os,
+                    "lstat",
+                    side_effect=AssertionError("unexpected os.lstat in retained mode"),
+                ),
+            ):
+                with rdt._preverified_trace_bytes_scope(trace_path, None):
+                    unavail_scope_res = rdt.inspect_native_trace_envelope(
+                        trace_path,
+                        expected_sha256=sha_pin,
+                        expected_size_bytes=sz_pin,
+                    )
+                unavail_kw_res = rdt.inspect_native_trace_envelope(
+                    trace_path,
+                    expected_sha256=sha_pin,
+                    expected_size_bytes=sz_pin,
+                    raw_bytes=None,
+                )
+                unavail_fn_res = rdt.inspect_native_trace_bytes(
+                    trace_path,
+                    None,
+                    expected_sha256=sha_pin,
+                    expected_size_bytes=sz_pin,
+                )
+
+            self.assertEqual(open_calls, 0)
+            for unavail_res in (
+                unavail_scope_res,
+                unavail_kw_res,
+                unavail_fn_res,
+            ):
+                self.assertFalse(unavail_res["valid"])
+                self.assertFalse(unavail_res["closed"])
+                self.assertFalse(unavail_res["read_complete"])
+                self.assertIsNone(unavail_res["observed_sha256"])
+                self.assertIsNone(unavail_res["observed_size_bytes"])
+                self.assertEqual(
+                    unavail_res["input_mode"],
+                    rdt.TRACE_INPUT_MODE_RETAINED_BYTES_SNAPSHOT,
+                )
+                self.assertFalse(unavail_res["filesystem_descriptor_opened"])
+                self.assertFalse(
+                    unavail_res["filesystem_identity_verified_by_trace_reader"]
+                )
+                self.assertEqual(
+                    unavail_res["descriptor_binding_note"],
+                    rdt._RETAINED_SNAPSHOT_UNAVAILABLE_BINDING_NOTE,
+                )
+                self.assertEqual(
+                    unavail_res["first_failure"]["code"],
+                    "retained_trace_snapshot_unavailable",
+                )
+                self.assertEqual(
+                    unavail_res["first_failure"]["stage"], "snapshot_binding"
+                )
+                json.dumps(unavail_res)
+
+            # 4. Nested scope: inner unavailable scope fails closed without inheriting outer bytes,
+            #    and exiting the inner scope restores the outer valid snapshot scope.
+            other_trace_path = refmac_dir / "other_trace.jsonl"
+            other_trace_path.write_bytes(valid_raw)
+            with (
+                mock.patch.object(rdt.os, "open", side_effect=count_open),
+                mock.patch.object(
+                    rdt.os,
+                    "lstat",
+                    side_effect=AssertionError("unexpected os.lstat in nested scope"),
+                ),
+            ):
+                with rdt._preverified_trace_bytes_scope(trace_path, valid_raw):
+                    outer_before = rdt.inspect_native_trace_envelope(
+                        trace_path,
+                        expected_sha256=sha_pin,
+                        expected_size_bytes=sz_pin,
+                    )
+                    mismatch_path_res = rdt.inspect_native_trace_envelope(
+                        other_trace_path,
+                        expected_sha256=sha_pin,
+                        expected_size_bytes=sz_pin,
+                    )
+                    with rdt._preverified_trace_bytes_scope(trace_path, None):
+                        inner_unavail = rdt.inspect_native_trace_envelope(
+                            trace_path,
+                            expected_sha256=sha_pin,
+                            expected_size_bytes=sz_pin,
+                        )
+                    outer_after = rdt.inspect_native_trace_envelope(
+                        trace_path,
+                        expected_sha256=sha_pin,
+                        expected_size_bytes=sz_pin,
+                    )
+
+            self.assertEqual(open_calls, 0)
+            self.assertIsNone(rdt._PREVERIFIED_TRACE_BYTES_CTX.get())
+            self.assertTrue(outer_before["valid"])
+            self.assertFalse(mismatch_path_res["valid"])
+            self.assertEqual(
+                mismatch_path_res["first_failure"]["code"],
+                "retained_trace_snapshot_path_mismatch",
+            )
+            self.assertEqual(
+                mismatch_path_res["first_failure"]["stage"], "snapshot_binding"
+            )
+            self.assertFalse(inner_unavail["valid"])
+            self.assertEqual(
+                inner_unavail["first_failure"]["code"],
+                "retained_trace_snapshot_unavailable",
+            )
+            self.assertTrue(outer_after["valid"])
+            self.assertEqual(outer_after, outer_before)
+
 
 if __name__ == "__main__":
     unittest.main()

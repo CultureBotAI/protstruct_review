@@ -31,6 +31,8 @@ Implementation scope (Tasks 163 & 165):
 
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import copy
 import datetime as dt
 import errno
@@ -46,11 +48,12 @@ import subprocess
 import sys
 import time
 import xml.etree.ElementTree as ET
+from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from fractions import Fraction
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any, Callable, Iterator, Mapping, Sequence
 
 _SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(_SCRIPTS_DIR) not in sys.path:
@@ -1005,9 +1008,11 @@ def _verify_refmac_directory_post_run(
             return {
                 "path": str(normalized_dir),
                 "resolved_path": None,
-                "exists": False,
-                "is_symlink": False,
-                "is_directory": False,
+                "lookup_attempted": False,
+                "lookup_succeeded": False,
+                "exists": None,
+                "is_symlink": None,
+                "is_directory": None,
                 "symlink_target": None,
                 "dev": None,
                 "ino": None,
@@ -1032,15 +1037,18 @@ def _verify_refmac_directory_post_run(
                 raise ValueError(
                     f"Parent directory is not a non-symlink directory: {parent_dir}"
                 )
+            parent_dir.resolve(strict=True)
         except Exception as exc:
             if caught_exceptions is not None:
                 caught_exceptions.append(exc)
             return {
                 "path": str(normalized_dir),
                 "resolved_path": None,
-                "exists": False,
-                "is_symlink": False,
-                "is_directory": False,
+                "lookup_attempted": False,
+                "lookup_succeeded": False,
+                "exists": None,
+                "is_symlink": None,
+                "is_directory": None,
                 "symlink_target": None,
                 "dev": None,
                 "ino": None,
@@ -1063,12 +1071,18 @@ def _verify_refmac_directory_post_run(
     except OSError as exc:
         if caught_exceptions is not None:
             caught_exceptions.append(exc)
+        is_confirmed_absent = (
+            isinstance(exc, FileNotFoundError)
+            or getattr(exc, "errno", None) == errno.ENOENT
+        )
         return {
             "path": str(normalized_dir),
             "resolved_path": None,
-            "exists": False,
-            "is_symlink": False,
-            "is_directory": False,
+            "lookup_attempted": True,
+            "lookup_succeeded": False,
+            "exists": False if is_confirmed_absent else None,
+            "is_symlink": False if is_confirmed_absent else None,
+            "is_directory": False if is_confirmed_absent else None,
             "symlink_target": None,
             "dev": None,
             "ino": None,
@@ -1111,6 +1125,8 @@ def _verify_refmac_directory_post_run(
         return {
             "path": str(normalized_dir),
             "resolved_path": None,
+            "lookup_attempted": True,
+            "lookup_succeeded": True,
             "exists": True,
             "is_symlink": True,
             "is_directory": False,
@@ -1139,6 +1155,8 @@ def _verify_refmac_directory_post_run(
         return {
             "path": str(normalized_dir),
             "resolved_path": None,
+            "lookup_attempted": True,
+            "lookup_succeeded": True,
             "exists": True,
             "is_symlink": False,
             "is_directory": False,
@@ -1175,6 +1193,8 @@ def _verify_refmac_directory_post_run(
         return {
             "path": str(normalized_dir),
             "resolved_path": None,
+            "lookup_attempted": True,
+            "lookup_succeeded": True,
             "exists": True,
             "is_symlink": False,
             "is_directory": True,
@@ -1200,12 +1220,15 @@ def _verify_refmac_directory_post_run(
     except OSError as exc:
         if caught_exceptions is not None:
             caught_exceptions.append(exc)
+        still_present = not isinstance(exc, FileNotFoundError)
         return {
             "path": str(normalized_dir),
             "resolved_path": None,
-            "exists": True,
+            "lookup_attempted": True,
+            "lookup_succeeded": True,
+            "exists": still_present,
             "is_symlink": False,
-            "is_directory": True,
+            "is_directory": still_present,
             "symlink_target": None,
             "dev": obs_dev,
             "ino": obs_ino,
@@ -1237,6 +1260,8 @@ def _verify_refmac_directory_post_run(
         return {
             "path": str(normalized_dir),
             "resolved_path": obs_resolved,
+            "lookup_attempted": True,
+            "lookup_succeeded": True,
             "exists": True,
             "is_symlink": False,
             "is_directory": True,
@@ -1260,6 +1285,8 @@ def _verify_refmac_directory_post_run(
     return {
         "path": str(normalized_dir),
         "resolved_path": obs_resolved,
+        "lookup_attempted": True,
+        "lookup_succeeded": True,
         "exists": True,
         "is_symlink": False,
         "is_directory": True,
@@ -1332,12 +1359,967 @@ def _materialize_json_payload(
     destination_path: Path,
 ) -> Mapping[str, Any]:
     """Materialize ``payload`` at the selected ``destination_path`` before JSON serialization."""
-    resolved = payload(destination_path) if callable(payload) else payload
+    if callable(payload):
+        try:
+            resolved = payload(destination_path)
+        except FileExistsError as exc:
+            try:
+                setattr(exc, "_from_payload_factory", True)
+            except Exception:
+                pass
+            raise
+    else:
+        resolved = payload
     if not isinstance(resolved, Mapping):
         raise TypeError(
             f"JSON payload must materialize to a Mapping, got {type(resolved).__name__}"
         )
     return resolved
+
+
+MAX_SIBLING_COLLISION_ATTEMPTS = 64
+MAX_FALLBACK_DIR_ATTEMPTS = 64
+
+
+def _is_non_collision_file_exists_error(exc: FileExistsError) -> bool:
+    """Return True when ``exc`` came from a payload factory or non-collision phase rather than destination path collision."""
+    return bool(
+        getattr(exc, "_from_payload_factory", False)
+        or getattr(exc, "_from_non_collision_phase", False)
+    )
+
+
+@dataclass(frozen=True)
+class _AdmittedDirectory:
+    """Verified open directory descriptor bound to its admitted ``(dev, ino)`` identity."""
+
+    path: Path
+    resolved_path: str
+    fd: int
+    dev: int
+    ino: int
+    mode: int
+    baseline: dict[str, Any]
+
+
+class _PostPublicationBindingError(ValueError):
+    """Raised when a newly linked artifact's directory loses admitted namespace binding before return."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        cause: Exception | None = None,
+        published_receipt: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.cause = cause
+        self.published_receipt = published_receipt
+
+
+_ADMITTED_DIR_BASELINE_CTX: contextvars.ContextVar[
+    tuple[
+        str,
+        Mapping[str, Any] | None,
+        dict[str, Any] | None,
+        list[Exception] | None,
+    ]
+    | None
+] = contextvars.ContextVar("_ADMITTED_DIR_BASELINE_CTX", default=None)
+
+_INSPECT_RAW_BYTES_SINK_CTX: contextvars.ContextVar[dict[str, bytes] | None] = (
+    contextvars.ContextVar("_INSPECT_RAW_BYTES_SINK_CTX", default=None)
+)
+
+_ACTIVE_RETAINED_PAYLOAD_SINK_CTX: contextvars.ContextVar[
+    list[dict[str, Any]] | None
+] = contextvars.ContextVar("_ACTIVE_RETAINED_PAYLOAD_SINK_CTX", default=None)
+
+_ACTIVE_COLLISION_CAUSE_CTX: contextvars.ContextVar[
+    FileExistsError | None
+] = contextvars.ContextVar("_ACTIVE_COLLISION_CAUSE_CTX", default=None)
+
+_ACTIVE_WRITE_CLEANUP_ERRORS_SINK_CTX: contextvars.ContextVar[
+    list[OSError] | None
+] = contextvars.ContextVar(
+    "_ACTIVE_WRITE_CLEANUP_ERRORS_SINK_CTX", default=None
+)
+
+
+@contextlib.contextmanager
+def _retained_payload_sink_context(
+    sink: list[dict[str, Any]] | None,
+) -> Iterator[None]:
+    """Bind the caller's retained payload sink so atomic JSON writes capture final post-enrichment payloads."""
+    token = _ACTIVE_RETAINED_PAYLOAD_SINK_CTX.set(sink)
+    try:
+        yield
+    finally:
+        _ACTIVE_RETAINED_PAYLOAD_SINK_CTX.reset(token)
+
+
+@contextlib.contextmanager
+def _collision_cause_context(
+    collision_exc: FileExistsError | None,
+) -> Iterator[None]:
+    """Bind the active destination collision FileExistsError during sibling fallback materialization."""
+    token = _ACTIVE_COLLISION_CAUSE_CTX.set(collision_exc)
+    try:
+        yield
+    finally:
+        _ACTIVE_COLLISION_CAUSE_CTX.reset(token)
+
+
+@contextlib.contextmanager
+def _write_cleanup_errors_sink_context(
+    sink: list[OSError] | None,
+) -> Iterator[None]:
+    """Bind a sink capturing per-write temporary file cleanup OSErrors in chronological order."""
+    token = _ACTIVE_WRITE_CLEANUP_ERRORS_SINK_CTX.set(sink)
+    try:
+        yield
+    finally:
+        _ACTIVE_WRITE_CLEANUP_ERRORS_SINK_CTX.reset(token)
+
+
+@contextlib.contextmanager
+def _admitted_directory_context(
+    dir_path: Path,
+    dir_baseline: Mapping[str, Any] | None,
+    dir_status_out: dict[str, Any] | None = None,
+    caught_exceptions: list[Exception] | None = None,
+) -> Iterator[None]:
+    """Bind the active admitted directory baseline and live status sink for nested atomic writes."""
+    norm_str = os.path.abspath(os.fspath(dir_path))
+    token = _ADMITTED_DIR_BASELINE_CTX.set(
+        (norm_str, dir_baseline, dir_status_out, caught_exceptions)
+    )
+    try:
+        yield
+    finally:
+        _ADMITTED_DIR_BASELINE_CTX.reset(token)
+
+
+def _normalize_directory_baseline(
+    dir_path: Path,
+    baseline_or_status: Mapping[str, Any] | None,
+    *,
+    fallback_evidence_root_source: Mapping[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """Normalize either a baseline record or a post-run directory status dict into a baseline mapping."""
+    if baseline_or_status is None:
+        return None
+    dev = baseline_or_status.get("expected_dev")
+    if dev is None:
+        dev = baseline_or_status.get("dev")
+    ino = baseline_or_status.get("expected_ino")
+    if ino is None:
+        ino = baseline_or_status.get("ino")
+    resolved_path = baseline_or_status.get("expected_resolved_path")
+    if resolved_path is None:
+        resolved_path = baseline_or_status.get("resolved_path")
+    mode = baseline_or_status.get("expected_mode")
+    if mode is None:
+        mode = baseline_or_status.get("mode")
+    if dev is None and ino is None and resolved_path is None:
+        return None
+    norm_dir = Path(os.path.abspath(os.fspath(dir_path)))
+    normalized: dict[str, Any] = {
+        "path": str(baseline_or_status.get("path") or norm_dir),
+        "resolved_path": str(resolved_path) if resolved_path is not None else None,
+        "dev": int(dev) if dev is not None else None,
+        "ino": int(ino) if ino is not None else None,
+        "mode": int(mode) if mode is not None else None,
+    }
+    for ev_key in (
+        "evidence_root",
+        "evidence_root_resolved_path",
+        "evidence_root_dev",
+        "evidence_root_ino",
+    ):
+        if baseline_or_status.get(ev_key) is not None:
+            normalized[ev_key] = baseline_or_status[ev_key]
+        elif (
+            fallback_evidence_root_source is not None
+            and fallback_evidence_root_source.get(ev_key) is not None
+        ):
+            normalized[ev_key] = fallback_evidence_root_source[ev_key]
+    return normalized
+
+
+_PRESERVED_ADMISSION_STATUS_KEYS: tuple[str, ...] = (
+    "lookup",
+    "lookup_path",
+    "lookup_resolved_path",
+    "lookup_attempted",
+    "lookup_succeeded",
+    "lookup_exists",
+    "lookup_is_symlink",
+    "lookup_symlink_target",
+    "lookup_is_directory",
+    "lookup_dev",
+    "lookup_ino",
+    "lookup_mode",
+    "lookup_verified",
+    "descriptor",
+    "descriptor_opened",
+    "descriptor_fstat_succeeded",
+    "descriptor_verified",
+    "descriptor_is_directory",
+    "descriptor_dev",
+    "descriptor_ino",
+    "descriptor_mode",
+    "descriptor_close_attempted",
+    "descriptor_close_succeeded",
+    "descriptor_close_error",
+    "descriptor_close_exception_type",
+    "descriptor_close_exception_message",
+    "descriptor_close_errno",
+    "post_open_lookup",
+    "post_open_lookup_path",
+    "post_open_lookup_resolved_path",
+    "post_open_lookup_attempted",
+    "post_open_lookup_succeeded",
+    "post_open_lookup_exists",
+    "post_open_lookup_is_symlink",
+    "post_open_lookup_symlink_target",
+    "post_open_lookup_is_directory",
+    "post_open_lookup_dev",
+    "post_open_lookup_ino",
+    "post_open_lookup_mode",
+    "post_open_lookup_verified",
+    "post_open_lookup_error",
+    "post_open_lookup_exception_type",
+    "post_open_lookup_exception_message",
+    "post_open_lookup_errno",
+    "post_open_error_lookup",
+    "recovery_lookup_attempted",
+    "recovery_lookup_succeeded",
+    "recovery_lookup_error",
+    "recovery_lookup_exception_type",
+    "recovery_lookup_exception_message",
+    "recovery_lookup_errno",
+    "admission_failure_phase",
+    "directory_close_error",
+    "directory_close_exception_type",
+    "directory_close_exception_message",
+    "directory_close_errno",
+    "directory_close_failures",
+    "cleanup_close_error",
+    "cleanup_close_exception_type",
+    "cleanup_close_exception_message",
+    "cleanup_close_errno",
+    "prior_collision_temp_cleanup_failures",
+)
+
+
+def _update_dir_status_preserving_write_failure(
+    dir_status_out: dict[str, Any] | None,
+    live_status: Mapping[str, Any],
+) -> None:
+    """Update ``dir_status_out`` with ``live_status`` while preserving prior write-denial and admission fields."""
+    if dir_status_out is None:
+        return
+    prev_writable = dir_status_out.get("writable_post_run", True)
+    prev_write_err = dir_status_out.get("write_error")
+    prev_write_exc_type = dir_status_out.get("write_exception_type")
+    prev_write_exc_msg = dir_status_out.get("write_exception_message")
+    prev_write_errno = dir_status_out.get("write_errno")
+    prev_published_receipt = dir_status_out.get("published_receipt")
+    prev_temp_cleanup_status = dir_status_out.get("temp_cleanup_status")
+    preserved_admission_fields: dict[str, Any] = {
+        key: copy.deepcopy(dir_status_out[key])
+        for key in _PRESERVED_ADMISSION_STATUS_KEYS
+        if key in dir_status_out and key not in live_status
+    }
+    dir_status_out.clear()
+    dir_status_out.update(live_status)
+    if preserved_admission_fields:
+        dir_status_out.update(preserved_admission_fields)
+    if (
+        bool(live_status.get("identity_verified", False))
+        and not prev_writable
+        and prev_write_err is not None
+    ):
+        dir_status_out["writable_post_run"] = False
+        dir_status_out["write_error"] = prev_write_err
+        dir_status_out["write_exception_type"] = prev_write_exc_type
+        dir_status_out["write_exception_message"] = prev_write_exc_msg
+        dir_status_out["write_errno"] = prev_write_errno
+    if isinstance(prev_published_receipt, Mapping):
+        dir_status_out["published_receipt"] = copy.deepcopy(
+            dict(prev_published_receipt)
+        )
+    if isinstance(prev_temp_cleanup_status, Mapping):
+        dir_status_out["temp_cleanup_status"] = copy.deepcopy(
+            dict(prev_temp_cleanup_status)
+        )
+
+
+def _open_admitted_directory(
+    dir_path: Path,
+    *,
+    dir_baseline: Mapping[str, Any] | None = None,
+    caught_exceptions: list[Exception] | None = None,
+    dir_status_out: dict[str, Any] | None = None,
+) -> _AdmittedDirectory:
+    """Open ``dir_path`` with ``O_RDONLY | O_DIRECTORY | O_NOFOLLOW`` and verify ``fstat`` and path binding."""
+    normalized_dir = Path(os.path.abspath(os.fspath(dir_path)))
+    eff_baseline = _normalize_directory_baseline(normalized_dir, dir_baseline)
+    lookup_obs: dict[str, Any] = {
+        "path": str(normalized_dir),
+        "resolved_path": None,
+        "lookup_attempted": False,
+        "lookup_succeeded": False,
+        "exists": None,
+        "is_symlink": None,
+        "symlink_target": None,
+        "is_directory": None,
+        "dev": None,
+        "ino": None,
+        "mode": None,
+        "verified": False,
+    }
+    descriptor_obs: dict[str, Any] = {
+        "path": str(normalized_dir),
+        "opened": False,
+        "fstat_succeeded": False,
+        "verified": False,
+        "is_directory": None,
+        "dev": None,
+        "ino": None,
+        "mode": None,
+        "close_attempted": False,
+        "close_succeeded": False,
+        "close_error": None,
+        "close_exception_type": None,
+        "close_exception_message": None,
+        "close_errno": None,
+    }
+
+    def _sync_admission_observations(
+        *,
+        failure_phase: str | None = None,
+    ) -> None:
+        if dir_status_out is None:
+            return
+        dir_status_out["lookup"] = copy.deepcopy(lookup_obs)
+        dir_status_out["lookup_path"] = lookup_obs["path"]
+        dir_status_out["lookup_resolved_path"] = lookup_obs["resolved_path"]
+        dir_status_out["lookup_attempted"] = lookup_obs["lookup_attempted"]
+        dir_status_out["lookup_succeeded"] = lookup_obs["lookup_succeeded"]
+        dir_status_out["lookup_exists"] = lookup_obs["exists"]
+        dir_status_out["lookup_is_symlink"] = lookup_obs["is_symlink"]
+        dir_status_out["lookup_symlink_target"] = lookup_obs["symlink_target"]
+        dir_status_out["lookup_is_directory"] = lookup_obs["is_directory"]
+        dir_status_out["lookup_dev"] = lookup_obs["dev"]
+        dir_status_out["lookup_ino"] = lookup_obs["ino"]
+        dir_status_out["lookup_mode"] = lookup_obs["mode"]
+        dir_status_out["lookup_verified"] = lookup_obs["verified"]
+        dir_status_out["descriptor"] = copy.deepcopy(descriptor_obs)
+        dir_status_out["descriptor_opened"] = descriptor_obs["opened"]
+        dir_status_out["descriptor_fstat_succeeded"] = descriptor_obs[
+            "fstat_succeeded"
+        ]
+        dir_status_out["descriptor_verified"] = descriptor_obs["verified"]
+        dir_status_out["descriptor_is_directory"] = descriptor_obs[
+            "is_directory"
+        ]
+        dir_status_out["descriptor_dev"] = descriptor_obs["dev"]
+        dir_status_out["descriptor_ino"] = descriptor_obs["ino"]
+        dir_status_out["descriptor_mode"] = descriptor_obs["mode"]
+        dir_status_out["descriptor_close_attempted"] = descriptor_obs[
+            "close_attempted"
+        ]
+        dir_status_out["descriptor_close_succeeded"] = descriptor_obs[
+            "close_succeeded"
+        ]
+        dir_status_out["descriptor_close_error"] = descriptor_obs[
+            "close_error"
+        ]
+        dir_status_out["descriptor_close_exception_type"] = descriptor_obs[
+            "close_exception_type"
+        ]
+        dir_status_out["descriptor_close_exception_message"] = descriptor_obs[
+            "close_exception_message"
+        ]
+        dir_status_out["descriptor_close_errno"] = descriptor_obs[
+            "close_errno"
+        ]
+        if failure_phase is not None:
+            dir_status_out["admission_failure_phase"] = failure_phase
+
+    if eff_baseline is not None:
+        pre_causes: list[Exception] = []
+        pre_status = _verify_refmac_directory_post_run(
+            normalized_dir,
+            refmac_dir_baseline=eff_baseline,
+            caught_exceptions=pre_causes,
+        )
+        _update_dir_status_preserving_write_failure(dir_status_out, pre_status)
+        lookup_obs.update(
+            {
+                "resolved_path": pre_status.get("resolved_path"),
+                "lookup_attempted": bool(
+                    pre_status.get("lookup_attempted", False)
+                ),
+                "lookup_succeeded": bool(
+                    pre_status.get("lookup_succeeded", False)
+                ),
+                "exists": pre_status.get("exists"),
+                "is_symlink": pre_status.get("is_symlink"),
+                "symlink_target": pre_status.get("symlink_target"),
+                "is_directory": pre_status.get("is_directory"),
+                "dev": pre_status.get("dev"),
+                "ino": pre_status.get("ino"),
+                "mode": pre_status.get("mode"),
+                "verified": bool(pre_status.get("identity_verified", False)),
+            }
+        )
+        if not bool(pre_status.get("identity_verified", False)):
+            _sync_admission_observations(failure_phase="parent_dir_lookup")
+            if caught_exceptions is not None:
+                caught_exceptions.extend(pre_causes)
+            if pre_causes:
+                raise pre_causes[0]
+            raise ValueError(
+                str(
+                    pre_status.get("error")
+                    or f"Admitted directory identity verification failed: {normalized_dir}"
+                )
+            )
+        _sync_admission_observations(failure_phase=None)
+        expected_dev = int(pre_status["dev"])
+        expected_ino = int(pre_status["ino"])
+        expected_resolved = str(pre_status["resolved_path"])
+        expected_mode = int(pre_status["mode"])
+        eff_baseline = dict(eff_baseline)
+        eff_baseline.update(
+            {
+                "path": str(normalized_dir),
+                "resolved_path": expected_resolved,
+                "dev": expected_dev,
+                "ino": expected_ino,
+                "mode": expected_mode,
+            }
+        )
+    else:
+        if normalized_dir.parent != normalized_dir:
+            parent_dir = normalized_dir.parent
+            parent_st = os.lstat(parent_dir)
+            if stat.S_ISLNK(parent_st.st_mode) or not stat.S_ISDIR(parent_st.st_mode):
+                _sync_admission_observations(failure_phase="parent_dir_lookup")
+                raise ValueError(
+                    f"Parent directory is not a non-symlink directory: {parent_dir}"
+                )
+            parent_dir.resolve(strict=True)
+        lookup_obs["lookup_attempted"] = True
+        st = os.lstat(normalized_dir)
+        lookup_obs.update(
+            {
+                "lookup_succeeded": True,
+                "exists": True,
+                "is_symlink": bool(stat.S_ISLNK(st.st_mode)),
+                "is_directory": bool(stat.S_ISDIR(st.st_mode)),
+                "dev": int(st.st_dev),
+                "ino": int(st.st_ino),
+                "mode": int(stat.S_IMODE(st.st_mode)),
+            }
+        )
+        if stat.S_ISLNK(st.st_mode):
+            _sync_admission_observations(failure_phase="parent_dir_lookup")
+            raise ValueError(
+                f"Refusing symlink directory: {normalized_dir}"
+            )
+        if not stat.S_ISDIR(st.st_mode):
+            _sync_admission_observations(failure_phase="parent_dir_lookup")
+            raise ValueError(
+                f"Directory path is not a directory: {normalized_dir}"
+            )
+        expected_resolved = str(normalized_dir.resolve(strict=True))
+        expected_dev = int(st.st_dev)
+        expected_ino = int(st.st_ino)
+        expected_mode = int(stat.S_IMODE(st.st_mode))
+        lookup_obs.update(
+            {
+                "resolved_path": expected_resolved,
+                "verified": True,
+            }
+        )
+        _sync_admission_observations(failure_phase=None)
+        eff_baseline = {
+            "path": str(normalized_dir),
+            "resolved_path": expected_resolved,
+            "dev": expected_dev,
+            "ino": expected_ino,
+            "mode": expected_mode,
+        }
+
+    dir_open_flags = (
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_CLOEXEC", 0)
+    )
+    try:
+        dir_fd = os.open(normalized_dir, dir_open_flags)
+    except OSError as exc:
+        if caught_exceptions is not None:
+            caught_exceptions.append(exc)
+        if dir_status_out is not None:
+            post_causes_err: list[Exception] = []
+            post_status_err = _verify_refmac_directory_post_run(
+                normalized_dir,
+                refmac_dir_baseline=eff_baseline,
+                caught_exceptions=post_causes_err,
+            )
+            if post_causes_err:
+                first_recovery_exc = post_causes_err[0]
+                try:
+                    setattr(exc, "recovery_lookup_error", first_recovery_exc)
+                    setattr(exc, "post_open_lookup_error", first_recovery_exc)
+                except Exception:
+                    pass
+                if caught_exceptions is not None:
+                    existing_cause_ids = {id(c) for c in caught_exceptions}
+                    for rec_exc in post_causes_err:
+                        if id(rec_exc) not in existing_cause_ids:
+                            caught_exceptions.append(rec_exc)
+                            existing_cause_ids.add(id(rec_exc))
+            recovery_lookup_oserror = next(
+                (c for c in post_causes_err if isinstance(c, OSError)),
+                None,
+            )
+            post_open_error_lookup: dict[str, Any] = {
+                "path": str(normalized_dir),
+                "resolved_path": post_status_err.get("resolved_path"),
+                "lookup_attempted": bool(
+                    post_status_err.get("lookup_attempted", False)
+                ),
+                "lookup_succeeded": bool(
+                    post_status_err.get("lookup_succeeded", False)
+                ),
+                "exists": (
+                    None
+                    if recovery_lookup_oserror is not None
+                    else post_status_err.get("exists")
+                ),
+                "is_symlink": (
+                    None
+                    if recovery_lookup_oserror is not None
+                    else post_status_err.get("is_symlink")
+                ),
+                "symlink_target": post_status_err.get("symlink_target"),
+                "is_directory": (
+                    None
+                    if recovery_lookup_oserror is not None
+                    else post_status_err.get("is_directory")
+                ),
+                "dev": post_status_err.get("dev"),
+                "ino": post_status_err.get("ino"),
+                "mode": post_status_err.get("mode"),
+                "verified": bool(post_status_err.get("identity_verified", False)),
+                "error": post_status_err.get("error"),
+                "exception_type": (
+                    type(recovery_lookup_oserror).__name__
+                    if recovery_lookup_oserror is not None
+                    else post_status_err.get("exception_type")
+                ),
+                "exception_message": (
+                    str(recovery_lookup_oserror)
+                    if recovery_lookup_oserror is not None
+                    else post_status_err.get("exception_message")
+                ),
+                "errno": (
+                    getattr(recovery_lookup_oserror, "errno", None)
+                    if recovery_lookup_oserror is not None
+                    else post_status_err.get("errno")
+                ),
+            }
+            if recovery_lookup_oserror is None:
+                _update_dir_status_preserving_write_failure(
+                    dir_status_out, post_status_err
+                )
+            else:
+                dir_status_out.update(
+                    {
+                        "path": str(normalized_dir),
+                        "resolved_path": lookup_obs["resolved_path"],
+                        "exists": lookup_obs["exists"],
+                        "is_symlink": lookup_obs["is_symlink"],
+                        "is_directory": lookup_obs["is_directory"],
+                        "symlink_target": lookup_obs["symlink_target"],
+                        "dev": lookup_obs["dev"],
+                        "ino": lookup_obs["ino"],
+                        "mode": lookup_obs["mode"],
+                        "expected_dev": expected_dev,
+                        "expected_ino": expected_ino,
+                        "expected_resolved_path": expected_resolved,
+                        "expected_mode": expected_mode,
+                        "mode_changed": False,
+                    }
+                )
+            dir_status_out.update(
+                {
+                    "identity_verified": False,
+                    "writable_post_run": False,
+                    "error": (
+                        f"Failed to open directory descriptor at {normalized_dir} "
+                        f"({type(exc).__name__}): {exc}"
+                    ),
+                    "exception_type": type(exc).__name__,
+                    "exception_message": str(exc),
+                    "errno": getattr(exc, "errno", None),
+                    "post_open_error_lookup": post_open_error_lookup,
+                    "recovery_lookup_attempted": True,
+                    "recovery_lookup_succeeded": recovery_lookup_oserror is None,
+                    "recovery_lookup_error": post_open_error_lookup["error"],
+                    "recovery_lookup_exception_type": post_open_error_lookup[
+                        "exception_type"
+                    ],
+                    "recovery_lookup_exception_message": post_open_error_lookup[
+                        "exception_message"
+                    ],
+                    "recovery_lookup_errno": post_open_error_lookup["errno"],
+                }
+            )
+            _sync_admission_observations(failure_phase="parent_dir_open")
+        raise
+
+    descriptor_obs["opened"] = True
+    _sync_admission_observations(failure_phase=None)
+
+    try:
+        try:
+            fd_st = os.fstat(dir_fd)
+        except OSError as exc:
+            try:
+                setattr(exc, "_from_descriptor_fstat", True)
+            except Exception:
+                pass
+            if caught_exceptions is not None:
+                caught_exceptions.append(exc)
+            if dir_status_out is not None:
+                dir_status_out.update(
+                    {
+                        "identity_verified": False,
+                        "writable_post_run": False,
+                        "error": (
+                            f"Failed to fstat opened directory descriptor at {normalized_dir} "
+                            f"({type(exc).__name__}): {exc}"
+                        ),
+                        "exception_type": type(exc).__name__,
+                        "exception_message": str(exc),
+                        "errno": getattr(exc, "errno", None),
+                    }
+                )
+            _sync_admission_observations(failure_phase="parent_dir_fstat")
+            raise
+        obs_fd_dev = int(fd_st.st_dev)
+        obs_fd_ino = int(fd_st.st_ino)
+        obs_fd_mode = int(stat.S_IMODE(fd_st.st_mode))
+        obs_fd_is_dir = bool(stat.S_ISDIR(fd_st.st_mode))
+        descriptor_obs.update(
+            {
+                "fstat_succeeded": True,
+                "is_directory": obs_fd_is_dir,
+                "dev": obs_fd_dev,
+                "ino": obs_fd_ino,
+                "mode": obs_fd_mode,
+            }
+        )
+        _sync_admission_observations(failure_phase=None)
+        if not obs_fd_is_dir:
+            err_msg = f"Opened descriptor is not a directory at {normalized_dir}"
+            val_exc = ValueError(err_msg)
+            if caught_exceptions is not None:
+                caught_exceptions.append(val_exc)
+            if dir_status_out is not None:
+                dir_status_out.update(
+                    {
+                        "is_directory": False,
+                        "identity_verified": False,
+                        "writable_post_run": False,
+                        "error": err_msg,
+                        "exception_type": "ValueError",
+                        "exception_message": err_msg,
+                        "errno": None,
+                    }
+                )
+            _sync_admission_observations(
+                failure_phase="parent_dir_descriptor_type"
+            )
+            raise val_exc
+        if (obs_fd_dev, obs_fd_ino) != (expected_dev, expected_ino):
+            err_msg = (
+                f"Refmac working directory inode changed while opening descriptor at {normalized_dir}: "
+                f"expected (dev={expected_dev}, ino={expected_ino}), "
+                f"observed (dev={obs_fd_dev}, ino={obs_fd_ino})"
+            )
+            val_exc = ValueError(err_msg)
+            if caught_exceptions is not None:
+                caught_exceptions.append(val_exc)
+            if dir_status_out is not None:
+                dir_status_out.update(
+                    {
+                        "dev": obs_fd_dev,
+                        "ino": obs_fd_ino,
+                        "mode": obs_fd_mode,
+                        "identity_verified": False,
+                        "writable_post_run": False,
+                        "error": err_msg,
+                        "exception_type": "ValueError",
+                        "exception_message": err_msg,
+                        "errno": None,
+                    }
+                )
+            _sync_admission_observations(
+                failure_phase="parent_dir_descriptor_identity"
+            )
+            raise val_exc
+
+        post_causes: list[Exception] = []
+        post_status = _verify_refmac_directory_post_run(
+            normalized_dir,
+            refmac_dir_baseline=eff_baseline,
+            caught_exceptions=post_causes,
+        )
+        post_open_lookup_oserror = next(
+            (c for c in post_causes if isinstance(c, OSError)), None
+        )
+        _update_dir_status_preserving_write_failure(dir_status_out, post_status)
+        if dir_status_out is not None:
+            post_open_lookup_attempted = bool(
+                post_status.get("lookup_attempted", False)
+            )
+            post_open_lookup_succeeded = bool(
+                post_status.get("lookup_succeeded", False)
+            )
+            post_open_lookup_err_str = (
+                f"{type(post_open_lookup_oserror).__name__}: {post_open_lookup_oserror}"
+                if post_open_lookup_oserror is not None
+                else post_status.get("error")
+            )
+            post_open_lookup_exc_type = (
+                type(post_open_lookup_oserror).__name__
+                if post_open_lookup_oserror is not None
+                else post_status.get("exception_type")
+            )
+            post_open_lookup_exc_msg = (
+                str(post_open_lookup_oserror)
+                if post_open_lookup_oserror is not None
+                else post_status.get("exception_message")
+            )
+            post_open_lookup_errno = (
+                getattr(post_open_lookup_oserror, "errno", None)
+                if post_open_lookup_oserror is not None
+                else post_status.get("errno")
+            )
+            post_open_exists = post_status.get("exists")
+            post_open_is_symlink = post_status.get("is_symlink")
+            post_open_is_directory = post_status.get("is_directory")
+            post_open_dev = post_status.get("dev")
+            post_open_ino = post_status.get("ino")
+            post_open_mode = post_status.get("mode")
+            dir_status_out["post_open_lookup"] = {
+                "path": str(normalized_dir),
+                "resolved_path": post_status.get("resolved_path"),
+                "lookup_attempted": post_open_lookup_attempted,
+                "lookup_succeeded": post_open_lookup_succeeded,
+                "exists": post_open_exists,
+                "is_symlink": post_open_is_symlink,
+                "symlink_target": post_status.get("symlink_target"),
+                "is_directory": post_open_is_directory,
+                "dev": post_open_dev,
+                "ino": post_open_ino,
+                "mode": post_open_mode,
+                "verified": bool(post_status.get("identity_verified", False)),
+                "error": post_open_lookup_err_str,
+                "exception_type": post_open_lookup_exc_type,
+                "exception_message": post_open_lookup_exc_msg,
+                "errno": post_open_lookup_errno,
+            }
+            dir_status_out["post_open_lookup_path"] = str(normalized_dir)
+            dir_status_out["post_open_lookup_resolved_path"] = post_status.get(
+                "resolved_path"
+            )
+            dir_status_out["post_open_lookup_attempted"] = (
+                post_open_lookup_attempted
+            )
+            dir_status_out["post_open_lookup_succeeded"] = (
+                post_open_lookup_succeeded
+            )
+            dir_status_out["post_open_lookup_exists"] = post_open_exists
+            dir_status_out["post_open_lookup_is_symlink"] = post_open_is_symlink
+            dir_status_out["post_open_lookup_symlink_target"] = post_status.get(
+                "symlink_target"
+            )
+            dir_status_out["post_open_lookup_is_directory"] = (
+                post_open_is_directory
+            )
+            dir_status_out["post_open_lookup_dev"] = post_open_dev
+            dir_status_out["post_open_lookup_ino"] = post_open_ino
+            dir_status_out["post_open_lookup_mode"] = post_open_mode
+            dir_status_out["post_open_lookup_verified"] = bool(
+                post_status.get("identity_verified", False)
+            )
+            dir_status_out["post_open_lookup_error"] = post_open_lookup_err_str
+            dir_status_out["post_open_lookup_exception_type"] = (
+                post_open_lookup_exc_type
+            )
+            dir_status_out["post_open_lookup_exception_message"] = (
+                post_open_lookup_exc_msg
+            )
+            dir_status_out["post_open_lookup_errno"] = post_open_lookup_errno
+        if not bool(post_status.get("identity_verified", False)):
+            _sync_admission_observations(
+                failure_phase="parent_dir_post_open_namespace_reverify"
+            )
+            if caught_exceptions is not None:
+                caught_exceptions.extend(post_causes)
+            if post_causes:
+                raise post_causes[0]
+            raise ValueError(
+                str(
+                    post_status.get("error")
+                    or f"Directory lost admitted namespace binding immediately after open: {normalized_dir}"
+                )
+            )
+        descriptor_obs["verified"] = True
+        _sync_admission_observations(failure_phase=None)
+        if dir_status_out is not None:
+            dir_status_out["admission_failure_phase"] = None
+    except BaseException as primary_dir_exc:
+        descriptor_obs["close_attempted"] = True
+        try:
+            os.close(dir_fd)
+        except OSError as close_exc:
+            descriptor_obs["close_succeeded"] = False
+            descriptor_obs["close_error"] = (
+                f"{type(close_exc).__name__}: {close_exc}"
+            )
+            descriptor_obs["close_exception_type"] = type(close_exc).__name__
+            descriptor_obs["close_exception_message"] = str(close_exc)
+            descriptor_obs["close_errno"] = getattr(close_exc, "errno", None)
+            try:
+                setattr(close_exc, "_is_cleanup_close_error", True)
+                setattr(primary_dir_exc, "cleanup_close_error", close_exc)
+                setattr(primary_dir_exc, "parent_close_error", close_exc)
+            except Exception:
+                pass
+            if caught_exceptions is not None:
+                caught_exceptions.append(close_exc)
+        else:
+            descriptor_obs["close_succeeded"] = True
+        _sync_admission_observations(failure_phase=None)
+        raise
+
+    return _AdmittedDirectory(
+        path=normalized_dir,
+        resolved_path=expected_resolved,
+        fd=dir_fd,
+        dev=expected_dev,
+        ino=expected_ino,
+        mode=obs_fd_mode,
+        baseline=eff_baseline,
+    )
+
+
+def _is_observed_namespace_detachment(exc: BaseException) -> bool:
+    """Return True iff ``exc`` reflects an observed namespace mismatch/absence rather than I/O verification unavailability."""
+    chain: list[BaseException] = []
+    seen_ids: set[int] = set()
+    cur: BaseException | None = exc
+    while cur is not None and id(cur) not in seen_ids:
+        seen_ids.add(id(cur))
+        chain.append(cur)
+        next_exc = getattr(cur, "cause", None)
+        if not isinstance(next_exc, BaseException):
+            next_exc = cur.__cause__
+        cur = next_exc
+
+    for item in chain:
+        if bool(getattr(item, "_from_descriptor_fstat", False)) or bool(
+            getattr(item, "_is_content_mismatch_error", False)
+        ):
+            return False
+
+    os_errors = [item for item in chain if isinstance(item, OSError)]
+    if os_errors:
+        leaf_os_err = os_errors[-1]
+        return getattr(leaf_os_err, "errno", None) in (
+            errno.ENOENT,
+            errno.ENOTDIR,
+            errno.ELOOP,
+        )
+
+    for item in chain:
+        if isinstance(item, ValueError):
+            return True
+    return False
+
+
+def _reverify_admitted_directory_binding(
+    admitted_dir: _AdmittedDirectory,
+    *,
+    caught_exceptions: list[Exception] | None = None,
+    dir_status_out: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Verify that ``admitted_dir.fd`` still has ``(dev, ino)`` and remains bound at ``admitted_dir.path``."""
+    try:
+        fd_st = os.fstat(admitted_dir.fd)
+    except OSError as fstat_exc:
+        try:
+            setattr(fstat_exc, "_from_descriptor_fstat", True)
+        except Exception:
+            pass
+        raise
+    if not stat.S_ISDIR(fd_st.st_mode) or (
+        int(fd_st.st_dev),
+        int(fd_st.st_ino),
+    ) != (admitted_dir.dev, admitted_dir.ino):
+        err_msg = (
+            f"Retained directory descriptor identity changed at {admitted_dir.path}: "
+            f"expected (dev={admitted_dir.dev}, ino={admitted_dir.ino}), "
+            f"observed (dev={int(fd_st.st_dev)}, ino={int(fd_st.st_ino)})"
+        )
+        val_exc = ValueError(err_msg)
+        if caught_exceptions is not None:
+            caught_exceptions.append(val_exc)
+        if dir_status_out is not None:
+            dir_status_out.update(
+                {
+                    "dev": int(fd_st.st_dev),
+                    "ino": int(fd_st.st_ino),
+                    "identity_verified": False,
+                    "writable_post_run": False,
+                    "error": err_msg,
+                    "exception_type": "ValueError",
+                    "exception_message": err_msg,
+                    "errno": None,
+                }
+            )
+        raise val_exc
+
+    live_causes: list[Exception] = []
+    live_status = _verify_refmac_directory_post_run(
+        admitted_dir.path,
+        refmac_dir_baseline=admitted_dir.baseline,
+        caught_exceptions=live_causes,
+    )
+    _update_dir_status_preserving_write_failure(dir_status_out, live_status)
+    if not bool(live_status.get("identity_verified", False)):
+        if caught_exceptions is not None:
+            caught_exceptions.extend(live_causes)
+        if live_causes:
+            raise live_causes[0]
+        raise ValueError(
+            str(
+                live_status.get("error")
+                or f"Admitted directory lost namespace binding: {admitted_dir.path}"
+            )
+        )
+    return live_status
 
 
 def _atomic_write_new_json_file(
@@ -1349,27 +2331,604 @@ def _atomic_write_new_json_file(
     target_path: Path,
     *,
     root: Path,
+    dir_baseline: Mapping[str, Any] | None = None,
+    dir_status_out: dict[str, Any] | None = None,
+    caught_exceptions: list[Exception] | None = None,
 ) -> dict[str, Any]:
-    """Atomically write a new JSON file without overwriting an existing destination or following symlinks."""
-    _ensure_no_symlink_components_under_root(target_path, root, check_leaf=False)
+    """Atomically write a new JSON file inside an admitted directory descriptor without clobbering or following symlinks."""
+    normalized_root = Path(os.path.abspath(os.fspath(root)))
+    normalized_target = Path(os.path.abspath(os.fspath(target_path)))
+
+    ctx_info = _ADMITTED_DIR_BASELINE_CTX.get()
+    eff_baseline = dir_baseline
+    eff_status_out = dir_status_out
+    eff_causes = caught_exceptions
+    if ctx_info is not None and ctx_info[0] == str(normalized_root):
+        if eff_baseline is None:
+            eff_baseline = ctx_info[1]
+        if eff_status_out is None:
+            eff_status_out = ctx_info[2]
+        if eff_causes is None:
+            eff_causes = ctx_info[3]
+
     try:
-        os.lstat(target_path)
-    except FileNotFoundError:
-        pass
-    else:
-        raise FileExistsError(
-            f"Refusing to overwrite existing JSON artifact or symlink: {target_path}"
+        _ensure_no_symlink_components_under_root(
+            normalized_target, normalized_root, check_leaf=False
+        )
+        root_cap = _open_admitted_directory(
+            normalized_root,
+            dir_baseline=eff_baseline,
+            caught_exceptions=eff_causes,
+            dir_status_out=eff_status_out,
+        )
+    except FileExistsError as exc:
+        try:
+            setattr(exc, "_from_non_collision_phase", True)
+        except Exception:
+            pass
+        raise
+
+    opened_subdir_fds: list[int] = []
+    intermediate_hops: list[dict[str, Any]] = []
+    created_tmp = False
+    tmp_unlinked = False
+    post_link_temp_absent = False
+    post_link_temp_identity_mismatch = False
+    post_link_mismatch_dev: int | None = None
+    post_link_mismatch_ino: int | None = None
+    published_link_created = False
+    readback_verified = False
+    unlink_attempt_count = 0
+    cleanup_error_records: list[tuple[str, OSError]] = []
+    cleanup_errors: list[OSError] = []
+    final_cleanup_executed = False
+    temp_cleanup_status: dict[str, Any] | None = None
+    tmp_name = f".{normalized_target.name}.tmp.{os.getpid()}"
+    target_name = normalized_target.name
+    tmp_dev: int | None = None
+    tmp_ino: int | None = None
+    parent_fd = root_cap.fd
+    parent_dev = root_cap.dev
+    parent_ino = root_cap.ino
+    active_write_exception: BaseException | None = None
+    subdir_closed_set: set[int] = set()
+    root_fd_closed = False
+    root_close_attempted = False
+    root_close_succeeded: bool | None = None
+    root_close_exc: OSError | None = None
+    dir_close_failures: list[tuple[str, str, OSError]] = []
+
+    def _close_writer_directory_descriptors() -> None:
+        nonlocal root_fd_closed, root_close_attempted
+        nonlocal root_close_succeeded, root_close_exc
+        for sub_fd in reversed(opened_subdir_fds):
+            if sub_fd in subdir_closed_set:
+                continue
+            subdir_closed_set.add(sub_fd)
+            hop_match = next(
+                (
+                    h
+                    for h in intermediate_hops
+                    if int(h.get("fd", -1)) == sub_fd
+                ),
+                None,
+            )
+            if hop_match is not None:
+                hop_match["close_attempted"] = True
+            try:
+                os.close(sub_fd)
+            except OSError as sub_close_exc:
+                try:
+                    setattr(sub_close_exc, "_is_cleanup_close_error", True)
+                except Exception:
+                    pass
+                dir_close_failures.append(
+                    (
+                        "intermediate_dir",
+                        "intermediate_dir_close",
+                        sub_close_exc,
+                    )
+                )
+                if hop_match is not None:
+                    hop_match["close_succeeded"] = False
+                    hop_match["close_error"] = (
+                        f"{type(sub_close_exc).__name__}: {sub_close_exc}"
+                    )
+                    hop_match["close_exception_type"] = type(
+                        sub_close_exc
+                    ).__name__
+                    hop_match["close_exception_message"] = str(sub_close_exc)
+                    hop_match["close_errno"] = getattr(
+                        sub_close_exc, "errno", None
+                    )
+            else:
+                if hop_match is not None:
+                    hop_match["close_succeeded"] = True
+                    hop_match["close_error"] = None
+                    hop_match["close_exception_type"] = None
+                    hop_match["close_exception_message"] = None
+                    hop_match["close_errno"] = None
+        if not root_fd_closed:
+            root_fd_closed = True
+            root_close_attempted = True
+            try:
+                os.close(root_cap.fd)
+                root_close_succeeded = True
+            except OSError as r_close_exc:
+                root_close_succeeded = False
+                root_close_exc = r_close_exc
+                try:
+                    setattr(r_close_exc, "_is_cleanup_close_error", True)
+                except Exception:
+                    pass
+                dir_close_failures.append(
+                    ("root_dir", "parent_dir_close", r_close_exc)
+                )
+            if eff_status_out is not None:
+                desc_dict = eff_status_out.get("descriptor")
+                if isinstance(desc_dict, dict):
+                    desc_dict["close_attempted"] = True
+                    desc_dict["close_succeeded"] = bool(root_close_succeeded)
+                    desc_dict["close_error"] = (
+                        f"{type(root_close_exc).__name__}: {root_close_exc}"
+                        if root_close_exc is not None
+                        else None
+                    )
+                    desc_dict["close_exception_type"] = (
+                        type(root_close_exc).__name__
+                        if root_close_exc is not None
+                        else None
+                    )
+                    desc_dict["close_exception_message"] = (
+                        str(root_close_exc)
+                        if root_close_exc is not None
+                        else None
+                    )
+                    desc_dict["close_errno"] = (
+                        getattr(root_close_exc, "errno", None)
+                        if root_close_exc is not None
+                        else None
+                    )
+                    if not root_close_succeeded:
+                        desc_dict["verified"] = False
+                if not root_close_succeeded:
+                    eff_status_out["descriptor_verified"] = False
+                eff_status_out["descriptor_close_attempted"] = True
+                eff_status_out["descriptor_close_succeeded"] = bool(
+                    root_close_succeeded
+                )
+                eff_status_out["descriptor_close_error"] = (
+                    f"{type(root_close_exc).__name__}: {root_close_exc}"
+                    if root_close_exc is not None
+                    else None
+                )
+                eff_status_out["descriptor_close_exception_type"] = (
+                    type(root_close_exc).__name__
+                    if root_close_exc is not None
+                    else None
+                )
+                eff_status_out["descriptor_close_exception_message"] = (
+                    str(root_close_exc)
+                    if root_close_exc is not None
+                    else None
+                )
+                eff_status_out["descriptor_close_errno"] = (
+                    getattr(root_close_exc, "errno", None)
+                    if root_close_exc is not None
+                    else None
+                )
+                if dir_close_failures:
+                    first_dc_exc = dir_close_failures[0][2]
+                    first_dc_str = (
+                        f"{type(first_dc_exc).__name__}: {first_dc_exc}"
+                    )
+                    eff_status_out["directory_close_error"] = first_dc_str
+                    eff_status_out["directory_close_exception_type"] = type(
+                        first_dc_exc
+                    ).__name__
+                    eff_status_out["directory_close_exception_message"] = str(
+                        first_dc_exc
+                    )
+                    eff_status_out["directory_close_errno"] = getattr(
+                        first_dc_exc, "errno", None
+                    )
+                    if eff_status_out.get("cleanup_close_error") is None:
+                        eff_status_out["cleanup_close_error"] = first_dc_str
+                        eff_status_out["cleanup_close_exception_type"] = type(
+                            first_dc_exc
+                        ).__name__
+                        eff_status_out["cleanup_close_exception_message"] = str(
+                            first_dc_exc
+                        )
+                        eff_status_out["cleanup_close_errno"] = getattr(
+                            first_dc_exc, "errno", None
+                        )
+                    eff_status_out["directory_close_failures"] = [
+                        {
+                            "role": r_name,
+                            "phase": p_name,
+                            "error": f"{type(c_exc).__name__}: {c_exc}",
+                            "exception_type": type(c_exc).__name__,
+                            "exception_message": str(c_exc),
+                            "errno": getattr(c_exc, "errno", None),
+                        }
+                        for r_name, p_name, c_exc in dir_close_failures
+                    ]
+
+    def _finalize_temp_cleanup() -> dict[str, Any]:
+        nonlocal tmp_unlinked, unlink_attempt_count, final_cleanup_executed
+        nonlocal temp_cleanup_status
+        if final_cleanup_executed and temp_cleanup_status is not None:
+            return temp_cleanup_status
+        final_cleanup_executed = True
+
+        obs_cleanup_dev: int | None = None
+        obs_cleanup_ino: int | None = None
+        temp_present_after_cleanup: bool | None = (
+            False if tmp_unlinked else None
+        )
+        reason: str = (
+            "unlinked_immediately_after_link"
+            if tmp_unlinked
+            else "temp_not_created"
         )
 
-    tmp_path = target_path.parent / f".{target_path.name}.tmp.{os.getpid()}"
-    _ensure_no_symlink_components_under_root(tmp_path, root, check_leaf=False)
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
-    created_tmp = False
+        if created_tmp and not tmp_unlinked:
+            if post_link_temp_absent:
+                reason = "temp_path_already_absent"
+                temp_present_after_cleanup = False
+            elif post_link_temp_identity_mismatch:
+                obs_cleanup_dev = post_link_mismatch_dev
+                obs_cleanup_ino = post_link_mismatch_ino
+                temp_present_after_cleanup = True
+                reason = "temp_path_identity_mismatch"
+            elif tmp_dev is None or tmp_ino is None:
+                reason = "initial_temp_fstat_identity_unknown"
+                temp_present_after_cleanup = None
+            else:
+                try:
+                    cleanup_st = os.stat(
+                        tmp_name, dir_fd=parent_fd, follow_symlinks=False
+                    )
+                except FileNotFoundError:
+                    reason = "temp_path_already_absent"
+                    temp_present_after_cleanup = False
+                except OSError as stat_exc:
+                    try:
+                        setattr(stat_exc, "_is_temp_cleanup_error", True)
+                    except Exception:
+                        pass
+                    cleanup_error_records.append(
+                        ("final_cleanup_stat", stat_exc)
+                    )
+                    cleanup_errors.append(stat_exc)
+                    temp_present_after_cleanup = None
+                    reason = (
+                        f"temp_cleanup_stat_or_unlink_error: "
+                        f"{type(stat_exc).__name__}: {stat_exc}"
+                    )
+                else:
+                    obs_cleanup_dev = int(cleanup_st.st_dev)
+                    obs_cleanup_ino = int(cleanup_st.st_ino)
+                    if stat.S_ISREG(cleanup_st.st_mode) and (
+                        obs_cleanup_dev,
+                        obs_cleanup_ino,
+                    ) == (tmp_dev, tmp_ino):
+                        unlink_attempt_count += 1
+                        try:
+                            os.unlink(tmp_name, dir_fd=parent_fd)
+                            tmp_unlinked = True
+                            temp_present_after_cleanup = False
+                            reason = "verified_temp_identity_unlinked"
+                        except OSError as unlink_exc:
+                            try:
+                                setattr(
+                                    unlink_exc, "_is_temp_cleanup_error", True
+                                )
+                            except Exception:
+                                pass
+                            cleanup_error_records.append(
+                                ("final_cleanup_unlink", unlink_exc)
+                            )
+                            cleanup_errors.append(unlink_exc)
+                            temp_present_after_cleanup = True
+                            reason = (
+                                f"temp_cleanup_stat_or_unlink_error: "
+                                f"{type(unlink_exc).__name__}: {unlink_exc}"
+                            )
+                    else:
+                        temp_present_after_cleanup = True
+                        reason = "temp_path_identity_mismatch"
+
+        last_cleanup_exc: OSError | None = (
+            cleanup_errors[-1] if cleanup_errors else None
+        )
+        error_entries: list[dict[str, Any]] = [
+            {
+                "attempt": idx + 1,
+                "phase": phase_name,
+                "exception_type": type(err_obj).__name__,
+                "exception_message": str(err_obj),
+                "errno": getattr(err_obj, "errno", None),
+            }
+            for idx, (phase_name, err_obj) in enumerate(cleanup_error_records)
+        ]
+        temp_cleanup_status = {
+            "temp_name": tmp_name,
+            "attempted_path": str(target_path),
+            "intended_lexical_path": str(target_path),
+            "target_name": target_name,
+            "published_link_created": published_link_created,
+            "readback_verified": readback_verified,
+            "temp_identity_known": (
+                tmp_dev is not None and tmp_ino is not None
+            ),
+            "unlink_attempted": unlink_attempt_count > 0,
+            "unlink_attempt_count": unlink_attempt_count,
+            "unlinked": tmp_unlinked,
+            "cleanup_verified": (
+                tmp_unlinked or reason == "temp_path_already_absent"
+            ),
+            "temp_present_after_cleanup": temp_present_after_cleanup,
+            "reason": reason,
+            "expected_temp_dev": tmp_dev,
+            "expected_temp_ino": tmp_ino,
+            "observed_temp_dev": (
+                tmp_dev
+                if tmp_unlinked and obs_cleanup_dev is None
+                else obs_cleanup_dev
+            ),
+            "observed_temp_ino": (
+                tmp_ino
+                if tmp_unlinked and obs_cleanup_ino is None
+                else obs_cleanup_ino
+            ),
+            "error": (
+                f"{type(last_cleanup_exc).__name__}: {last_cleanup_exc}"
+                if last_cleanup_exc is not None and not tmp_unlinked
+                else None
+            ),
+            "exception_type": (
+                type(last_cleanup_exc).__name__
+                if last_cleanup_exc is not None and not tmp_unlinked
+                else None
+            ),
+            "exception_message": (
+                str(last_cleanup_exc)
+                if last_cleanup_exc is not None and not tmp_unlinked
+                else None
+            ),
+            "errno": (
+                getattr(last_cleanup_exc, "errno", None)
+                if last_cleanup_exc is not None and not tmp_unlinked
+                else None
+            ),
+            "errors": error_entries,
+        }
+        for err_obj in cleanup_errors:
+            try:
+                setattr(err_obj, "_is_temp_cleanup_error", True)
+                setattr(
+                    err_obj,
+                    "temp_cleanup_status",
+                    copy.deepcopy(temp_cleanup_status),
+                )
+            except Exception:
+                pass
+        return temp_cleanup_status
+
+    def _attach_cleanup_metadata_to_exception(
+        target_exc: BaseException,
+        status_snapshot: Mapping[str, Any],
+        *,
+        receipt_snapshot: Mapping[str, Any] | None = None,
+    ) -> None:
+        seen_exc_ids: set[int] = set()
+        cur_exc: BaseException | None = target_exc
+        while cur_exc is not None and id(cur_exc) not in seen_exc_ids:
+            seen_exc_ids.add(id(cur_exc))
+            try:
+                setattr(
+                    cur_exc,
+                    "temp_cleanup_status",
+                    copy.deepcopy(dict(status_snapshot)),
+                )
+                setattr(cur_exc, "temp_cleanup_errors", list(cleanup_errors))
+                if cleanup_errors:
+                    setattr(cur_exc, "temp_cleanup_error", cleanup_errors[-1])
+                if receipt_snapshot is not None:
+                    setattr(
+                        cur_exc,
+                        "published_receipt",
+                        copy.deepcopy(dict(receipt_snapshot)),
+                    )
+            except Exception:
+                pass
+            next_item = getattr(cur_exc, "cause", None)
+            if not isinstance(next_item, BaseException):
+                next_item = cur_exc.__cause__
+            cur_exc = next_item
+
+        if receipt_snapshot is not None:
+            for err_obj in cleanup_errors:
+                try:
+                    setattr(
+                        err_obj,
+                        "published_receipt",
+                        copy.deepcopy(dict(receipt_snapshot)),
+                    )
+                except Exception:
+                    pass
+
+    def _reverify_full_destination_parent_chain() -> None:
+        try:
+            _reverify_admitted_directory_binding(
+                root_cap,
+                caught_exceptions=eff_causes,
+                dir_status_out=eff_status_out,
+            )
+            _ensure_no_symlink_components_under_root(
+                normalized_target, normalized_root, check_leaf=False
+            )
+            for hop in intermediate_hops:
+                hop_fd = int(hop["fd"])
+                hop_parent_fd = int(hop["parent_fd"])
+                hop_part = str(hop["part"])
+                hop_lex = Path(hop["lexical_path"])
+                hop_exp_dev = int(hop["dev"])
+                hop_exp_ino = int(hop["ino"])
+                hop_exp_res = str(hop["resolved_path"])
+                try:
+                    hop_fd_st = os.fstat(hop_fd)
+                except OSError as fstat_exc:
+                    try:
+                        setattr(fstat_exc, "_from_descriptor_fstat", True)
+                    except Exception:
+                        pass
+                    raise
+                if not stat.S_ISDIR(hop_fd_st.st_mode) or (
+                    int(hop_fd_st.st_dev),
+                    int(hop_fd_st.st_ino),
+                ) != (hop_exp_dev, hop_exp_ino):
+                    raise ValueError(
+                        f"Intermediate directory descriptor identity changed at {hop_lex}"
+                    )
+                hop_rel_st = os.stat(
+                    hop_part, dir_fd=hop_parent_fd, follow_symlinks=False
+                )
+                if not stat.S_ISDIR(hop_rel_st.st_mode) or (
+                    int(hop_rel_st.st_dev),
+                    int(hop_rel_st.st_ino),
+                ) != (hop_exp_dev, hop_exp_ino):
+                    raise ValueError(
+                        f"Intermediate directory component rebound or replaced at {hop_lex}: "
+                        f"expected (dev={hop_exp_dev}, ino={hop_exp_ino}), "
+                        f"observed (dev={int(hop_rel_st.st_dev)}, ino={int(hop_rel_st.st_ino)})"
+                    )
+                hop_path_lstat = os.lstat(hop_lex)
+                if not stat.S_ISDIR(hop_path_lstat.st_mode) or (
+                    int(hop_path_lstat.st_dev),
+                    int(hop_path_lstat.st_ino),
+                ) != (hop_exp_dev, hop_exp_ino):
+                    raise ValueError(
+                        f"Intermediate directory lexical path rebound at {hop_lex}: "
+                        f"expected (dev={hop_exp_dev}, ino={hop_exp_ino}), "
+                        f"observed (dev={int(hop_path_lstat.st_dev)}, ino={int(hop_path_lstat.st_ino)})"
+                    )
+                hop_cur_res = str(hop_lex.resolve(strict=True))
+                if hop_cur_res != hop_exp_res:
+                    raise ValueError(
+                        f"Intermediate directory resolved path changed at {hop_lex}: "
+                        f"expected {hop_exp_res!r}, observed {hop_cur_res!r}"
+                    )
+        except FileExistsError as exc:
+            try:
+                setattr(exc, "_from_non_collision_phase", True)
+            except Exception:
+                pass
+            raise
+
     try:
-        fd = os.open(tmp_path, flags, 0o644)
+        resolved_root = Path(root_cap.resolved_path)
+        if normalized_target.is_relative_to(normalized_root):
+            rel_parts = normalized_target.relative_to(normalized_root).parts
+        else:
+            rel_parts = normalized_target.relative_to(resolved_root).parts
+
+        dir_open_flags = (
+            os.O_RDONLY
+            | getattr(os, "O_DIRECTORY", 0)
+            | getattr(os, "O_NOFOLLOW", 0)
+            | getattr(os, "O_CLOEXEC", 0)
+        )
+        current_lexical_dir = normalized_root
+        for part in rel_parts[:-1]:
+            hop_lexical_path = current_lexical_dir / part
+            hop_parent_fd = parent_fd
+            sub_fd = os.open(part, dir_open_flags, 0o755, dir_fd=hop_parent_fd)
+            opened_subdir_fds.append(sub_fd)
+            sub_st = os.fstat(sub_fd)
+            if not stat.S_ISDIR(sub_st.st_mode) or int(sub_st.st_dev) != root_cap.dev:
+                raise ValueError(
+                    f"Intermediate directory component invalid under {normalized_root}: {part}"
+                )
+            hop_dev = int(sub_st.st_dev)
+            hop_ino = int(sub_st.st_ino)
+            hop_rel_st = os.stat(part, dir_fd=hop_parent_fd, follow_symlinks=False)
+            if not stat.S_ISDIR(hop_rel_st.st_mode) or (
+                int(hop_rel_st.st_dev),
+                int(hop_rel_st.st_ino),
+            ) != (hop_dev, hop_ino):
+                raise ValueError(
+                    f"Intermediate directory component changed while opening {hop_lexical_path}"
+                )
+            hop_lstat = os.lstat(hop_lexical_path)
+            if not stat.S_ISDIR(hop_lstat.st_mode) or (
+                int(hop_lstat.st_dev),
+                int(hop_lstat.st_ino),
+            ) != (hop_dev, hop_ino):
+                raise ValueError(
+                    f"Intermediate directory lexical path mismatch while opening {hop_lexical_path}"
+                )
+            hop_resolved = str(hop_lexical_path.resolve(strict=True))
+            intermediate_hops.append(
+                {
+                    "part": part,
+                    "parent_fd": hop_parent_fd,
+                    "fd": sub_fd,
+                    "lexical_path": hop_lexical_path,
+                    "resolved_path": hop_resolved,
+                    "dev": hop_dev,
+                    "ino": hop_ino,
+                }
+            )
+            parent_fd = sub_fd
+            parent_dev = hop_dev
+            parent_ino = hop_ino
+            current_lexical_dir = hop_lexical_path
+
+        try:
+            os.stat(target_name, dir_fd=parent_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            pass
+        else:
+            raise FileExistsError(
+                errno.EEXIST,
+                f"Refusing to overwrite existing JSON artifact or symlink: {target_path}",
+                str(target_path),
+            )
+
+        if intermediate_hops:
+            _reverify_full_destination_parent_chain()
+
+        flags = (
+            os.O_WRONLY
+            | os.O_CREAT
+            | os.O_EXCL
+            | getattr(os, "O_NOFOLLOW", 0)
+            | getattr(os, "O_CLOEXEC", 0)
+        )
+        fd = os.open(tmp_name, flags, 0o644, dir_fd=parent_fd)
         created_tmp = True
         with os.fdopen(fd, "wb") as handle:
+            tmp_st = os.fstat(handle.fileno())
+            if not stat.S_ISREG(tmp_st.st_mode) or int(tmp_st.st_dev) != root_cap.dev:
+                raise ValueError(
+                    f"Temporary JSON file descriptor is not a regular file on admitted device: {target_path}"
+                )
+            tmp_dev = int(tmp_st.st_dev)
+            tmp_ino = int(tmp_st.st_ino)
+            if callable(payload) or intermediate_hops:
+                _reverify_full_destination_parent_chain()
             materialized_payload = _materialize_json_payload(payload, target_path)
+            active_payload_sink = _ACTIVE_RETAINED_PAYLOAD_SINK_CTX.get()
+            if active_payload_sink is not None:
+                active_payload_sink.clear()
+                active_payload_sink.append(
+                    copy.deepcopy(dict(materialized_payload))
+                )
+            if callable(payload) and intermediate_hops:
+                _reverify_full_destination_parent_chain()
             serialized = (
                 json.dumps(
                     materialized_payload,
@@ -1387,30 +2946,768 @@ def _atomic_write_new_json_file(
             except OSError as exc:
                 if exc.errno not in (errno.EINVAL, errno.ENOTSUP):
                     raise
-        try:
-            os.lstat(target_path)
-        except FileNotFoundError:
-            pass
-        else:
-            raise FileExistsError(
-                f"Destination appeared before atomic move: {target_path}"
-            )
-        os.replace(tmp_path, target_path)
-        created_tmp = False
-    except BaseException:
-        if created_tmp:
-            try:
-                tmp_path.unlink(missing_ok=True)
-            except OSError:
-                pass
-        raise
 
-    digest = _sha256_regular_file(target_path)
-    return {
-        "path": str(target_path),
-        "sha256": digest,
-        "size_bytes": len(raw_bytes),
-    }
+        expected_digest = _sha256_bytes(raw_bytes)
+        expected_size_bytes = len(raw_bytes)
+
+        _reverify_full_destination_parent_chain()
+        tmp_check_st = os.stat(tmp_name, dir_fd=parent_fd, follow_symlinks=False)
+        if not stat.S_ISREG(tmp_check_st.st_mode) or (
+            int(tmp_check_st.st_dev),
+            int(tmp_check_st.st_ino),
+        ) != (tmp_dev, tmp_ino):
+            raise ValueError(
+                f"Temporary JSON file identity changed before publication in {normalized_root}: {tmp_name}"
+            )
+
+        try:
+            os.link(
+                tmp_name,
+                target_name,
+                src_dir_fd=parent_fd,
+                dst_dir_fd=parent_fd,
+                follow_symlinks=False,
+            )
+            published_link_created = True
+        except FileExistsError as exc:
+            raise FileExistsError(
+                errno.EEXIST,
+                f"Destination appeared before atomic publication: {target_path}",
+                str(target_path),
+            ) from exc
+
+        if tmp_dev is not None and tmp_ino is not None:
+            try:
+                post_link_tmp_st = os.stat(
+                    tmp_name, dir_fd=parent_fd, follow_symlinks=False
+                )
+            except FileNotFoundError:
+                post_link_temp_absent = True
+            except OSError as post_link_stat_exc:
+                try:
+                    setattr(post_link_stat_exc, "_is_temp_cleanup_error", True)
+                except Exception:
+                    pass
+                cleanup_error_records.append(
+                    ("post_link_stat", post_link_stat_exc)
+                )
+                cleanup_errors.append(post_link_stat_exc)
+            else:
+                post_link_obs_dev = int(post_link_tmp_st.st_dev)
+                post_link_obs_ino = int(post_link_tmp_st.st_ino)
+                if stat.S_ISREG(post_link_tmp_st.st_mode) and (
+                    post_link_obs_dev,
+                    post_link_obs_ino,
+                ) == (tmp_dev, tmp_ino):
+                    unlink_attempt_count += 1
+                    try:
+                        os.unlink(tmp_name, dir_fd=parent_fd)
+                        tmp_unlinked = True
+                    except OSError as post_link_unlink_exc:
+                        try:
+                            setattr(
+                                post_link_unlink_exc,
+                                "_is_temp_cleanup_error",
+                                True,
+                            )
+                        except Exception:
+                            pass
+                        cleanup_error_records.append(
+                            ("post_link_unlink", post_link_unlink_exc)
+                        )
+                        cleanup_errors.append(post_link_unlink_exc)
+                else:
+                    post_link_temp_identity_mismatch = True
+                    post_link_mismatch_dev = post_link_obs_dev
+                    post_link_mismatch_ino = post_link_obs_ino
+
+        observed_target_dev: int | None = None
+        observed_target_ino: int | None = None
+        observed_readback_sha256: str | None = None
+        observed_readback_size_bytes: int | None = None
+        readback_eof_reached = False
+        read_chunks: list[bytes] = []
+        readback_close_attempted = False
+        readback_close_succeeded: bool | None = None
+        readback_cleanup_close_exc: OSError | None = None
+
+        try:
+            verify_flags = (
+                os.O_RDONLY
+                | getattr(os, "O_NONBLOCK", 0)
+                | getattr(os, "O_NOFOLLOW", 0)
+                | getattr(os, "O_CLOEXEC", 0)
+            )
+            verify_fd = os.open(target_name, verify_flags, 0o644, dir_fd=parent_fd)
+            inner_readback_exc: BaseException | None = None
+            try:
+                verify_st = os.fstat(verify_fd)
+                observed_target_dev = int(verify_st.st_dev)
+                observed_target_ino = int(verify_st.st_ino)
+                if not stat.S_ISREG(verify_st.st_mode) or (
+                    observed_target_dev,
+                    observed_target_ino,
+                ) != (tmp_dev, tmp_ino):
+                    raise ValueError(
+                        f"Published JSON artifact identity mismatch on readback for {target_path}: "
+                        f"expected (dev={tmp_dev}, ino={tmp_ino}), "
+                        f"observed (dev={observed_target_dev}, ino={observed_target_ino})"
+                    )
+                while True:
+                    chunk = os.read(verify_fd, 65536)
+                    if not chunk:
+                        readback_eof_reached = True
+                        break
+                    read_chunks.append(chunk)
+                written_bytes = b"".join(read_chunks)
+                observed_readback_size_bytes = len(written_bytes)
+                observed_readback_sha256 = _sha256_bytes(written_bytes)
+                verify_post_st = os.fstat(verify_fd)
+                observed_target_dev = int(verify_post_st.st_dev)
+                observed_target_ino = int(verify_post_st.st_ino)
+                if (
+                    observed_target_dev,
+                    observed_target_ino,
+                ) != (tmp_dev, tmp_ino):
+                    raise ValueError(
+                        f"Published JSON artifact inode changed during readback for {target_path}"
+                    )
+            except BaseException as exc_in_readback:
+                if read_chunks or readback_eof_reached:
+                    partial_written_bytes = b"".join(read_chunks)
+                    observed_readback_size_bytes = len(partial_written_bytes)
+                    observed_readback_sha256 = _sha256_bytes(
+                        partial_written_bytes
+                    )
+                inner_readback_exc = exc_in_readback
+                raise
+            finally:
+                readback_close_attempted = True
+                try:
+                    os.close(verify_fd)
+                    readback_close_succeeded = True
+                except OSError as close_exc:
+                    readback_close_succeeded = False
+                    readback_cleanup_close_exc = close_exc
+                    if inner_readback_exc is not None:
+                        try:
+                            setattr(close_exc, "_is_cleanup_close_error", True)
+                            setattr(
+                                inner_readback_exc,
+                                "cleanup_close_error",
+                                close_exc,
+                            )
+                            setattr(
+                                inner_readback_exc,
+                                "readback_close_error",
+                                close_exc,
+                            )
+                            setattr(
+                                inner_readback_exc, "close_error", close_exc
+                            )
+                        except Exception:
+                            pass
+                    else:
+                        raise
+
+            if (
+                observed_readback_sha256 != expected_digest
+                or observed_readback_size_bytes != expected_size_bytes
+            ):
+                raise ValueError(
+                    f"Published JSON artifact content mismatch on readback for {target_path}"
+                )
+            readback_verified = True
+        except Exception as readback_exc:
+            if isinstance(readback_exc, FileExistsError):
+                try:
+                    setattr(readback_exc, "_from_non_collision_phase", True)
+                except Exception:
+                    pass
+            cleanup_status_now = _finalize_temp_cleanup()
+            readback_partial_receipt: dict[str, Any] = {
+                "path": None,
+                "intended_lexical_path": str(target_path),
+                "target_name": target_name,
+                "published_link_created": published_link_created,
+                "readback_verified": False,
+                "post_publication_namespace_verified": False,
+                "available_at_lexical_path": None,
+                "lexical_path_currently_bound": None,
+                "detached_from_lexical_path": None,
+                "sha256": None,
+                "size_bytes": None,
+                "expected_sha256": expected_digest,
+                "expected_size_bytes": expected_size_bytes,
+                "observed_readback_sha256": observed_readback_sha256,
+                "observed_readback_size_bytes": observed_readback_size_bytes,
+                "observed_readback_eof": readback_eof_reached,
+                "dev": None,
+                "ino": None,
+                "source_tmp_dev": tmp_dev,
+                "source_tmp_ino": tmp_ino,
+                "observed_target_dev": observed_target_dev,
+                "observed_target_ino": observed_target_ino,
+                "parent_dir_dev": parent_dev,
+                "parent_dir_ino": parent_ino,
+                "dir_dev": root_cap.dev,
+                "dir_ino": root_cap.ino,
+                "failure_phase": "post_link_readback",
+                "readback_error": f"{type(readback_exc).__name__}: {readback_exc}",
+                "readback_close_attempted": readback_close_attempted,
+                "readback_close_succeeded": readback_close_succeeded,
+                "cleanup_close_error": (
+                    f"{type(readback_cleanup_close_exc).__name__}: {readback_cleanup_close_exc}"
+                    if readback_cleanup_close_exc is not None
+                    else None
+                ),
+                "cleanup_close_exception_type": (
+                    type(readback_cleanup_close_exc).__name__
+                    if readback_cleanup_close_exc is not None
+                    else None
+                ),
+                "cleanup_close_exception_message": (
+                    str(readback_cleanup_close_exc)
+                    if readback_cleanup_close_exc is not None
+                    else None
+                ),
+                "cleanup_close_errno": (
+                    getattr(readback_cleanup_close_exc, "errno", None)
+                    if readback_cleanup_close_exc is not None
+                    else None
+                ),
+                "namespace_binding_error": None,
+                "temp_cleanup_status": copy.deepcopy(cleanup_status_now),
+            }
+            if eff_causes is not None:
+                existing_cause_ids = {id(c) for c in eff_causes}
+                if id(readback_exc) not in existing_cause_ids:
+                    eff_causes.append(readback_exc)
+                    existing_cause_ids.add(id(readback_exc))
+                if (
+                    readback_cleanup_close_exc is not None
+                    and readback_cleanup_close_exc is not readback_exc
+                    and id(readback_cleanup_close_exc) not in existing_cause_ids
+                ):
+                    eff_causes.append(readback_cleanup_close_exc)
+            if eff_status_out is not None:
+                eff_status_out["published_receipt"] = copy.deepcopy(
+                    readback_partial_receipt
+                )
+                eff_status_out["temp_cleanup_status"] = copy.deepcopy(
+                    cleanup_status_now
+                )
+            _attach_cleanup_metadata_to_exception(
+                readback_exc,
+                cleanup_status_now,
+                receipt_snapshot=readback_partial_receipt,
+            )
+            raise
+
+        post_leaf_present: bool | None = None
+        post_leaf_is_regular: bool | None = None
+        post_leaf_is_symlink: bool | None = None
+        post_leaf_dev: int | None = None
+        post_leaf_ino: int | None = None
+        try:
+            _reverify_full_destination_parent_chain()
+            try:
+                post_leaf_st = os.stat(
+                    target_name, dir_fd=parent_fd, follow_symlinks=False
+                )
+            except FileNotFoundError:
+                post_leaf_present = False
+                post_leaf_is_regular = False
+                post_leaf_is_symlink = False
+                raise
+            else:
+                post_leaf_present = True
+                post_leaf_is_regular = bool(stat.S_ISREG(post_leaf_st.st_mode))
+                post_leaf_is_symlink = bool(stat.S_ISLNK(post_leaf_st.st_mode))
+                post_leaf_dev = int(post_leaf_st.st_dev)
+                post_leaf_ino = int(post_leaf_st.st_ino)
+                if not post_leaf_is_regular or (
+                    post_leaf_dev,
+                    post_leaf_ino,
+                ) != (observed_target_dev, observed_target_ino):
+                    raise ValueError(
+                        f"Published JSON artifact final leaf rebound or replaced after readback for {target_path}: "
+                        f"expected regular file (dev={observed_target_dev}, ino={observed_target_ino}), "
+                        f"observed (regular={post_leaf_is_regular}, symlink={post_leaf_is_symlink}, "
+                        f"dev={post_leaf_dev}, ino={post_leaf_ino})"
+                    )
+        except Exception as post_exc:
+            if isinstance(post_exc, FileExistsError):
+                try:
+                    setattr(post_exc, "_from_non_collision_phase", True)
+                except Exception:
+                    pass
+            if eff_causes is not None:
+                existing_cause_ids = {id(c) for c in eff_causes}
+                if id(post_exc) not in existing_cause_ids:
+                    eff_causes.append(post_exc)
+            cleanup_status_now = _finalize_temp_cleanup()
+            detachment_observed = _is_observed_namespace_detachment(post_exc)
+            post_partial_receipt: dict[str, Any] = {
+                "path": None,
+                "intended_lexical_path": str(target_path),
+                "target_name": target_name,
+                "published_link_created": published_link_created,
+                "readback_verified": readback_verified,
+                "post_publication_namespace_verified": False,
+                "available_at_lexical_path": (
+                    False if detachment_observed else None
+                ),
+                "lexical_path_currently_bound": (
+                    False if detachment_observed else None
+                ),
+                "detached_from_lexical_path": (
+                    True if detachment_observed else None
+                ),
+                "post_readback_leaf_exists": post_leaf_present,
+                "post_readback_leaf_is_regular_file": post_leaf_is_regular,
+                "post_readback_leaf_is_symlink": post_leaf_is_symlink,
+                "post_readback_leaf_dev": post_leaf_dev,
+                "post_readback_leaf_ino": post_leaf_ino,
+                "sha256": observed_readback_sha256,
+                "size_bytes": observed_readback_size_bytes,
+                "expected_sha256": expected_digest,
+                "expected_size_bytes": expected_size_bytes,
+                "observed_readback_sha256": observed_readback_sha256,
+                "observed_readback_size_bytes": observed_readback_size_bytes,
+                "observed_readback_eof": readback_eof_reached,
+                "dev": observed_target_dev,
+                "ino": observed_target_ino,
+                "source_tmp_dev": tmp_dev,
+                "source_tmp_ino": tmp_ino,
+                "observed_target_dev": observed_target_dev,
+                "observed_target_ino": observed_target_ino,
+                "parent_dir_dev": parent_dev,
+                "parent_dir_ino": parent_ino,
+                "dir_dev": root_cap.dev,
+                "dir_ino": root_cap.ino,
+                "failure_phase": "after_publication",
+                "readback_error": None,
+                "namespace_binding_error": f"{type(post_exc).__name__}: {post_exc}",
+                "temp_cleanup_status": copy.deepcopy(cleanup_status_now),
+            }
+            if eff_status_out is not None:
+                eff_status_out["published_receipt"] = copy.deepcopy(
+                    post_partial_receipt
+                )
+                eff_status_out["temp_cleanup_status"] = copy.deepcopy(
+                    cleanup_status_now
+                )
+            wrapped_post_err = _PostPublicationBindingError(
+                str(post_exc),
+                cause=post_exc,
+                published_receipt=copy.deepcopy(post_partial_receipt),
+            )
+            _attach_cleanup_metadata_to_exception(
+                wrapped_post_err,
+                cleanup_status_now,
+                receipt_snapshot=post_partial_receipt,
+            )
+            raise wrapped_post_err from post_exc
+
+        cleanup_status_now = _finalize_temp_cleanup()
+        receipt: dict[str, Any] = {
+            "path": str(target_path),
+            "sha256": observed_readback_sha256,
+            "size_bytes": expected_size_bytes,
+            "temp_cleanup_succeeded": bool(
+                cleanup_status_now.get("unlinked", False)
+            ),
+            "temp_cleanup_status": copy.deepcopy(cleanup_status_now),
+        }
+        active_cleanup_sink = _ACTIVE_WRITE_CLEANUP_ERRORS_SINK_CTX.get()
+        if active_cleanup_sink is not None:
+            active_cleanup_sink.clear()
+            if not bool(cleanup_status_now.get("unlinked", False)):
+                active_cleanup_sink.extend(cleanup_errors)
+        if not bool(cleanup_status_now.get("unlinked", False)):
+            for err_obj in cleanup_errors:
+                try:
+                    setattr(
+                        err_obj,
+                        "published_receipt",
+                        copy.deepcopy(receipt),
+                    )
+                    setattr(
+                        err_obj,
+                        "temp_cleanup_status",
+                        copy.deepcopy(cleanup_status_now),
+                    )
+                    setattr(
+                        err_obj,
+                        "temp_cleanup_errors",
+                        list(cleanup_errors),
+                    )
+                    setattr(
+                        err_obj,
+                        "temp_cleanup_error",
+                        cleanup_errors[-1],
+                    )
+                except Exception:
+                    pass
+            if eff_causes is not None:
+                existing_cause_ids = {id(c) for c in eff_causes}
+                for err_obj in cleanup_errors:
+                    if id(err_obj) not in existing_cause_ids:
+                        eff_causes.append(err_obj)
+                        existing_cause_ids.add(id(err_obj))
+            if eff_status_out is not None:
+                eff_status_out["temp_cleanup_status"] = copy.deepcopy(
+                    cleanup_status_now
+                )
+
+        _close_writer_directory_descriptors()
+        if dir_close_failures:
+            if eff_causes is not None:
+                existing_cause_ids = {id(c) for c in eff_causes}
+                for _, _, dc_exc in dir_close_failures:
+                    if id(dc_exc) not in existing_cause_ids:
+                        eff_causes.append(dc_exc)
+                        existing_cause_ids.add(id(dc_exc))
+            first_close_role, first_close_phase, primary_dir_close_exc = (
+                dir_close_failures[0]
+            )
+            dir_close_partial_receipt: dict[str, Any] = {
+                "path": str(target_path),
+                "intended_lexical_path": str(target_path),
+                "target_name": target_name,
+                "published_link_created": published_link_created,
+                "readback_verified": readback_verified,
+                "post_readback_leaf_verified": True,
+                "post_publication_namespace_verified": False,
+                "available_at_lexical_path": True,
+                "lexical_path_currently_bound": True,
+                "detached_from_lexical_path": False,
+                "post_readback_leaf_exists": post_leaf_present,
+                "post_readback_leaf_is_regular_file": post_leaf_is_regular,
+                "post_readback_leaf_is_symlink": post_leaf_is_symlink,
+                "post_readback_leaf_dev": post_leaf_dev,
+                "post_readback_leaf_ino": post_leaf_ino,
+                "sha256": observed_readback_sha256,
+                "size_bytes": observed_readback_size_bytes,
+                "expected_sha256": expected_digest,
+                "expected_size_bytes": expected_size_bytes,
+                "observed_readback_sha256": observed_readback_sha256,
+                "observed_readback_size_bytes": observed_readback_size_bytes,
+                "observed_readback_eof": readback_eof_reached,
+                "dev": observed_target_dev,
+                "ino": observed_target_ino,
+                "source_tmp_dev": tmp_dev,
+                "source_tmp_ino": tmp_ino,
+                "observed_target_dev": observed_target_dev,
+                "observed_target_ino": observed_target_ino,
+                "parent_dir_dev": parent_dev,
+                "parent_dir_ino": parent_ino,
+                "dir_dev": root_cap.dev,
+                "dir_ino": root_cap.ino,
+                "failure_phase": first_close_phase,
+                "readback_error": None,
+                "readback_close_attempted": readback_close_attempted,
+                "readback_close_succeeded": readback_close_succeeded,
+                "parent_close_attempted": root_close_attempted,
+                "parent_close_succeeded": root_close_succeeded,
+                "parent_close_error": (
+                    f"{type(root_close_exc).__name__}: {root_close_exc}"
+                    if root_close_exc is not None
+                    else None
+                ),
+                "parent_close_exception_type": (
+                    type(root_close_exc).__name__
+                    if root_close_exc is not None
+                    else None
+                ),
+                "parent_close_exception_message": (
+                    str(root_close_exc) if root_close_exc is not None else None
+                ),
+                "parent_close_errno": (
+                    getattr(root_close_exc, "errno", None)
+                    if root_close_exc is not None
+                    else None
+                ),
+                "directory_close_error": (
+                    f"{type(primary_dir_close_exc).__name__}: {primary_dir_close_exc}"
+                ),
+                "directory_close_exception_type": type(
+                    primary_dir_close_exc
+                ).__name__,
+                "directory_close_exception_message": str(primary_dir_close_exc),
+                "directory_close_errno": getattr(
+                    primary_dir_close_exc, "errno", None
+                ),
+                "cleanup_close_error": (
+                    f"{type(primary_dir_close_exc).__name__}: {primary_dir_close_exc}"
+                ),
+                "cleanup_close_exception_type": type(
+                    primary_dir_close_exc
+                ).__name__,
+                "cleanup_close_exception_message": str(primary_dir_close_exc),
+                "cleanup_close_errno": getattr(
+                    primary_dir_close_exc, "errno", None
+                ),
+                "directory_close_failures": [
+                    {
+                        "role": r_name,
+                        "phase": p_name,
+                        "error": f"{type(c_exc).__name__}: {c_exc}",
+                        "exception_type": type(c_exc).__name__,
+                        "exception_message": str(c_exc),
+                        "errno": getattr(c_exc, "errno", None),
+                    }
+                    for r_name, p_name, c_exc in dir_close_failures
+                ],
+                "namespace_binding_error": None,
+                "temp_cleanup_succeeded": bool(
+                    cleanup_status_now.get("unlinked", False)
+                ),
+                "temp_cleanup_status": copy.deepcopy(cleanup_status_now),
+            }
+            if eff_status_out is not None:
+                eff_status_out["identity_verified"] = False
+                eff_status_out["writable_post_run"] = False
+                eff_status_out["write_error"] = (
+                    f"{type(primary_dir_close_exc).__name__}: {primary_dir_close_exc}"
+                )
+                eff_status_out["write_exception_type"] = type(
+                    primary_dir_close_exc
+                ).__name__
+                eff_status_out["write_exception_message"] = str(
+                    primary_dir_close_exc
+                )
+                eff_status_out["write_errno"] = getattr(
+                    primary_dir_close_exc, "errno", None
+                )
+                eff_status_out["published_receipt"] = copy.deepcopy(
+                    dir_close_partial_receipt
+                )
+                eff_status_out["temp_cleanup_status"] = copy.deepcopy(
+                    cleanup_status_now
+                )
+            _attach_cleanup_metadata_to_exception(
+                primary_dir_close_exc,
+                cleanup_status_now,
+                receipt_snapshot=dir_close_partial_receipt,
+            )
+            if len(dir_close_failures) > 1:
+                second_dc_exc = dir_close_failures[1][2]
+                try:
+                    setattr(
+                        primary_dir_close_exc,
+                        "cleanup_close_error",
+                        second_dc_exc,
+                    )
+                    setattr(
+                        primary_dir_close_exc,
+                        "directory_close_error",
+                        second_dc_exc,
+                    )
+                    if root_close_exc is not None:
+                        setattr(
+                            primary_dir_close_exc,
+                            "parent_close_error",
+                            root_close_exc,
+                        )
+                except Exception:
+                    pass
+            raise primary_dir_close_exc
+
+        return receipt
+    except BaseException as exc:
+        active_write_exception = exc
+        if eff_causes is not None:
+            actual_primary_exc = (
+                exc.cause
+                if isinstance(exc, _PostPublicationBindingError)
+                and exc.cause is not None
+                else exc
+            )
+            is_benign_collision = isinstance(
+                actual_primary_exc, FileExistsError
+            ) and not _is_non_collision_file_exists_error(actual_primary_exc)
+            if (
+                isinstance(actual_primary_exc, Exception)
+                and not is_benign_collision
+            ):
+                existing_cause_ids = {id(c) for c in eff_causes}
+                if id(actual_primary_exc) not in existing_cause_ids:
+                    eff_causes.append(actual_primary_exc)
+        raise
+    finally:
+        if created_tmp and not final_cleanup_executed:
+            cleanup_status_final = _finalize_temp_cleanup()
+            if not bool(cleanup_status_final.get("unlinked", False)):
+                if eff_causes is not None:
+                    existing_cause_ids = {id(c) for c in eff_causes}
+                    for err_obj in cleanup_errors:
+                        if id(err_obj) not in existing_cause_ids:
+                            eff_causes.append(err_obj)
+                            existing_cause_ids.add(id(err_obj))
+                if eff_status_out is not None:
+                    eff_status_out["temp_cleanup_status"] = copy.deepcopy(
+                        cleanup_status_final
+                    )
+            if active_write_exception is not None:
+                _attach_cleanup_metadata_to_exception(
+                    active_write_exception,
+                    cleanup_status_final,
+                    receipt_snapshot=(
+                        getattr(
+                            active_write_exception, "published_receipt", None
+                        )
+                        if isinstance(
+                            getattr(
+                                active_write_exception,
+                                "published_receipt",
+                                None,
+                            ),
+                            Mapping,
+                        )
+                        else None
+                    ),
+                )
+        _close_writer_directory_descriptors()
+        if dir_close_failures:
+            actual_primary_for_close = (
+                active_write_exception.cause
+                if isinstance(active_write_exception, _PostPublicationBindingError)
+                and active_write_exception.cause is not None
+                else active_write_exception
+            )
+            if eff_causes is not None:
+                existing_cause_ids = {id(c) for c in eff_causes}
+                if (
+                    isinstance(actual_primary_for_close, Exception)
+                    and id(actual_primary_for_close) not in existing_cause_ids
+                ):
+                    eff_causes.append(actual_primary_for_close)
+                    existing_cause_ids.add(id(actual_primary_for_close))
+                for _, _, dc_exc in dir_close_failures:
+                    if id(dc_exc) not in existing_cause_ids:
+                        eff_causes.append(dc_exc)
+                        existing_cause_ids.add(id(dc_exc))
+            if active_write_exception is not None:
+                first_dc_exc = dir_close_failures[0][2]
+                first_dc_str = f"{type(first_dc_exc).__name__}: {first_dc_exc}"
+                if eff_status_out is not None:
+                    eff_status_out["identity_verified"] = False
+                    eff_status_out["writable_post_run"] = False
+                    if (
+                        isinstance(actual_primary_for_close, Exception)
+                        and eff_status_out.get("write_error") is None
+                    ):
+                        eff_status_out["write_error"] = (
+                            f"{type(actual_primary_for_close).__name__}: {actual_primary_for_close}"
+                        )
+                        eff_status_out["write_exception_type"] = type(
+                            actual_primary_for_close
+                        ).__name__
+                        eff_status_out["write_exception_message"] = str(
+                            actual_primary_for_close
+                        )
+                        eff_status_out["write_errno"] = getattr(
+                            actual_primary_for_close, "errno", None
+                        )
+                    if (
+                        isinstance(temp_cleanup_status, Mapping)
+                        and "temp_cleanup_status" not in eff_status_out
+                    ):
+                        eff_status_out["temp_cleanup_status"] = copy.deepcopy(
+                            dict(temp_cleanup_status)
+                        )
+                dir_close_failure_entries = [
+                    {
+                        "role": r_name,
+                        "phase": p_name,
+                        "error": f"{type(c_exc).__name__}: {c_exc}",
+                        "exception_type": type(c_exc).__name__,
+                        "exception_message": str(c_exc),
+                        "errno": getattr(c_exc, "errno", None),
+                    }
+                    for r_name, p_name, c_exc in dir_close_failures
+                ]
+                targets_to_annotate: list[BaseException] = [
+                    active_write_exception
+                ]
+                inner_cause = getattr(active_write_exception, "cause", None)
+                if isinstance(inner_cause, BaseException):
+                    targets_to_annotate.append(inner_cause)
+                for tgt in targets_to_annotate:
+                    try:
+                        setattr(tgt, "directory_close_error", first_dc_exc)
+                        setattr(
+                            tgt,
+                            "directory_close_failures",
+                            copy.deepcopy(dir_close_failure_entries),
+                        )
+                        if root_close_exc is not None:
+                            setattr(tgt, "parent_close_error", root_close_exc)
+                        if getattr(tgt, "cleanup_close_error", None) is None:
+                            setattr(tgt, "cleanup_close_error", first_dc_exc)
+                        if getattr(tgt, "close_error", None) is None:
+                            setattr(tgt, "close_error", first_dc_exc)
+                        cur_rec = getattr(tgt, "published_receipt", None)
+                        if isinstance(cur_rec, Mapping):
+                            updated_rec = copy.deepcopy(dict(cur_rec))
+                            updated_rec["parent_close_attempted"] = (
+                                root_close_attempted
+                            )
+                            updated_rec["parent_close_succeeded"] = (
+                                root_close_succeeded
+                            )
+                            updated_rec["parent_close_error"] = (
+                                f"{type(root_close_exc).__name__}: {root_close_exc}"
+                                if root_close_exc is not None
+                                else None
+                            )
+                            updated_rec["parent_close_exception_type"] = (
+                                type(root_close_exc).__name__
+                                if root_close_exc is not None
+                                else None
+                            )
+                            updated_rec["parent_close_exception_message"] = (
+                                str(root_close_exc)
+                                if root_close_exc is not None
+                                else None
+                            )
+                            updated_rec["parent_close_errno"] = (
+                                getattr(root_close_exc, "errno", None)
+                                if root_close_exc is not None
+                                else None
+                            )
+                            updated_rec["directory_close_error"] = first_dc_str
+                            updated_rec["directory_close_exception_type"] = (
+                                type(first_dc_exc).__name__
+                            )
+                            updated_rec["directory_close_exception_message"] = (
+                                str(first_dc_exc)
+                            )
+                            updated_rec["directory_close_errno"] = getattr(
+                                first_dc_exc, "errno", None
+                            )
+                            if updated_rec.get("cleanup_close_error") is None:
+                                updated_rec["cleanup_close_error"] = (
+                                    first_dc_str
+                                )
+                                updated_rec["cleanup_close_exception_type"] = (
+                                    type(first_dc_exc).__name__
+                                )
+                                updated_rec[
+                                    "cleanup_close_exception_message"
+                                ] = str(first_dc_exc)
+                                updated_rec["cleanup_close_errno"] = getattr(
+                                    first_dc_exc, "errno", None
+                                )
+                            setattr(tgt, "published_receipt", updated_rec)
+                            if eff_status_out is not None:
+                                eff_status_out["published_receipt"] = (
+                                    copy.deepcopy(updated_rec)
+                                )
+                    except Exception:
+                        pass
 
 
 def _write_json_with_sibling_collision_fallback(
@@ -1423,12 +3720,203 @@ def _write_json_with_sibling_collision_fallback(
     *,
     root: Path,
 ) -> dict[str, Any]:
-    """Write ``payload`` to ``target_path`` under ``root``, using a ``.parent.<pid>`` sibling on ``FileExistsError``."""
+    """Write ``payload`` to ``target_path`` under ``root``, using a ``.parent.<pid>`` sibling on destination ``FileExistsError``."""
+
+    def _has_directory_close_failure(exc_obj: BaseException) -> bool:
+        return isinstance(
+            getattr(exc_obj, "directory_close_error", None), BaseException
+        ) or isinstance(
+            getattr(exc_obj, "cleanup_close_error", None), BaseException
+        )
+
     try:
         return _atomic_write_new_json_file(payload, target_path, root=root)
-    except FileExistsError:
-        attempt = 0
-        while True:
+    except FileExistsError as exc:
+        if _is_non_collision_file_exists_error(
+            exc
+        ) or _has_directory_close_failure(exc):
+            raise
+        prior_collision_cleanup_statuses: list[dict[str, Any]] = []
+        prior_collision_cleanup_errors: list[OSError] = []
+        prior_collision_exceptions: list[FileExistsError] = []
+
+        def _record_collision_attempt_cleanup(
+            coll_exc: FileExistsError,
+            attempted_dest: Path,
+        ) -> None:
+            prior_collision_exceptions.append(coll_exc)
+            raw_st = getattr(coll_exc, "temp_cleanup_status", None)
+            if isinstance(raw_st, Mapping) and not bool(
+                raw_st.get("unlinked", True)
+            ):
+                st_entry = copy.deepcopy(dict(raw_st))
+                st_entry["attempted_path"] = str(attempted_dest)
+                st_entry["intended_lexical_path"] = str(attempted_dest)
+                st_entry["target_name"] = attempted_dest.name
+                st_entry["published_link_created"] = False
+                st_entry["readback_verified"] = False
+                st_entry["collision_attempt_published"] = False
+                st_entry["collision_exception_type"] = type(coll_exc).__name__
+                st_entry["collision_exception_message"] = str(coll_exc)
+                st_entry["collision_errno"] = getattr(
+                    coll_exc, "errno", None
+                )
+                prior_collision_cleanup_statuses.append(st_entry)
+            raw_errs = getattr(coll_exc, "temp_cleanup_errors", None)
+            if isinstance(raw_errs, list):
+                existing_ids = {id(e) for e in prior_collision_cleanup_errors}
+                for item in raw_errs:
+                    if (
+                        isinstance(item, OSError)
+                        and id(item) not in existing_ids
+                    ):
+                        prior_collision_cleanup_errors.append(item)
+                        existing_ids.add(id(item))
+
+        def _attach_prior_collision_cleanup_to_exc(
+            target_exc: BaseException,
+        ) -> None:
+            if (
+                not prior_collision_cleanup_statuses
+                and not prior_collision_cleanup_errors
+            ):
+                return
+            merged_cleanup_errors: list[OSError] = []
+            seen_err_ids: set[int] = set()
+            for prior_err in prior_collision_cleanup_errors:
+                if (
+                    isinstance(prior_err, OSError)
+                    and id(prior_err) not in seen_err_ids
+                ):
+                    merged_cleanup_errors.append(prior_err)
+                    seen_err_ids.add(id(prior_err))
+            walk_seen: set[int] = set()
+            cur_walk: BaseException | None = target_exc
+            while cur_walk is not None and id(cur_walk) not in walk_seen:
+                walk_seen.add(id(cur_walk))
+                cur_errs = getattr(cur_walk, "temp_cleanup_errors", None)
+                if isinstance(cur_errs, list):
+                    for cur_err in cur_errs:
+                        if (
+                            isinstance(cur_err, OSError)
+                            and id(cur_err) not in seen_err_ids
+                        ):
+                            merged_cleanup_errors.append(cur_err)
+                            seen_err_ids.add(id(cur_err))
+                next_walk = getattr(cur_walk, "cause", None)
+                if not isinstance(next_walk, BaseException):
+                    next_walk = cur_walk.__cause__
+                cur_walk = next_walk
+
+            existing_st = getattr(target_exc, "temp_cleanup_status", None)
+            if isinstance(existing_st, Mapping) and not bool(
+                existing_st.get("unlinked", True)
+            ):
+                effective_st = copy.deepcopy(dict(existing_st))
+                if prior_collision_cleanup_statuses:
+                    effective_st["prior_collision_temp_cleanup_failures"] = (
+                        copy.deepcopy(prior_collision_cleanup_statuses)
+                    )
+            elif prior_collision_cleanup_statuses:
+                effective_st = copy.deepcopy(
+                    prior_collision_cleanup_statuses[-1]
+                )
+                if isinstance(existing_st, Mapping):
+                    effective_st["current_attempt_temp_cleanup_status"] = (
+                        copy.deepcopy(dict(existing_st))
+                    )
+                effective_st["prior_collision_temp_cleanup_failures"] = (
+                    copy.deepcopy(prior_collision_cleanup_statuses)
+                )
+            elif isinstance(existing_st, Mapping):
+                effective_st = copy.deepcopy(dict(existing_st))
+            else:
+                effective_st = None
+
+            assign_seen: set[int] = set()
+            cur_assign: BaseException | None = target_exc
+            while cur_assign is not None and id(cur_assign) not in assign_seen:
+                assign_seen.add(id(cur_assign))
+                try:
+                    if effective_st is not None:
+                        setattr(
+                            cur_assign,
+                            "temp_cleanup_status",
+                            copy.deepcopy(effective_st),
+                        )
+                    if prior_collision_cleanup_statuses:
+                        setattr(
+                            cur_assign,
+                            "prior_collision_temp_cleanup_failures",
+                            copy.deepcopy(prior_collision_cleanup_statuses),
+                        )
+                    if merged_cleanup_errors:
+                        setattr(
+                            cur_assign,
+                            "temp_cleanup_errors",
+                            list(merged_cleanup_errors),
+                        )
+                        setattr(
+                            cur_assign,
+                            "temp_cleanup_error",
+                            merged_cleanup_errors[-1],
+                        )
+                    cur_pub_rec = getattr(
+                        cur_assign, "published_receipt", None
+                    )
+                    if (
+                        isinstance(cur_pub_rec, Mapping)
+                        and prior_collision_cleanup_statuses
+                    ):
+                        updated_pub_rec = copy.deepcopy(dict(cur_pub_rec))
+                        updated_pub_rec[
+                            "prior_collision_temp_cleanup_failures"
+                        ] = copy.deepcopy(prior_collision_cleanup_statuses)
+                        if isinstance(
+                            updated_pub_rec.get("temp_cleanup_status"),
+                            Mapping,
+                        ):
+                            updated_pub_rec["temp_cleanup_status"][
+                                "prior_collision_temp_cleanup_failures"
+                            ] = copy.deepcopy(
+                                prior_collision_cleanup_statuses
+                            )
+                        setattr(
+                            cur_assign, "published_receipt", updated_pub_rec
+                        )
+                except Exception:
+                    pass
+                next_assign = getattr(cur_assign, "cause", None)
+                if not isinstance(next_assign, BaseException):
+                    next_assign = cur_assign.__cause__
+                cur_assign = next_assign
+
+            ctx_info = _ADMITTED_DIR_BASELINE_CTX.get()
+            normalized_root_str = str(
+                Path(os.path.abspath(os.fspath(root)))
+            )
+            if ctx_info is not None and ctx_info[0] == normalized_root_str:
+                ctx_status_out = ctx_info[2]
+                ctx_causes = ctx_info[3]
+                if ctx_status_out is not None:
+                    if effective_st is not None:
+                        ctx_status_out["temp_cleanup_status"] = copy.deepcopy(
+                            effective_st
+                        )
+                    if prior_collision_cleanup_statuses:
+                        ctx_status_out[
+                            "prior_collision_temp_cleanup_failures"
+                        ] = copy.deepcopy(prior_collision_cleanup_statuses)
+                if ctx_causes is not None and merged_cleanup_errors:
+                    existing_ids = {id(c) for c in ctx_causes}
+                    for c_err in merged_cleanup_errors:
+                        if id(c_err) not in existing_ids:
+                            ctx_causes.append(c_err)
+                            existing_ids.add(id(c_err))
+
+        _record_collision_attempt_cleanup(exc, target_path)
+        last_collision_exc: FileExistsError = exc
+        for attempt in range(MAX_SIBLING_COLLISION_ATTEMPTS):
             suffix_tag = (
                 f".parent.{os.getpid()}"
                 if attempt == 0
@@ -1438,15 +3926,185 @@ def _write_json_with_sibling_collision_fallback(
                 target_path.parent
                 / f"{target_path.stem}{suffix_tag}{target_path.suffix}"
             )
-            try:
-                artifact = _atomic_write_new_json_file(
-                    payload, fallback_path, root=root
+            if prior_collision_cleanup_statuses:
+                prior_statuses_snapshot = copy.deepcopy(
+                    prior_collision_cleanup_statuses
                 )
-            except FileExistsError:
-                attempt += 1
+
+                def _payload_with_prior_collision_cleanup(
+                    dest: Path,
+                    _snap: list[dict[str, Any]] = prior_statuses_snapshot,
+                ) -> Mapping[str, Any]:
+                    base_map = _materialize_json_payload(payload, dest)
+                    enriched_map = dict(base_map)
+                    enriched_map["fallback_for_preexisting_path"] = str(
+                        target_path
+                    )
+                    enriched_map["prior_collision_temp_cleanup_failures"] = (
+                        copy.deepcopy(_snap)
+                    )
+                    prior_primary_st = copy.deepcopy(_snap[-1])
+                    prior_primary_st["actual_published_path"] = str(dest)
+                    prior_primary_st[
+                        "prior_collision_temp_cleanup_failures"
+                    ] = copy.deepcopy(_snap)
+                    enriched_map["prior_collision_temp_cleanup_status"] = (
+                        prior_primary_st
+                    )
+                    enriched_map["temp_cleanup_succeeded"] = False
+                    return enriched_map
+
+                attempt_payload: (
+                    Mapping[str, Any]
+                    | Callable[[Path], Mapping[str, Any]]
+                    | Callable[[Path | None], Mapping[str, Any]]
+                ) = _payload_with_prior_collision_cleanup
+            else:
+                attempt_payload = payload
+            sibling_cleanup_errors: list[OSError] = []
+            try:
+                with (
+                    _collision_cause_context(
+                        prior_collision_exceptions[0]
+                        if prior_collision_exceptions
+                        else exc
+                    ),
+                    _write_cleanup_errors_sink_context(sibling_cleanup_errors),
+                ):
+                    artifact = _atomic_write_new_json_file(
+                        attempt_payload, fallback_path, root=root
+                    )
+            except FileExistsError as sub_exc:
+                if _is_non_collision_file_exists_error(
+                    sub_exc
+                ) or _has_directory_close_failure(sub_exc):
+                    _attach_prior_collision_cleanup_to_exc(sub_exc)
+                    raise
+                _record_collision_attempt_cleanup(sub_exc, fallback_path)
+                last_collision_exc = sub_exc
                 continue
+            except BaseException as sub_other_exc:
+                _attach_prior_collision_cleanup_to_exc(sub_other_exc)
+                raise
             artifact["fallback_for_preexisting_path"] = str(target_path)
+            if prior_collision_cleanup_statuses:
+                sibling_cleanup_status = copy.deepcopy(
+                    artifact.get("temp_cleanup_status")
+                )
+                sibling_cleanup_succeeded = bool(
+                    artifact.get("temp_cleanup_succeeded", True)
+                )
+                artifact["temp_cleanup_succeeded"] = False
+                artifact["sibling_temp_cleanup_succeeded"] = (
+                    sibling_cleanup_succeeded
+                )
+                artifact["sibling_temp_cleanup_status"] = (
+                    sibling_cleanup_status
+                )
+                artifact["prior_collision_temp_cleanup_failures"] = (
+                    copy.deepcopy(prior_collision_cleanup_statuses)
+                )
+                primary_failed_cleanup = (
+                    copy.deepcopy(dict(sibling_cleanup_status))
+                    if (
+                        not sibling_cleanup_succeeded
+                        and isinstance(sibling_cleanup_status, Mapping)
+                    )
+                    else copy.deepcopy(prior_collision_cleanup_statuses[-1])
+                )
+                primary_failed_cleanup["actual_published_path"] = str(
+                    artifact["path"]
+                )
+                primary_failed_cleanup["sibling_temp_cleanup_status"] = (
+                    copy.deepcopy(sibling_cleanup_status)
+                )
+                primary_failed_cleanup[
+                    "prior_collision_temp_cleanup_failures"
+                ] = copy.deepcopy(prior_collision_cleanup_statuses)
+                artifact["temp_cleanup_status"] = primary_failed_cleanup
+            combined_cleanup_errors: list[OSError] = []
+            seen_cleanup_err_ids: set[int] = set()
+            for c_err in (
+                *prior_collision_cleanup_errors,
+                *sibling_cleanup_errors,
+            ):
+                if (
+                    isinstance(c_err, OSError)
+                    and id(c_err) not in seen_cleanup_err_ids
+                ):
+                    combined_cleanup_errors.append(c_err)
+                    seen_cleanup_err_ids.add(id(c_err))
+            outer_cleanup_sink = _ACTIVE_WRITE_CLEANUP_ERRORS_SINK_CTX.get()
+            if outer_cleanup_sink is not None:
+                outer_cleanup_sink.clear()
+                outer_cleanup_sink.extend(combined_cleanup_errors)
+            if combined_cleanup_errors:
+                for c_err in combined_cleanup_errors:
+                    try:
+                        setattr(
+                            c_err,
+                            "published_receipt",
+                            copy.deepcopy(artifact),
+                        )
+                        setattr(
+                            c_err,
+                            "temp_cleanup_status",
+                            copy.deepcopy(artifact.get("temp_cleanup_status")),
+                        )
+                        setattr(
+                            c_err,
+                            "temp_cleanup_errors",
+                            list(combined_cleanup_errors),
+                        )
+                        setattr(
+                            c_err,
+                            "temp_cleanup_error",
+                            combined_cleanup_errors[-1],
+                        )
+                        if prior_collision_cleanup_statuses:
+                            setattr(
+                                c_err,
+                                "prior_collision_temp_cleanup_failures",
+                                copy.deepcopy(prior_collision_cleanup_statuses),
+                            )
+                    except Exception:
+                        pass
+            if prior_collision_cleanup_statuses:
+                ctx_info = _ADMITTED_DIR_BASELINE_CTX.get()
+                normalized_root_str = str(
+                    Path(os.path.abspath(os.fspath(root)))
+                )
+                if ctx_info is not None and ctx_info[0] == normalized_root_str:
+                    ctx_status_out = ctx_info[2]
+                    ctx_causes = ctx_info[3]
+                    if ctx_status_out is not None:
+                        ctx_status_out["temp_cleanup_status"] = copy.deepcopy(
+                            artifact["temp_cleanup_status"]
+                        )
+                        ctx_status_out[
+                            "prior_collision_temp_cleanup_failures"
+                        ] = copy.deepcopy(prior_collision_cleanup_statuses)
+                    if ctx_causes is not None and combined_cleanup_errors:
+                        combined_ids = {id(c) for c in combined_cleanup_errors}
+                        retained_other_causes = [
+                            c for c in ctx_causes if id(c) not in combined_ids
+                        ]
+                        ctx_causes.clear()
+                        ctx_causes.extend(retained_other_causes)
+                        existing_ids = {id(c) for c in ctx_causes}
+                        for c_err in combined_cleanup_errors:
+                            if id(c_err) not in existing_ids:
+                                ctx_causes.append(c_err)
+                                existing_ids.add(id(c_err))
             return artifact
+        exhausted_exc = FileExistsError(
+            errno.EEXIST,
+            f"Exhausted {MAX_SIBLING_COLLISION_ATTEMPTS} sibling collision fallback candidates for {target_path}",
+            str(target_path),
+        )
+        _attach_prior_collision_cleanup_to_exc(exhausted_exc)
+        _attach_prior_collision_cleanup_to_exc(last_collision_exc)
+        raise exhausted_exc from last_collision_exc
 
 
 def _ensure_verified_root_exclusive_fallback_dir(
@@ -1548,76 +4206,376 @@ def _ensure_verified_root_exclusive_fallback_dir(
         if bool(existing_check.get("identity_verified", False)):
             return existing_anchor_path, dict(existing_anchor_baseline), None
 
-    attempt = 0
-    while True:
-        suffix = (
-            f"refmac_parent_retention.verified_root_fallback.{os.getpid()}"
-            if attempt == 0
-            else f"refmac_parent_retention.verified_root_fallback.{os.getpid()}.{attempt}"
+    ev_root_baseline = {
+        "path": str(ev_root_path),
+        "resolved_path": obs_ev_resolved,
+        "dev": expected_ev_dev,
+        "ino": expected_ev_ino,
+        "mode": int(stat.S_IMODE(ev_st.st_mode)),
+    }
+    ev_root_status: dict[str, Any] = {}
+    try:
+        ev_root_cap = _open_admitted_directory(
+            ev_root_path,
+            dir_baseline=ev_root_baseline,
+            caught_exceptions=caught_persistence_exceptions,
+            dir_status_out=ev_root_status,
         )
-        candidate_dir = ev_root_path / suffix
-        try:
-            _ensure_no_symlink_components_under_root(
-                candidate_dir, ev_root_path, check_leaf=False
-            )
-            ev_st_check = os.lstat(ev_root_path)
-            if (
-                stat.S_ISLNK(ev_st_check.st_mode)
-                or not stat.S_ISDIR(ev_st_check.st_mode)
-                or (int(ev_st_check.st_dev), int(ev_st_check.st_ino))
-                != (expected_ev_dev, expected_ev_ino)
-            ):
-                raise ValueError(
-                    f"Admitted evidence_root failed re-verification before mkdir: {ev_root_path}"
-                )
-            try:
-                os.lstat(candidate_dir)
-            except FileNotFoundError:
-                pass
-            else:
-                attempt += 1
-                continue
-            os.mkdir(candidate_dir, 0o755)
-            anchor_baseline = _capture_directory_identity_baseline(
-                candidate_dir,
-                evidence_root=ev_root_path,
-            )
-        except FileExistsError:
-            attempt += 1
-            continue
-        except Exception as exc:
-            if caught_persistence_exceptions is not None:
+    except Exception as exc:
+        if caught_persistence_exceptions is not None:
+            existing_ids = {id(c) for c in caught_persistence_exceptions}
+            if id(exc) not in existing_ids:
                 caught_persistence_exceptions.append(exc)
-            ev_err = f"{type(exc).__name__}: {exc}"
-            verified_root_fallback_state.update(
-                {
-                    "used": False,
-                    "no_verified_anchor_available": True,
-                    "failed_intended_parent_retention_dir": str(parent_retention_dir),
-                    "parent_retention_dir_failure_reason": parent_dir_unusable_reason,
-                    "evidence_root_verified": False,
-                    "evidence_root_failure_reason": ev_err,
-                    "actual_anchor_dir": None,
-                    "actual_anchor_kind": None,
-                    "actual_anchor_baseline": None,
-                }
-            )
-            return None, None, ev_err
-
+        ev_err = f"{type(exc).__name__}: {exc}"
         verified_root_fallback_state.update(
             {
-                "used": True,
-                "no_verified_anchor_available": False,
+                "used": False,
+                "no_verified_anchor_available": True,
                 "failed_intended_parent_retention_dir": str(parent_retention_dir),
                 "parent_retention_dir_failure_reason": parent_dir_unusable_reason,
-                "evidence_root_verified": True,
-                "evidence_root_failure_reason": None,
-                "actual_anchor_dir": str(candidate_dir),
-                "actual_anchor_kind": "verified_evidence_root_exclusive_dir",
-                "actual_anchor_baseline": copy.deepcopy(anchor_baseline),
+                "evidence_root_verified": False,
+                "evidence_root_failure_reason": ev_err,
+                "actual_anchor_dir": None,
+                "actual_anchor_kind": None,
+                "actual_anchor_baseline": None,
             }
         )
-        return candidate_dir, anchor_baseline, None
+        return None, None, ev_err
+
+    ev_root_closed = False
+    ev_root_close_attempted = False
+    ev_root_close_succeeded: bool | None = None
+    ev_root_close_exc: OSError | None = None
+
+    def _close_ev_root_descriptor() -> OSError | None:
+        nonlocal ev_root_closed, ev_root_close_attempted
+        nonlocal ev_root_close_succeeded, ev_root_close_exc
+        if ev_root_closed:
+            return ev_root_close_exc
+        ev_root_closed = True
+        ev_root_close_attempted = True
+        try:
+            os.close(ev_root_cap.fd)
+            ev_root_close_succeeded = True
+        except OSError as r_close_exc:
+            ev_root_close_succeeded = False
+            ev_root_close_exc = r_close_exc
+            try:
+                setattr(r_close_exc, "_is_cleanup_close_error", True)
+            except Exception:
+                pass
+        return ev_root_close_exc
+
+    try:
+        for attempt in range(MAX_FALLBACK_DIR_ATTEMPTS):
+            suffix = (
+                f"refmac_parent_retention.verified_root_fallback.{os.getpid()}"
+                if attempt == 0
+                else f"refmac_parent_retention.verified_root_fallback.{os.getpid()}.{attempt}"
+            )
+            candidate_dir = ev_root_path / suffix
+            cand_close_attempted = False
+            cand_close_succeeded: bool | None = None
+            cand_close_exc: OSError | None = None
+            try:
+                _reverify_admitted_directory_binding(ev_root_cap)
+                try:
+                    os.stat(
+                        suffix,
+                        dir_fd=ev_root_cap.fd,
+                        follow_symlinks=False,
+                    )
+                except FileNotFoundError:
+                    pass
+                else:
+                    continue
+                os.mkdir(suffix, 0o755, dir_fd=ev_root_cap.fd)
+                cand_fd = os.open(
+                    suffix,
+                    os.O_RDONLY
+                    | getattr(os, "O_DIRECTORY", 0)
+                    | getattr(os, "O_NOFOLLOW", 0)
+                    | getattr(os, "O_CLOEXEC", 0),
+                    0o755,
+                    dir_fd=ev_root_cap.fd,
+                )
+                cand_primary_exc: BaseException | None = None
+                try:
+                    cand_st = os.fstat(cand_fd)
+                    if (
+                        not stat.S_ISDIR(cand_st.st_mode)
+                        or int(cand_st.st_dev) != expected_ev_dev
+                    ):
+                        raise ValueError(
+                            f"Created fallback anchor descriptor is not a directory on admitted evidence_root device: {candidate_dir}"
+                        )
+                    cand_dev = int(cand_st.st_dev)
+                    cand_ino = int(cand_st.st_ino)
+                    cand_mode = int(stat.S_IMODE(cand_st.st_mode))
+                except BaseException as c_exc:
+                    cand_primary_exc = c_exc
+                    raise
+                finally:
+                    cand_close_attempted = True
+                    try:
+                        os.close(cand_fd)
+                        cand_close_succeeded = True
+                    except OSError as c_close_exc:
+                        cand_close_succeeded = False
+                        cand_close_exc = c_close_exc
+                        try:
+                            setattr(
+                                c_close_exc, "_is_cleanup_close_error", True
+                            )
+                        except Exception:
+                            pass
+                        if cand_primary_exc is not None:
+                            try:
+                                setattr(
+                                    cand_primary_exc,
+                                    "cleanup_close_error",
+                                    c_close_exc,
+                                )
+                                setattr(
+                                    cand_primary_exc,
+                                    "directory_close_error",
+                                    c_close_exc,
+                                )
+                                setattr(
+                                    cand_primary_exc,
+                                    "candidate_close_error",
+                                    c_close_exc,
+                                )
+                                setattr(
+                                    cand_primary_exc,
+                                    "close_error",
+                                    c_close_exc,
+                                )
+                            except Exception:
+                                pass
+                        else:
+                            raise
+                _reverify_admitted_directory_binding(ev_root_cap)
+                anchor_baseline = _capture_directory_identity_baseline(
+                    candidate_dir,
+                    evidence_root=ev_root_path,
+                )
+                if (
+                    int(anchor_baseline["dev"]),
+                    int(anchor_baseline["ino"]),
+                ) != (cand_dev, cand_ino):
+                    raise ValueError(
+                        f"Fallback anchor directory inode changed immediately after creation at {candidate_dir}: "
+                        f"expected (dev={cand_dev}, ino={cand_ino}), "
+                        f"observed (dev={anchor_baseline['dev']}, ino={anchor_baseline['ino']})"
+                    )
+                anchor_baseline["mode"] = cand_mode
+            except FileExistsError:
+                continue
+            except Exception as exc:
+                if caught_persistence_exceptions is not None:
+                    existing_ids = {
+                        id(c) for c in caught_persistence_exceptions
+                    }
+                    if id(exc) not in existing_ids:
+                        caught_persistence_exceptions.append(exc)
+                        existing_ids.add(id(exc))
+                    if (
+                        cand_close_exc is not None
+                        and cand_close_exc is not exc
+                        and id(cand_close_exc) not in existing_ids
+                    ):
+                        caught_persistence_exceptions.append(cand_close_exc)
+                        existing_ids.add(id(cand_close_exc))
+                r_close_err = _close_ev_root_descriptor()
+                if r_close_err is not None:
+                    if caught_persistence_exceptions is not None:
+                        existing_ids = {
+                            id(c) for c in caught_persistence_exceptions
+                        }
+                        if id(r_close_err) not in existing_ids:
+                            caught_persistence_exceptions.append(r_close_err)
+                    try:
+                        setattr(exc, "parent_close_error", r_close_err)
+                        if getattr(exc, "cleanup_close_error", None) is None:
+                            setattr(exc, "cleanup_close_error", r_close_err)
+                        if getattr(exc, "directory_close_error", None) is None:
+                            setattr(exc, "directory_close_error", r_close_err)
+                    except Exception:
+                        pass
+                effective_close_exc = (
+                    cand_close_exc
+                    if cand_close_exc is not None
+                    else r_close_err
+                )
+                ev_err = f"{type(exc).__name__}: {exc}"
+                verified_root_fallback_state.update(
+                    {
+                        "used": False,
+                        "no_verified_anchor_available": True,
+                        "failed_intended_parent_retention_dir": str(parent_retention_dir),
+                        "parent_retention_dir_failure_reason": parent_dir_unusable_reason,
+                        "evidence_root_verified": False,
+                        "evidence_root_failure_reason": ev_err,
+                        "actual_anchor_dir": None,
+                        "actual_anchor_kind": None,
+                        "actual_anchor_baseline": None,
+                        "candidate_close_attempted": cand_close_attempted,
+                        "candidate_close_succeeded": cand_close_succeeded,
+                        "candidate_close_error": (
+                            f"{type(cand_close_exc).__name__}: {cand_close_exc}"
+                            if cand_close_exc is not None
+                            else None
+                        ),
+                        "root_close_attempted": ev_root_close_attempted,
+                        "root_close_succeeded": ev_root_close_succeeded,
+                        "root_close_error": (
+                            f"{type(r_close_err).__name__}: {r_close_err}"
+                            if r_close_err is not None
+                            else None
+                        ),
+                        "cleanup_close_error": (
+                            f"{type(effective_close_exc).__name__}: {effective_close_exc}"
+                            if effective_close_exc is not None
+                            else None
+                        ),
+                        "cleanup_close_exception_type": (
+                            type(effective_close_exc).__name__
+                            if effective_close_exc is not None
+                            else None
+                        ),
+                        "cleanup_close_exception_message": (
+                            str(effective_close_exc)
+                            if effective_close_exc is not None
+                            else None
+                        ),
+                        "cleanup_close_errno": (
+                            getattr(effective_close_exc, "errno", None)
+                            if effective_close_exc is not None
+                            else None
+                        ),
+                    }
+                )
+                return None, None, ev_err
+
+            r_close_err = _close_ev_root_descriptor()
+            if r_close_err is not None:
+                if caught_persistence_exceptions is not None:
+                    existing_ids = {
+                        id(c) for c in caught_persistence_exceptions
+                    }
+                    if id(r_close_err) not in existing_ids:
+                        caught_persistence_exceptions.append(r_close_err)
+                ev_err = f"{type(r_close_err).__name__}: {r_close_err}"
+                verified_root_fallback_state.update(
+                    {
+                        "used": False,
+                        "no_verified_anchor_available": True,
+                        "failed_intended_parent_retention_dir": str(parent_retention_dir),
+                        "parent_retention_dir_failure_reason": parent_dir_unusable_reason,
+                        "evidence_root_verified": False,
+                        "evidence_root_failure_reason": ev_err,
+                        "actual_anchor_dir": None,
+                        "actual_anchor_kind": None,
+                        "actual_anchor_baseline": None,
+                        "created_unverified_candidate_dir": str(candidate_dir),
+                        "candidate_close_attempted": cand_close_attempted,
+                        "candidate_close_succeeded": cand_close_succeeded,
+                        "candidate_close_error": None,
+                        "root_close_attempted": ev_root_close_attempted,
+                        "root_close_succeeded": ev_root_close_succeeded,
+                        "root_close_error": ev_err,
+                        "root_close_exception_type": type(
+                            r_close_err
+                        ).__name__,
+                        "root_close_exception_message": str(r_close_err),
+                        "root_close_errno": getattr(
+                            r_close_err, "errno", None
+                        ),
+                        "directory_close_error": ev_err,
+                        "directory_close_exception_type": type(
+                            r_close_err
+                        ).__name__,
+                        "directory_close_exception_message": str(r_close_err),
+                        "directory_close_errno": getattr(
+                            r_close_err, "errno", None
+                        ),
+                        "cleanup_close_error": ev_err,
+                        "cleanup_close_exception_type": type(
+                            r_close_err
+                        ).__name__,
+                        "cleanup_close_exception_message": str(r_close_err),
+                        "cleanup_close_errno": getattr(
+                            r_close_err, "errno", None
+                        ),
+                    }
+                )
+                return None, None, ev_err
+
+            verified_root_fallback_state.update(
+                {
+                    "used": True,
+                    "no_verified_anchor_available": False,
+                    "failed_intended_parent_retention_dir": str(parent_retention_dir),
+                    "parent_retention_dir_failure_reason": parent_dir_unusable_reason,
+                    "evidence_root_verified": True,
+                    "evidence_root_failure_reason": None,
+                    "actual_anchor_dir": str(candidate_dir),
+                    "actual_anchor_kind": "verified_evidence_root_exclusive_dir",
+                    "actual_anchor_baseline": copy.deepcopy(anchor_baseline),
+                    "candidate_close_attempted": cand_close_attempted,
+                    "candidate_close_succeeded": cand_close_succeeded,
+                    "candidate_close_error": None,
+                    "root_close_attempted": ev_root_close_attempted,
+                    "root_close_succeeded": ev_root_close_succeeded,
+                    "root_close_error": None,
+                }
+            )
+            return candidate_dir, anchor_baseline, None
+
+        exhausted_exc = FileExistsError(
+            errno.EEXIST,
+            f"Exhausted {MAX_FALLBACK_DIR_ATTEMPTS} verified_root_fallback directory candidates under {ev_root_path}",
+            str(ev_root_path),
+        )
+        if caught_persistence_exceptions is not None:
+            caught_persistence_exceptions.append(exhausted_exc)
+        r_close_err = _close_ev_root_descriptor()
+        if r_close_err is not None:
+            if caught_persistence_exceptions is not None:
+                existing_ids = {id(c) for c in caught_persistence_exceptions}
+                if id(r_close_err) not in existing_ids:
+                    caught_persistence_exceptions.append(r_close_err)
+            try:
+                setattr(exhausted_exc, "parent_close_error", r_close_err)
+                setattr(exhausted_exc, "cleanup_close_error", r_close_err)
+                setattr(exhausted_exc, "directory_close_error", r_close_err)
+            except Exception:
+                pass
+        ev_err = f"{type(exhausted_exc).__name__}: {exhausted_exc}"
+        verified_root_fallback_state.update(
+            {
+                "used": False,
+                "no_verified_anchor_available": True,
+                "failed_intended_parent_retention_dir": str(parent_retention_dir),
+                "parent_retention_dir_failure_reason": parent_dir_unusable_reason,
+                "evidence_root_verified": False,
+                "evidence_root_failure_reason": ev_err,
+                "actual_anchor_dir": None,
+                "actual_anchor_kind": None,
+                "actual_anchor_baseline": None,
+                "root_close_attempted": ev_root_close_attempted,
+                "root_close_succeeded": ev_root_close_succeeded,
+                "root_close_error": (
+                    f"{type(r_close_err).__name__}: {r_close_err}"
+                    if r_close_err is not None
+                    else None
+                ),
+            }
+        )
+        return None, None, ev_err
+    finally:
+        _close_ev_root_descriptor()
 
 
 def _persist_collector_json_with_fallback(
@@ -1634,6 +4592,7 @@ def _persist_collector_json_with_fallback(
     parent_retention_dir_status: dict[str, Any] | None = None,
     verified_root_fallback_state: dict[str, Any] | None = None,
     allow_unpersisted_on_no_verified_anchor: bool = False,
+    refmac_dir_baseline: Mapping[str, Any] | None = None,
     refmac_dir_status: dict[str, Any] | None = None,
     child_dir_persistence_failures: list[dict[str, Any]] | None = None,
     caught_persistence_exceptions: list[Exception] | None = None,
@@ -1651,13 +4610,33 @@ def _persist_collector_json_with_fallback(
             retained_payload_sink.append(copy.deepcopy(dict(materialized)))
         return materialized
 
+    eff_child_baseline = _normalize_directory_baseline(
+        root,
+        refmac_dir_baseline if refmac_dir_baseline is not None else refmac_dir_status,
+        fallback_evidence_root_source=parent_retention_dir_baseline,
+    )
+
     child_dir_usable = True
     child_dir_unusable_reason: str | None = None
     child_dir_exc_type: str | None = None
     child_dir_exc_msg: str | None = None
     child_dir_errno: int | None = None
+    child_published_receipt: dict[str, Any] | None = None
+    child_temp_cleanup_status: dict[str, Any] | None = None
+    parent_published_receipt: dict[str, Any] | None = None
+    parent_temp_cleanup_status: dict[str, Any] | None = None
+    anchor_published_receipt: dict[str, Any] | None = None
+    anchor_temp_cleanup_status: dict[str, Any] | None = None
 
     if refmac_dir_status is not None:
+        if isinstance(refmac_dir_status.get("published_receipt"), Mapping):
+            child_published_receipt = copy.deepcopy(
+                dict(refmac_dir_status["published_receipt"])
+            )
+        if isinstance(refmac_dir_status.get("temp_cleanup_status"), Mapping):
+            child_temp_cleanup_status = copy.deepcopy(
+                dict(refmac_dir_status["temp_cleanup_status"])
+            )
         if not bool(refmac_dir_status.get("identity_verified", True)):
             child_dir_usable = False
             child_dir_unusable_reason = str(
@@ -1695,6 +4674,33 @@ def _persist_collector_json_with_fallback(
                 else refmac_dir_status.get("errno")
             )
 
+    if child_dir_usable and eff_child_baseline is not None and parent_retention_dir is not None:
+        live_child_causes: list[Exception] = []
+        live_child_check = _verify_refmac_directory_post_run(
+            root,
+            refmac_dir_baseline=eff_child_baseline,
+            caught_exceptions=live_child_causes,
+        )
+        _update_dir_status_preserving_write_failure(refmac_dir_status, live_child_check)
+        if not bool(live_child_check.get("identity_verified", False)):
+            if caught_persistence_exceptions is not None:
+                caught_persistence_exceptions.extend(live_child_causes)
+            child_dir_usable = False
+            child_dir_unusable_reason = str(
+                live_child_check.get("error")
+                or f"Child refmac directory identity verification failed: {root}"
+            )
+            child_dir_exc_type = str(
+                live_child_check.get("exception_type") or "ValueError"
+            )
+            child_dir_exc_msg = str(
+                live_child_check.get("exception_message")
+                or child_dir_unusable_reason
+            )
+            child_dir_errno = live_child_check.get("errno")
+            if child_dir_persistence_causes is not None and live_child_causes:
+                child_dir_persistence_causes.append(live_child_causes[0])
+
     if child_dir_usable:
         child_payload: (
             Mapping[str, Any]
@@ -1713,38 +4719,383 @@ def _persist_collector_json_with_fallback(
         else:
             child_payload = payload
         try:
-            return _write_json_with_sibling_collision_fallback(
-                child_payload, target_path, root=root
-            )
+            child_attempt_causes: list[Exception] = []
+            with (
+                _admitted_directory_context(
+                    root,
+                    eff_child_baseline,
+                    refmac_dir_status,
+                    child_attempt_causes,
+                ),
+                _retained_payload_sink_context(retained_payload_sink),
+            ):
+                child_written = _write_json_with_sibling_collision_fallback(
+                    child_payload, target_path, root=root
+                )
+            if not bool(child_written.get("temp_cleanup_succeeded", True)):
+                if caught_persistence_exceptions is not None:
+                    existing_ids = {
+                        id(c) for c in caught_persistence_exceptions
+                    }
+                    for c_exc in child_attempt_causes:
+                        if id(c_exc) not in existing_ids:
+                            caught_persistence_exceptions.append(c_exc)
+                            existing_ids.add(id(c_exc))
+                if child_dir_persistence_failures is not None:
+                    cleanup_st_for_fail = child_written.get(
+                        "temp_cleanup_status"
+                    )
+                    first_cleanup_exc = (
+                        child_attempt_causes[0]
+                        if child_attempt_causes
+                        else None
+                    )
+                    cleanup_fail_entry: dict[str, Any] = {
+                        "intended_path": str(target_path),
+                        "actual_published_path": str(
+                            child_written.get("path")
+                        ),
+                        "artifact_name": target_path.name,
+                        "exception_type": (
+                            type(first_cleanup_exc).__name__
+                            if first_cleanup_exc is not None
+                            else (
+                                str(cleanup_st_for_fail.get("exception_type"))
+                                if isinstance(cleanup_st_for_fail, Mapping)
+                                and cleanup_st_for_fail.get("exception_type")
+                                is not None
+                                else "OSError"
+                            )
+                        ),
+                        "exception_message": (
+                            str(first_cleanup_exc)
+                            if first_cleanup_exc is not None
+                            else str(
+                                (
+                                    cleanup_st_for_fail.get(
+                                        "exception_message"
+                                    )
+                                    or cleanup_st_for_fail.get("error")
+                                )
+                                if isinstance(cleanup_st_for_fail, Mapping)
+                                else "Temporary file cleanup failed"
+                            )
+                        ),
+                        "errno": (
+                            getattr(first_cleanup_exc, "errno", None)
+                            if first_cleanup_exc is not None
+                            else (
+                                cleanup_st_for_fail.get("errno")
+                                if isinstance(cleanup_st_for_fail, Mapping)
+                                else None
+                            )
+                        ),
+                        "attempted_write_in_child_dir": True,
+                        "published_in_child_dir": True,
+                        "failure_phase": "temp_cleanup",
+                        "temp_cleanup_status": (
+                            copy.deepcopy(dict(cleanup_st_for_fail))
+                            if isinstance(cleanup_st_for_fail, Mapping)
+                            else None
+                        ),
+                    }
+                    if isinstance(
+                        child_written.get(
+                            "prior_collision_temp_cleanup_failures"
+                        ),
+                        list,
+                    ):
+                        cleanup_fail_entry[
+                            "prior_collision_temp_cleanup_failures"
+                        ] = copy.deepcopy(
+                            child_written[
+                                "prior_collision_temp_cleanup_failures"
+                            ]
+                        )
+                    child_dir_persistence_failures.append(cleanup_fail_entry)
+                if (
+                    child_dir_persistence_causes is not None
+                    and child_attempt_causes
+                ):
+                    child_dir_persistence_causes.append(
+                        child_attempt_causes[0]
+                    )
+            return child_written
         except (OSError, ValueError) as exc:
             if parent_retention_dir is None:
                 raise
+            raw_child_receipt = (
+                exc.published_receipt
+                if isinstance(exc, _PostPublicationBindingError)
+                else getattr(exc, "published_receipt", None)
+            )
+            if isinstance(raw_child_receipt, Mapping):
+                child_published_receipt = copy.deepcopy(dict(raw_child_receipt))
+            raw_child_cleanup = getattr(exc, "temp_cleanup_status", None)
+            if not isinstance(raw_child_cleanup, Mapping) and isinstance(
+                child_published_receipt, Mapping
+            ):
+                raw_child_cleanup = child_published_receipt.get(
+                    "temp_cleanup_status"
+                )
+            if isinstance(raw_child_cleanup, Mapping):
+                child_temp_cleanup_status = copy.deepcopy(
+                    dict(raw_child_cleanup)
+                )
+            raw_child_cleanup_errors = getattr(
+                exc, "temp_cleanup_errors", None
+            )
+            actual_child_exc: Exception = (
+                exc.cause
+                if isinstance(exc, _PostPublicationBindingError)
+                and exc.cause is not None
+                else exc
+            )
+            if child_published_receipt is not None:
+                try:
+                    setattr(
+                        actual_child_exc,
+                        "published_receipt",
+                        copy.deepcopy(child_published_receipt),
+                    )
+                except Exception:
+                    pass
+            if child_temp_cleanup_status is not None:
+                try:
+                    setattr(
+                        actual_child_exc,
+                        "temp_cleanup_status",
+                        copy.deepcopy(child_temp_cleanup_status),
+                    )
+                except Exception:
+                    pass
+            if isinstance(raw_child_cleanup_errors, list):
+                try:
+                    setattr(
+                        actual_child_exc,
+                        "temp_cleanup_errors",
+                        list(raw_child_cleanup_errors),
+                    )
+                    if raw_child_cleanup_errors:
+                        setattr(
+                            actual_child_exc,
+                            "temp_cleanup_error",
+                            raw_child_cleanup_errors[-1],
+                        )
+                except Exception:
+                    pass
+            raw_child_dir_close_err = getattr(
+                actual_child_exc, "directory_close_error", None
+            )
+            if not isinstance(raw_child_dir_close_err, BaseException):
+                raw_child_dir_close_err = getattr(
+                    exc, "directory_close_error", None
+                )
+            raw_child_dir_close_failures = getattr(
+                actual_child_exc, "directory_close_failures", None
+            )
+            if not isinstance(raw_child_dir_close_failures, list):
+                raw_child_dir_close_failures = getattr(
+                    exc, "directory_close_failures", None
+                )
+            raw_child_prior_collision_cleanup = getattr(
+                actual_child_exc, "prior_collision_temp_cleanup_failures", None
+            )
+            if not isinstance(raw_child_prior_collision_cleanup, list):
+                raw_child_prior_collision_cleanup = getattr(
+                    exc, "prior_collision_temp_cleanup_failures", None
+                )
+            if isinstance(raw_child_dir_close_err, BaseException):
+                try:
+                    setattr(
+                        actual_child_exc,
+                        "directory_close_error",
+                        raw_child_dir_close_err,
+                    )
+                    if (
+                        getattr(actual_child_exc, "cleanup_close_error", None)
+                        is None
+                    ):
+                        setattr(
+                            actual_child_exc,
+                            "cleanup_close_error",
+                            raw_child_dir_close_err,
+                        )
+                except Exception:
+                    pass
+            if isinstance(raw_child_dir_close_failures, list):
+                try:
+                    setattr(
+                        actual_child_exc,
+                        "directory_close_failures",
+                        copy.deepcopy(raw_child_dir_close_failures),
+                    )
+                except Exception:
+                    pass
+            if isinstance(raw_child_prior_collision_cleanup, list):
+                try:
+                    setattr(
+                        actual_child_exc,
+                        "prior_collision_temp_cleanup_failures",
+                        copy.deepcopy(raw_child_prior_collision_cleanup),
+                    )
+                except Exception:
+                    pass
+            raw_child_close_err = getattr(
+                actual_child_exc, "cleanup_close_error", None
+            )
+            if not isinstance(raw_child_close_err, BaseException):
+                raw_child_close_err = getattr(exc, "cleanup_close_error", None)
+            if not isinstance(raw_child_close_err, BaseException) and isinstance(
+                raw_child_dir_close_err, BaseException
+            ):
+                raw_child_close_err = raw_child_dir_close_err
             if caught_persistence_exceptions is not None:
-                caught_persistence_exceptions.append(exc)
+                existing_ids = {
+                    id(c) for c in caught_persistence_exceptions
+                }
+                for c_attempt_exc in child_attempt_causes:
+                    if (
+                        isinstance(c_attempt_exc, Exception)
+                        and id(c_attempt_exc) not in existing_ids
+                    ):
+                        caught_persistence_exceptions.append(c_attempt_exc)
+                        existing_ids.add(id(c_attempt_exc))
+                if (
+                    isinstance(actual_child_exc, Exception)
+                    and id(actual_child_exc) not in existing_ids
+                ):
+                    caught_persistence_exceptions.append(actual_child_exc)
+                    existing_ids.add(id(actual_child_exc))
+                if (
+                    isinstance(raw_child_close_err, Exception)
+                    and id(raw_child_close_err) not in existing_ids
+                ):
+                    caught_persistence_exceptions.append(raw_child_close_err)
+                    existing_ids.add(id(raw_child_close_err))
+                if (
+                    isinstance(raw_child_dir_close_err, Exception)
+                    and id(raw_child_dir_close_err) not in existing_ids
+                ):
+                    caught_persistence_exceptions.append(
+                        raw_child_dir_close_err
+                    )
+                    existing_ids.add(id(raw_child_dir_close_err))
+                if isinstance(raw_child_cleanup_errors, list):
+                    for c_err in raw_child_cleanup_errors:
+                        if (
+                            isinstance(c_err, Exception)
+                            and id(c_err) not in existing_ids
+                        ):
+                            caught_persistence_exceptions.append(c_err)
+                            existing_ids.add(id(c_err))
             child_dir_usable = False
-            child_dir_unusable_reason = f"{type(exc).__name__}: {exc}"
-            child_dir_exc_type = type(exc).__name__
-            child_dir_exc_msg = str(exc)
-            child_dir_errno = getattr(exc, "errno", None)
+            child_dir_unusable_reason = f"{type(actual_child_exc).__name__}: {actual_child_exc}"
+            child_dir_exc_type = type(actual_child_exc).__name__
+            child_dir_exc_msg = str(actual_child_exc)
+            child_dir_errno = getattr(actual_child_exc, "errno", None)
             if refmac_dir_status is not None:
                 refmac_dir_status["writable_post_run"] = False
                 refmac_dir_status["write_error"] = child_dir_unusable_reason
                 refmac_dir_status["write_exception_type"] = child_dir_exc_type
                 refmac_dir_status["write_exception_message"] = child_dir_exc_msg
                 refmac_dir_status["write_errno"] = child_dir_errno
+                if isinstance(raw_child_dir_close_err, BaseException):
+                    refmac_dir_status["directory_close_error"] = (
+                        f"{type(raw_child_dir_close_err).__name__}: {raw_child_dir_close_err}"
+                    )
+                    refmac_dir_status["directory_close_exception_type"] = type(
+                        raw_child_dir_close_err
+                    ).__name__
+                    refmac_dir_status["directory_close_exception_message"] = (
+                        str(raw_child_dir_close_err)
+                    )
+                    refmac_dir_status["directory_close_errno"] = getattr(
+                        raw_child_dir_close_err, "errno", None
+                    )
+                if isinstance(raw_child_dir_close_failures, list):
+                    refmac_dir_status["directory_close_failures"] = (
+                        copy.deepcopy(raw_child_dir_close_failures)
+                    )
+                if isinstance(raw_child_close_err, BaseException):
+                    refmac_dir_status["cleanup_close_error"] = (
+                        f"{type(raw_child_close_err).__name__}: {raw_child_close_err}"
+                    )
+                    refmac_dir_status["cleanup_close_exception_type"] = type(
+                        raw_child_close_err
+                    ).__name__
+                    refmac_dir_status["cleanup_close_exception_message"] = str(
+                        raw_child_close_err
+                    )
+                    refmac_dir_status["cleanup_close_errno"] = getattr(
+                        raw_child_close_err, "errno", None
+                    )
+                if child_published_receipt is not None:
+                    refmac_dir_status["published_receipt"] = copy.deepcopy(
+                        child_published_receipt
+                    )
+                if child_temp_cleanup_status is not None:
+                    refmac_dir_status["temp_cleanup_status"] = copy.deepcopy(
+                        child_temp_cleanup_status
+                    )
+                if isinstance(raw_child_prior_collision_cleanup, list):
+                    refmac_dir_status[
+                        "prior_collision_temp_cleanup_failures"
+                    ] = copy.deepcopy(raw_child_prior_collision_cleanup)
             if child_dir_persistence_failures is not None:
-                child_dir_persistence_failures.append(
-                    {
-                        "intended_path": str(target_path),
-                        "artifact_name": target_path.name,
-                        "exception_type": child_dir_exc_type,
-                        "exception_message": child_dir_exc_msg,
-                        "errno": child_dir_errno,
-                        "attempted_write_in_child_dir": True,
-                    }
-                )
+                failure_entry: dict[str, Any] = {
+                    "intended_path": str(target_path),
+                    "artifact_name": target_path.name,
+                    "exception_type": child_dir_exc_type,
+                    "exception_message": child_dir_exc_msg,
+                    "errno": child_dir_errno,
+                    "attempted_write_in_child_dir": True,
+                }
+                if isinstance(raw_child_dir_close_err, BaseException):
+                    failure_entry["directory_close_error"] = (
+                        f"{type(raw_child_dir_close_err).__name__}: {raw_child_dir_close_err}"
+                    )
+                    failure_entry["directory_close_exception_type"] = type(
+                        raw_child_dir_close_err
+                    ).__name__
+                    failure_entry["directory_close_exception_message"] = str(
+                        raw_child_dir_close_err
+                    )
+                    failure_entry["directory_close_errno"] = getattr(
+                        raw_child_dir_close_err, "errno", None
+                    )
+                if isinstance(raw_child_dir_close_failures, list):
+                    failure_entry["directory_close_failures"] = copy.deepcopy(
+                        raw_child_dir_close_failures
+                    )
+                if isinstance(raw_child_close_err, BaseException):
+                    failure_entry["cleanup_close_error"] = (
+                        f"{type(raw_child_close_err).__name__}: {raw_child_close_err}"
+                    )
+                    failure_entry["cleanup_close_exception_type"] = type(
+                        raw_child_close_err
+                    ).__name__
+                    failure_entry["cleanup_close_exception_message"] = str(
+                        raw_child_close_err
+                    )
+                    failure_entry["cleanup_close_errno"] = getattr(
+                        raw_child_close_err, "errno", None
+                    )
+                if child_published_receipt is not None:
+                    failure_entry["published_receipt"] = copy.deepcopy(
+                        child_published_receipt
+                    )
+                if child_temp_cleanup_status is not None:
+                    failure_entry["temp_cleanup_status"] = copy.deepcopy(
+                        child_temp_cleanup_status
+                    )
+                if isinstance(raw_child_prior_collision_cleanup, list):
+                    failure_entry["prior_collision_temp_cleanup_failures"] = (
+                        copy.deepcopy(raw_child_prior_collision_cleanup)
+                    )
+                child_dir_persistence_failures.append(failure_entry)
             if child_dir_persistence_causes is not None:
-                child_dir_persistence_causes.append(exc)
+                child_dir_persistence_causes.append(actual_child_exc)
     else:
         if parent_retention_dir is None:
             raise ValueError(
@@ -1752,24 +5103,64 @@ def _persist_collector_json_with_fallback(
                 or f"Child refmac directory unavailable for persistence: {root}"
             )
         if child_dir_persistence_failures is not None:
-            child_dir_persistence_failures.append(
-                {
-                    "intended_path": str(target_path),
-                    "artifact_name": target_path.name,
-                    "exception_type": child_dir_exc_type or "ValueError",
-                    "exception_message": child_dir_exc_msg
-                    or child_dir_unusable_reason
-                    or f"Child refmac directory unavailable: {root}",
-                    "errno": child_dir_errno,
-                    "attempted_write_in_child_dir": False,
-                }
-            )
+            failure_entry_no_attempt: dict[str, Any] = {
+                "intended_path": str(target_path),
+                "artifact_name": target_path.name,
+                "exception_type": child_dir_exc_type or "ValueError",
+                "exception_message": child_dir_exc_msg
+                or child_dir_unusable_reason
+                or f"Child refmac directory unavailable: {root}",
+                "errno": child_dir_errno,
+                "attempted_write_in_child_dir": False,
+            }
+            if child_published_receipt is not None:
+                failure_entry_no_attempt["published_receipt"] = copy.deepcopy(
+                    child_published_receipt
+                )
+            if child_temp_cleanup_status is not None:
+                failure_entry_no_attempt["temp_cleanup_status"] = copy.deepcopy(
+                    child_temp_cleanup_status
+                )
+            child_dir_persistence_failures.append(failure_entry_no_attempt)
         if child_dir_persistence_causes is not None:
-            child_dir_persistence_causes.append(
-                child_dir_persistence_causes[0]
-                if child_dir_persistence_causes
-                else None
+            if not (
+                child_dir_persistence_causes
+                and len(child_dir_persistence_causes)
+                == (
+                    len(child_dir_persistence_failures)
+                    if child_dir_persistence_failures is not None
+                    else 0
+                )
+            ):
+                child_dir_persistence_causes.append(
+                    child_dir_persistence_causes[0]
+                    if child_dir_persistence_causes
+                    else None
+                )
+
+    def _attach_child_published_receipt_to_payload(
+        materialized: Mapping[str, Any],
+    ) -> Mapping[str, Any]:
+        if (
+            child_published_receipt is None
+            and child_temp_cleanup_status is None
+        ):
+            return materialized
+        enriched = dict(materialized)
+        if child_published_receipt is not None:
+            enriched.setdefault(
+                "published_receipt", copy.deepcopy(child_published_receipt)
             )
+            enriched.setdefault(
+                "child_dir_published_receipt",
+                copy.deepcopy(child_published_receipt),
+            )
+        if child_temp_cleanup_status is not None:
+            enriched.setdefault(
+                "child_dir_temp_cleanup_status",
+                copy.deepcopy(child_temp_cleanup_status),
+            )
+        return enriched
 
     def _compose_child_failure_payload(
         extra_transform: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
@@ -1786,6 +5177,7 @@ def _persist_collector_json_with_fallback(
                 )
             if extra_transform is not None:
                 transformed = extra_transform(transformed)
+            transformed = _attach_child_published_receipt_to_payload(transformed)
             return transformed
 
         def _factory_for_destination(destination_path: Path) -> Mapping[str, Any]:
@@ -1799,6 +5191,7 @@ def _persist_collector_json_with_fallback(
                     )
             if extra_transform is not None:
                 materialized = extra_transform(materialized)
+            materialized = _attach_child_published_receipt_to_payload(materialized)
             return _record_retained_payload(materialized)
 
         return _factory_for_destination
@@ -1815,23 +5208,55 @@ def _persist_collector_json_with_fallback(
         if caught_persistence_exceptions is not None:
             caught_persistence_exceptions.extend(live_parent_causes)
         if parent_retention_dir_status is not None:
-            prev_writable = parent_retention_dir_status.get("writable_post_run", True)
+            prev_writable = parent_retention_dir_status.get(
+                "writable_post_run", True
+            )
             prev_write_err = parent_retention_dir_status.get("write_error")
-            prev_write_exc_type = parent_retention_dir_status.get("write_exception_type")
-            prev_write_exc_msg = parent_retention_dir_status.get("write_exception_message")
+            prev_write_exc_type = parent_retention_dir_status.get(
+                "write_exception_type"
+            )
+            prev_write_exc_msg = parent_retention_dir_status.get(
+                "write_exception_message"
+            )
             prev_write_errno = parent_retention_dir_status.get("write_errno")
+            prev_parent_receipt = parent_retention_dir_status.get(
+                "published_receipt"
+            )
+            prev_parent_cleanup = parent_retention_dir_status.get(
+                "temp_cleanup_status"
+            )
+            preserved_parent_fields: dict[str, Any] = {
+                key: copy.deepcopy(parent_retention_dir_status[key])
+                for key in _PRESERVED_ADMISSION_STATUS_KEYS
+                if key in parent_retention_dir_status
+                and key not in live_parent_check
+            }
             parent_retention_dir_status.clear()
             parent_retention_dir_status.update(live_parent_check)
+            if preserved_parent_fields:
+                parent_retention_dir_status.update(preserved_parent_fields)
             if not prev_writable and prev_write_err is not None:
                 parent_retention_dir_status["writable_post_run"] = False
                 parent_retention_dir_status["write_error"] = prev_write_err
-                parent_retention_dir_status["write_exception_type"] = prev_write_exc_type
-                parent_retention_dir_status["write_exception_message"] = prev_write_exc_msg
+                parent_retention_dir_status["write_exception_type"] = (
+                    prev_write_exc_type
+                )
+                parent_retention_dir_status["write_exception_message"] = (
+                    prev_write_exc_msg
+                )
                 parent_retention_dir_status["write_errno"] = prev_write_errno
             elif parent_retention_dir_cause_sink is not None:
                 parent_retention_dir_cause_sink.clear()
                 parent_retention_dir_cause_sink.append(
                     live_parent_causes[0] if live_parent_causes else None
+                )
+            if isinstance(prev_parent_receipt, Mapping):
+                parent_retention_dir_status["published_receipt"] = copy.deepcopy(
+                    dict(prev_parent_receipt)
+                )
+            if isinstance(prev_parent_cleanup, Mapping):
+                parent_retention_dir_status["temp_cleanup_status"] = copy.deepcopy(
+                    dict(prev_parent_cleanup)
                 )
         elif parent_retention_dir_cause_sink is not None and live_parent_causes:
             parent_retention_dir_cause_sink.clear()
@@ -1866,37 +5291,295 @@ def _persist_collector_json_with_fallback(
                 or f"Parent retention directory is not writable: {parent_retention_dir}"
             )
 
+    eff_parent_baseline = _normalize_directory_baseline(
+        parent_retention_dir,
+        (
+            parent_retention_dir_baseline
+            if parent_retention_dir_baseline is not None
+            else parent_retention_dir_status
+        ),
+    )
+
     if parent_dir_usable:
         effective_payload = _compose_child_failure_payload()
         parent_target_path = parent_retention_dir / target_path.name
         try:
-            artifact = _write_json_with_sibling_collision_fallback(
-                effective_payload,
-                parent_target_path,
-                root=parent_retention_dir,
-            )
+            parent_attempt_causes: list[Exception] = []
+            with (
+                _admitted_directory_context(
+                    parent_retention_dir,
+                    eff_parent_baseline,
+                    parent_retention_dir_status,
+                    parent_attempt_causes,
+                ),
+                _retained_payload_sink_context(retained_payload_sink),
+            ):
+                artifact = _write_json_with_sibling_collision_fallback(
+                    effective_payload,
+                    parent_target_path,
+                    root=parent_retention_dir,
+                )
+            if (
+                caught_persistence_exceptions is not None
+                and not bool(artifact.get("temp_cleanup_succeeded", True))
+            ):
+                existing_ids = {id(c) for c in caught_persistence_exceptions}
+                for p_exc in parent_attempt_causes:
+                    if id(p_exc) not in existing_ids:
+                        caught_persistence_exceptions.append(p_exc)
+                        existing_ids.add(id(p_exc))
             artifact["fallback_for_unwritable_or_damaged_child_dir"] = True
             artifact["intended_child_dir_path"] = str(target_path)
             artifact["intended_parent_retention_dir"] = str(parent_retention_dir)
             artifact["parent_retention_dir"] = str(parent_retention_dir)
             artifact["actual_retention_anchor_dir"] = str(parent_retention_dir)
             artifact["actual_retention_anchor_kind"] = "parent_retention_dir"
+            if parent_retention_dir_baseline is not None:
+                artifact["actual_retention_anchor_baseline"] = copy.deepcopy(
+                    dict(parent_retention_dir_baseline)
+                )
             artifact["child_dir_persistence_error"] = child_dir_unusable_reason
+            if child_published_receipt is not None:
+                artifact["published_receipt"] = copy.deepcopy(
+                    child_published_receipt
+                )
+                artifact["child_dir_published_receipt"] = copy.deepcopy(
+                    child_published_receipt
+                )
+            if child_temp_cleanup_status is not None:
+                artifact["child_dir_temp_cleanup_status"] = copy.deepcopy(
+                    child_temp_cleanup_status
+                )
             return artifact
         except (OSError, ValueError) as exc:
+            raw_parent_receipt = (
+                exc.published_receipt
+                if isinstance(exc, _PostPublicationBindingError)
+                else getattr(exc, "published_receipt", None)
+            )
+            if isinstance(raw_parent_receipt, Mapping):
+                parent_published_receipt = copy.deepcopy(dict(raw_parent_receipt))
+            raw_parent_cleanup = getattr(exc, "temp_cleanup_status", None)
+            if not isinstance(raw_parent_cleanup, Mapping) and isinstance(
+                parent_published_receipt, Mapping
+            ):
+                raw_parent_cleanup = parent_published_receipt.get(
+                    "temp_cleanup_status"
+                )
+            if isinstance(raw_parent_cleanup, Mapping):
+                parent_temp_cleanup_status = copy.deepcopy(
+                    dict(raw_parent_cleanup)
+                )
+            raw_parent_cleanup_errors = getattr(
+                exc, "temp_cleanup_errors", None
+            )
+            actual_parent_exc: Exception = (
+                exc.cause
+                if isinstance(exc, _PostPublicationBindingError)
+                and exc.cause is not None
+                else exc
+            )
+            if parent_published_receipt is not None:
+                try:
+                    setattr(
+                        actual_parent_exc,
+                        "published_receipt",
+                        copy.deepcopy(parent_published_receipt),
+                    )
+                except Exception:
+                    pass
+            if parent_temp_cleanup_status is not None:
+                try:
+                    setattr(
+                        actual_parent_exc,
+                        "temp_cleanup_status",
+                        copy.deepcopy(parent_temp_cleanup_status),
+                    )
+                except Exception:
+                    pass
+            if isinstance(raw_parent_cleanup_errors, list):
+                try:
+                    setattr(
+                        actual_parent_exc,
+                        "temp_cleanup_errors",
+                        list(raw_parent_cleanup_errors),
+                    )
+                    if raw_parent_cleanup_errors:
+                        setattr(
+                            actual_parent_exc,
+                            "temp_cleanup_error",
+                            raw_parent_cleanup_errors[-1],
+                        )
+                except Exception:
+                    pass
+            raw_parent_dir_close_err = getattr(
+                actual_parent_exc, "directory_close_error", None
+            )
+            if not isinstance(raw_parent_dir_close_err, BaseException):
+                raw_parent_dir_close_err = getattr(
+                    exc, "directory_close_error", None
+                )
+            raw_parent_dir_close_failures = getattr(
+                actual_parent_exc, "directory_close_failures", None
+            )
+            if not isinstance(raw_parent_dir_close_failures, list):
+                raw_parent_dir_close_failures = getattr(
+                    exc, "directory_close_failures", None
+                )
+            raw_parent_prior_collision_cleanup = getattr(
+                actual_parent_exc, "prior_collision_temp_cleanup_failures", None
+            )
+            if not isinstance(raw_parent_prior_collision_cleanup, list):
+                raw_parent_prior_collision_cleanup = getattr(
+                    exc, "prior_collision_temp_cleanup_failures", None
+                )
+            if isinstance(raw_parent_dir_close_err, BaseException):
+                try:
+                    setattr(
+                        actual_parent_exc,
+                        "directory_close_error",
+                        raw_parent_dir_close_err,
+                    )
+                    if (
+                        getattr(actual_parent_exc, "cleanup_close_error", None)
+                        is None
+                    ):
+                        setattr(
+                            actual_parent_exc,
+                            "cleanup_close_error",
+                            raw_parent_dir_close_err,
+                        )
+                except Exception:
+                    pass
+            if isinstance(raw_parent_dir_close_failures, list):
+                try:
+                    setattr(
+                        actual_parent_exc,
+                        "directory_close_failures",
+                        copy.deepcopy(raw_parent_dir_close_failures),
+                    )
+                except Exception:
+                    pass
+            if isinstance(raw_parent_prior_collision_cleanup, list):
+                try:
+                    setattr(
+                        actual_parent_exc,
+                        "prior_collision_temp_cleanup_failures",
+                        copy.deepcopy(raw_parent_prior_collision_cleanup),
+                    )
+                except Exception:
+                    pass
+            raw_parent_close_err = getattr(
+                actual_parent_exc, "cleanup_close_error", None
+            )
+            if not isinstance(raw_parent_close_err, BaseException):
+                raw_parent_close_err = getattr(
+                    exc, "cleanup_close_error", None
+                )
+            if not isinstance(
+                raw_parent_close_err, BaseException
+            ) and isinstance(raw_parent_dir_close_err, BaseException):
+                raw_parent_close_err = raw_parent_dir_close_err
             if caught_persistence_exceptions is not None:
-                caught_persistence_exceptions.append(exc)
+                existing_ids = {
+                    id(c) for c in caught_persistence_exceptions
+                }
+                for p_attempt_exc in parent_attempt_causes:
+                    if (
+                        isinstance(p_attempt_exc, Exception)
+                        and id(p_attempt_exc) not in existing_ids
+                    ):
+                        caught_persistence_exceptions.append(p_attempt_exc)
+                        existing_ids.add(id(p_attempt_exc))
+                if (
+                    isinstance(actual_parent_exc, Exception)
+                    and id(actual_parent_exc) not in existing_ids
+                ):
+                    caught_persistence_exceptions.append(actual_parent_exc)
+                    existing_ids.add(id(actual_parent_exc))
+                if (
+                    isinstance(raw_parent_close_err, Exception)
+                    and id(raw_parent_close_err) not in existing_ids
+                ):
+                    caught_persistence_exceptions.append(raw_parent_close_err)
+                    existing_ids.add(id(raw_parent_close_err))
+                if (
+                    isinstance(raw_parent_dir_close_err, Exception)
+                    and id(raw_parent_dir_close_err) not in existing_ids
+                ):
+                    caught_persistence_exceptions.append(
+                        raw_parent_dir_close_err
+                    )
+                    existing_ids.add(id(raw_parent_dir_close_err))
+                if isinstance(raw_parent_cleanup_errors, list):
+                    for p_err in raw_parent_cleanup_errors:
+                        if (
+                            isinstance(p_err, Exception)
+                            and id(p_err) not in existing_ids
+                        ):
+                            caught_persistence_exceptions.append(p_err)
+                            existing_ids.add(id(p_err))
             parent_dir_usable = False
-            parent_dir_unusable_reason = f"{type(exc).__name__}: {exc}"
+            parent_dir_unusable_reason = (
+                f"{type(actual_parent_exc).__name__}: {actual_parent_exc}"
+            )
             if parent_retention_dir_status is not None:
                 parent_retention_dir_status["writable_post_run"] = False
                 parent_retention_dir_status["write_error"] = parent_dir_unusable_reason
-                parent_retention_dir_status["write_exception_type"] = type(exc).__name__
-                parent_retention_dir_status["write_exception_message"] = str(exc)
-                parent_retention_dir_status["write_errno"] = getattr(exc, "errno", None)
+                parent_retention_dir_status["write_exception_type"] = type(
+                    actual_parent_exc
+                ).__name__
+                parent_retention_dir_status["write_exception_message"] = str(
+                    actual_parent_exc
+                )
+                parent_retention_dir_status["write_errno"] = getattr(
+                    actual_parent_exc, "errno", None
+                )
+                if isinstance(raw_parent_dir_close_err, BaseException):
+                    parent_retention_dir_status["directory_close_error"] = (
+                        f"{type(raw_parent_dir_close_err).__name__}: {raw_parent_dir_close_err}"
+                    )
+                    parent_retention_dir_status[
+                        "directory_close_exception_type"
+                    ] = type(raw_parent_dir_close_err).__name__
+                    parent_retention_dir_status[
+                        "directory_close_exception_message"
+                    ] = str(raw_parent_dir_close_err)
+                    parent_retention_dir_status["directory_close_errno"] = (
+                        getattr(raw_parent_dir_close_err, "errno", None)
+                    )
+                if isinstance(raw_parent_dir_close_failures, list):
+                    parent_retention_dir_status["directory_close_failures"] = (
+                        copy.deepcopy(raw_parent_dir_close_failures)
+                    )
+                if isinstance(raw_parent_close_err, BaseException):
+                    parent_retention_dir_status["cleanup_close_error"] = (
+                        f"{type(raw_parent_close_err).__name__}: {raw_parent_close_err}"
+                    )
+                    parent_retention_dir_status[
+                        "cleanup_close_exception_type"
+                    ] = type(raw_parent_close_err).__name__
+                    parent_retention_dir_status[
+                        "cleanup_close_exception_message"
+                    ] = str(raw_parent_close_err)
+                    parent_retention_dir_status["cleanup_close_errno"] = (
+                        getattr(raw_parent_close_err, "errno", None)
+                    )
+                if parent_published_receipt is not None:
+                    parent_retention_dir_status["published_receipt"] = (
+                        copy.deepcopy(parent_published_receipt)
+                    )
+                if parent_temp_cleanup_status is not None:
+                    parent_retention_dir_status["temp_cleanup_status"] = (
+                        copy.deepcopy(parent_temp_cleanup_status)
+                    )
+                if isinstance(raw_parent_prior_collision_cleanup, list):
+                    parent_retention_dir_status[
+                        "prior_collision_temp_cleanup_failures"
+                    ] = copy.deepcopy(raw_parent_prior_collision_cleanup)
             if parent_retention_dir_cause_sink is not None:
                 parent_retention_dir_cause_sink.clear()
-                parent_retention_dir_cause_sink.append(exc)
+                parent_retention_dir_cause_sink.append(actual_parent_exc)
 
     fallback_state = (
         verified_root_fallback_state
@@ -1956,11 +5639,30 @@ def _persist_collector_json_with_fallback(
         )
         try:
             anchor_target_path = anchor_dir / target_path.name
-            artifact = _write_json_with_sibling_collision_fallback(
-                effective_payload,
-                anchor_target_path,
-                root=anchor_dir,
-            )
+            anchor_attempt_causes: list[Exception] = []
+            with (
+                _admitted_directory_context(
+                    anchor_dir,
+                    anchor_baseline,
+                    None,
+                    anchor_attempt_causes,
+                ),
+                _retained_payload_sink_context(retained_payload_sink),
+            ):
+                artifact = _write_json_with_sibling_collision_fallback(
+                    effective_payload,
+                    anchor_target_path,
+                    root=anchor_dir,
+                )
+            if (
+                caught_persistence_exceptions is not None
+                and not bool(artifact.get("temp_cleanup_succeeded", True))
+            ):
+                existing_ids = {id(c) for c in caught_persistence_exceptions}
+                for a_exc in anchor_attempt_causes:
+                    if id(a_exc) not in existing_ids:
+                        caught_persistence_exceptions.append(a_exc)
+                        existing_ids.add(id(a_exc))
             artifact["fallback_for_unwritable_or_damaged_child_dir"] = True
             artifact["fallback_for_damaged_or_replaced_parent_retention_dir"] = True
             artifact["intended_child_dir_path"] = str(target_path)
@@ -1975,11 +5677,121 @@ def _persist_collector_json_with_fallback(
             artifact["parent_retention_dir_persistence_error"] = (
                 parent_dir_unusable_reason
             )
+            if child_published_receipt is not None:
+                artifact["published_receipt"] = copy.deepcopy(
+                    child_published_receipt
+                )
+                artifact["child_dir_published_receipt"] = copy.deepcopy(
+                    child_published_receipt
+                )
+            if child_temp_cleanup_status is not None:
+                artifact["child_dir_temp_cleanup_status"] = copy.deepcopy(
+                    child_temp_cleanup_status
+                )
+            if parent_published_receipt is not None:
+                artifact["parent_retention_dir_published_receipt"] = (
+                    copy.deepcopy(parent_published_receipt)
+                )
+            if parent_temp_cleanup_status is not None:
+                artifact["parent_retention_dir_temp_cleanup_status"] = (
+                    copy.deepcopy(parent_temp_cleanup_status)
+                )
             return artifact
         except (OSError, ValueError) as exc:
+            raw_anchor_receipt = (
+                exc.published_receipt
+                if isinstance(exc, _PostPublicationBindingError)
+                else getattr(exc, "published_receipt", None)
+            )
+            if isinstance(raw_anchor_receipt, Mapping):
+                anchor_published_receipt = copy.deepcopy(dict(raw_anchor_receipt))
+            raw_anchor_cleanup = getattr(exc, "temp_cleanup_status", None)
+            if not isinstance(raw_anchor_cleanup, Mapping) and isinstance(
+                anchor_published_receipt, Mapping
+            ):
+                raw_anchor_cleanup = anchor_published_receipt.get(
+                    "temp_cleanup_status"
+                )
+            if isinstance(raw_anchor_cleanup, Mapping):
+                anchor_temp_cleanup_status = copy.deepcopy(
+                    dict(raw_anchor_cleanup)
+                )
+            raw_anchor_cleanup_errors = getattr(
+                exc, "temp_cleanup_errors", None
+            )
+            actual_anchor_exc: Exception = (
+                exc.cause
+                if isinstance(exc, _PostPublicationBindingError)
+                and exc.cause is not None
+                else exc
+            )
+            if anchor_published_receipt is not None:
+                try:
+                    setattr(
+                        actual_anchor_exc,
+                        "published_receipt",
+                        copy.deepcopy(anchor_published_receipt),
+                    )
+                except Exception:
+                    pass
+            if anchor_temp_cleanup_status is not None:
+                try:
+                    setattr(
+                        actual_anchor_exc,
+                        "temp_cleanup_status",
+                        copy.deepcopy(anchor_temp_cleanup_status),
+                    )
+                except Exception:
+                    pass
+            if isinstance(raw_anchor_cleanup_errors, list):
+                try:
+                    setattr(
+                        actual_anchor_exc,
+                        "temp_cleanup_errors",
+                        list(raw_anchor_cleanup_errors),
+                    )
+                    if raw_anchor_cleanup_errors:
+                        setattr(
+                            actual_anchor_exc,
+                            "temp_cleanup_error",
+                            raw_anchor_cleanup_errors[-1],
+                        )
+                except Exception:
+                    pass
+            raw_anchor_close_err = getattr(
+                actual_anchor_exc, "cleanup_close_error", None
+            )
+            if not isinstance(raw_anchor_close_err, BaseException):
+                raw_anchor_close_err = getattr(
+                    exc, "cleanup_close_error", None
+                )
             if caught_persistence_exceptions is not None:
-                caught_persistence_exceptions.append(exc)
-            ev_err = f"{type(exc).__name__}: {exc}"
+                caught_persistence_exceptions.append(actual_anchor_exc)
+                existing_ids = {
+                    id(c) for c in caught_persistence_exceptions
+                }
+                if (
+                    isinstance(raw_anchor_close_err, Exception)
+                    and id(raw_anchor_close_err) not in existing_ids
+                ):
+                    caught_persistence_exceptions.append(raw_anchor_close_err)
+                    existing_ids.add(id(raw_anchor_close_err))
+                for a_attempt_exc in anchor_attempt_causes:
+                    if (
+                        isinstance(a_attempt_exc, Exception)
+                        and id(a_attempt_exc) not in existing_ids
+                    ):
+                        caught_persistence_exceptions.append(a_attempt_exc)
+                        existing_ids.add(id(a_attempt_exc))
+                if isinstance(raw_anchor_cleanup_errors, list):
+                    for a_err in raw_anchor_cleanup_errors:
+                        if (
+                            isinstance(a_err, Exception)
+                            and id(a_err) not in existing_ids
+                        ):
+                            caught_persistence_exceptions.append(a_err)
+                            existing_ids.add(id(a_err))
+            ev_err = f"{type(actual_anchor_exc).__name__}: {actual_anchor_exc}"
             fallback_state.update(
                 {
                     "used": False,
@@ -1993,6 +5805,14 @@ def _persist_collector_json_with_fallback(
                     "actual_anchor_baseline": None,
                 }
             )
+            if anchor_published_receipt is not None:
+                fallback_state["published_receipt"] = copy.deepcopy(
+                    anchor_published_receipt
+                )
+            if anchor_temp_cleanup_status is not None:
+                fallback_state["temp_cleanup_status"] = copy.deepcopy(
+                    anchor_temp_cleanup_status
+                )
 
     unpersisted_msg = (
         f"No verified writable retention anchor available for {target_path.name}: "
@@ -2001,8 +5821,36 @@ def _persist_collector_json_with_fallback(
         f"evidence_root_error={ev_err!r}"
     )
     fallback_state["unpersisted_reason"] = unpersisted_msg
+    latest_partial_receipt = (
+        anchor_published_receipt
+        or parent_published_receipt
+        or child_published_receipt
+    )
+    latest_cleanup_status = (
+        anchor_temp_cleanup_status
+        or parent_temp_cleanup_status
+        or child_temp_cleanup_status
+    )
     if not allow_unpersisted_on_no_verified_anchor:
         err_exc = ValueError(unpersisted_msg)
+        if latest_partial_receipt is not None:
+            try:
+                setattr(
+                    err_exc,
+                    "published_receipt",
+                    copy.deepcopy(latest_partial_receipt),
+                )
+            except Exception:
+                pass
+        if latest_cleanup_status is not None:
+            try:
+                setattr(
+                    err_exc,
+                    "temp_cleanup_status",
+                    copy.deepcopy(latest_cleanup_status),
+                )
+            except Exception:
+                pass
         if caught_persistence_exceptions is not None:
             caught_persistence_exceptions.append(err_exc)
         raise err_exc
@@ -2027,6 +5875,9 @@ def _persist_collector_json_with_fallback(
                     "on_child_dir_failure_transform must return a Mapping, "
                     f"got {type(no_anchor_payload).__name__}"
                 )
+            no_anchor_payload = _attach_child_published_receipt_to_payload(
+                no_anchor_payload
+            )
         except Exception as exc:
             materialization_error = f"{type(exc).__name__}: {exc}"
             unavailable_memory_evidence = {
@@ -2043,12 +5894,23 @@ def _persist_collector_json_with_fallback(
                 ),
                 "unpersisted_reason": unpersisted_msg,
             }
+            if latest_partial_receipt is not None:
+                unavailable_memory_evidence["published_receipt"] = copy.deepcopy(
+                    latest_partial_receipt
+                )
+            if latest_cleanup_status is not None:
+                unavailable_memory_evidence["temp_cleanup_status"] = (
+                    copy.deepcopy(latest_cleanup_status)
+                )
             no_anchor_payload = unavailable_memory_evidence
     else:
         no_anchor_payload = (
             on_child_dir_failure_transform(payload)
             if on_child_dir_failure_transform is not None
             else payload
+        )
+        no_anchor_payload = _attach_child_published_receipt_to_payload(
+            no_anchor_payload
         )
     _record_retained_payload(no_anchor_payload)
     serialized = (
@@ -2073,6 +5935,22 @@ def _persist_collector_json_with_fallback(
         "evidence_root_persistence_error": ev_err,
         "unpersisted_reason": unpersisted_msg,
     }
+    if latest_partial_receipt is not None:
+        unpersisted_record["published_receipt"] = copy.deepcopy(
+            latest_partial_receipt
+        )
+    if child_published_receipt is not None:
+        unpersisted_record["child_dir_published_receipt"] = copy.deepcopy(
+            child_published_receipt
+        )
+    if latest_cleanup_status is not None:
+        unpersisted_record["temp_cleanup_status"] = copy.deepcopy(
+            latest_cleanup_status
+        )
+    if child_temp_cleanup_status is not None:
+        unpersisted_record["child_dir_temp_cleanup_status"] = copy.deepcopy(
+            child_temp_cleanup_status
+        )
     if unavailable_memory_evidence is not None:
         unpersisted_record["payload_materialized"] = False
         unpersisted_record["payload_materialization_error"] = materialization_error
@@ -2088,6 +5966,7 @@ def _inspect_output_artifact(
     root: Path,
     caught_exceptions: list[Exception] | None = None,
     expected_root_identity: Mapping[str, Any] | None = None,
+    _raw_bytes_out: list[bytes] | None = None,
 ) -> dict[str, Any]:
     """Inspect an output path under ``root`` without following symlinks at ``root`` or any descendant."""
     normalized_root = Path(os.path.abspath(os.fspath(root)))
@@ -2225,6 +6104,8 @@ def _inspect_output_artifact(
             "errno": None,
         }
 
+    expected_root_dev = int(root_st.st_dev)
+    expected_root_ino = int(root_st.st_ino)
     if (
         expected_root_identity is not None
         and expected_root_identity.get("dev") is not None
@@ -2232,11 +6113,11 @@ def _inspect_output_artifact(
     ):
         exp_dev = int(expected_root_identity["dev"])
         exp_ino = int(expected_root_identity["ino"])
-        if (int(root_st.st_dev), int(root_st.st_ino)) != (exp_dev, exp_ino):
+        if (expected_root_dev, expected_root_ino) != (exp_dev, exp_ino):
             err_msg = (
                 f"Refmac directory inode changed at {normalized_root}: "
                 f"expected (dev={exp_dev}, ino={exp_ino}), "
-                f"observed (dev={int(root_st.st_dev)}, ino={int(root_st.st_ino)})"
+                f"observed (dev={expected_root_dev}, ino={expected_root_ino})"
             )
             exc_obj = ValueError(err_msg)
             if caught_exceptions is not None:
@@ -2256,7 +6137,57 @@ def _inspect_output_artifact(
                 "errno": None,
             }
 
-    resolved_root = normalized_root.resolve(strict=True)
+    try:
+        resolved_root = normalized_root.resolve(strict=True)
+    except OSError as exc:
+        if caught_exceptions is not None:
+            caught_exceptions.append(exc)
+        return {
+            "path": str(normalized_path),
+            "exists": False,
+            "is_symlink": False,
+            "is_regular_file": False,
+            "within_refmac_dir": False,
+            "resolved_path": None,
+            "sha256": None,
+            "size_bytes": None,
+            "error": (
+                f"Failed to resolve refmac directory {normalized_root} "
+                f"({type(exc).__name__}): {exc}"
+            ),
+            "exception_type": type(exc).__name__,
+            "exception_message": str(exc),
+            "errno": getattr(exc, "errno", None),
+        }
+
+    if (
+        expected_root_identity is not None
+        and expected_root_identity.get("resolved_path") is not None
+        and str(resolved_root) != str(expected_root_identity["resolved_path"])
+    ):
+        err_msg = (
+            f"Refmac directory resolved path changed at {normalized_root}: "
+            f"expected {str(expected_root_identity['resolved_path'])!r}, "
+            f"observed {str(resolved_root)!r}"
+        )
+        exc_obj = ValueError(err_msg)
+        if caught_exceptions is not None:
+            caught_exceptions.append(exc_obj)
+        return {
+            "path": str(normalized_path),
+            "exists": False,
+            "is_symlink": False,
+            "is_regular_file": False,
+            "within_refmac_dir": False,
+            "resolved_path": None,
+            "sha256": None,
+            "size_bytes": None,
+            "error": err_msg,
+            "exception_type": "ValueError",
+            "exception_message": err_msg,
+            "errno": None,
+        }
+
     if normalized_path == resolved_root or not normalized_path.is_relative_to(resolved_root):
         return {
             "path": str(path),
@@ -2270,200 +6201,1092 @@ def _inspect_output_artifact(
             "error": f"Output path {path} is outside refmac directory {resolved_root}",
         }
 
-    current = resolved_root
-    rel_parts = normalized_path.relative_to(resolved_root).parts
-    for part in rel_parts[:-1]:
-        current = current / part
+    dir_open_flags = (
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_CLOEXEC", 0)
+    )
+    try:
+        root_fd = os.open(normalized_root, dir_open_flags)
+    except OSError as exc:
+        if caught_exceptions is not None:
+            caught_exceptions.append(exc)
+        return {
+            "path": str(normalized_path),
+            "exists": False,
+            "is_symlink": False,
+            "is_regular_file": False,
+            "within_refmac_dir": False,
+            "resolved_path": None,
+            "sha256": None,
+            "size_bytes": None,
+            "error": (
+                f"Refmac directory unavailable at {normalized_root} "
+                f"({type(exc).__name__}): {exc}"
+            ),
+            "exception_type": type(exc).__name__,
+            "exception_message": str(exc),
+            "errno": getattr(exc, "errno", None),
+        }
+
+    root_lookup_obs: dict[str, Any] = {
+        "path": str(normalized_root),
+        "resolved_path": str(resolved_root),
+        "exists": True,
+        "is_symlink": False,
+        "is_directory": True,
+        "dev": expected_root_dev,
+        "ino": expected_root_ino,
+        "mode": int(stat.S_IMODE(root_st.st_mode)),
+    }
+    root_dir_entry: dict[str, Any] = {
+        "fd": root_fd,
+        "role": "root",
+        "name": str(normalized_root.name),
+        "path": str(normalized_root),
+        "descriptor_obs": None,
+        "close_attempted": False,
+        "close_succeeded": False,
+        "close_exc": None,
+    }
+    opened_dir_entries: list[dict[str, Any]] = [root_dir_entry]
+    dir_close_failures: list[tuple[dict[str, Any], OSError]] = []
+
+    def _close_owned_dir_fds() -> None:
+        for d_entry in reversed(opened_dir_entries):
+            if d_entry["close_attempted"]:
+                continue
+            d_entry["close_attempted"] = True
+            d_fd = d_entry["fd"]
+            desc_obs = d_entry.get("descriptor_obs")
+            try:
+                os.close(d_fd)
+            except OSError as close_exc:
+                d_entry["close_succeeded"] = False
+                d_entry["close_exc"] = close_exc
+                dir_close_failures.append((d_entry, close_exc))
+                if isinstance(desc_obs, dict):
+                    desc_obs["verified"] = False
+                    desc_obs["close_attempted"] = True
+                    desc_obs["close_succeeded"] = False
+                    desc_obs["close_error"] = (
+                        f"{type(close_exc).__name__}: {close_exc}"
+                    )
+                    desc_obs["close_exception_type"] = type(close_exc).__name__
+                    desc_obs["close_exception_message"] = str(close_exc)
+                    desc_obs["close_errno"] = getattr(close_exc, "errno", None)
+            else:
+                d_entry["close_succeeded"] = True
+                if isinstance(desc_obs, dict):
+                    desc_obs["close_attempted"] = True
+                    desc_obs["close_succeeded"] = True
+                    desc_obs["close_error"] = None
+                    desc_obs["close_exception_type"] = None
+                    desc_obs["close_exception_message"] = None
+                    desc_obs["close_errno"] = None
+
+    def _capture_with_opened_root() -> tuple[
+        dict[str, Any], BaseException | None, bytes | None
+    ]:
         try:
-            anc_st = os.lstat(current)
-        except FileNotFoundError:
-            return {
-                "path": str(normalized_path),
-                "exists": False,
-                "is_symlink": False,
-                "is_regular_file": False,
-                "within_refmac_dir": True,
-                "resolved_path": None,
-                "sha256": None,
-                "size_bytes": None,
-                "error": None,
-            }
+            root_fd_st = os.fstat(root_fd)
         except OSError as exc:
             if caught_exceptions is not None:
                 caught_exceptions.append(exc)
-            return {
-                "path": str(normalized_path),
-                "exists": False,
-                "is_symlink": False,
-                "is_regular_file": False,
-                "within_refmac_dir": False,
-                "resolved_path": None,
-                "sha256": None,
-                "size_bytes": None,
-                "error": (
-                    f"Ancestor path inspection failed at {current} "
-                    f"({type(exc).__name__}): {exc}"
-                ),
-                "exception_type": type(exc).__name__,
-                "exception_message": str(exc),
-                "errno": getattr(exc, "errno", None),
+            failed_root_descriptor: dict[str, Any] = {
+                "path": str(normalized_root),
+                "opened": True,
+                "fstat_succeeded": False,
+                "verified": False,
+                "is_directory": None,
+                "dev": None,
+                "ino": None,
+                "mode": None,
             }
-        if stat.S_ISLNK(anc_st.st_mode):
-            return {
+            root_dir_entry["descriptor_obs"] = failed_root_descriptor
+            return (
+                {
+                    "path": str(normalized_path),
+                    "exists": False,
+                    "leaf_existence_known": False,
+                    "is_symlink": False,
+                    "is_regular_file": False,
+                    "within_refmac_dir": False,
+                    "resolved_path": None,
+                    "sha256": None,
+                    "size_bytes": None,
+                    "stat_size_bytes": None,
+                    "observed_read_bytes": 0,
+                    "observed_read_sha256": None,
+                    "observed_eof": False,
+                    "read_complete": False,
+                    "leaf_pre_fstat_verified": False,
+                    "leaf_post_fstat_verified": False,
+                    "leaf_close_attempted": False,
+                    "leaf_close_succeeded": False,
+                    "root_lookup": root_lookup_obs,
+                    "root_lookup_path": str(normalized_root),
+                    "root_lookup_resolved_path": str(resolved_root),
+                    "root_lookup_dev": expected_root_dev,
+                    "root_lookup_ino": expected_root_ino,
+                    "root_lookup_is_directory": True,
+                    "root_lookup_is_symlink": False,
+                    "root_descriptor": failed_root_descriptor,
+                    "root_descriptor_fstat_succeeded": False,
+                    "root_descriptor_verified": False,
+                    "root_descriptor_dev": None,
+                    "root_descriptor_ino": None,
+                    "root_descriptor_is_directory": None,
+                    "traversed_directory_components": [],
+                    "failed_directory_component": None,
+                    "component_lookup": None,
+                    "component_descriptor": None,
+                    "failure_phase": "root_dir_fstat",
+                    "error": (
+                        f"Failed to fstat opened root directory descriptor {normalized_root} "
+                        f"({type(exc).__name__}): {exc}"
+                    ),
+                    "exception_type": type(exc).__name__,
+                    "exception_message": str(exc),
+                    "errno": getattr(exc, "errno", None),
+                },
+                exc,
+                None,
+            )
+        if not stat.S_ISDIR(root_fd_st.st_mode) or (
+            int(root_fd_st.st_dev),
+            int(root_fd_st.st_ino),
+        ) != (expected_root_dev, expected_root_ino):
+            err_msg = (
+                f"Refmac directory inode changed while opening descriptor at {normalized_root}: "
+                f"expected (dev={expected_root_dev}, ino={expected_root_ino}), "
+                f"observed (dev={int(root_fd_st.st_dev)}, ino={int(root_fd_st.st_ino)})"
+            )
+            exc_obj = ValueError(err_msg)
+            if caught_exceptions is not None:
+                caught_exceptions.append(exc_obj)
+            mismatch_root_descriptor: dict[str, Any] = {
+                "path": str(normalized_root),
+                "opened": True,
+                "fstat_succeeded": True,
+                "verified": False,
+                "is_directory": bool(stat.S_ISDIR(root_fd_st.st_mode)),
+                "dev": int(root_fd_st.st_dev),
+                "ino": int(root_fd_st.st_ino),
+                "mode": int(stat.S_IMODE(root_fd_st.st_mode)),
+            }
+            root_dir_entry["descriptor_obs"] = mismatch_root_descriptor
+            return (
+                {
+                    "path": str(normalized_path),
+                    "exists": False,
+                    "is_symlink": False,
+                    "is_regular_file": False,
+                    "within_refmac_dir": False,
+                    "resolved_path": None,
+                    "sha256": None,
+                    "size_bytes": None,
+                    "root_lookup": root_lookup_obs,
+                    "root_descriptor": mismatch_root_descriptor,
+                    "error": err_msg,
+                    "exception_type": "ValueError",
+                    "exception_message": err_msg,
+                    "errno": None,
+                },
+                exc_obj,
+                None,
+            )
+
+        root_descriptor_obs: dict[str, Any] = {
+            "path": str(normalized_root),
+            "opened": True,
+            "fstat_succeeded": True,
+            "verified": True,
+            "is_directory": True,
+            "dev": int(root_fd_st.st_dev),
+            "ino": int(root_fd_st.st_ino),
+            "mode": int(stat.S_IMODE(root_fd_st.st_mode)),
+        }
+        root_dir_entry["descriptor_obs"] = root_descriptor_obs
+        traversed_directory_components: list[dict[str, Any]] = []
+        cur_dir_fd = root_fd
+        current = resolved_root
+        rel_parts = normalized_path.relative_to(resolved_root).parts
+        for part in rel_parts[:-1]:
+            current = current / part
+            try:
+                anc_st = os.stat(part, dir_fd=cur_dir_fd, follow_symlinks=False)
+            except FileNotFoundError:
+                return (
+                    {
+                        "path": str(normalized_path),
+                        "exists": False,
+                        "is_symlink": False,
+                        "is_regular_file": False,
+                        "within_refmac_dir": True,
+                        "resolved_path": None,
+                        "sha256": None,
+                        "size_bytes": None,
+                        "root_lookup": root_lookup_obs,
+                        "root_descriptor": root_descriptor_obs,
+                        "traversed_directory_components": traversed_directory_components,
+                        "error": None,
+                    },
+                    None,
+                    None,
+                )
+            except OSError as exc:
+                if caught_exceptions is not None:
+                    caught_exceptions.append(exc)
+                return (
+                    {
+                        "path": str(normalized_path),
+                        "exists": False,
+                        "is_symlink": False,
+                        "is_regular_file": False,
+                        "within_refmac_dir": False,
+                        "resolved_path": None,
+                        "sha256": None,
+                        "size_bytes": None,
+                        "root_lookup": root_lookup_obs,
+                        "root_descriptor": root_descriptor_obs,
+                        "traversed_directory_components": traversed_directory_components,
+                        "error": (
+                            f"Ancestor path inspection failed at {current} "
+                            f"({type(exc).__name__}): {exc}"
+                        ),
+                        "exception_type": type(exc).__name__,
+                        "exception_message": str(exc),
+                        "errno": getattr(exc, "errno", None),
+                    },
+                    exc,
+                    None,
+                )
+            if stat.S_ISLNK(anc_st.st_mode):
+                return (
+                    {
+                        "path": str(normalized_path),
+                        "exists": True,
+                        "is_symlink": True,
+                        "is_regular_file": False,
+                        "within_refmac_dir": False,
+                        "resolved_path": None,
+                        "sha256": None,
+                        "size_bytes": None,
+                        "root_lookup": root_lookup_obs,
+                        "root_descriptor": root_descriptor_obs,
+                        "traversed_directory_components": traversed_directory_components,
+                        "error": f"Ancestor directory was replaced by symlink: {current}",
+                    },
+                    None,
+                    None,
+                )
+            if not stat.S_ISDIR(anc_st.st_mode):
+                return (
+                    {
+                        "path": str(normalized_path),
+                        "exists": False,
+                        "is_symlink": False,
+                        "is_regular_file": False,
+                        "within_refmac_dir": False,
+                        "resolved_path": None,
+                        "sha256": None,
+                        "size_bytes": None,
+                        "root_lookup": root_lookup_obs,
+                        "root_descriptor": root_descriptor_obs,
+                        "traversed_directory_components": traversed_directory_components,
+                        "error": f"Ancestor component is not a directory: {current}",
+                    },
+                    None,
+                    None,
+                )
+            comp_lookup_obs: dict[str, Any] = {
+                "name": str(part),
+                "path": str(current),
+                "parent_path": str(current.parent),
+                "exists": True,
+                "is_symlink": False,
+                "is_directory": True,
+                "dev": int(anc_st.st_dev),
+                "ino": int(anc_st.st_ino),
+                "mode": int(stat.S_IMODE(anc_st.st_mode)),
+            }
+            try:
+                next_dir_fd = os.open(
+                    part, dir_open_flags, 0o755, dir_fd=cur_dir_fd
+                )
+            except OSError as exc:
+                if caught_exceptions is not None:
+                    caught_exceptions.append(exc)
+                return (
+                    {
+                        "path": str(normalized_path),
+                        "exists": False,
+                        "is_symlink": False,
+                        "is_regular_file": False,
+                        "within_refmac_dir": False,
+                        "resolved_path": None,
+                        "sha256": None,
+                        "size_bytes": None,
+                        "root_lookup": root_lookup_obs,
+                        "root_descriptor": root_descriptor_obs,
+                        "traversed_directory_components": traversed_directory_components,
+                        "error": (
+                            f"Ancestor path inspection failed at {current} "
+                            f"({type(exc).__name__}): {exc}"
+                        ),
+                        "exception_type": type(exc).__name__,
+                        "exception_message": str(exc),
+                        "errno": getattr(exc, "errno", None),
+                    },
+                    exc,
+                    None,
+                )
+            comp_dir_entry: dict[str, Any] = {
+                "fd": next_dir_fd,
+                "role": "intermediate",
+                "name": str(part),
+                "path": str(current),
+                "descriptor_obs": None,
+                "close_attempted": False,
+                "close_succeeded": False,
+                "close_exc": None,
+            }
+            opened_dir_entries.append(comp_dir_entry)
+            try:
+                next_st = os.fstat(next_dir_fd)
+            except OSError as exc:
+                if caught_exceptions is not None:
+                    caught_exceptions.append(exc)
+                failed_comp_descriptor: dict[str, Any] = {
+                    "path": str(current),
+                    "opened": True,
+                    "fstat_succeeded": False,
+                    "verified": False,
+                    "is_directory": None,
+                    "dev": None,
+                    "ino": None,
+                    "mode": None,
+                }
+                comp_dir_entry["descriptor_obs"] = failed_comp_descriptor
+                failed_comp_obs: dict[str, Any] = {
+                    "name": str(part),
+                    "path": str(current),
+                    "lookup": comp_lookup_obs,
+                    "descriptor": failed_comp_descriptor,
+                }
+                return (
+                    {
+                        "path": str(normalized_path),
+                        "exists": False,
+                        "leaf_existence_known": False,
+                        "is_symlink": False,
+                        "is_regular_file": False,
+                        "within_refmac_dir": False,
+                        "resolved_path": None,
+                        "sha256": None,
+                        "size_bytes": None,
+                        "stat_size_bytes": None,
+                        "observed_read_bytes": 0,
+                        "observed_read_sha256": None,
+                        "observed_eof": False,
+                        "read_complete": False,
+                        "leaf_pre_fstat_verified": False,
+                        "leaf_post_fstat_verified": False,
+                        "leaf_close_attempted": False,
+                        "leaf_close_succeeded": False,
+                        "root_lookup": root_lookup_obs,
+                        "root_lookup_path": str(normalized_root),
+                        "root_lookup_resolved_path": str(resolved_root),
+                        "root_lookup_dev": expected_root_dev,
+                        "root_lookup_ino": expected_root_ino,
+                        "root_lookup_is_directory": True,
+                        "root_lookup_is_symlink": False,
+                        "root_descriptor": root_descriptor_obs,
+                        "root_descriptor_fstat_succeeded": True,
+                        "root_descriptor_verified": True,
+                        "root_descriptor_dev": int(root_fd_st.st_dev),
+                        "root_descriptor_ino": int(root_fd_st.st_ino),
+                        "root_descriptor_is_directory": True,
+                        "traversed_directory_components": traversed_directory_components,
+                        "failed_directory_component": failed_comp_obs,
+                        "component_lookup": comp_lookup_obs,
+                        "component_lookup_name": str(part),
+                        "component_lookup_path": str(current),
+                        "component_lookup_dev": int(anc_st.st_dev),
+                        "component_lookup_ino": int(anc_st.st_ino),
+                        "component_lookup_is_directory": True,
+                        "component_lookup_is_symlink": False,
+                        "component_descriptor": failed_comp_descriptor,
+                        "component_descriptor_fstat_succeeded": False,
+                        "component_descriptor_verified": False,
+                        "component_descriptor_dev": None,
+                        "component_descriptor_ino": None,
+                        "component_descriptor_is_directory": None,
+                        "failure_phase": "intermediate_dir_fstat",
+                        "error": (
+                            f"Failed to fstat directory component {part!r} under {normalized_root} "
+                            f"({type(exc).__name__}): {exc}"
+                        ),
+                        "exception_type": type(exc).__name__,
+                        "exception_message": str(exc),
+                        "errno": getattr(exc, "errno", None),
+                    },
+                    exc,
+                    None,
+                )
+            if not stat.S_ISDIR(next_st.st_mode) or (
+                int(next_st.st_dev),
+                int(next_st.st_ino),
+            ) != (int(anc_st.st_dev), int(anc_st.st_ino)):
+                err_msg = f"Ancestor directory identity changed while opening {current}"
+                exc_obj = ValueError(err_msg)
+                if caught_exceptions is not None:
+                    caught_exceptions.append(exc_obj)
+                mismatch_comp_descriptor: dict[str, Any] = {
+                    "path": str(current),
+                    "opened": True,
+                    "fstat_succeeded": True,
+                    "verified": False,
+                    "is_directory": bool(stat.S_ISDIR(next_st.st_mode)),
+                    "dev": int(next_st.st_dev),
+                    "ino": int(next_st.st_ino),
+                    "mode": int(stat.S_IMODE(next_st.st_mode)),
+                }
+                comp_dir_entry["descriptor_obs"] = mismatch_comp_descriptor
+                mismatch_comp_obs: dict[str, Any] = {
+                    "name": str(part),
+                    "path": str(current),
+                    "lookup": comp_lookup_obs,
+                    "descriptor": mismatch_comp_descriptor,
+                }
+                return (
+                    {
+                        "path": str(normalized_path),
+                        "exists": False,
+                        "leaf_existence_known": False,
+                        "is_symlink": False,
+                        "is_regular_file": False,
+                        "within_refmac_dir": False,
+                        "resolved_path": None,
+                        "sha256": None,
+                        "size_bytes": None,
+                        "stat_size_bytes": None,
+                        "observed_read_bytes": 0,
+                        "observed_read_sha256": None,
+                        "observed_eof": False,
+                        "read_complete": False,
+                        "leaf_pre_fstat_verified": False,
+                        "leaf_post_fstat_verified": False,
+                        "leaf_close_attempted": False,
+                        "leaf_close_succeeded": False,
+                        "root_lookup": root_lookup_obs,
+                        "root_lookup_path": str(normalized_root),
+                        "root_lookup_resolved_path": str(resolved_root),
+                        "root_lookup_dev": expected_root_dev,
+                        "root_lookup_ino": expected_root_ino,
+                        "root_lookup_is_directory": True,
+                        "root_lookup_is_symlink": False,
+                        "root_descriptor": root_descriptor_obs,
+                        "root_descriptor_fstat_succeeded": True,
+                        "root_descriptor_verified": True,
+                        "root_descriptor_dev": int(root_fd_st.st_dev),
+                        "root_descriptor_ino": int(root_fd_st.st_ino),
+                        "root_descriptor_is_directory": True,
+                        "traversed_directory_components": traversed_directory_components,
+                        "failed_directory_component": mismatch_comp_obs,
+                        "component_lookup": comp_lookup_obs,
+                        "component_lookup_name": str(part),
+                        "component_lookup_path": str(current),
+                        "component_lookup_dev": int(anc_st.st_dev),
+                        "component_lookup_ino": int(anc_st.st_ino),
+                        "component_lookup_is_directory": True,
+                        "component_lookup_is_symlink": False,
+                        "component_descriptor": mismatch_comp_descriptor,
+                        "component_descriptor_fstat_succeeded": True,
+                        "component_descriptor_verified": False,
+                        "component_descriptor_dev": int(next_st.st_dev),
+                        "component_descriptor_ino": int(next_st.st_ino),
+                        "component_descriptor_is_directory": bool(
+                            stat.S_ISDIR(next_st.st_mode)
+                        ),
+                        "failure_phase": "intermediate_dir_identity_mismatch",
+                        "error": err_msg,
+                        "exception_type": "ValueError",
+                        "exception_message": err_msg,
+                        "errno": None,
+                    },
+                    exc_obj,
+                    None,
+                )
+            comp_desc_obs: dict[str, Any] = {
+                "path": str(current),
+                "opened": True,
+                "fstat_succeeded": True,
+                "verified": True,
+                "is_directory": True,
+                "dev": int(next_st.st_dev),
+                "ino": int(next_st.st_ino),
+                "mode": int(stat.S_IMODE(next_st.st_mode)),
+            }
+            comp_dir_entry["descriptor_obs"] = comp_desc_obs
+            traversed_directory_components.append(
+                {
+                    "name": str(part),
+                    "path": str(current),
+                    "lookup": comp_lookup_obs,
+                    "descriptor": comp_desc_obs,
+                }
+            )
+            cur_dir_fd = next_dir_fd
+
+        leaf_name = rel_parts[-1]
+        try:
+            st = os.stat(leaf_name, dir_fd=cur_dir_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            return (
+                {
+                    "path": str(normalized_path),
+                    "exists": False,
+                    "is_symlink": False,
+                    "is_regular_file": False,
+                    "within_refmac_dir": True,
+                    "resolved_path": None,
+                    "sha256": None,
+                    "size_bytes": None,
+                    "root_lookup": root_lookup_obs,
+                    "root_descriptor": root_descriptor_obs,
+                    "traversed_directory_components": traversed_directory_components,
+                    "error": None,
+                },
+                None,
+                None,
+            )
+        except OSError as exc:
+            if caught_exceptions is not None:
+                caught_exceptions.append(exc)
+            return (
+                {
+                    "path": str(normalized_path),
+                    "exists": False,
+                    "is_symlink": False,
+                    "is_regular_file": False,
+                    "within_refmac_dir": True,
+                    "resolved_path": None,
+                    "sha256": None,
+                    "size_bytes": None,
+                    "root_lookup": root_lookup_obs,
+                    "root_descriptor": root_descriptor_obs,
+                    "traversed_directory_components": traversed_directory_components,
+                    "error": (
+                        f"Failed to stat output path {normalized_path} "
+                        f"({type(exc).__name__}): {exc}"
+                    ),
+                    "exception_type": type(exc).__name__,
+                    "exception_message": str(exc),
+                    "errno": getattr(exc, "errno", None),
+                },
+                exc,
+                None,
+            )
+
+        if stat.S_ISLNK(st.st_mode):
+            return (
+                {
+                    "path": str(normalized_path),
+                    "exists": True,
+                    "is_symlink": True,
+                    "is_regular_file": False,
+                    "within_refmac_dir": False,
+                    "resolved_path": None,
+                    "sha256": None,
+                    "size_bytes": None,
+                    "root_lookup": root_lookup_obs,
+                    "root_descriptor": root_descriptor_obs,
+                    "traversed_directory_components": traversed_directory_components,
+                    "error": f"Refusing to follow symlink at output path: {normalized_path}",
+                },
+                None,
+                None,
+            )
+
+        if not stat.S_ISREG(st.st_mode):
+            return (
+                {
+                    "path": str(normalized_path),
+                    "exists": True,
+                    "is_symlink": False,
+                    "is_regular_file": False,
+                    "within_refmac_dir": True,
+                    "resolved_path": None,
+                    "sha256": None,
+                    "size_bytes": None,
+                    "root_lookup": root_lookup_obs,
+                    "root_descriptor": root_descriptor_obs,
+                    "traversed_directory_components": traversed_directory_components,
+                    "error": f"Output path is not a regular file: {normalized_path}",
+                },
+                None,
+                None,
+            )
+
+        try:
+            resolved_target = normalized_path.resolve(strict=True)
+        except OSError as exc:
+            if caught_exceptions is not None:
+                caught_exceptions.append(exc)
+            return (
+                {
+                    "path": str(normalized_path),
+                    "exists": True,
+                    "is_symlink": False,
+                    "is_regular_file": True,
+                    "within_refmac_dir": False,
+                    "resolved_path": None,
+                    "sha256": None,
+                    "size_bytes": int(st.st_size),
+                    "root_lookup": root_lookup_obs,
+                    "root_descriptor": root_descriptor_obs,
+                    "traversed_directory_components": traversed_directory_components,
+                    "error": (
+                        f"Failed to resolve regular file path {normalized_path} "
+                        f"({type(exc).__name__}): {exc}"
+                    ),
+                    "exception_type": type(exc).__name__,
+                    "exception_message": str(exc),
+                    "errno": getattr(exc, "errno", None),
+                },
+                exc,
+                None,
+            )
+
+        if not resolved_target.is_relative_to(resolved_root):
+            return (
+                {
+                    "path": str(normalized_path),
+                    "exists": True,
+                    "is_symlink": False,
+                    "is_regular_file": True,
+                    "within_refmac_dir": False,
+                    "resolved_path": str(resolved_target),
+                    "sha256": None,
+                    "size_bytes": None,
+                    "root_lookup": root_lookup_obs,
+                    "root_descriptor": root_descriptor_obs,
+                    "traversed_directory_components": traversed_directory_components,
+                    "error": f"Resolved output path escaped refmac directory: {resolved_target}",
+                },
+                None,
+                None,
+            )
+
+        leaf_lookup_obs: dict[str, Any] = {
+            "name": str(leaf_name),
+            "path": str(normalized_path),
+            "resolved_path": str(resolved_target),
+            "exists": True,
+            "is_symlink": False,
+            "is_regular_file": True,
+            "dev": int(st.st_dev),
+            "ino": int(st.st_ino),
+            "size_bytes": int(st.st_size),
+            "mtime_ns": int(st.st_mtime_ns),
+            "mode": int(stat.S_IMODE(st.st_mode)),
+        }
+        chunks: list[bytes] = []
+        eof_reached = False
+        leaf_pre_fstat_verified = False
+        leaf_post_fstat_verified = False
+        leaf_close_attempted = False
+        leaf_close_succeeded = False
+        leaf_cleanup_close_exc: OSError | None = None
+        leaf_failure_phase = "leaf_open"
+        try:
+            leaf_open_flags = (
+                os.O_RDONLY
+                | getattr(os, "O_NONBLOCK", 0)
+                | getattr(os, "O_NOFOLLOW", 0)
+                | getattr(os, "O_CLOEXEC", 0)
+            )
+            leaf_fd = os.open(
+                leaf_name,
+                leaf_open_flags,
+                0o644,
+                dir_fd=cur_dir_fd,
+            )
+            leaf_closed = False
+            try:
+                leaf_failure_phase = "leaf_pre_read_fstat"
+                leaf_pre_st = os.fstat(leaf_fd)
+                if (
+                    not stat.S_ISREG(leaf_pre_st.st_mode)
+                    or (
+                        int(leaf_pre_st.st_dev),
+                        int(leaf_pre_st.st_ino),
+                    )
+                    != (int(st.st_dev), int(st.st_ino))
+                    or int(leaf_pre_st.st_size) != int(st.st_size)
+                    or int(leaf_pre_st.st_mtime_ns) != int(st.st_mtime_ns)
+                ):
+                    raise ValueError(
+                        f"Output file identity changed while opening {normalized_path}: "
+                        f"expected (dev={int(st.st_dev)}, ino={int(st.st_ino)}, "
+                        f"size={int(st.st_size)}, mtime_ns={int(st.st_mtime_ns)}), "
+                        f"observed (dev={int(leaf_pre_st.st_dev)}, ino={int(leaf_pre_st.st_ino)}, "
+                        f"size={int(leaf_pre_st.st_size)}, mtime_ns={int(leaf_pre_st.st_mtime_ns)})"
+                    )
+                leaf_pre_fstat_verified = True
+                leaf_failure_phase = "leaf_read"
+                while True:
+                    chunk = os.read(leaf_fd, 65536)
+                    if not chunk:
+                        eof_reached = True
+                        break
+                    chunks.append(chunk)
+                data = b"".join(chunks)
+                leaf_failure_phase = "leaf_post_read_fstat"
+                leaf_post_st = os.fstat(leaf_fd)
+                if (
+                    not stat.S_ISREG(leaf_post_st.st_mode)
+                    or (
+                        int(leaf_post_st.st_dev),
+                        int(leaf_post_st.st_ino),
+                    )
+                    != (int(leaf_pre_st.st_dev), int(leaf_pre_st.st_ino))
+                    or int(leaf_post_st.st_size) != int(leaf_pre_st.st_size)
+                    or int(leaf_post_st.st_size) != len(data)
+                    or int(leaf_post_st.st_mtime_ns) != int(leaf_pre_st.st_mtime_ns)
+                ):
+                    raise ValueError(
+                        f"Output file identity changed while reading {normalized_path}"
+                    )
+                leaf_failure_phase = "leaf_post_read_stat"
+                leaf_post_rel_st = os.stat(
+                    leaf_name,
+                    dir_fd=cur_dir_fd,
+                    follow_symlinks=False,
+                )
+                if (
+                    stat.S_ISLNK(leaf_post_rel_st.st_mode)
+                    or not stat.S_ISREG(leaf_post_rel_st.st_mode)
+                    or (
+                        int(leaf_post_rel_st.st_dev),
+                        int(leaf_post_rel_st.st_ino),
+                    )
+                    != (int(leaf_pre_st.st_dev), int(leaf_pre_st.st_ino))
+                    or int(leaf_post_rel_st.st_size) != len(data)
+                    or int(leaf_post_rel_st.st_mtime_ns) != int(leaf_pre_st.st_mtime_ns)
+                ):
+                    raise ValueError(
+                        f"Output file leaf binding or metadata changed while reading {normalized_path}"
+                    )
+                leaf_post_fstat_verified = True
+                leaf_failure_phase = "leaf_close"
+                leaf_closed = True
+                leaf_close_attempted = True
+                os.close(leaf_fd)
+                leaf_close_succeeded = True
+            finally:
+                if not leaf_closed:
+                    leaf_close_attempted = True
+                    try:
+                        os.close(leaf_fd)
+                    except OSError as close_exc:
+                        leaf_close_succeeded = False
+                        leaf_cleanup_close_exc = close_exc
+                    else:
+                        leaf_close_succeeded = True
+        except (OSError, ValueError) as exc:
+            if caught_exceptions is not None:
+                caught_exceptions.append(exc)
+            if leaf_cleanup_close_exc is not None:
+                try:
+                    setattr(exc, "cleanup_close_error", leaf_cleanup_close_exc)
+                except Exception:
+                    pass
+                if caught_exceptions is not None:
+                    caught_exceptions.append(leaf_cleanup_close_exc)
+            observed_data = b"".join(chunks)
+            observed_read_size = len(observed_data)
+            observed_read_sha256 = (
+                _sha256_bytes(observed_data)
+                if (observed_read_size > 0 or eof_reached)
+                else None
+            )
+            effective_close_exc: BaseException | None = (
+                leaf_cleanup_close_exc
+                if leaf_cleanup_close_exc is not None
+                else (exc if leaf_failure_phase == "leaf_close" else None)
+            )
+            return (
+                {
+                    "path": str(normalized_path),
+                    "exists": True,
+                    "leaf_existence_known": True,
+                    "is_symlink": False,
+                    "is_regular_file": True,
+                    "within_refmac_dir": True,
+                    "resolved_path": str(resolved_target),
+                    "sha256": None,
+                    "size_bytes": int(st.st_size),
+                    "stat_size_bytes": int(st.st_size),
+                    "observed_read_bytes": observed_read_size,
+                    "observed_read_sha256": observed_read_sha256,
+                    "observed_eof": eof_reached,
+                    "read_complete": bool(
+                        eof_reached and observed_read_size == int(st.st_size)
+                    ),
+                    "leaf_pre_fstat_verified": leaf_pre_fstat_verified,
+                    "leaf_post_fstat_verified": leaf_post_fstat_verified,
+                    "leaf_close_attempted": leaf_close_attempted,
+                    "leaf_close_succeeded": leaf_close_succeeded,
+                    "leaf_close_error": (
+                        f"{type(effective_close_exc).__name__}: {effective_close_exc}"
+                        if effective_close_exc is not None
+                        else None
+                    ),
+                    "leaf_close_exception_type": (
+                        type(effective_close_exc).__name__
+                        if effective_close_exc is not None
+                        else None
+                    ),
+                    "leaf_close_exception_message": (
+                        str(effective_close_exc)
+                        if effective_close_exc is not None
+                        else None
+                    ),
+                    "leaf_close_errno": (
+                        getattr(effective_close_exc, "errno", None)
+                        if effective_close_exc is not None
+                        else None
+                    ),
+                    "cleanup_close_error": (
+                        f"{type(leaf_cleanup_close_exc).__name__}: {leaf_cleanup_close_exc}"
+                        if leaf_cleanup_close_exc is not None
+                        else None
+                    ),
+                    "cleanup_close_exception_type": (
+                        type(leaf_cleanup_close_exc).__name__
+                        if leaf_cleanup_close_exc is not None
+                        else None
+                    ),
+                    "cleanup_close_exception_message": (
+                        str(leaf_cleanup_close_exc)
+                        if leaf_cleanup_close_exc is not None
+                        else None
+                    ),
+                    "cleanup_close_errno": (
+                        getattr(leaf_cleanup_close_exc, "errno", None)
+                        if leaf_cleanup_close_exc is not None
+                        else None
+                    ),
+                    "root_lookup": root_lookup_obs,
+                    "root_descriptor": root_descriptor_obs,
+                    "traversed_directory_components": traversed_directory_components,
+                    "leaf_lookup": leaf_lookup_obs,
+                    "leaf_lookup_dev": int(st.st_dev),
+                    "leaf_lookup_ino": int(st.st_ino),
+                    "failure_phase": leaf_failure_phase,
+                    "error": (
+                        f"Failed to read regular file {normalized_path} "
+                        f"({type(exc).__name__}): {exc}"
+                    ),
+                    "exception_type": type(exc).__name__,
+                    "exception_message": str(exc),
+                    "errno": getattr(exc, "errno", None),
+                },
+                exc,
+                None,
+            )
+
+        digest = _sha256_bytes(data)
+        return (
+            {
                 "path": str(normalized_path),
                 "exists": True,
-                "is_symlink": True,
-                "is_regular_file": False,
-                "within_refmac_dir": False,
-                "resolved_path": None,
-                "sha256": None,
-                "size_bytes": None,
-                "error": f"Ancestor directory was replaced by symlink: {current}",
-            }
-        if not stat.S_ISDIR(anc_st.st_mode):
-            return {
-                "path": str(normalized_path),
-                "exists": False,
+                "leaf_existence_known": True,
                 "is_symlink": False,
-                "is_regular_file": False,
-                "within_refmac_dir": False,
-                "resolved_path": None,
-                "sha256": None,
-                "size_bytes": None,
-                "error": f"Ancestor component is not a directory: {current}",
+                "is_regular_file": True,
+                "within_refmac_dir": True,
+                "resolved_path": str(resolved_target),
+                "sha256": digest,
+                "size_bytes": len(data),
+                "stat_size_bytes": int(st.st_size),
+                "observed_read_bytes": len(data),
+                "observed_read_sha256": digest,
+                "observed_eof": True,
+                "read_complete": True,
+                "leaf_pre_fstat_verified": True,
+                "leaf_post_fstat_verified": True,
+                "leaf_close_attempted": True,
+                "leaf_close_succeeded": True,
+                "leaf_close_error": None,
+                "leaf_close_exception_type": None,
+                "leaf_close_exception_message": None,
+                "leaf_close_errno": None,
+                "cleanup_close_error": None,
+                "cleanup_close_exception_type": None,
+                "cleanup_close_exception_message": None,
+                "cleanup_close_errno": None,
+                "root_lookup": root_lookup_obs,
+                "root_descriptor": root_descriptor_obs,
+                "traversed_directory_components": traversed_directory_components,
+                "leaf_lookup": leaf_lookup_obs,
+                "leaf_lookup_dev": int(st.st_dev),
+                "leaf_lookup_ino": int(st.st_ino),
+                "failure_phase": None,
+                "error": None,
+            },
+            None,
+            data,
+        )
+
+    try:
+        result_record, primary_exc, candidate_admitted_bytes = (
+            _capture_with_opened_root()
+        )
+        _close_owned_dir_fds()
+    finally:
+        _close_owned_dir_fds()
+
+    for _d_ent, dir_close_exc in dir_close_failures:
+        if caught_exceptions is not None:
+            caught_exceptions.append(dir_close_exc)
+        if primary_exc is not None:
+            try:
+                if getattr(primary_exc, "directory_close_error", None) is None:
+                    setattr(primary_exc, "directory_close_error", dir_close_exc)
+                if getattr(primary_exc, "parent_close_error", None) is None:
+                    setattr(primary_exc, "parent_close_error", dir_close_exc)
+                if getattr(primary_exc, "cleanup_close_error", None) is None:
+                    setattr(primary_exc, "cleanup_close_error", dir_close_exc)
+            except Exception:
+                pass
+
+    root_close_exc: OSError | None = root_dir_entry["close_exc"]
+    if (
+        "root_descriptor_verified" in result_record
+        and not root_dir_entry["close_succeeded"]
+    ):
+        result_record["root_descriptor_verified"] = False
+    if (
+        "component_descriptor_verified" in result_record
+        and len(opened_dir_entries) > 1
+        and not opened_dir_entries[-1]["close_succeeded"]
+    ):
+        result_record["component_descriptor_verified"] = False
+
+    result_record["root_close_attempted"] = bool(
+        root_dir_entry["close_attempted"]
+    )
+    result_record["root_close_succeeded"] = bool(
+        root_dir_entry["close_succeeded"]
+    )
+    result_record["root_close_error"] = (
+        f"{type(root_close_exc).__name__}: {root_close_exc}"
+        if root_close_exc is not None
+        else None
+    )
+    result_record["root_close_exception_type"] = (
+        type(root_close_exc).__name__ if root_close_exc is not None else None
+    )
+    result_record["root_close_exception_message"] = (
+        str(root_close_exc) if root_close_exc is not None else None
+    )
+    result_record["root_close_errno"] = (
+        getattr(root_close_exc, "errno", None)
+        if root_close_exc is not None
+        else None
+    )
+    result_record["directory_close_attempted"] = True
+    result_record["directory_close_succeeded"] = len(dir_close_failures) == 0
+
+    if len(dir_close_failures) == 0:
+        result_record["directory_close_phase"] = None
+        result_record["directory_close_error"] = None
+        result_record["directory_close_exception_type"] = None
+        result_record["directory_close_exception_message"] = None
+        result_record["directory_close_errno"] = None
+        result_record["directory_close_failures"] = []
+        if (
+            candidate_admitted_bytes is not None
+            and result_record.get("error") is None
+        ):
+            if _raw_bytes_out is not None:
+                _raw_bytes_out.clear()
+                _raw_bytes_out.append(candidate_admitted_bytes)
+            raw_sink = _INSPECT_RAW_BYTES_SINK_CTX.get()
+            if raw_sink is not None:
+                raw_sink[str(normalized_path)] = candidate_admitted_bytes
+    else:
+        if _raw_bytes_out is not None:
+            _raw_bytes_out.clear()
+        raw_sink = _INSPECT_RAW_BYTES_SINK_CTX.get()
+        if raw_sink is not None:
+            raw_sink.pop(str(normalized_path), None)
+        result_record["sha256"] = None
+        first_failed_dir, first_dir_close_exc = dir_close_failures[0]
+        first_dir_phase = (
+            "root_dir_close"
+            if first_failed_dir["role"] == "root"
+            else "intermediate_dir_close"
+        )
+        result_record["directory_close_phase"] = first_dir_phase
+        result_record["directory_close_error"] = (
+            f"{type(first_dir_close_exc).__name__}: {first_dir_close_exc}"
+        )
+        result_record["directory_close_exception_type"] = type(
+            first_dir_close_exc
+        ).__name__
+        result_record["directory_close_exception_message"] = str(
+            first_dir_close_exc
+        )
+        result_record["directory_close_errno"] = getattr(
+            first_dir_close_exc, "errno", None
+        )
+        result_record["directory_close_failures"] = [
+            {
+                "role": d_ent["role"],
+                "name": d_ent["name"],
+                "path": d_ent["path"],
+                "error": f"{type(c_exc).__name__}: {c_exc}",
+                "exception_type": type(c_exc).__name__,
+                "exception_message": str(c_exc),
+                "errno": getattr(c_exc, "errno", None),
             }
+            for d_ent, c_exc in dir_close_failures
+        ]
+        if result_record.get("cleanup_close_error") is None:
+            result_record["cleanup_close_error"] = (
+                f"{type(first_dir_close_exc).__name__}: {first_dir_close_exc}"
+            )
+            result_record["cleanup_close_exception_type"] = type(
+                first_dir_close_exc
+            ).__name__
+            result_record["cleanup_close_exception_message"] = str(
+                first_dir_close_exc
+            )
+            result_record["cleanup_close_errno"] = getattr(
+                first_dir_close_exc, "errno", None
+            )
+        if result_record.get("error") is None:
+            result_record["failure_phase"] = first_dir_phase
+            result_record["error"] = (
+                f"Failed to close root directory descriptor {first_failed_dir['path']} "
+                f"({type(first_dir_close_exc).__name__}): {first_dir_close_exc}"
+                if first_failed_dir["role"] == "root"
+                else (
+                    f"Failed to close directory component descriptor {first_failed_dir['name']!r} "
+                    f"at {first_failed_dir['path']} ({type(first_dir_close_exc).__name__}): "
+                    f"{first_dir_close_exc}"
+                )
+            )
+            result_record["exception_type"] = type(first_dir_close_exc).__name__
+            result_record["exception_message"] = str(first_dir_close_exc)
+            result_record["errno"] = getattr(first_dir_close_exc, "errno", None)
 
-    try:
-        st = os.lstat(normalized_path)
-    except FileNotFoundError:
-        return {
-            "path": str(normalized_path),
-            "exists": False,
-            "is_symlink": False,
-            "is_regular_file": False,
-            "within_refmac_dir": True,
-            "resolved_path": None,
-            "sha256": None,
-            "size_bytes": None,
-            "error": None,
-        }
-    except OSError as exc:
-        if caught_exceptions is not None:
-            caught_exceptions.append(exc)
-        return {
-            "path": str(normalized_path),
-            "exists": False,
-            "is_symlink": False,
-            "is_regular_file": False,
-            "within_refmac_dir": True,
-            "resolved_path": None,
-            "sha256": None,
-            "size_bytes": None,
-            "error": (
-                f"Failed to stat output path {normalized_path} "
-                f"({type(exc).__name__}): {exc}"
-            ),
-            "exception_type": type(exc).__name__,
-            "exception_message": str(exc),
-            "errno": getattr(exc, "errno", None),
-        }
-
-    if stat.S_ISLNK(st.st_mode):
-        return {
-            "path": str(normalized_path),
-            "exists": True,
-            "is_symlink": True,
-            "is_regular_file": False,
-            "within_refmac_dir": False,
-            "resolved_path": None,
-            "sha256": None,
-            "size_bytes": None,
-            "error": f"Refusing to follow symlink at output path: {normalized_path}",
-        }
-
-    if not stat.S_ISREG(st.st_mode):
-        return {
-            "path": str(normalized_path),
-            "exists": True,
-            "is_symlink": False,
-            "is_regular_file": False,
-            "within_refmac_dir": True,
-            "resolved_path": None,
-            "sha256": None,
-            "size_bytes": None,
-            "error": f"Output path is not a regular file: {normalized_path}",
-        }
-
-    try:
-        resolved_target = normalized_path.resolve(strict=True)
-    except OSError as exc:
-        if caught_exceptions is not None:
-            caught_exceptions.append(exc)
-        return {
-            "path": str(normalized_path),
-            "exists": True,
-            "is_symlink": False,
-            "is_regular_file": True,
-            "within_refmac_dir": False,
-            "resolved_path": None,
-            "sha256": None,
-            "size_bytes": int(st.st_size),
-            "error": (
-                f"Failed to resolve regular file path {normalized_path} "
-                f"({type(exc).__name__}): {exc}"
-            ),
-            "exception_type": type(exc).__name__,
-            "exception_message": str(exc),
-            "errno": getattr(exc, "errno", None),
-        }
-
-    if not resolved_target.is_relative_to(resolved_root):
-        return {
-            "path": str(normalized_path),
-            "exists": True,
-            "is_symlink": False,
-            "is_regular_file": True,
-            "within_refmac_dir": False,
-            "resolved_path": str(resolved_target),
-            "sha256": None,
-            "size_bytes": None,
-            "error": f"Resolved output path escaped refmac directory: {resolved_target}",
-        }
-
-    try:
-        data = normalized_path.read_bytes()
-    except OSError as exc:
-        if caught_exceptions is not None:
-            caught_exceptions.append(exc)
-        return {
-            "path": str(normalized_path),
-            "exists": True,
-            "is_symlink": False,
-            "is_regular_file": True,
-            "within_refmac_dir": True,
-            "resolved_path": str(resolved_target),
-            "sha256": None,
-            "size_bytes": int(st.st_size),
-            "error": (
-                f"Failed to read regular file {normalized_path} "
-                f"({type(exc).__name__}): {exc}"
-            ),
-            "exception_type": type(exc).__name__,
-            "exception_message": str(exc),
-            "errno": getattr(exc, "errno", None),
-        }
-
-    return {
-        "path": str(normalized_path),
-        "exists": True,
-        "is_symlink": False,
-        "is_regular_file": True,
-        "within_refmac_dir": True,
-        "resolved_path": str(resolved_target),
-        "sha256": _sha256_bytes(data),
-        "size_bytes": len(data),
-        "error": None,
-    }
+    return result_record
 
 
 def _build_helper_source_baseline(
@@ -2850,6 +7673,7 @@ def _inspect_retained_native_trace_envelope(
     *,
     trace_info: Mapping[str, Any],
     caught_exceptions: list[Exception],
+    raw_bytes: bytes | None = None,
 ) -> tuple[dict[str, Any], Exception | None]:
     """Inspect a safely retained native trace file with bounded streaming envelope checks."""
     raw_observation: dict[str, Any] = copy.deepcopy(dict(trace_info))
@@ -2864,11 +7688,14 @@ def _inspect_retained_native_trace_envelope(
         and isinstance(trace_info.get("sha256"), str)
     ):
         try:
-            envelope = refmac_diagnostic_trace.inspect_native_trace_envelope(
-                native_trace_path,
-                expected_sha256=str(trace_info["sha256"]),
-                expected_size_bytes=int(trace_info["size_bytes"]),
-            )
+            with refmac_diagnostic_trace._preverified_trace_bytes_scope(
+                native_trace_path, raw_bytes
+            ):
+                envelope = refmac_diagnostic_trace.inspect_native_trace_envelope(
+                    native_trace_path,
+                    expected_sha256=str(trace_info["sha256"]),
+                    expected_size_bytes=int(trace_info["size_bytes"]),
+                )
             envelope = dict(envelope)
             envelope["raw_observation"] = raw_observation
             envelope["scientific_coverage_proven"] = False
@@ -2898,9 +7725,28 @@ def _inspect_retained_native_trace_envelope(
                 "code": "envelope_inspection_exception",
                 "message": f"{type(exc).__name__}: {exc}",
             }
+            has_valid_snapshot_bytes = isinstance(
+                raw_bytes, (bytes, bytearray, memoryview)
+            )
+            exc_binding_note = (
+                (
+                    "Retained trace byte snapshot was supplied in memory without "
+                    "opening or statting path in refmac_diagnostic_trace, but trace "
+                    "envelope inspection raised an exception before completion; see "
+                    "errors for envelope_inspection_exception."
+                )
+                if has_valid_snapshot_bytes
+                else refmac_diagnostic_trace._RETAINED_SNAPSHOT_UNAVAILABLE_BINDING_NOTE
+            )
             return (
                 {
                     "schema_id": refmac_diagnostic_trace.TRACE_SCHEMA_ID,
+                    "input_mode": (
+                        refmac_diagnostic_trace.TRACE_INPUT_MODE_RETAINED_BYTES_SNAPSHOT
+                    ),
+                    "filesystem_descriptor_opened": False,
+                    "filesystem_identity_verified_by_trace_reader": False,
+                    "descriptor_binding_note": exc_binding_note,
                     "path": str(native_trace_path),
                     "valid": False,
                     "closed": False,
@@ -2948,6 +7794,17 @@ def _inspect_retained_native_trace_envelope(
     return (
         {
             "schema_id": refmac_diagnostic_trace.TRACE_SCHEMA_ID,
+            "input_mode": (
+                refmac_diagnostic_trace.TRACE_INPUT_MODE_RETAINED_BYTES_SNAPSHOT
+            ),
+            "filesystem_descriptor_opened": False,
+            "filesystem_identity_verified_by_trace_reader": False,
+            "descriptor_binding_note": (
+                "Trace envelope inspection was skipped without opening or statting "
+                "path in refmac_diagnostic_trace because raw trace output capture "
+                "was missing, empty, or invalid; see errors for "
+                "raw_trace_missing_or_invalid."
+            ),
             "path": str(native_trace_path),
             "valid": False,
             "closed": False,
@@ -3115,9 +7972,41 @@ def _verify_immutable_baselines_post_run(
             st = os.lstat(path)
             if stat.S_ISLNK(st.st_mode) or not stat.S_ISREG(st.st_mode):
                 raise ValueError(f"Staged input path is not a regular non-symlink file: {path}")
-            actual_sha256 = _sha256_regular_file(path)
             actual_resolved = str(path.resolve(strict=True))
-            actual_size = int(st.st_size)
+            in_fd = os.open(
+                path,
+                os.O_RDONLY
+                | getattr(os, "O_NOFOLLOW", 0)
+                | getattr(os, "O_CLOEXEC", 0),
+            )
+            try:
+                in_fd_st = os.fstat(in_fd)
+                if not stat.S_ISREG(in_fd_st.st_mode) or (
+                    int(in_fd_st.st_dev),
+                    int(in_fd_st.st_ino),
+                ) != (int(st.st_dev), int(st.st_ino)):
+                    raise ValueError(
+                        f"Staged input file inode changed while opening descriptor: {path}"
+                    )
+                in_chunks: list[bytes] = []
+                while True:
+                    chunk = os.read(in_fd, 65536)
+                    if not chunk:
+                        break
+                    in_chunks.append(chunk)
+                in_post_st = os.fstat(in_fd)
+                if (
+                    int(in_post_st.st_dev),
+                    int(in_post_st.st_ino),
+                ) != (int(st.st_dev), int(st.st_ino)):
+                    raise ValueError(
+                        f"Staged input file inode changed while reading descriptor: {path}"
+                    )
+                in_bytes = b"".join(in_chunks)
+            finally:
+                os.close(in_fd)
+            actual_sha256 = _sha256_bytes(in_bytes)
+            actual_size = len(in_bytes)
             inode_ok = (
                 expected.get("dev") is None
                 or expected.get("ino") is None
@@ -3281,8 +8170,40 @@ def _verify_immutable_baselines_post_run(
             if not stat.S_ISREG(kw_st.st_mode):
                 raise ValueError(f"Keywords file is not a regular file: {kw_path}")
             kw_resolved = str(kw_path.resolve(strict=True))
-            kw_sha256 = _sha256_regular_file(kw_path)
-            kw_size = int(kw_st.st_size)
+            kw_fd = os.open(
+                kw_path,
+                os.O_RDONLY
+                | getattr(os, "O_NOFOLLOW", 0)
+                | getattr(os, "O_CLOEXEC", 0),
+            )
+            try:
+                kw_fd_st = os.fstat(kw_fd)
+                if not stat.S_ISREG(kw_fd_st.st_mode) or (
+                    int(kw_fd_st.st_dev),
+                    int(kw_fd_st.st_ino),
+                ) != (int(kw_st.st_dev), int(kw_st.st_ino)):
+                    raise ValueError(
+                        f"Keywords file inode changed while opening descriptor: {kw_path}"
+                    )
+                kw_chunks: list[bytes] = []
+                while True:
+                    chunk = os.read(kw_fd, 65536)
+                    if not chunk:
+                        break
+                    kw_chunks.append(chunk)
+                kw_post_st = os.fstat(kw_fd)
+                if (
+                    int(kw_post_st.st_dev),
+                    int(kw_post_st.st_ino),
+                ) != (int(kw_st.st_dev), int(kw_st.st_ino)):
+                    raise ValueError(
+                        f"Keywords file inode changed while reading descriptor: {kw_path}"
+                    )
+                kw_bytes = b"".join(kw_chunks)
+            finally:
+                os.close(kw_fd)
+            kw_sha256 = _sha256_bytes(kw_bytes)
+            kw_size = len(kw_bytes)
             kw_resolved_ok = (
                 keywords_baseline.get("resolved_path") is None
                 or kw_resolved == str(keywords_baseline["resolved_path"])
@@ -3362,8 +8283,40 @@ def _verify_immutable_baselines_post_run(
 
     if pre_execution_checkpoint_baseline is not None:
         cp_path = Path(pre_execution_checkpoint_baseline["path"])
+        cp_normalized_path = Path(os.path.abspath(os.fspath(cp_path)))
+        cp_leaf_name = cp_normalized_path.name
+        cp_parent_dir = Path(
+            os.path.abspath(
+                os.fspath(
+                    str(
+                        pre_execution_checkpoint_baseline.get("parent_dir_path")
+                        or cp_normalized_path.parent
+                    )
+                )
+            )
+        )
         expected_cp_sha256 = pre_execution_checkpoint_baseline["sha256"]
         expected_cp_size = int(pre_execution_checkpoint_baseline["size_bytes"])
+        expected_cp_parent_dev = (
+            int(pre_execution_checkpoint_baseline["parent_dir_dev"])
+            if pre_execution_checkpoint_baseline.get("parent_dir_dev")
+            is not None
+            else (
+                int(pre_execution_checkpoint_baseline["dir_dev"])
+                if pre_execution_checkpoint_baseline.get("dir_dev") is not None
+                else None
+            )
+        )
+        expected_cp_parent_ino = (
+            int(pre_execution_checkpoint_baseline["parent_dir_ino"])
+            if pre_execution_checkpoint_baseline.get("parent_dir_ino")
+            is not None
+            else (
+                int(pre_execution_checkpoint_baseline["dir_ino"])
+                if pre_execution_checkpoint_baseline.get("dir_ino") is not None
+                else None
+            )
+        )
         cp_anc_check = _verify_admitted_ancestor_chain(
             cp_path, pre_execution_checkpoint_baseline
         )
@@ -3383,29 +8336,188 @@ def _verify_immutable_baselines_post_run(
                 "Pre-execution checkpoint refmac_pre_execution_checkpoint.json "
                 f"ancestor chain invalid after REFMAC operation: {cp_err}"
             )
+            damaged_anc_path_raw = cp_anc_check.get("damaged_ancestor_path")
+            parent_was_damaged_ancestor = (
+                damaged_anc_path_raw is not None
+                and os.path.abspath(str(damaged_anc_path_raw))
+                == os.path.abspath(str(cp_parent_dir))
+            )
+            verified_parent_entry: dict[str, Any] | None = None
+            for va_item in cp_anc_check.get("verified_ancestors") or []:
+                if (
+                    isinstance(va_item, dict)
+                    and va_item.get("path") is not None
+                    and os.path.abspath(str(va_item["path"]))
+                    == os.path.abspath(str(cp_parent_dir))
+                ):
+                    verified_parent_entry = va_item
+                    break
+
+            if parent_was_damaged_ancestor:
+                parent_lookup_attempted = True
+                parent_lookup_resolved_path = None
+                parent_lookup_mode = None
+                parent_lookup_verified = False
+                if cp_anc_check["observed_ancestor_dev"] is not None:
+                    parent_lookup_exists: bool | None = True
+                    parent_lookup_is_symlink: bool | None = bool(
+                        cp_anc_check["damaged_ancestor_is_symlink"]
+                    )
+                    parent_lookup_symlink_target = cp_anc_check[
+                        "damaged_ancestor_symlink_target"
+                    ]
+                    parent_lookup_is_directory: bool | None = (
+                        bool(cp_anc_check["damaged_ancestor_is_directory"])
+                        if cp_anc_check.get("damaged_ancestor_is_directory")
+                        is not None
+                        else (
+                            False
+                            if cp_anc_check["damaged_ancestor_is_symlink"]
+                            else None
+                        )
+                    )
+                    parent_lookup_dev = cp_anc_check["observed_ancestor_dev"]
+                    parent_lookup_ino = cp_anc_check["observed_ancestor_ino"]
+                else:
+                    if cp_anc_check.get("errno") == errno.ENOENT:
+                        parent_lookup_exists = False
+                        parent_lookup_is_symlink = False
+                        parent_lookup_is_directory = False
+                    else:
+                        parent_lookup_exists = None
+                        parent_lookup_is_symlink = None
+                        parent_lookup_is_directory = None
+                    parent_lookup_symlink_target = None
+                    parent_lookup_dev = None
+                    parent_lookup_ino = None
+            elif verified_parent_entry is not None:
+                parent_lookup_attempted = True
+                parent_lookup_resolved_path = verified_parent_entry.get(
+                    "resolved_path"
+                )
+                parent_lookup_exists = True
+                parent_lookup_is_symlink = False
+                parent_lookup_symlink_target = None
+                parent_lookup_is_directory = True
+                parent_lookup_dev = verified_parent_entry.get("dev")
+                parent_lookup_ino = verified_parent_entry.get("ino")
+                parent_lookup_mode = verified_parent_entry.get("mode")
+                parent_lookup_verified = True
+            else:
+                parent_lookup_attempted = False
+                parent_lookup_resolved_path = None
+                parent_lookup_exists = None
+                parent_lookup_is_symlink = None
+                parent_lookup_symlink_target = None
+                parent_lookup_is_directory = None
+                parent_lookup_dev = None
+                parent_lookup_ino = None
+                parent_lookup_mode = None
+                parent_lookup_verified = False
+
             pre_checkpoint_post: dict[str, Any] = {
                 "path": str(cp_path),
                 "resolved_path": None,
                 "exists": False,
+                "leaf_existence_known": False,
                 "is_symlink": bool(cp_anc_check["damaged_ancestor_is_symlink"]),
                 "is_regular_file": False,
                 "sha256": None,
                 "size_bytes": None,
+                "stat_size_bytes": None,
+                "observed_read_bytes": 0,
+                "observed_read_sha256": None,
+                "observed_eof": False,
+                "read_complete": False,
+                "leaf_pre_fstat_verified": False,
+                "leaf_post_fstat_verified": False,
+                "leaf_close_attempted": False,
+                "leaf_close_succeeded": False,
+                "parent_lookup": {
+                    "path": str(cp_parent_dir),
+                    "attempted": parent_lookup_attempted,
+                    "resolved_path": parent_lookup_resolved_path,
+                    "exists": parent_lookup_exists,
+                    "is_symlink": parent_lookup_is_symlink,
+                    "symlink_target": parent_lookup_symlink_target,
+                    "is_directory": parent_lookup_is_directory,
+                    "dev": parent_lookup_dev,
+                    "ino": parent_lookup_ino,
+                    "mode": parent_lookup_mode,
+                    "verified": parent_lookup_verified,
+                },
+                "parent_lookup_path": str(cp_parent_dir),
+                "parent_lookup_attempted": parent_lookup_attempted,
+                "parent_lookup_resolved_path": parent_lookup_resolved_path,
+                "parent_lookup_exists": parent_lookup_exists,
+                "parent_lookup_is_symlink": parent_lookup_is_symlink,
+                "parent_lookup_symlink_target": parent_lookup_symlink_target,
+                "parent_lookup_is_directory": parent_lookup_is_directory,
+                "parent_lookup_dev": parent_lookup_dev,
+                "parent_lookup_ino": parent_lookup_ino,
+                "parent_lookup_mode": parent_lookup_mode,
+                "parent_lookup_verified": parent_lookup_verified,
+                "parent_descriptor": {
+                    "path": str(cp_parent_dir),
+                    "opened": False,
+                    "fstat_succeeded": False,
+                    "verified": False,
+                    "is_directory": None,
+                    "dev": None,
+                    "ino": None,
+                    "mode": None,
+                    "close_attempted": False,
+                    "close_succeeded": False,
+                    "close_error": None,
+                    "close_exception_type": None,
+                    "close_exception_message": None,
+                    "close_errno": None,
+                },
+                "parent_descriptor_opened": False,
+                "parent_descriptor_fstat_succeeded": False,
+                "parent_descriptor_verified": False,
+                "parent_descriptor_is_directory": None,
+                "parent_descriptor_dev": None,
+                "parent_descriptor_ino": None,
+                "parent_descriptor_mode": None,
+                "parent_descriptor_close_attempted": False,
+                "parent_descriptor_close_succeeded": False,
+                "parent_close_attempted": False,
+                "parent_close_succeeded": False,
+                "parent_close_phase": None,
+                "parent_close_error": None,
+                "parent_close_exception_type": None,
+                "parent_close_exception_message": None,
+                "parent_close_errno": None,
+                "leaf_lookup_relative_to_admitted_parent": False,
+                "failure_phase": "ancestor_chain_precheck",
                 "expected_sha256": expected_cp_sha256,
                 "expected_size_bytes": expected_cp_size,
                 "expected_resolved_path": pre_execution_checkpoint_baseline.get(
                     "resolved_path"
                 ),
-                "expected_parent_dir_dev": cp_anc_check["expected_ancestor_dev"],
-                "expected_parent_dir_ino": cp_anc_check["expected_ancestor_ino"],
+                "expected_parent_dir_dev": expected_cp_parent_dev,
+                "expected_parent_dir_ino": expected_cp_parent_ino,
                 "ancestor_chain_verified": False,
                 "damaged_ancestor_path": cp_anc_check["damaged_ancestor_path"],
+                "damaged_ancestor_exists": cp_anc_check.get(
+                    "damaged_ancestor_exists"
+                ),
                 "damaged_ancestor_is_symlink": bool(
                     cp_anc_check["damaged_ancestor_is_symlink"]
+                ),
+                "damaged_ancestor_is_directory": cp_anc_check.get(
+                    "damaged_ancestor_is_directory"
                 ),
                 "damaged_ancestor_symlink_target": cp_anc_check[
                     "damaged_ancestor_symlink_target"
                 ],
+                "expected_ancestor_dev": cp_anc_check.get(
+                    "expected_ancestor_dev"
+                ),
+                "expected_ancestor_ino": cp_anc_check.get(
+                    "expected_ancestor_ino"
+                ),
                 "observed_ancestor_dev": cp_anc_check["observed_ancestor_dev"],
                 "observed_ancestor_ino": cp_anc_check["observed_ancestor_ino"],
                 "matches_baseline": False,
@@ -3435,11 +8547,31 @@ def _verify_immutable_baselines_post_run(
                     "is_regular_file_post_run": False,
                     "ancestor_chain_verified": False,
                     "damaged_ancestor_path": cp_anc_check["damaged_ancestor_path"],
+                    "damaged_ancestor_exists": cp_anc_check.get(
+                        "damaged_ancestor_exists"
+                    ),
                     "damaged_ancestor_is_symlink": bool(
                         cp_anc_check["damaged_ancestor_is_symlink"]
                     ),
+                    "damaged_ancestor_is_directory": cp_anc_check.get(
+                        "damaged_ancestor_is_directory"
+                    ),
                     "damaged_ancestor_symlink_target": cp_anc_check[
                         "damaged_ancestor_symlink_target"
+                    ],
+                    "expected_parent_dir_dev": expected_cp_parent_dev,
+                    "expected_parent_dir_ino": expected_cp_parent_ino,
+                    "expected_ancestor_dev": cp_anc_check.get(
+                        "expected_ancestor_dev"
+                    ),
+                    "expected_ancestor_ino": cp_anc_check.get(
+                        "expected_ancestor_ino"
+                    ),
+                    "observed_ancestor_dev": cp_anc_check[
+                        "observed_ancestor_dev"
+                    ],
+                    "observed_ancestor_ino": cp_anc_check[
+                        "observed_ancestor_ino"
                     ],
                     "error": cp_err,
                     "exception_type": str(
@@ -3452,285 +8584,272 @@ def _verify_immutable_baselines_post_run(
                 }
             )
         else:
+            cp_parent_baseline: dict[str, Any] = {
+                "path": str(cp_parent_dir),
+                "resolved_path": (
+                    str(pre_execution_checkpoint_baseline["parent_dir_resolved_path"])
+                    if pre_execution_checkpoint_baseline.get(
+                        "parent_dir_resolved_path"
+                    )
+                    is not None
+                    else None
+                ),
+                "dev": expected_cp_parent_dev,
+                "ino": expected_cp_parent_ino,
+            }
+            if (
+                pre_execution_checkpoint_baseline.get("evidence_root_path")
+                is not None
+            ):
+                cp_parent_baseline["evidence_root"] = str(
+                    pre_execution_checkpoint_baseline["evidence_root_path"]
+                )
+            if (
+                pre_execution_checkpoint_baseline.get(
+                    "evidence_root_resolved_path"
+                )
+                is not None
+            ):
+                cp_parent_baseline["evidence_root_resolved_path"] = str(
+                    pre_execution_checkpoint_baseline[
+                        "evidence_root_resolved_path"
+                    ]
+                )
+            if (
+                pre_execution_checkpoint_baseline.get("evidence_root_dev")
+                is not None
+            ):
+                cp_parent_baseline["evidence_root_dev"] = int(
+                    pre_execution_checkpoint_baseline["evidence_root_dev"]
+                )
+            if (
+                pre_execution_checkpoint_baseline.get("evidence_root_ino")
+                is not None
+            ):
+                cp_parent_baseline["evidence_root_ino"] = int(
+                    pre_execution_checkpoint_baseline["evidence_root_ino"]
+                )
+
+            cp_parent_open_causes: list[Exception] = []
+            cp_parent_status: dict[str, Any] = {}
+            cp_parent_cap: _AdmittedDirectory | None = None
             try:
-                cp_st = os.lstat(cp_path)
-                cp_is_symlink = bool(stat.S_ISLNK(cp_st.st_mode))
-                cp_is_regular = bool(stat.S_ISREG(cp_st.st_mode))
-                if cp_is_symlink:
-                    cp_err = (
-                        f"Pre-execution checkpoint path was replaced by a symlink: {cp_path}"
-                    )
-                    cp_reason = (
-                        "Pre-execution checkpoint refmac_pre_execution_checkpoint.json "
-                        "was replaced by a symlink during REFMAC operation"
-                    )
-                    cp_sym_exc = ValueError(cp_err)
-                    if caught_exceptions is not None:
-                        caught_exceptions.append(cp_sym_exc)
-                    if pre_checkpoint_cause_out is not None:
-                        pre_checkpoint_cause_out.append(cp_sym_exc)
-                    if mutation_causes_out is not None:
-                        mutation_causes_out.append(cp_sym_exc)
-                    pre_checkpoint_post = {
-                        "path": str(cp_path),
-                        "resolved_path": None,
-                        "exists": True,
-                        "is_symlink": True,
-                        "is_regular_file": False,
-                        "sha256": None,
-                        "size_bytes": int(cp_st.st_size),
-                        "expected_sha256": expected_cp_sha256,
-                        "expected_size_bytes": expected_cp_size,
-                        "ancestor_chain_verified": True,
-                        "matches_baseline": False,
-                        "error": cp_err,
-                        "exception_type": "ValueError",
-                        "exception_message": cp_err,
-                        "errno": None,
-                        "reason": cp_reason,
-                    }
-                    mutations.append(
-                        {
-                            "category": "pre_execution_checkpoint",
-                            "key": "refmac_pre_execution_checkpoint_json",
-                            "path": str(cp_path),
-                            "expected_sha256": expected_cp_sha256,
-                            "expected_size_bytes": expected_cp_size,
-                            "actual_sha256": None,
-                            "actual_size_bytes": int(cp_st.st_size),
-                            "exists_post_run": True,
-                            "is_symlink_post_run": True,
-                            "is_regular_file_post_run": False,
-                            "ancestor_chain_verified": True,
-                            "error": cp_err,
-                            "exception_type": "ValueError",
-                            "exception_message": cp_err,
-                            "reason": cp_reason,
-                        }
-                    )
-                elif not cp_is_regular:
-                    cp_err = (
-                        f"Pre-execution checkpoint path is not a regular file: {cp_path}"
-                    )
-                    cp_reason = (
-                        "Pre-execution checkpoint refmac_pre_execution_checkpoint.json "
-                        "is not a regular file after REFMAC operation"
-                    )
-                    cp_reg_exc = ValueError(cp_err)
-                    if caught_exceptions is not None:
-                        caught_exceptions.append(cp_reg_exc)
-                    if pre_checkpoint_cause_out is not None:
-                        pre_checkpoint_cause_out.append(cp_reg_exc)
-                    if mutation_causes_out is not None:
-                        mutation_causes_out.append(cp_reg_exc)
-                    pre_checkpoint_post = {
-                        "path": str(cp_path),
-                        "resolved_path": None,
-                        "exists": True,
-                        "is_symlink": False,
-                        "is_regular_file": False,
-                        "sha256": None,
-                        "size_bytes": int(cp_st.st_size),
-                        "expected_sha256": expected_cp_sha256,
-                        "expected_size_bytes": expected_cp_size,
-                        "ancestor_chain_verified": True,
-                        "matches_baseline": False,
-                        "error": cp_err,
-                        "exception_type": "ValueError",
-                        "exception_message": cp_err,
-                        "errno": None,
-                        "reason": cp_reason,
-                    }
-                    mutations.append(
-                        {
-                            "category": "pre_execution_checkpoint",
-                            "key": "refmac_pre_execution_checkpoint_json",
-                            "path": str(cp_path),
-                            "expected_sha256": expected_cp_sha256,
-                            "expected_size_bytes": expected_cp_size,
-                            "actual_sha256": None,
-                            "actual_size_bytes": int(cp_st.st_size),
-                            "exists_post_run": True,
-                            "is_symlink_post_run": False,
-                            "is_regular_file_post_run": False,
-                            "ancestor_chain_verified": True,
-                            "error": cp_err,
-                            "exception_type": "ValueError",
-                            "exception_message": cp_err,
-                            "reason": cp_reason,
-                        }
-                    )
-                else:
+                cp_parent_cap = _open_admitted_directory(
+                    cp_parent_dir,
+                    dir_baseline=cp_parent_baseline,
+                    caught_exceptions=cp_parent_open_causes,
+                    dir_status_out=cp_parent_status,
+                )
+            except Exception as open_exc:
+                bound_open_exc: Exception = (
+                    cp_parent_open_causes[0]
+                    if cp_parent_open_causes
+                    else open_exc
+                )
+                ordered_open_causes: list[Exception] = (
+                    list(cp_parent_open_causes)
+                    if cp_parent_open_causes
+                    else [bound_open_exc]
+                )
+                secondary_open_close_exc = next(
+                    (
+                        c
+                        for c in ordered_open_causes[1:]
+                        if getattr(c, "_is_cleanup_close_error", False) is True
+                    ),
+                    None,
+                )
+                if secondary_open_close_exc is not None:
                     try:
-                        cp_resolved = str(cp_path.resolve(strict=True))
-                        cp_bytes = cp_path.read_bytes()
-                    except OSError as exc:
-                        if caught_exceptions is not None:
-                            caught_exceptions.append(exc)
-                        if pre_checkpoint_cause_out is not None:
-                            pre_checkpoint_cause_out.append(exc)
-                        if mutation_causes_out is not None:
-                            mutation_causes_out.append(exc)
-                        cp_err = f"{type(exc).__name__}: {exc}"
-                        cp_reason = (
-                            "Pre-execution checkpoint refmac_pre_execution_checkpoint.json "
-                            f"unreadable after REFMAC operation: {exc}"
+                        setattr(
+                            bound_open_exc,
+                            "parent_close_error",
+                            secondary_open_close_exc,
                         )
-                        pre_checkpoint_post = {
-                            "path": str(cp_path),
-                            "resolved_path": None,
-                            "exists": True,
-                            "is_symlink": False,
-                            "is_regular_file": True,
-                            "sha256": None,
-                            "size_bytes": int(cp_st.st_size),
-                            "expected_sha256": expected_cp_sha256,
-                            "expected_size_bytes": expected_cp_size,
-                            "ancestor_chain_verified": True,
-                            "matches_baseline": False,
-                            "error": cp_err,
-                            "exception_type": type(exc).__name__,
-                            "exception_message": str(exc),
-                            "errno": getattr(exc, "errno", None),
-                            "reason": cp_reason,
-                        }
-                        mutations.append(
-                            {
-                                "category": "pre_execution_checkpoint",
-                                "key": "refmac_pre_execution_checkpoint_json",
-                                "path": str(cp_path),
-                                "expected_sha256": expected_cp_sha256,
-                                "expected_size_bytes": expected_cp_size,
-                                "actual_sha256": None,
-                                "actual_size_bytes": int(cp_st.st_size),
-                                "exists_post_run": True,
-                                "is_symlink_post_run": False,
-                                "is_regular_file_post_run": True,
-                                "ancestor_chain_verified": True,
-                                "error": cp_err,
-                                "exception_type": type(exc).__name__,
-                                "exception_message": str(exc),
-                                "reason": cp_reason,
-                            }
-                        )
-                    else:
-                        cp_sha256 = _sha256_bytes(cp_bytes)
-                        cp_size = len(cp_bytes)
-                        expected_cp_resolved = pre_execution_checkpoint_baseline.get(
-                            "resolved_path"
-                        )
-                        expected_cp_dev = pre_execution_checkpoint_baseline.get("dev")
-                        expected_cp_ino = pre_execution_checkpoint_baseline.get("ino")
-                        cp_resolved_ok = (
-                            expected_cp_resolved is None
-                            or cp_resolved == str(expected_cp_resolved)
-                        )
-                        cp_inode_ok = (
-                            expected_cp_dev is None
-                            or expected_cp_ino is None
-                            or (int(cp_st.st_dev), int(cp_st.st_ino))
-                            == (int(expected_cp_dev), int(expected_cp_ino))
-                        )
-                        cp_matches = (
-                            cp_sha256 == expected_cp_sha256
-                            and cp_size == expected_cp_size
-                            and cp_resolved_ok
-                            and cp_inode_ok
-                        )
-                        cp_err = (
-                            None
-                            if cp_matches
-                            else (
-                                f"Pre-execution checkpoint {cp_path} mutated during REFMAC operation: "
-                                f"expected sha256={expected_cp_sha256} (size={expected_cp_size}), "
-                                f"observed sha256={cp_sha256} (size={cp_size})"
+                        if (
+                            getattr(
+                                bound_open_exc,
+                                "cleanup_close_error",
+                                None,
                             )
-                        )
-                        cp_reason = (
-                            None
-                            if cp_matches
-                            else (
-                                "Pre-execution checkpoint refmac_pre_execution_checkpoint.json "
-                                "mutated during REFMAC operation"
+                            is None
+                        ):
+                            setattr(
+                                bound_open_exc,
+                                "cleanup_close_error",
+                                secondary_open_close_exc,
                             )
-                        )
-                        cp_mut_exc = (
-                            ValueError(cp_err)
-                            if (not cp_matches and cp_err is not None)
-                            else None
-                        )
-                        if cp_mut_exc is not None and caught_exceptions is not None:
-                            caught_exceptions.append(cp_mut_exc)
-                        pre_checkpoint_post = {
-                            "path": str(cp_path),
-                            "resolved_path": cp_resolved,
-                            "exists": True,
-                            "is_symlink": False,
-                            "is_regular_file": True,
-                            "sha256": cp_sha256,
-                            "size_bytes": cp_size,
-                            "expected_sha256": expected_cp_sha256,
-                            "expected_size_bytes": expected_cp_size,
-                            "ancestor_chain_verified": True,
-                            "matches_baseline": cp_matches,
-                            "error": cp_err,
-                            "exception_type": None if cp_matches else "ValueError",
-                            "exception_message": cp_err,
-                            "errno": None,
-                            "reason": cp_reason,
-                        }
-                        if not cp_matches:
-                            if pre_checkpoint_cause_out is not None:
-                                pre_checkpoint_cause_out.append(cp_mut_exc)
-                            if mutation_causes_out is not None:
-                                mutation_causes_out.append(cp_mut_exc)
-                            mutations.append(
-                                {
-                                    "category": "pre_execution_checkpoint",
-                                    "key": "refmac_pre_execution_checkpoint_json",
-                                    "path": str(cp_path),
-                                    "expected_sha256": expected_cp_sha256,
-                                    "expected_size_bytes": expected_cp_size,
-                                    "actual_sha256": cp_sha256,
-                                    "actual_size_bytes": cp_size,
-                                    "exists_post_run": True,
-                                    "is_symlink_post_run": False,
-                                    "is_regular_file_post_run": True,
-                                    "ancestor_chain_verified": True,
-                                    "error": cp_err,
-                                    "exception_type": "ValueError",
-                                    "exception_message": cp_err,
-                                    "reason": cp_reason,
-                                }
-                            )
-            except Exception as exc:
+                    except Exception:
+                        pass
                 if caught_exceptions is not None:
-                    caught_exceptions.append(exc)
+                    for item_exc in ordered_open_causes:
+                        caught_exceptions.append(item_exc)
                 if pre_checkpoint_cause_out is not None:
-                    pre_checkpoint_cause_out.append(exc)
+                    for item_exc in ordered_open_causes:
+                        pre_checkpoint_cause_out.append(item_exc)
                 if mutation_causes_out is not None:
-                    mutation_causes_out.append(exc)
-                cp_err = f"{type(exc).__name__}: {exc}"
+                    mutation_causes_out.append(bound_open_exc)
+                cp_err = f"{type(bound_open_exc).__name__}: {bound_open_exc}"
                 cp_reason = (
                     "Pre-execution checkpoint refmac_pre_execution_checkpoint.json "
-                    f"missing or invalid after REFMAC operation: {exc}"
+                    f"parent directory admission failed after REFMAC operation: {bound_open_exc}"
+                )
+                damaged_sym = bool(cp_parent_status.get("is_symlink", False))
+                obs_anc_dev_open = (
+                    cp_parent_status.get("post_open_lookup_dev")
+                    if "post_open_lookup_dev" in cp_parent_status
+                    else (
+                        cp_parent_status.get("descriptor_dev")
+                        if bool(
+                            cp_parent_status.get(
+                                "descriptor_fstat_succeeded", False
+                            )
+                        )
+                        else cp_parent_status.get("lookup_dev")
+                    )
+                )
+                obs_anc_ino_open = (
+                    cp_parent_status.get("post_open_lookup_ino")
+                    if "post_open_lookup_ino" in cp_parent_status
+                    else (
+                        cp_parent_status.get("descriptor_ino")
+                        if bool(
+                            cp_parent_status.get(
+                                "descriptor_fstat_succeeded", False
+                            )
+                        )
+                        else cp_parent_status.get("lookup_ino")
+                    )
                 )
                 pre_checkpoint_post = {
                     "path": str(cp_path),
                     "resolved_path": None,
                     "exists": False,
-                    "is_symlink": False,
+                    "leaf_existence_known": False,
+                    "is_symlink": damaged_sym,
                     "is_regular_file": False,
                     "sha256": None,
                     "size_bytes": None,
+                    "stat_size_bytes": None,
+                    "observed_read_bytes": 0,
+                    "observed_read_sha256": None,
+                    "observed_eof": False,
+                    "read_complete": False,
+                    "leaf_pre_fstat_verified": False,
+                    "leaf_post_fstat_verified": False,
+                    "leaf_close_attempted": False,
+                    "leaf_close_succeeded": False,
+                    "parent_lookup": copy.deepcopy(
+                        cp_parent_status.get("lookup")
+                    ),
+                    "parent_lookup_path": cp_parent_status.get(
+                        "lookup_path", str(cp_parent_dir)
+                    ),
+                    "parent_lookup_resolved_path": cp_parent_status.get(
+                        "lookup_resolved_path"
+                    ),
+                    "parent_lookup_exists": cp_parent_status.get(
+                        "lookup_exists"
+                    ),
+                    "parent_lookup_is_symlink": cp_parent_status.get(
+                        "lookup_is_symlink"
+                    ),
+                    "parent_lookup_is_directory": cp_parent_status.get(
+                        "lookup_is_directory"
+                    ),
+                    "parent_lookup_dev": cp_parent_status.get("lookup_dev"),
+                    "parent_lookup_ino": cp_parent_status.get("lookup_ino"),
+                    "parent_lookup_mode": cp_parent_status.get("lookup_mode"),
+                    "parent_lookup_verified": cp_parent_status.get(
+                        "lookup_verified"
+                    ),
+                    "parent_descriptor": copy.deepcopy(
+                        cp_parent_status.get("descriptor")
+                    ),
+                    "parent_descriptor_opened": bool(
+                        cp_parent_status.get("descriptor_opened", False)
+                    ),
+                    "parent_descriptor_fstat_succeeded": bool(
+                        cp_parent_status.get(
+                            "descriptor_fstat_succeeded", False
+                        )
+                    ),
+                    "parent_descriptor_verified": False,
+                    "parent_descriptor_is_directory": cp_parent_status.get(
+                        "descriptor_is_directory"
+                    ),
+                    "parent_descriptor_dev": cp_parent_status.get(
+                        "descriptor_dev"
+                    ),
+                    "parent_descriptor_ino": cp_parent_status.get(
+                        "descriptor_ino"
+                    ),
+                    "parent_descriptor_mode": cp_parent_status.get(
+                        "descriptor_mode"
+                    ),
+                    "parent_descriptor_close_attempted": bool(
+                        cp_parent_status.get(
+                            "descriptor_close_attempted", False
+                        )
+                    ),
+                    "parent_descriptor_close_succeeded": bool(
+                        cp_parent_status.get(
+                            "descriptor_close_succeeded", False
+                        )
+                    ),
+                    "parent_close_attempted": bool(
+                        cp_parent_status.get(
+                            "descriptor_close_attempted", False
+                        )
+                    ),
+                    "parent_close_succeeded": bool(
+                        cp_parent_status.get(
+                            "descriptor_close_succeeded", False
+                        )
+                    ),
+                    "parent_close_phase": (
+                        "parent_dir_close"
+                        if cp_parent_status.get("descriptor_close_error")
+                        is not None
+                        else None
+                    ),
+                    "parent_close_error": cp_parent_status.get(
+                        "descriptor_close_error"
+                    ),
+                    "parent_close_exception_type": cp_parent_status.get(
+                        "descriptor_close_exception_type"
+                    ),
+                    "parent_close_exception_message": cp_parent_status.get(
+                        "descriptor_close_exception_message"
+                    ),
+                    "parent_close_errno": cp_parent_status.get(
+                        "descriptor_close_errno"
+                    ),
+                    "leaf_lookup_relative_to_admitted_parent": False,
+                    "failure_phase": str(
+                        cp_parent_status.get("admission_failure_phase")
+                        or "parent_dir_open"
+                    ),
                     "expected_sha256": expected_cp_sha256,
                     "expected_size_bytes": expected_cp_size,
-                    "ancestor_chain_verified": True,
+                    "expected_resolved_path": pre_execution_checkpoint_baseline.get(
+                        "resolved_path"
+                    ),
+                    "expected_parent_dir_dev": cp_parent_baseline.get("dev"),
+                    "expected_parent_dir_ino": cp_parent_baseline.get("ino"),
+                    "ancestor_chain_verified": False,
+                    "damaged_ancestor_path": str(cp_parent_dir),
+                    "damaged_ancestor_is_symlink": damaged_sym,
+                    "damaged_ancestor_symlink_target": cp_parent_status.get(
+                        "symlink_target"
+                    ),
+                    "observed_ancestor_dev": obs_anc_dev_open,
+                    "observed_ancestor_ino": obs_anc_ino_open,
                     "matches_baseline": False,
                     "error": cp_err,
-                    "exception_type": type(exc).__name__,
-                    "exception_message": str(exc),
-                    "errno": getattr(exc, "errno", None),
+                    "exception_type": type(bound_open_exc).__name__,
+                    "exception_message": str(bound_open_exc),
+                    "errno": getattr(bound_open_exc, "errno", None),
                     "reason": cp_reason,
                 }
                 mutations.append(
@@ -3743,15 +8862,1136 @@ def _verify_immutable_baselines_post_run(
                         "actual_sha256": None,
                         "actual_size_bytes": None,
                         "exists_post_run": False,
-                        "is_symlink_post_run": False,
+                        "is_symlink_post_run": damaged_sym,
                         "is_regular_file_post_run": False,
-                        "ancestor_chain_verified": True,
+                        "ancestor_chain_verified": False,
+                        "damaged_ancestor_path": str(cp_parent_dir),
+                        "damaged_ancestor_is_symlink": damaged_sym,
+                        "damaged_ancestor_symlink_target": cp_parent_status.get(
+                            "symlink_target"
+                        ),
+                        "failure_phase": str(
+                            cp_parent_status.get("admission_failure_phase")
+                            or "parent_dir_open"
+                        ),
+                        "parent_close_phase": (
+                            "parent_dir_close"
+                            if cp_parent_status.get("descriptor_close_error")
+                            is not None
+                            else None
+                        ),
+                        "parent_close_error": cp_parent_status.get(
+                            "descriptor_close_error"
+                        ),
+                        "parent_close_exception_type": cp_parent_status.get(
+                            "descriptor_close_exception_type"
+                        ),
+                        "parent_close_exception_message": cp_parent_status.get(
+                            "descriptor_close_exception_message"
+                        ),
+                        "parent_close_errno": cp_parent_status.get(
+                            "descriptor_close_errno"
+                        ),
                         "error": cp_err,
-                        "exception_type": type(exc).__name__,
-                        "exception_message": str(exc),
+                        "exception_type": type(bound_open_exc).__name__,
+                        "exception_message": str(bound_open_exc),
                         "reason": cp_reason,
                     }
                 )
+
+            if cp_parent_cap is not None:
+                cp_primary_exc: Exception | None = None
+                try:
+                    cp_stat_exc: OSError | None = None
+                    cp_st: os.stat_result | None = None
+                    try:
+                        cp_st = os.stat(
+                            cp_leaf_name,
+                            dir_fd=cp_parent_cap.fd,
+                            follow_symlinks=False,
+                        )
+                    except OSError as stat_exc:
+                        cp_stat_exc = stat_exc
+
+                    post_stat_anc = _verify_admitted_ancestor_chain(
+                        cp_path, pre_execution_checkpoint_baseline
+                    )
+                    post_stat_reverify_causes: list[Exception] = []
+                    post_stat_reverify_status: dict[str, Any] = {}
+                    post_stat_reverify_exc: Exception | None = None
+                    if post_stat_anc["verified"]:
+                        try:
+                            _reverify_admitted_directory_binding(
+                                cp_parent_cap,
+                                caught_exceptions=post_stat_reverify_causes,
+                                dir_status_out=post_stat_reverify_status,
+                            )
+                        except Exception as rev_exc:
+                            post_stat_reverify_exc = (
+                                post_stat_reverify_causes[0]
+                                if post_stat_reverify_causes
+                                else rev_exc
+                            )
+
+                    if (
+                        not post_stat_anc["verified"]
+                        or post_stat_reverify_exc is not None
+                    ):
+                        if (
+                            cp_stat_exc is not None
+                            and caught_exceptions is not None
+                        ):
+                            caught_exceptions.append(cp_stat_exc)
+                        if not post_stat_anc["verified"]:
+                            raw_anc_exc = post_stat_anc.get("exception")
+                            bound_post_stat_exc: Exception = (
+                                raw_anc_exc
+                                if isinstance(raw_anc_exc, Exception)
+                                else ValueError(str(post_stat_anc["error"]))
+                            )
+                            cp_err = str(post_stat_anc["error"])
+                            damaged_path = str(
+                                post_stat_anc["damaged_ancestor_path"]
+                                or cp_parent_dir
+                            )
+                            damaged_sym = bool(
+                                post_stat_anc["damaged_ancestor_is_symlink"]
+                            )
+                            damaged_sym_target = post_stat_anc[
+                                "damaged_ancestor_symlink_target"
+                            ]
+                            obs_anc_dev = post_stat_anc["observed_ancestor_dev"]
+                            obs_anc_ino = post_stat_anc["observed_ancestor_ino"]
+                        else:
+                            assert post_stat_reverify_exc is not None
+                            bound_post_stat_exc = post_stat_reverify_exc
+                            cp_err = str(bound_post_stat_exc)
+                            damaged_path = str(cp_parent_dir)
+                            damaged_sym = bool(
+                                post_stat_reverify_status.get(
+                                    "is_symlink", False
+                                )
+                            )
+                            damaged_sym_target = post_stat_reverify_status.get(
+                                "symlink_target"
+                            )
+                            obs_anc_dev = post_stat_reverify_status.get("dev")
+                            obs_anc_ino = post_stat_reverify_status.get("ino")
+
+                        cp_primary_exc = bound_post_stat_exc
+                        if caught_exceptions is not None:
+                            caught_exceptions.append(bound_post_stat_exc)
+                        if pre_checkpoint_cause_out is not None:
+                            pre_checkpoint_cause_out.append(bound_post_stat_exc)
+                        if mutation_causes_out is not None:
+                            mutation_causes_out.append(bound_post_stat_exc)
+                        cp_reason = (
+                            "Pre-execution checkpoint refmac_pre_execution_checkpoint.json "
+                            f"ancestor chain invalid after REFMAC operation: {cp_err}"
+                        )
+                        pre_checkpoint_post = {
+                            "path": str(cp_path),
+                            "resolved_path": None,
+                            "exists": False,
+                            "leaf_existence_known": (
+                                cp_st is not None
+                                or isinstance(cp_stat_exc, FileNotFoundError)
+                            ),
+                            "is_symlink": damaged_sym,
+                            "is_regular_file": False,
+                            "sha256": None,
+                            "size_bytes": None,
+                            "stat_size_bytes": (
+                                int(cp_st.st_size)
+                                if cp_st is not None
+                                else None
+                            ),
+                            "observed_read_bytes": 0,
+                            "observed_read_sha256": None,
+                            "observed_eof": False,
+                            "read_complete": False,
+                            "leaf_pre_fstat_verified": False,
+                            "leaf_post_fstat_verified": False,
+                            "leaf_close_attempted": False,
+                            "leaf_close_succeeded": False,
+                            "parent_descriptor_opened": True,
+                            "parent_descriptor_fstat_succeeded": True,
+                            "parent_descriptor_verified": False,
+                            "parent_descriptor_dev": cp_parent_cap.dev,
+                            "parent_descriptor_ino": cp_parent_cap.ino,
+                            "leaf_lookup_relative_to_admitted_parent": True,
+                            "failure_phase": "post_leaf_stat_ancestor_reverify",
+                            "expected_sha256": expected_cp_sha256,
+                            "expected_size_bytes": expected_cp_size,
+                            "expected_resolved_path": pre_execution_checkpoint_baseline.get(
+                                "resolved_path"
+                            ),
+                            "expected_parent_dir_dev": cp_parent_cap.dev,
+                            "expected_parent_dir_ino": cp_parent_cap.ino,
+                            "ancestor_chain_verified": False,
+                            "damaged_ancestor_path": damaged_path,
+                            "damaged_ancestor_is_symlink": damaged_sym,
+                            "damaged_ancestor_symlink_target": damaged_sym_target,
+                            "observed_ancestor_dev": obs_anc_dev,
+                            "observed_ancestor_ino": obs_anc_ino,
+                            "matches_baseline": False,
+                            "error": cp_err,
+                            "exception_type": type(bound_post_stat_exc).__name__,
+                            "exception_message": str(bound_post_stat_exc),
+                            "errno": getattr(bound_post_stat_exc, "errno", None),
+                            "reason": cp_reason,
+                        }
+                        mutations.append(
+                            {
+                                "category": "pre_execution_checkpoint",
+                                "key": "refmac_pre_execution_checkpoint_json",
+                                "path": str(cp_path),
+                                "expected_sha256": expected_cp_sha256,
+                                "expected_size_bytes": expected_cp_size,
+                                "actual_sha256": None,
+                                "actual_size_bytes": None,
+                                "exists_post_run": False,
+                                "is_symlink_post_run": damaged_sym,
+                                "is_regular_file_post_run": False,
+                                "ancestor_chain_verified": False,
+                                "damaged_ancestor_path": damaged_path,
+                                "damaged_ancestor_is_symlink": damaged_sym,
+                                "damaged_ancestor_symlink_target": damaged_sym_target,
+                                "error": cp_err,
+                                "exception_type": type(
+                                    bound_post_stat_exc
+                                ).__name__,
+                                "exception_message": str(bound_post_stat_exc),
+                                "reason": cp_reason,
+                            }
+                        )
+                    elif cp_stat_exc is not None:
+                        cp_primary_exc = cp_stat_exc
+                        if caught_exceptions is not None:
+                            caught_exceptions.append(cp_stat_exc)
+                        if pre_checkpoint_cause_out is not None:
+                            pre_checkpoint_cause_out.append(cp_stat_exc)
+                        if mutation_causes_out is not None:
+                            mutation_causes_out.append(cp_stat_exc)
+                        cp_err = f"{type(cp_stat_exc).__name__}: {cp_stat_exc}"
+                        cp_reason = (
+                            "Pre-execution checkpoint refmac_pre_execution_checkpoint.json "
+                            f"missing or invalid after REFMAC operation: {cp_stat_exc}"
+                        )
+                        pre_checkpoint_post = {
+                            "path": str(cp_path),
+                            "resolved_path": None,
+                            "exists": False,
+                            "leaf_existence_known": isinstance(
+                                cp_stat_exc, FileNotFoundError
+                            ),
+                            "is_symlink": False,
+                            "is_regular_file": False,
+                            "sha256": None,
+                            "size_bytes": None,
+                            "stat_size_bytes": None,
+                            "observed_read_bytes": 0,
+                            "observed_read_sha256": None,
+                            "observed_eof": False,
+                            "read_complete": False,
+                            "leaf_pre_fstat_verified": False,
+                            "leaf_post_fstat_verified": False,
+                            "leaf_close_attempted": False,
+                            "leaf_close_succeeded": False,
+                            "parent_descriptor_opened": True,
+                            "parent_descriptor_fstat_succeeded": True,
+                            "parent_descriptor_verified": True,
+                            "parent_descriptor_dev": cp_parent_cap.dev,
+                            "parent_descriptor_ino": cp_parent_cap.ino,
+                            "leaf_lookup_relative_to_admitted_parent": True,
+                            "failure_phase": "leaf_stat",
+                            "expected_sha256": expected_cp_sha256,
+                            "expected_size_bytes": expected_cp_size,
+                            "ancestor_chain_verified": True,
+                            "matches_baseline": False,
+                            "error": cp_err,
+                            "exception_type": type(cp_stat_exc).__name__,
+                            "exception_message": str(cp_stat_exc),
+                            "errno": getattr(cp_stat_exc, "errno", None),
+                            "reason": cp_reason,
+                        }
+                        mutations.append(
+                            {
+                                "category": "pre_execution_checkpoint",
+                                "key": "refmac_pre_execution_checkpoint_json",
+                                "path": str(cp_path),
+                                "expected_sha256": expected_cp_sha256,
+                                "expected_size_bytes": expected_cp_size,
+                                "actual_sha256": None,
+                                "actual_size_bytes": None,
+                                "exists_post_run": False,
+                                "is_symlink_post_run": False,
+                                "is_regular_file_post_run": False,
+                                "ancestor_chain_verified": True,
+                                "error": cp_err,
+                                "exception_type": type(cp_stat_exc).__name__,
+                                "exception_message": str(cp_stat_exc),
+                                "reason": cp_reason,
+                            }
+                        )
+                    else:
+                        assert cp_st is not None
+                        cp_is_symlink = bool(stat.S_ISLNK(cp_st.st_mode))
+                        cp_is_regular = bool(stat.S_ISREG(cp_st.st_mode))
+                        if cp_is_symlink:
+                            cp_err = (
+                                f"Pre-execution checkpoint path was replaced by a symlink: {cp_path}"
+                            )
+                            cp_reason = (
+                                "Pre-execution checkpoint refmac_pre_execution_checkpoint.json "
+                                "was replaced by a symlink during REFMAC operation"
+                            )
+                            cp_sym_exc = ValueError(cp_err)
+                            cp_primary_exc = cp_sym_exc
+                            if caught_exceptions is not None:
+                                caught_exceptions.append(cp_sym_exc)
+                            if pre_checkpoint_cause_out is not None:
+                                pre_checkpoint_cause_out.append(cp_sym_exc)
+                            if mutation_causes_out is not None:
+                                mutation_causes_out.append(cp_sym_exc)
+                            pre_checkpoint_post = {
+                                "path": str(cp_path),
+                                "resolved_path": None,
+                                "exists": True,
+                                "leaf_existence_known": True,
+                                "is_symlink": True,
+                                "is_regular_file": False,
+                                "sha256": None,
+                                "size_bytes": int(cp_st.st_size),
+                                "stat_size_bytes": int(cp_st.st_size),
+                                "observed_read_bytes": 0,
+                                "observed_read_sha256": None,
+                                "observed_eof": False,
+                                "read_complete": False,
+                                "leaf_pre_fstat_verified": False,
+                                "leaf_post_fstat_verified": False,
+                                "leaf_close_attempted": False,
+                                "leaf_close_succeeded": False,
+                                "parent_descriptor_opened": True,
+                                "parent_descriptor_fstat_succeeded": True,
+                                "parent_descriptor_verified": True,
+                                "parent_descriptor_dev": cp_parent_cap.dev,
+                                "parent_descriptor_ino": cp_parent_cap.ino,
+                                "leaf_lookup_relative_to_admitted_parent": True,
+                                "failure_phase": "leaf_type_check",
+                                "expected_sha256": expected_cp_sha256,
+                                "expected_size_bytes": expected_cp_size,
+                                "ancestor_chain_verified": True,
+                                "matches_baseline": False,
+                                "error": cp_err,
+                                "exception_type": "ValueError",
+                                "exception_message": cp_err,
+                                "errno": None,
+                                "reason": cp_reason,
+                            }
+                            mutations.append(
+                                {
+                                    "category": "pre_execution_checkpoint",
+                                    "key": "refmac_pre_execution_checkpoint_json",
+                                    "path": str(cp_path),
+                                    "expected_sha256": expected_cp_sha256,
+                                    "expected_size_bytes": expected_cp_size,
+                                    "actual_sha256": None,
+                                    "actual_size_bytes": int(cp_st.st_size),
+                                    "exists_post_run": True,
+                                    "is_symlink_post_run": True,
+                                    "is_regular_file_post_run": False,
+                                    "ancestor_chain_verified": True,
+                                    "error": cp_err,
+                                    "exception_type": "ValueError",
+                                    "exception_message": cp_err,
+                                    "reason": cp_reason,
+                                }
+                            )
+                        elif not cp_is_regular:
+                            cp_err = (
+                                f"Pre-execution checkpoint path is not a regular file: {cp_path}"
+                            )
+                            cp_reason = (
+                                "Pre-execution checkpoint refmac_pre_execution_checkpoint.json "
+                                "is not a regular file after REFMAC operation"
+                            )
+                            cp_reg_exc = ValueError(cp_err)
+                            cp_primary_exc = cp_reg_exc
+                            if caught_exceptions is not None:
+                                caught_exceptions.append(cp_reg_exc)
+                            if pre_checkpoint_cause_out is not None:
+                                pre_checkpoint_cause_out.append(cp_reg_exc)
+                            if mutation_causes_out is not None:
+                                mutation_causes_out.append(cp_reg_exc)
+                            pre_checkpoint_post = {
+                                "path": str(cp_path),
+                                "resolved_path": None,
+                                "exists": True,
+                                "leaf_existence_known": True,
+                                "is_symlink": False,
+                                "is_regular_file": False,
+                                "sha256": None,
+                                "size_bytes": int(cp_st.st_size),
+                                "stat_size_bytes": int(cp_st.st_size),
+                                "observed_read_bytes": 0,
+                                "observed_read_sha256": None,
+                                "observed_eof": False,
+                                "read_complete": False,
+                                "leaf_pre_fstat_verified": False,
+                                "leaf_post_fstat_verified": False,
+                                "leaf_close_attempted": False,
+                                "leaf_close_succeeded": False,
+                                "parent_descriptor_opened": True,
+                                "parent_descriptor_fstat_succeeded": True,
+                                "parent_descriptor_verified": True,
+                                "parent_descriptor_dev": cp_parent_cap.dev,
+                                "parent_descriptor_ino": cp_parent_cap.ino,
+                                "leaf_lookup_relative_to_admitted_parent": True,
+                                "failure_phase": "leaf_type_check",
+                                "expected_sha256": expected_cp_sha256,
+                                "expected_size_bytes": expected_cp_size,
+                                "ancestor_chain_verified": True,
+                                "matches_baseline": False,
+                                "error": cp_err,
+                                "exception_type": "ValueError",
+                                "exception_message": cp_err,
+                                "errno": None,
+                                "reason": cp_reason,
+                            }
+                            mutations.append(
+                                {
+                                    "category": "pre_execution_checkpoint",
+                                    "key": "refmac_pre_execution_checkpoint_json",
+                                    "path": str(cp_path),
+                                    "expected_sha256": expected_cp_sha256,
+                                    "expected_size_bytes": expected_cp_size,
+                                    "actual_sha256": None,
+                                    "actual_size_bytes": int(cp_st.st_size),
+                                    "exists_post_run": True,
+                                    "is_symlink_post_run": False,
+                                    "is_regular_file_post_run": False,
+                                    "ancestor_chain_verified": True,
+                                    "error": cp_err,
+                                    "exception_type": "ValueError",
+                                    "exception_message": cp_err,
+                                    "reason": cp_reason,
+                                }
+                            )
+                        else:
+                            cp_chunks: list[bytes] = []
+                            cp_eof_reached = False
+                            cp_pre_fstat_verified = False
+                            cp_post_fstat_verified = False
+                            cp_close_attempted = False
+                            cp_close_succeeded = False
+                            cp_cleanup_close_exc: OSError | None = None
+                            cp_leaf_phase = "leaf_open"
+                            try:
+                                cp_fd = os.open(
+                                    cp_leaf_name,
+                                    os.O_RDONLY
+                                    | getattr(os, "O_NOFOLLOW", 0)
+                                    | getattr(os, "O_CLOEXEC", 0),
+                                    0o644,
+                                    dir_fd=cp_parent_cap.fd,
+                                )
+                                cp_leaf_closed = False
+                                try:
+                                    cp_leaf_phase = "leaf_pre_read_fstat"
+                                    cp_fd_st = os.fstat(cp_fd)
+                                    if not stat.S_ISREG(cp_fd_st.st_mode) or (
+                                        int(cp_fd_st.st_dev),
+                                        int(cp_fd_st.st_ino),
+                                    ) != (int(cp_st.st_dev), int(cp_st.st_ino)):
+                                        raise OSError(
+                                            errno.ESTALE,
+                                            "Pre-execution checkpoint inode changed while opening descriptor",
+                                            str(cp_path),
+                                        )
+                                    cp_pre_fstat_verified = True
+                                    cp_leaf_phase = "leaf_read"
+                                    while True:
+                                        chunk = os.read(cp_fd, 65536)
+                                        if not chunk:
+                                            cp_eof_reached = True
+                                            break
+                                        cp_chunks.append(chunk)
+                                    cp_leaf_phase = "leaf_post_read_fstat"
+                                    cp_post_st = os.fstat(cp_fd)
+                                    if not stat.S_ISREG(cp_post_st.st_mode) or (
+                                        int(cp_post_st.st_dev),
+                                        int(cp_post_st.st_ino),
+                                    ) != (int(cp_st.st_dev), int(cp_st.st_ino)):
+                                        raise OSError(
+                                            errno.ESTALE,
+                                            "Pre-execution checkpoint inode changed while reading descriptor",
+                                            str(cp_path),
+                                        )
+                                    cp_post_fstat_verified = True
+                                    cp_bytes = b"".join(cp_chunks)
+                                    cp_leaf_phase = "leaf_close"
+                                    cp_leaf_closed = True
+                                    cp_close_attempted = True
+                                    os.close(cp_fd)
+                                    cp_close_succeeded = True
+                                finally:
+                                    if not cp_leaf_closed:
+                                        cp_close_attempted = True
+                                        try:
+                                            os.close(cp_fd)
+                                        except OSError as close_exc:
+                                            cp_close_succeeded = False
+                                            cp_cleanup_close_exc = close_exc
+                                        else:
+                                            cp_close_succeeded = True
+                            except OSError as exc:
+                                cp_primary_exc = exc
+                                if caught_exceptions is not None:
+                                    caught_exceptions.append(exc)
+                                if cp_cleanup_close_exc is not None:
+                                    try:
+                                        setattr(
+                                            exc,
+                                            "cleanup_close_error",
+                                            cp_cleanup_close_exc,
+                                        )
+                                    except Exception:
+                                        pass
+                                    if caught_exceptions is not None:
+                                        caught_exceptions.append(
+                                            cp_cleanup_close_exc
+                                        )
+                                if pre_checkpoint_cause_out is not None:
+                                    pre_checkpoint_cause_out.append(exc)
+                                    if cp_cleanup_close_exc is not None:
+                                        pre_checkpoint_cause_out.append(
+                                            cp_cleanup_close_exc
+                                        )
+                                if mutation_causes_out is not None:
+                                    mutation_causes_out.append(exc)
+                                obs_cp_data = b"".join(cp_chunks)
+                                obs_cp_size = len(obs_cp_data)
+                                obs_cp_sha256 = (
+                                    _sha256_bytes(obs_cp_data)
+                                    if (obs_cp_size > 0 or cp_eof_reached)
+                                    else None
+                                )
+                                cp_err = f"{type(exc).__name__}: {exc}"
+                                cp_reason = (
+                                    "Pre-execution checkpoint refmac_pre_execution_checkpoint.json "
+                                    f"unreadable after REFMAC operation: {exc}"
+                                )
+                                pre_checkpoint_post = {
+                                    "path": str(cp_path),
+                                    "resolved_path": None,
+                                    "exists": True,
+                                    "leaf_existence_known": True,
+                                    "is_symlink": False,
+                                    "is_regular_file": True,
+                                    "sha256": None,
+                                    "size_bytes": int(cp_st.st_size),
+                                    "stat_size_bytes": int(cp_st.st_size),
+                                    "observed_read_bytes": obs_cp_size,
+                                    "observed_read_sha256": obs_cp_sha256,
+                                    "observed_eof": cp_eof_reached,
+                                    "read_complete": bool(
+                                        cp_eof_reached
+                                        and obs_cp_size == int(cp_st.st_size)
+                                    ),
+                                    "leaf_pre_fstat_verified": cp_pre_fstat_verified,
+                                    "leaf_post_fstat_verified": cp_post_fstat_verified,
+                                    "leaf_close_attempted": cp_close_attempted,
+                                    "leaf_close_succeeded": cp_close_succeeded,
+                                    "cleanup_close_error": (
+                                        f"{type(cp_cleanup_close_exc).__name__}: {cp_cleanup_close_exc}"
+                                        if cp_cleanup_close_exc is not None
+                                        else None
+                                    ),
+                                    "cleanup_close_exception_type": (
+                                        type(cp_cleanup_close_exc).__name__
+                                        if cp_cleanup_close_exc is not None
+                                        else None
+                                    ),
+                                    "cleanup_close_exception_message": (
+                                        str(cp_cleanup_close_exc)
+                                        if cp_cleanup_close_exc is not None
+                                        else None
+                                    ),
+                                    "cleanup_close_errno": (
+                                        getattr(
+                                            cp_cleanup_close_exc, "errno", None
+                                        )
+                                        if cp_cleanup_close_exc is not None
+                                        else None
+                                    ),
+                                    "parent_descriptor_opened": True,
+                                    "parent_descriptor_fstat_succeeded": True,
+                                    "parent_descriptor_verified": True,
+                                    "parent_descriptor_dev": cp_parent_cap.dev,
+                                    "parent_descriptor_ino": cp_parent_cap.ino,
+                                    "leaf_lookup_relative_to_admitted_parent": True,
+                                    "failure_phase": cp_leaf_phase,
+                                    "expected_sha256": expected_cp_sha256,
+                                    "expected_size_bytes": expected_cp_size,
+                                    "ancestor_chain_verified": True,
+                                    "matches_baseline": False,
+                                    "error": cp_err,
+                                    "exception_type": type(exc).__name__,
+                                    "exception_message": str(exc),
+                                    "errno": getattr(exc, "errno", None),
+                                    "reason": cp_reason,
+                                }
+                                mutations.append(
+                                    {
+                                        "category": "pre_execution_checkpoint",
+                                        "key": "refmac_pre_execution_checkpoint_json",
+                                        "path": str(cp_path),
+                                        "expected_sha256": expected_cp_sha256,
+                                        "expected_size_bytes": expected_cp_size,
+                                        "actual_sha256": None,
+                                        "actual_size_bytes": int(cp_st.st_size),
+                                        "exists_post_run": True,
+                                        "is_symlink_post_run": False,
+                                        "is_regular_file_post_run": True,
+                                        "ancestor_chain_verified": True,
+                                        "error": cp_err,
+                                        "exception_type": type(exc).__name__,
+                                        "exception_message": str(exc),
+                                        "reason": cp_reason,
+                                    }
+                                )
+                            else:
+                                cp_sha256 = _sha256_bytes(cp_bytes)
+                                cp_size = len(cp_bytes)
+                                post_read_anc = _verify_admitted_ancestor_chain(
+                                    cp_path, pre_execution_checkpoint_baseline
+                                )
+                                post_read_reverify_causes: list[Exception] = []
+                                post_read_reverify_status: dict[str, Any] = {}
+                                post_read_reverify_exc: Exception | None = None
+                                if post_read_anc["verified"]:
+                                    try:
+                                        _reverify_admitted_directory_binding(
+                                            cp_parent_cap,
+                                            caught_exceptions=post_read_reverify_causes,
+                                            dir_status_out=post_read_reverify_status,
+                                        )
+                                    except Exception as rev_exc:
+                                        post_read_reverify_exc = (
+                                            post_read_reverify_causes[0]
+                                            if post_read_reverify_causes
+                                            else rev_exc
+                                        )
+
+                                if (
+                                    not post_read_anc["verified"]
+                                    or post_read_reverify_exc is not None
+                                ):
+                                    if not post_read_anc["verified"]:
+                                        raw_pr_exc = post_read_anc.get(
+                                            "exception"
+                                        )
+                                        bound_post_read_exc: Exception = (
+                                            raw_pr_exc
+                                            if isinstance(raw_pr_exc, Exception)
+                                            else ValueError(
+                                                str(post_read_anc["error"])
+                                            )
+                                        )
+                                        cp_err = str(post_read_anc["error"])
+                                        damaged_path = str(
+                                            post_read_anc[
+                                                "damaged_ancestor_path"
+                                            ]
+                                            or cp_parent_dir
+                                        )
+                                        damaged_sym = bool(
+                                            post_read_anc[
+                                                "damaged_ancestor_is_symlink"
+                                            ]
+                                        )
+                                        damaged_sym_target = post_read_anc[
+                                            "damaged_ancestor_symlink_target"
+                                        ]
+                                        obs_anc_dev = post_read_anc[
+                                            "observed_ancestor_dev"
+                                        ]
+                                        obs_anc_ino = post_read_anc[
+                                            "observed_ancestor_ino"
+                                        ]
+                                    else:
+                                        assert (
+                                            post_read_reverify_exc is not None
+                                        )
+                                        bound_post_read_exc = (
+                                            post_read_reverify_exc
+                                        )
+                                        cp_err = str(bound_post_read_exc)
+                                        damaged_path = str(cp_parent_dir)
+                                        damaged_sym = bool(
+                                            post_read_reverify_status.get(
+                                                "is_symlink", False
+                                            )
+                                        )
+                                        damaged_sym_target = (
+                                            post_read_reverify_status.get(
+                                                "symlink_target"
+                                            )
+                                        )
+                                        obs_anc_dev = (
+                                            post_read_reverify_status.get("dev")
+                                        )
+                                        obs_anc_ino = (
+                                            post_read_reverify_status.get("ino")
+                                        )
+
+                                    cp_primary_exc = bound_post_read_exc
+                                    if caught_exceptions is not None:
+                                        caught_exceptions.append(
+                                            bound_post_read_exc
+                                        )
+                                    if pre_checkpoint_cause_out is not None:
+                                        pre_checkpoint_cause_out.append(
+                                            bound_post_read_exc
+                                        )
+                                    if mutation_causes_out is not None:
+                                        mutation_causes_out.append(
+                                            bound_post_read_exc
+                                        )
+                                    cp_reason = (
+                                        "Pre-execution checkpoint refmac_pre_execution_checkpoint.json "
+                                        f"ancestor chain invalid after REFMAC operation: {cp_err}"
+                                    )
+                                    pre_checkpoint_post = {
+                                        "path": str(cp_path),
+                                        "resolved_path": None,
+                                        "exists": True,
+                                        "leaf_existence_known": True,
+                                        "is_symlink": damaged_sym,
+                                        "is_regular_file": True,
+                                        "sha256": None,
+                                        "size_bytes": cp_size,
+                                        "stat_size_bytes": int(cp_st.st_size),
+                                        "observed_read_bytes": cp_size,
+                                        "observed_read_sha256": cp_sha256,
+                                        "observed_eof": True,
+                                        "read_complete": bool(
+                                            cp_size == int(cp_st.st_size)
+                                        ),
+                                        "leaf_pre_fstat_verified": True,
+                                        "leaf_post_fstat_verified": True,
+                                        "leaf_close_attempted": True,
+                                        "leaf_close_succeeded": True,
+                                        "parent_descriptor_opened": True,
+                                        "parent_descriptor_fstat_succeeded": True,
+                                        "parent_descriptor_verified": False,
+                                        "parent_descriptor_dev": cp_parent_cap.dev,
+                                        "parent_descriptor_ino": cp_parent_cap.ino,
+                                        "leaf_lookup_relative_to_admitted_parent": True,
+                                        "failure_phase": "post_leaf_read_ancestor_reverify",
+                                        "expected_sha256": expected_cp_sha256,
+                                        "expected_size_bytes": expected_cp_size,
+                                        "expected_resolved_path": pre_execution_checkpoint_baseline.get(
+                                            "resolved_path"
+                                        ),
+                                        "expected_parent_dir_dev": cp_parent_cap.dev,
+                                        "expected_parent_dir_ino": cp_parent_cap.ino,
+                                        "ancestor_chain_verified": False,
+                                        "damaged_ancestor_path": damaged_path,
+                                        "damaged_ancestor_is_symlink": damaged_sym,
+                                        "damaged_ancestor_symlink_target": damaged_sym_target,
+                                        "observed_ancestor_dev": obs_anc_dev,
+                                        "observed_ancestor_ino": obs_anc_ino,
+                                        "matches_baseline": False,
+                                        "error": cp_err,
+                                        "exception_type": type(
+                                            bound_post_read_exc
+                                        ).__name__,
+                                        "exception_message": str(
+                                            bound_post_read_exc
+                                        ),
+                                        "errno": getattr(
+                                            bound_post_read_exc, "errno", None
+                                        ),
+                                        "reason": cp_reason,
+                                    }
+                                    mutations.append(
+                                        {
+                                            "category": "pre_execution_checkpoint",
+                                            "key": "refmac_pre_execution_checkpoint_json",
+                                            "path": str(cp_path),
+                                            "expected_sha256": expected_cp_sha256,
+                                            "expected_size_bytes": expected_cp_size,
+                                            "actual_sha256": None,
+                                            "actual_size_bytes": cp_size,
+                                            "exists_post_run": True,
+                                            "is_symlink_post_run": damaged_sym,
+                                            "is_regular_file_post_run": True,
+                                            "ancestor_chain_verified": False,
+                                            "damaged_ancestor_path": damaged_path,
+                                            "damaged_ancestor_is_symlink": damaged_sym,
+                                            "damaged_ancestor_symlink_target": damaged_sym_target,
+                                            "error": cp_err,
+                                            "exception_type": type(
+                                                bound_post_read_exc
+                                            ).__name__,
+                                            "exception_message": str(
+                                                bound_post_read_exc
+                                            ),
+                                            "reason": cp_reason,
+                                        }
+                                    )
+                                else:
+                                    cp_resolved = str(
+                                        Path(cp_parent_cap.resolved_path)
+                                        / cp_leaf_name
+                                    )
+                                    expected_cp_resolved = pre_execution_checkpoint_baseline.get(
+                                        "resolved_path"
+                                    )
+                                    expected_cp_dev = pre_execution_checkpoint_baseline.get(
+                                        "dev"
+                                    )
+                                    expected_cp_ino = pre_execution_checkpoint_baseline.get(
+                                        "ino"
+                                    )
+                                    cp_resolved_ok = (
+                                        expected_cp_resolved is None
+                                        or cp_resolved
+                                        == str(expected_cp_resolved)
+                                    )
+                                    cp_inode_ok = (
+                                        expected_cp_dev is None
+                                        or expected_cp_ino is None
+                                        or (
+                                            int(cp_st.st_dev),
+                                            int(cp_st.st_ino),
+                                        )
+                                        == (
+                                            int(expected_cp_dev),
+                                            int(expected_cp_ino),
+                                        )
+                                    )
+                                    cp_matches = (
+                                        cp_sha256 == expected_cp_sha256
+                                        and cp_size == expected_cp_size
+                                        and cp_resolved_ok
+                                        and cp_inode_ok
+                                    )
+                                    cp_err = (
+                                        None
+                                        if cp_matches
+                                        else (
+                                            f"Pre-execution checkpoint {cp_path} mutated during REFMAC operation: "
+                                            f"expected sha256={expected_cp_sha256} (size={expected_cp_size}), "
+                                            f"observed sha256={cp_sha256} (size={cp_size})"
+                                        )
+                                    )
+                                    cp_reason = (
+                                        None
+                                        if cp_matches
+                                        else (
+                                            "Pre-execution checkpoint refmac_pre_execution_checkpoint.json "
+                                            "mutated during REFMAC operation"
+                                        )
+                                    )
+                                    cp_mut_exc = (
+                                        ValueError(cp_err)
+                                        if (
+                                            not cp_matches and cp_err is not None
+                                        )
+                                        else None
+                                    )
+                                    if (
+                                        cp_mut_exc is not None
+                                        and caught_exceptions is not None
+                                    ):
+                                        caught_exceptions.append(cp_mut_exc)
+                                    pre_checkpoint_post = {
+                                        "path": str(cp_path),
+                                        "resolved_path": cp_resolved,
+                                        "exists": True,
+                                        "leaf_existence_known": True,
+                                        "is_symlink": False,
+                                        "is_regular_file": True,
+                                        "sha256": cp_sha256,
+                                        "size_bytes": cp_size,
+                                        "stat_size_bytes": int(cp_st.st_size),
+                                        "observed_read_bytes": cp_size,
+                                        "observed_read_sha256": cp_sha256,
+                                        "observed_eof": True,
+                                        "read_complete": True,
+                                        "leaf_pre_fstat_verified": True,
+                                        "leaf_post_fstat_verified": True,
+                                        "leaf_close_attempted": True,
+                                        "leaf_close_succeeded": True,
+                                        "parent_descriptor_opened": True,
+                                        "parent_descriptor_fstat_succeeded": True,
+                                        "parent_descriptor_verified": True,
+                                        "parent_descriptor_dev": cp_parent_cap.dev,
+                                        "parent_descriptor_ino": cp_parent_cap.ino,
+                                        "leaf_lookup_relative_to_admitted_parent": True,
+                                        "failure_phase": (
+                                            None
+                                            if cp_matches
+                                            else "baseline_comparison"
+                                        ),
+                                        "expected_sha256": expected_cp_sha256,
+                                        "expected_size_bytes": expected_cp_size,
+                                        "ancestor_chain_verified": True,
+                                        "content_matches_baseline": cp_matches,
+                                        "matches_baseline": cp_matches,
+                                        "error": cp_err,
+                                        "exception_type": (
+                                            None
+                                            if cp_matches
+                                            else "ValueError"
+                                        ),
+                                        "exception_message": cp_err,
+                                        "errno": None,
+                                        "reason": cp_reason,
+                                    }
+                                    if not cp_matches:
+                                        cp_primary_exc = cp_mut_exc
+                                        if pre_checkpoint_cause_out is not None:
+                                            pre_checkpoint_cause_out.append(
+                                                cp_mut_exc
+                                            )
+                                        if mutation_causes_out is not None:
+                                            mutation_causes_out.append(
+                                                cp_mut_exc
+                                            )
+                                        mutations.append(
+                                            {
+                                                "category": "pre_execution_checkpoint",
+                                                "key": "refmac_pre_execution_checkpoint_json",
+                                                "path": str(cp_path),
+                                                "expected_sha256": expected_cp_sha256,
+                                                "expected_size_bytes": expected_cp_size,
+                                                "actual_sha256": cp_sha256,
+                                                "actual_size_bytes": cp_size,
+                                                "exists_post_run": True,
+                                                "is_symlink_post_run": False,
+                                                "is_regular_file_post_run": True,
+                                                "ancestor_chain_verified": True,
+                                                "error": cp_err,
+                                                "exception_type": "ValueError",
+                                                "exception_message": cp_err,
+                                                "reason": cp_reason,
+                                            }
+                                        )
+                finally:
+                    parent_close_succeeded = False
+                    parent_close_exc: OSError | None = None
+                    try:
+                        os.close(cp_parent_cap.fd)
+                    except OSError as close_exc:
+                        parent_close_exc = close_exc
+                    else:
+                        parent_close_succeeded = True
+
+                    parent_close_err_str = (
+                        f"{type(parent_close_exc).__name__}: {parent_close_exc}"
+                        if parent_close_exc is not None
+                        else None
+                    )
+                    parent_close_exc_type = (
+                        type(parent_close_exc).__name__
+                        if parent_close_exc is not None
+                        else None
+                    )
+                    parent_close_exc_msg = (
+                        str(parent_close_exc)
+                        if parent_close_exc is not None
+                        else None
+                    )
+                    parent_close_errno = (
+                        getattr(parent_close_exc, "errno", None)
+                        if parent_close_exc is not None
+                        else None
+                    )
+                    parent_verified_final = bool(
+                        pre_checkpoint_post.get(
+                            "parent_descriptor_verified", False
+                        )
+                        and parent_close_succeeded
+                    )
+                    retained_parent_lookup = copy.deepcopy(
+                        cp_parent_status.get("lookup")
+                    )
+                    pre_checkpoint_post.update(
+                        {
+                            "parent_lookup": retained_parent_lookup,
+                            "parent_lookup_path": cp_parent_status.get(
+                                "lookup_path", str(cp_parent_cap.path)
+                            ),
+                            "parent_lookup_resolved_path": cp_parent_status.get(
+                                "lookup_resolved_path",
+                                str(cp_parent_cap.resolved_path),
+                            ),
+                            "parent_lookup_exists": cp_parent_status.get(
+                                "lookup_exists", True
+                            ),
+                            "parent_lookup_is_symlink": cp_parent_status.get(
+                                "lookup_is_symlink", False
+                            ),
+                            "parent_lookup_is_directory": cp_parent_status.get(
+                                "lookup_is_directory", True
+                            ),
+                            "parent_lookup_dev": cp_parent_status.get(
+                                "lookup_dev", cp_parent_cap.dev
+                            ),
+                            "parent_lookup_ino": cp_parent_status.get(
+                                "lookup_ino", cp_parent_cap.ino
+                            ),
+                            "parent_lookup_mode": cp_parent_status.get(
+                                "lookup_mode", cp_parent_cap.mode
+                            ),
+                            "parent_lookup_verified": cp_parent_status.get(
+                                "lookup_verified", True
+                            ),
+                            "parent_descriptor": {
+                                "path": str(cp_parent_cap.path),
+                                "opened": True,
+                                "fstat_succeeded": True,
+                                "verified": parent_verified_final,
+                                "is_directory": True,
+                                "dev": cp_parent_cap.dev,
+                                "ino": cp_parent_cap.ino,
+                                "mode": cp_parent_cap.mode,
+                                "close_attempted": True,
+                                "close_succeeded": parent_close_succeeded,
+                                "close_error": parent_close_err_str,
+                                "close_exception_type": parent_close_exc_type,
+                                "close_exception_message": parent_close_exc_msg,
+                                "close_errno": parent_close_errno,
+                            },
+                            "parent_descriptor_is_directory": True,
+                            "parent_descriptor_mode": cp_parent_cap.mode,
+                            "parent_descriptor_verified": parent_verified_final,
+                            "parent_descriptor_close_attempted": True,
+                            "parent_descriptor_close_succeeded": parent_close_succeeded,
+                            "parent_close_attempted": True,
+                            "parent_close_succeeded": parent_close_succeeded,
+                            "parent_close_phase": (
+                                "parent_dir_close"
+                                if parent_close_exc is not None
+                                else None
+                            ),
+                            "parent_close_error": parent_close_err_str,
+                            "parent_close_exception_type": parent_close_exc_type,
+                            "parent_close_exception_message": parent_close_exc_msg,
+                            "parent_close_errno": parent_close_errno,
+                        }
+                    )
+                    if parent_close_exc is not None:
+                        had_prior_checkpoint_failure = (
+                            pre_checkpoint_post.get("failure_phase")
+                            is not None
+                        )
+                        if had_prior_checkpoint_failure:
+                            prior_primary = cp_primary_exc
+                            if isinstance(prior_primary, BaseException):
+                                try:
+                                    setattr(
+                                        prior_primary,
+                                        "parent_close_error",
+                                        parent_close_exc,
+                                    )
+                                    if (
+                                        getattr(
+                                            prior_primary,
+                                            "cleanup_close_error",
+                                            None,
+                                        )
+                                        is None
+                                    ):
+                                        setattr(
+                                            prior_primary,
+                                            "cleanup_close_error",
+                                            parent_close_exc,
+                                        )
+                                except Exception:
+                                    pass
+                        if caught_exceptions is not None:
+                            caught_exceptions.append(parent_close_exc)
+                        if pre_checkpoint_cause_out is not None:
+                            pre_checkpoint_cause_out.append(parent_close_exc)
+                        pre_checkpoint_post["matches_baseline"] = False
+                        if not had_prior_checkpoint_failure:
+                            if mutation_causes_out is not None:
+                                mutation_causes_out.append(parent_close_exc)
+                            cp_close_reason = (
+                                "Pre-execution checkpoint refmac_pre_execution_checkpoint.json "
+                                f"parent directory descriptor close failed after REFMAC operation: {parent_close_exc}"
+                            )
+                            pre_checkpoint_post.update(
+                                {
+                                    "failure_phase": "parent_dir_close",
+                                    "error": parent_close_err_str,
+                                    "exception_type": parent_close_exc_type,
+                                    "exception_message": parent_close_exc_msg,
+                                    "errno": parent_close_errno,
+                                    "reason": cp_close_reason,
+                                }
+                            )
+                            mutations.append(
+                                {
+                                    "category": "pre_execution_checkpoint",
+                                    "key": "refmac_pre_execution_checkpoint_json",
+                                    "path": str(cp_path),
+                                    "expected_sha256": expected_cp_sha256,
+                                    "expected_size_bytes": expected_cp_size,
+                                    "actual_sha256": pre_checkpoint_post.get(
+                                        "sha256"
+                                    ),
+                                    "actual_size_bytes": pre_checkpoint_post.get(
+                                        "size_bytes"
+                                    ),
+                                    "exists_post_run": bool(
+                                        pre_checkpoint_post.get("exists", True)
+                                    ),
+                                    "is_symlink_post_run": bool(
+                                        pre_checkpoint_post.get(
+                                            "is_symlink", False
+                                        )
+                                    ),
+                                    "is_regular_file_post_run": bool(
+                                        pre_checkpoint_post.get(
+                                            "is_regular_file", True
+                                        )
+                                    ),
+                                    "ancestor_chain_verified": bool(
+                                        pre_checkpoint_post.get(
+                                            "ancestor_chain_verified", True
+                                        )
+                                    ),
+                                    "failure_phase": "parent_dir_close",
+                                    "parent_close_error": parent_close_err_str,
+                                    "parent_close_exception_type": parent_close_exc_type,
+                                    "parent_close_exception_message": parent_close_exc_msg,
+                                    "parent_close_errno": parent_close_errno,
+                                    "error": parent_close_err_str,
+                                    "exception_type": parent_close_exc_type,
+                                    "exception_message": parent_close_exc_msg,
+                                    "errno": parent_close_errno,
+                                    "reason": cp_close_reason,
+                                }
+                            )
+                        elif mutations and (
+                            mutations[-1].get("category")
+                            == "pre_execution_checkpoint"
+                        ):
+                            mutations[-1].update(
+                                {
+                                    "parent_close_phase": "parent_dir_close",
+                                    "parent_close_error": parent_close_err_str,
+                                    "parent_close_exception_type": parent_close_exc_type,
+                                    "parent_close_exception_message": parent_close_exc_msg,
+                                    "parent_close_errno": parent_close_errno,
+                                }
+                            )
 
         report["pre_execution_checkpoint_baseline"] = copy.deepcopy(
             dict(pre_execution_checkpoint_baseline)
@@ -4192,6 +10432,8 @@ def _scan_refmac_directory_entries(
             "scandir_error": scandir_error,
         }
 
+    expected_scan_dev: int | None = None
+    expected_scan_ino: int | None = None
     if expected_root_identity is not None:
         chain_causes: list[Exception] = []
         chain_check = _verify_refmac_directory_post_run(
@@ -4234,6 +10476,8 @@ def _scan_refmac_directory_entries(
                 "inspection_errors": [scandir_error],
                 "scandir_error": scandir_error,
             }
+        expected_scan_dev = int(chain_check["dev"])
+        expected_scan_ino = int(chain_check["ino"])
     else:
         if normalized_refmac_dir.parent != normalized_refmac_dir:
             try:
@@ -4244,6 +10488,7 @@ def _scan_refmac_directory_entries(
                     raise ValueError(
                         f"Evidence root directory is not a non-symlink directory: {normalized_refmac_dir.parent}"
                     )
+                normalized_refmac_dir.parent.resolve(strict=True)
             except Exception as exc:
                 if caught_exceptions is not None:
                     caught_exceptions.append(exc)
@@ -4343,15 +10588,298 @@ def _scan_refmac_directory_entries(
                 "inspection_errors": [scandir_error],
                 "scandir_error": scandir_error,
             }
+        expected_scan_dev = int(refmac_st.st_dev)
+        expected_scan_ino = int(refmac_st.st_ino)
 
+    scan_dir_fd: int | None = None
+    dup_scan_fd: int | None = None
+    dup_close_attempted = False
+    dup_close_succeeded = False
+    dup_close_exc: OSError | None = None
+    scan_dir_close_attempted = False
+    scan_dir_close_succeeded = False
+    scan_dir_close_exc: OSError | None = None
+    scan_close_failures: list[tuple[str, str, OSError]] = []
+    scan_primary_exc: Exception | None = None
+    observed_entry_names: list[str] = []
+    entry_names: list[str] = []
+
+    def _close_scan_descriptors() -> None:
+        nonlocal dup_scan_fd, scan_dir_fd
+        nonlocal dup_close_attempted, dup_close_succeeded, dup_close_exc
+        nonlocal scan_dir_close_attempted, scan_dir_close_succeeded, scan_dir_close_exc
+        if dup_scan_fd is not None:
+            fd_to_close = dup_scan_fd
+            dup_scan_fd = None
+            dup_close_attempted = True
+            try:
+                os.close(fd_to_close)
+            except OSError as close_exc:
+                dup_close_succeeded = False
+                dup_close_exc = close_exc
+                scan_close_failures.append(
+                    ("dup_scan_dir", "dup_scan_dir_close", close_exc)
+                )
+            else:
+                dup_close_succeeded = True
+        if scan_dir_fd is not None:
+            fd_to_close = scan_dir_fd
+            scan_dir_fd = None
+            scan_dir_close_attempted = True
+            try:
+                os.close(fd_to_close)
+            except OSError as close_exc:
+                scan_dir_close_succeeded = False
+                scan_dir_close_exc = close_exc
+                scan_close_failures.append(
+                    ("scan_dir", "scan_dir_close", close_exc)
+                )
+            else:
+                scan_dir_close_succeeded = True
+
+    def _build_scan_close_metadata() -> dict[str, Any]:
+        primary_close_exc = (
+            scan_close_failures[0][2] if scan_close_failures else None
+        )
+        primary_close_err_str = (
+            f"{type(primary_close_exc).__name__}: {primary_close_exc}"
+            if primary_close_exc is not None
+            else None
+        )
+        primary_close_type = (
+            type(primary_close_exc).__name__
+            if primary_close_exc is not None
+            else None
+        )
+        primary_close_msg = (
+            str(primary_close_exc) if primary_close_exc is not None else None
+        )
+        primary_close_errno = (
+            getattr(primary_close_exc, "errno", None)
+            if primary_close_exc is not None
+            else None
+        )
+        dup_close_err_str = (
+            f"{type(dup_close_exc).__name__}: {dup_close_exc}"
+            if dup_close_exc is not None
+            else None
+        )
+        scan_dir_close_err_str = (
+            f"{type(scan_dir_close_exc).__name__}: {scan_dir_close_exc}"
+            if scan_dir_close_exc is not None
+            else None
+        )
+        return {
+            "dup_close_attempted": dup_close_attempted,
+            "dup_close_succeeded": dup_close_succeeded,
+            "dup_close_error": dup_close_err_str,
+            "dup_close_exception_type": (
+                type(dup_close_exc).__name__
+                if dup_close_exc is not None
+                else None
+            ),
+            "dup_close_exception_message": (
+                str(dup_close_exc) if dup_close_exc is not None else None
+            ),
+            "dup_close_errno": (
+                getattr(dup_close_exc, "errno", None)
+                if dup_close_exc is not None
+                else None
+            ),
+            "scan_dir_close_attempted": scan_dir_close_attempted,
+            "scan_dir_close_succeeded": scan_dir_close_succeeded,
+            "scan_dir_close_error": scan_dir_close_err_str,
+            "scan_dir_close_exception_type": (
+                type(scan_dir_close_exc).__name__
+                if scan_dir_close_exc is not None
+                else None
+            ),
+            "scan_dir_close_exception_message": (
+                str(scan_dir_close_exc)
+                if scan_dir_close_exc is not None
+                else None
+            ),
+            "scan_dir_close_errno": (
+                getattr(scan_dir_close_exc, "errno", None)
+                if scan_dir_close_exc is not None
+                else None
+            ),
+            "cleanup_close_error": primary_close_err_str,
+            "cleanup_close_exception_type": primary_close_type,
+            "cleanup_close_exception_message": primary_close_msg,
+            "cleanup_close_errno": primary_close_errno,
+            "directory_close_error": primary_close_err_str,
+            "directory_close_exception_type": primary_close_type,
+            "directory_close_exception_message": primary_close_msg,
+            "directory_close_errno": primary_close_errno,
+            "directory_close_failures": [
+                {
+                    "role": role_name,
+                    "phase": phase_name,
+                    "error": f"{type(c_exc).__name__}: {c_exc}",
+                    "exception_type": type(c_exc).__name__,
+                    "exception_message": str(c_exc),
+                    "errno": getattr(c_exc, "errno", None),
+                }
+                for role_name, phase_name, c_exc in scan_close_failures
+            ],
+        }
+
+    scan_phase = "scan_dir_open"
     try:
-        with os.scandir(refmac_dir) as it:
-            entries = sorted(list(it), key=lambda e: e.name)
+        scan_open_flags = (
+            os.O_RDONLY
+            | getattr(os, "O_DIRECTORY", 0)
+            | getattr(os, "O_NOFOLLOW", 0)
+            | getattr(os, "O_CLOEXEC", 0)
+        )
+        scan_dir_fd = os.open(normalized_refmac_dir, scan_open_flags)
+        scan_phase = "scan_dir_fstat"
+        scan_fd_st = os.fstat(scan_dir_fd)
+        if not stat.S_ISDIR(scan_fd_st.st_mode) or (
+            expected_scan_dev is not None
+            and expected_scan_ino is not None
+            and (int(scan_fd_st.st_dev), int(scan_fd_st.st_ino))
+            != (expected_scan_dev, expected_scan_ino)
+        ):
+            err_msg = (
+                f"Refmac working directory inode changed while opening scan descriptor at {refmac_dir}: "
+                f"expected (dev={expected_scan_dev}, ino={expected_scan_ino}), "
+                f"observed (dev={int(scan_fd_st.st_dev)}, ino={int(scan_fd_st.st_ino)})"
+            )
+            val_exc = ValueError(err_msg)
+            scan_primary_exc = val_exc
+            if caught_exceptions is not None:
+                caught_exceptions.append(val_exc)
+            if scandir_cause_out is not None:
+                scandir_cause_out.append(val_exc)
+            scandir_error = {
+                "output_key": "refmac_dir_scan",
+                "path": str(refmac_dir),
+                "exists": True,
+                "is_symlink": False,
+                "is_regular_file": False,
+                "within_refmac_dir": False,
+                "size_bytes": None,
+                "failure_phase": "scan_dir_fstat_verify",
+                "observed_entry_names": [],
+                "error": err_msg,
+                "exception_type": "ValueError",
+                "exception_message": err_msg,
+                "errno": None,
+            }
+        else:
+            scan_phase = "dup_scan_dir"
+            dup_scan_fd = os.dup(scan_dir_fd)
+            scan_phase = "scandir_construct"
+            scan_it = os.scandir(dup_scan_fd)
+            scan_phase = "scandir_iterate"
+            with scan_it as it:
+                for entry_obj in it:
+                    observed_entry_names.append(entry_obj.name)
+            entry_names = sorted(observed_entry_names)
     except OSError as exc:
+        scan_primary_exc = exc
         if caught_exceptions is not None:
             caught_exceptions.append(exc)
         if scandir_cause_out is not None:
             scandir_cause_out.append(exc)
+        scandir_error = {
+            "output_key": "refmac_dir_scan",
+            "path": str(refmac_dir),
+            "exists": not isinstance(exc, FileNotFoundError),
+            "is_symlink": False,
+            "is_regular_file": False,
+            "within_refmac_dir": not isinstance(exc, FileNotFoundError),
+            "size_bytes": None,
+            "failure_phase": scan_phase,
+            "observed_entry_names": sorted(observed_entry_names),
+            "error": f"Failed to scan refmac directory {refmac_dir} ({type(exc).__name__}): {exc}",
+            "exception_type": type(exc).__name__,
+            "exception_message": str(exc),
+            "errno": getattr(exc, "errno", None),
+        }
+    finally:
+        _close_scan_descriptors()
+
+    if scan_close_failures:
+        for _role_name, _phase_name, close_exc_item in scan_close_failures:
+            if caught_exceptions is not None:
+                caught_exceptions.append(close_exc_item)
+            if scandir_cause_out is not None:
+                scandir_cause_out.append(close_exc_item)
+
+    if scan_primary_exc is not None:
+        if scan_close_failures:
+            first_close_exc = scan_close_failures[0][2]
+            parent_or_first_close_exc = (
+                scan_dir_close_exc
+                if scan_dir_close_exc is not None
+                else first_close_exc
+            )
+            try:
+                setattr(
+                    scan_primary_exc,
+                    "cleanup_close_error",
+                    first_close_exc,
+                )
+                setattr(
+                    scan_primary_exc,
+                    "directory_close_error",
+                    first_close_exc,
+                )
+                setattr(
+                    scan_primary_exc,
+                    "parent_close_error",
+                    parent_or_first_close_exc,
+                )
+                if dup_close_exc is not None:
+                    setattr(
+                        scan_primary_exc,
+                        "dup_close_error",
+                        dup_close_exc,
+                    )
+                if scan_dir_close_exc is not None:
+                    setattr(
+                        scan_primary_exc,
+                        "scan_dir_close_error",
+                        scan_dir_close_exc,
+                    )
+            except Exception:
+                pass
+        assert scandir_error is not None
+        scandir_error.update(_build_scan_close_metadata())
+        return {
+            "additional_files": additional_files,
+            "unexpected_symlinks": unexpected_symlinks,
+            "inspection_errors": [scandir_error],
+            "scandir_error": scandir_error,
+        }
+
+    if scan_close_failures:
+        primary_close_role, primary_close_phase, primary_close_exc = (
+            scan_close_failures[0]
+        )
+        if len(scan_close_failures) > 1:
+            secondary_close_exc = scan_close_failures[1][2]
+            try:
+                setattr(
+                    primary_close_exc,
+                    "cleanup_close_error",
+                    secondary_close_exc,
+                )
+                setattr(
+                    primary_close_exc,
+                    "directory_close_error",
+                    secondary_close_exc,
+                )
+                setattr(
+                    primary_close_exc,
+                    "parent_close_error",
+                    secondary_close_exc,
+                )
+            except Exception:
+                pass
         scandir_error = {
             "output_key": "refmac_dir_scan",
             "path": str(refmac_dir),
@@ -4360,20 +10888,21 @@ def _scan_refmac_directory_entries(
             "is_regular_file": False,
             "within_refmac_dir": True,
             "size_bytes": None,
-            "error": f"Failed to scan refmac directory {refmac_dir} ({type(exc).__name__}): {exc}",
-            "exception_type": type(exc).__name__,
-            "exception_message": str(exc),
-            "errno": getattr(exc, "errno", None),
+            "failure_phase": primary_close_phase,
+            "observed_entry_names": list(entry_names),
+            "error": (
+                f"Failed to close refmac directory scan descriptor ({primary_close_role}) "
+                f"at {refmac_dir} ({type(primary_close_exc).__name__}): {primary_close_exc}"
+            ),
+            "exception_type": type(primary_close_exc).__name__,
+            "exception_message": str(primary_close_exc),
+            "errno": getattr(primary_close_exc, "errno", None),
+            **_build_scan_close_metadata(),
         }
-        return {
-            "additional_files": additional_files,
-            "unexpected_symlinks": unexpected_symlinks,
-            "inspection_errors": [scandir_error],
-            "scandir_error": scandir_error,
-        }
+        inspection_errors.append(scandir_error)
 
-    for entry in entries:
-        entry_path = refmac_dir / entry.name
+    for entry_name in entry_names:
+        entry_path = refmac_dir / entry_name
         abs_entry = os.path.abspath(os.fspath(entry_path))
         entry_causes: list[Exception] = []
         info = _inspect_output_artifact(
@@ -4389,14 +10918,14 @@ def _scan_refmac_directory_entries(
         if info.get("error") is not None:
             inspection_errors.append(
                 {
-                    "entry_name": entry.name,
+                    "entry_name": entry_name,
                     **info,
                 }
             )
         if abs_entry not in known_by_abspath:
-            additional_files[entry.name] = info
+            additional_files[entry_name] = info
             if additional_file_causes_out is not None:
-                additional_file_causes_out[entry.name] = (
+                additional_file_causes_out[entry_name] = (
                     entry_causes[0] if entry_causes else None
                 )
 
@@ -4910,11 +11439,15 @@ def _compare_r_decimal_with_log_precision(
     }
 
 
+_UNSET_RAW_BYTES = object()
+
+
 def _audit_refmac_xmlout(
     xmlout_path: Path,
     *,
     xmlout_info: Mapping[str, Any],
     parsed_log: Mapping[str, Any] | None,
+    raw_bytes: bytes | None | object = _UNSET_RAW_BYTES,
 ) -> dict[str, Any]:
     """Audit optional native REFMAC ``XMLOUT`` while retaining raw bytes/hash across all states."""
     precision_unproven_reason = (
@@ -4990,7 +11523,21 @@ def _audit_refmac_xmlout(
         )
         return base_record
 
-    raw_bytes = xmlout_path.read_bytes()
+    if raw_bytes is not _UNSET_RAW_BYTES:
+        if isinstance(raw_bytes, (bytes, bytearray, memoryview)):
+            raw_bytes = bytes(raw_bytes)
+        else:
+            base_record["status"] = "rejected_unavailable_snapshot"
+            base_record["well_formed_xml"] = None
+            base_record["valid"] = False
+            base_record["reconciled_with_log"] = False
+            base_record["errors"] = [
+                f"XMLOUT in-memory byte snapshot is unavailable for {xmlout_path}; "
+                "pathname re-read is forbidden in snapshot mode"
+            ]
+            return base_record
+    else:
+        raw_bytes = xmlout_path.read_bytes()
     base_record["sha256"] = _sha256_bytes(raw_bytes)
     base_record["size_bytes"] = len(raw_bytes)
     try:
@@ -5363,6 +11910,7 @@ def _raw_export_mtz_file(
     mtz_path: Path,
     *,
     mtz_info: dict[str, Any],
+    raw_bytes: bytes | None | object = _UNSET_RAW_BYTES,
 ) -> tuple[dict[str, Any], bytes | None]:
     """Extract raw binary layout, header cards, column descriptors, and float32 words from MTZ.
 
@@ -5415,11 +11963,21 @@ def _raw_export_mtz_file(
         )
         return export, None
 
-    try:
-        mtz_bytes = mtz_path.read_bytes()
-    except OSError as exc:
-        export["raw_export_error"] = f"Failed to read HKLOUT bytes: {exc}"
-        return export, None
+    if raw_bytes is not _UNSET_RAW_BYTES:
+        if isinstance(raw_bytes, (bytes, bytearray, memoryview)):
+            mtz_bytes = bytes(raw_bytes)
+        else:
+            export["raw_export_error"] = (
+                f"HKLOUT in-memory byte snapshot is unavailable for {mtz_path}; "
+                "pathname re-read is forbidden in snapshot mode"
+            )
+            return export, None
+    else:
+        try:
+            mtz_bytes = mtz_path.read_bytes()
+        except OSError as exc:
+            export["raw_export_error"] = f"Failed to read HKLOUT bytes: {exc}"
+            return export, None
 
     export["byte_length"] = len(mtz_bytes)
     export["sha256"] = hashlib.sha256(mtz_bytes).hexdigest()
@@ -6977,14 +13535,20 @@ def _export_and_audit_refmac_hklout(
     parent_retention_dir_status: dict[str, Any] | None = None,
     verified_root_fallback_state: dict[str, Any] | None = None,
     allow_unpersisted_on_no_verified_anchor: bool = False,
+    refmac_dir_baseline: Mapping[str, Any] | None = None,
     refmac_dir_status: dict[str, Any] | None = None,
     child_dir_persistence_failures: list[dict[str, Any]] | None = None,
     caught_persistence_exceptions: list[Exception] | None = None,
     child_dir_persistence_causes: list[Exception | None] | None = None,
     parent_retention_dir_cause_sink: list[Exception | None] | None = None,
+    hklout_raw_bytes: bytes | None | object = _UNSET_RAW_BYTES,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Export raw HKLOUT MTZ contents first, then audit crystallographic context, 1-to-1 HKLs, and FC_ALL_LS."""
-    raw_export, hklout_bytes = _raw_export_mtz_file(hklout_path, mtz_info=hklout_info)
+    raw_export, hklout_bytes = _raw_export_mtz_file(
+        hklout_path,
+        mtz_info=hklout_info,
+        raw_bytes=hklout_raw_bytes,
+    )
     raw_export_artifact = _persist_collector_json_with_fallback(
         raw_export,
         raw_export_json_path,
@@ -6994,6 +13558,7 @@ def _export_and_audit_refmac_hklout(
         parent_retention_dir_status=parent_retention_dir_status,
         verified_root_fallback_state=verified_root_fallback_state,
         allow_unpersisted_on_no_verified_anchor=allow_unpersisted_on_no_verified_anchor,
+        refmac_dir_baseline=refmac_dir_baseline,
         refmac_dir_status=refmac_dir_status,
         child_dir_persistence_failures=child_dir_persistence_failures,
         caught_persistence_exceptions=caught_persistence_exceptions,
@@ -8581,6 +15146,7 @@ def _audit_refmac_xyzout(
     xyzout_path: Path,
     xyzout_info: dict[str, Any],
     xyzin_baseline: Mapping[str, Any] | None = None,
+    xyzout_raw_bytes: bytes | None | object = _UNSET_RAW_BYTES,
 ) -> dict[str, Any]:
     """Audit REFMAC XYZOUT against XYZIN using pdb_atoms plus supplemented raw/H-D/ANISOU inventory."""
     errors: list[str] = []
@@ -8647,8 +15213,10 @@ def _audit_refmac_xyzout(
         }
 
     xyzin_text: str | None = None
+    xyzout_text: str | None = None
     xyzin_pdb_atoms: dict[tuple[str, int, str, str, str, str], dict[str, Any]] | None = None
     xyzout_pdb_atoms: dict[tuple[str, int, str, str, str, str], dict[str, Any]] | None = None
+    xyzout_snapshot_mode = xyzout_raw_bytes is not _UNSET_RAW_BYTES
     if xyzin_readable_regular and xyzin_check["bytes"] is not None:
         try:
             xyzin_text = xyzin_check["bytes"].decode("utf-8", errors="strict")
@@ -8656,12 +15224,33 @@ def _audit_refmac_xyzout(
             xyzin_pdb_atoms = _adapt_pdb_atoms_records(raw_xyzin_atoms, label="XYZIN")
         except Exception as exc:
             errors.append(f"XYZIN failed pdb_atoms helper: {type(exc).__name__}: {exc}")
-    try:
-        xyzout_text = xyzout_path.read_text(encoding="utf-8", errors="strict")
-        raw_xyzout_atoms = audit_1sar_retained_evidence.pdb_atoms(xyzout_text)
-        xyzout_pdb_atoms = _adapt_pdb_atoms_records(raw_xyzout_atoms, label="XYZOUT")
-    except Exception as exc:
-        errors.append(f"XYZOUT failed pdb_atoms helper: {type(exc).__name__}: {exc}")
+    if xyzout_snapshot_mode:
+        if isinstance(xyzout_raw_bytes, (bytes, bytearray, memoryview)):
+            try:
+                xyzout_text = bytes(xyzout_raw_bytes).decode("utf-8", errors="strict")
+                raw_xyzout_atoms = audit_1sar_retained_evidence.pdb_atoms(xyzout_text)
+                xyzout_pdb_atoms = _adapt_pdb_atoms_records(
+                    raw_xyzout_atoms, label="XYZOUT"
+                )
+            except Exception as exc:
+                errors.append(
+                    f"XYZOUT failed pdb_atoms helper: {type(exc).__name__}: {exc}"
+                )
+        else:
+            errors.append(
+                "XYZOUT failed pdb_atoms helper: ValueError: "
+                "XYZOUT in-memory byte snapshot is unavailable; "
+                "pathname re-read is forbidden in snapshot mode"
+            )
+    else:
+        try:
+            xyzout_text = xyzout_path.read_text(encoding="utf-8", errors="strict")
+            raw_xyzout_atoms = audit_1sar_retained_evidence.pdb_atoms(xyzout_text)
+            xyzout_pdb_atoms = _adapt_pdb_atoms_records(
+                raw_xyzout_atoms, label="XYZOUT"
+            )
+        except Exception as exc:
+            errors.append(f"XYZOUT failed pdb_atoms helper: {type(exc).__name__}: {exc}")
 
     xyzin_supp: dict[str, Any] | None = None
     xyzout_supp: dict[str, Any] | None = None
@@ -8675,15 +15264,33 @@ def _audit_refmac_xyzout(
             errors.append(
                 f"XYZIN failed supplemented PDB inspection: {type(exc).__name__}: {exc}"
             )
-    try:
-        xyzout_supp = _inspect_pdb_supplemented(
-            xyzout_path,
-            raw_text=xyzout_text if "xyzout_text" in locals() else None,
-        )
-    except Exception as exc:
-        errors.append(
-            f"XYZOUT failed supplemented PDB inspection: {type(exc).__name__}: {exc}"
-        )
+    if xyzout_snapshot_mode:
+        if xyzout_text is not None:
+            try:
+                xyzout_supp = _inspect_pdb_supplemented(
+                    xyzout_path,
+                    raw_text=xyzout_text,
+                )
+            except Exception as exc:
+                errors.append(
+                    f"XYZOUT failed supplemented PDB inspection: {type(exc).__name__}: {exc}"
+                )
+        else:
+            errors.append(
+                "XYZOUT failed supplemented PDB inspection: ValueError: "
+                "XYZOUT decoded text is unavailable from in-memory byte snapshot; "
+                "pathname re-read is forbidden in snapshot mode"
+            )
+    elif xyzout_text is not None:
+        try:
+            xyzout_supp = _inspect_pdb_supplemented(
+                xyzout_path,
+                raw_text=xyzout_text,
+            )
+        except Exception as exc:
+            errors.append(
+                f"XYZOUT failed supplemented PDB inspection: {type(exc).__name__}: {exc}"
+            )
 
     if xyzin_supp is not None and xyzin_supp["duplicate_heavy_keys"]:
         errors.append(
@@ -9507,6 +16114,7 @@ def run_refmac_rfactor_operation(
         pre_execution_checkpoint_payload,
         pre_execution_checkpoint_json_path,
         root=refmac_dir,
+        refmac_dir_baseline=refmac_dir_baseline,
     )
     pre_execution_checkpoint_initial_artifact.update(
         _build_file_ancestor_chain_baseline(
@@ -9664,17 +16272,22 @@ def run_refmac_rfactor_operation(
     if native_trace_path is not None:
         raw_output_paths["native_trace"] = native_trace_path
     raw_outputs: dict[str, dict[str, Any]] = {}
+    raw_output_bytes_by_path: dict[str, bytes] = {}
     per_raw_output_causes: dict[str, Exception | None] = {}
-    for key, path in raw_output_paths.items():
-        key_causes: list[Exception] = []
-        raw_outputs[key] = _inspect_output_artifact(
-            path,
-            root=refmac_dir,
-            caught_exceptions=key_causes,
-            expected_root_identity=refmac_dir_baseline,
-        )
-        caught_inspection_exceptions.extend(key_causes)
-        per_raw_output_causes[key] = key_causes[0] if key_causes else None
+    raw_sink_token = _INSPECT_RAW_BYTES_SINK_CTX.set(raw_output_bytes_by_path)
+    try:
+        for key, path in raw_output_paths.items():
+            key_causes: list[Exception] = []
+            raw_outputs[key] = _inspect_output_artifact(
+                path,
+                root=refmac_dir,
+                caught_exceptions=key_causes,
+                expected_root_identity=refmac_dir_baseline,
+            )
+            caught_inspection_exceptions.extend(key_causes)
+            per_raw_output_causes[key] = key_causes[0] if key_causes else None
+    finally:
+        _INSPECT_RAW_BYTES_SINK_CTX.reset(raw_sink_token)
 
     scandir_causes: list[Exception | None] = []
     additional_file_causes: dict[str, Exception | None] = {}
@@ -9789,6 +16402,7 @@ def run_refmac_rfactor_operation(
                 parent_retention_dir_status=parent_retention_dir_post_run,
                 verified_root_fallback_state=verified_root_fallback_state,
                 allow_unpersisted_on_no_verified_anchor=True,
+                refmac_dir_baseline=refmac_dir_baseline,
                 refmac_dir_status=refmac_dir_post_run,
                 child_dir_persistence_failures=child_dir_persistence_failures,
                 caught_persistence_exceptions=caught_persistence_exceptions,
@@ -9873,6 +16487,20 @@ def run_refmac_rfactor_operation(
                 reserved_item["exception_type"] = res_info["exception_type"]
                 reserved_item["exception_message"] = res_info.get("exception_message")
                 reserved_item["errno"] = res_info.get("errno")
+            for _extra_k in (
+                "failure_phase",
+                "directory_close_error",
+                "directory_close_exception_type",
+                "directory_close_exception_message",
+                "directory_close_errno",
+                "directory_close_failures",
+                "cleanup_close_error",
+                "cleanup_close_exception_type",
+                "cleanup_close_exception_message",
+                "cleanup_close_errno",
+            ):
+                if res_info.get(_extra_k) is not None:
+                    reserved_item[_extra_k] = copy.deepcopy(res_info[_extra_k])
             missing_or_invalid_outputs.append(reserved_item)
             missing_or_invalid_output_causes.append(
                 additional_file_causes.get(reserved_path.name)
@@ -9913,6 +16541,20 @@ def run_refmac_rfactor_operation(
                 raw_item["exception_type"] = info["exception_type"]
                 raw_item["exception_message"] = info.get("exception_message")
                 raw_item["errno"] = info.get("errno")
+            for _extra_k in (
+                "failure_phase",
+                "directory_close_error",
+                "directory_close_exception_type",
+                "directory_close_exception_message",
+                "directory_close_errno",
+                "directory_close_failures",
+                "cleanup_close_error",
+                "cleanup_close_exception_type",
+                "cleanup_close_exception_message",
+                "cleanup_close_errno",
+            ):
+                if info.get(_extra_k) is not None:
+                    raw_item[_extra_k] = copy.deepcopy(info[_extra_k])
             missing_or_invalid_outputs.append(raw_item)
             missing_or_invalid_output_causes.append(per_raw_output_causes.get(key))
 
@@ -9925,6 +16567,9 @@ def run_refmac_rfactor_operation(
                 native_trace_path,
                 trace_info=trace_raw_info,
                 caught_exceptions=caught_inspection_exceptions,
+                raw_bytes=raw_output_bytes_by_path.get(
+                    os.path.abspath(os.fspath(native_trace_path))
+                ),
             )
         )
         if not any(
@@ -9985,6 +16630,20 @@ def run_refmac_rfactor_operation(
             xml_item["exception_type"] = xml_info["exception_type"]
             xml_item["exception_message"] = xml_info.get("exception_message")
             xml_item["errno"] = xml_info.get("errno")
+        for _extra_k in (
+            "failure_phase",
+            "directory_close_error",
+            "directory_close_exception_type",
+            "directory_close_exception_message",
+            "directory_close_errno",
+            "directory_close_failures",
+            "cleanup_close_error",
+            "cleanup_close_exception_type",
+            "cleanup_close_exception_message",
+            "cleanup_close_errno",
+        ):
+            if xml_info.get(_extra_k) is not None:
+                xml_item[_extra_k] = copy.deepcopy(xml_info[_extra_k])
         missing_or_invalid_outputs.append(xml_item)
         missing_or_invalid_output_causes.append(per_raw_output_causes.get("xmlout"))
 
@@ -10025,6 +16684,20 @@ def run_refmac_rfactor_operation(
                         "exception_message"
                     )
                     extra_item["errno"] = extra_info.get("errno")
+                for _extra_k in (
+                    "failure_phase",
+                    "directory_close_error",
+                    "directory_close_exception_type",
+                    "directory_close_exception_message",
+                    "directory_close_errno",
+                    "directory_close_failures",
+                    "cleanup_close_error",
+                    "cleanup_close_exception_type",
+                    "cleanup_close_exception_message",
+                    "cleanup_close_errno",
+                ):
+                    if extra_info.get(_extra_k) is not None:
+                        extra_item[_extra_k] = copy.deepcopy(extra_info[_extra_k])
                 missing_or_invalid_outputs.append(extra_item)
                 missing_or_invalid_output_causes.append(
                     additional_file_causes.get(extra_name)
@@ -10138,9 +16811,20 @@ def run_refmac_rfactor_operation(
     )
     publication_terminal_failure: dict[str, Any] | None = None
 
+    def _is_cleanup_only_child_failure_row(row: Mapping[str, Any]) -> bool:
+        return bool(
+            row.get("published_in_child_dir") is True
+            and row.get("failure_phase") == "temp_cleanup"
+        )
+
+    def _has_non_cleanup_child_dir_failure(
+        rows: Sequence[Mapping[str, Any]],
+    ) -> bool:
+        return any(not _is_cleanup_only_child_failure_row(r) for r in rows)
+
     def _current_actual_parent_anchor_info() -> tuple[str | None, str | None, dict[str, Any] | None]:
         parent_used = bool(
-            len(child_dir_persistence_failures) > 0
+            _has_non_cleanup_child_dir_failure(child_dir_persistence_failures)
             or not bool(refmac_dir_post_run.get("identity_verified", True))
             or not bool(refmac_dir_post_run.get("writable_post_run", True))
         )
@@ -10301,6 +16985,13 @@ def run_refmac_rfactor_operation(
             or not bool(refmac_dir_post_run.get("writable_post_run", True))
             or len(child_dir_persistence_failures) > 0
         ):
+            child_parent_used = bool(
+                _has_non_cleanup_child_dir_failure(
+                    child_dir_persistence_failures
+                )
+                or not bool(refmac_dir_post_run.get("identity_verified", True))
+                or not bool(refmac_dir_post_run.get("writable_post_run", True))
+            )
             first_persist_exc_type = (
                 str(child_dir_persistence_failures[0]["exception_type"])
                 if child_dir_persistence_failures
@@ -10323,20 +17014,58 @@ def run_refmac_rfactor_operation(
             actual_anchor_dir, actual_anchor_kind, actual_anchor_baseline = (
                 _current_actual_parent_anchor_info()
             )
-            retention_loc_desc = (
-                f"retained under {actual_anchor_kind} {actual_anchor_dir}"
-                if actual_anchor_dir is not None
-                else "no verified retention anchor available on disk"
-            )
+            if not child_parent_used:
+                term_stage_desc = (
+                    f"; publication terminated incomplete at stage {publication_terminal_failure.get('stage')}"
+                    if publication_terminal_failure is not None
+                    and publication_terminal_failure.get("stage") is not None
+                    else ""
+                )
+                persist_exc_message = (
+                    f"Collector JSON artifact(s) published in child refmac directory {refmac_dir}, "
+                    f"but post-write temporary file cleanup failed "
+                    f"({first_persist_exc_type}: {first_persist_exc_msg}); "
+                    f"parent retention was not used{term_stage_desc}"
+                )
+            else:
+                if actual_anchor_dir is not None:
+                    retention_loc_desc = (
+                        f"retained under {actual_anchor_kind} {actual_anchor_dir}"
+                    )
+                elif publication_terminal_failure is not None:
+                    term_stage = str(
+                        publication_terminal_failure.get("stage") or ""
+                    )
+                    if term_stage in (
+                        "persist_corrected_diagnostics_d1",
+                        "persist_corrected_manifest_m1",
+                        "select_correction_destination",
+                    ):
+                        retention_loc_desc = (
+                            "selected admitted correction directory failed during bounded pair "
+                            f"publication ({publication_terminal_failure.get('exception_type')}: "
+                            f"{publication_terminal_failure.get('exception_message')})"
+                        )
+                    else:
+                        retention_loc_desc = (
+                            f"publication terminated incomplete at stage {term_stage or 'bounded_pair_publication'} "
+                            f"({publication_terminal_failure.get('exception_type')}: "
+                            f"{publication_terminal_failure.get('exception_message')})"
+                        )
+                else:
+                    retention_loc_desc = (
+                        "no verified retention anchor available on disk"
+                    )
+                persist_exc_message = (
+                    f"Unable to persist collector JSON artifacts in child refmac directory {refmac_dir} "
+                    f"({first_persist_exc_type}: {first_persist_exc_msg}); "
+                    f"{retention_loc_desc}"
+                )
             stage_failures.append(
                 {
                     "failed_stage": "persist_collector_artifacts_in_refmac_dir",
                     "exception_type": first_persist_exc_type,
-                    "exception_message": (
-                        f"Unable to persist collector JSON artifacts in child refmac directory {refmac_dir} "
-                        f"({first_persist_exc_type}: {first_persist_exc_msg}); "
-                        f"{retention_loc_desc}"
-                    ),
+                    "exception_message": persist_exc_message,
                     "parent_retention_dir": str(parent_retention_dir),
                     "intended_parent_retention_dir": str(parent_retention_dir),
                     "actual_parent_retention_anchor_dir": actual_anchor_dir,
@@ -10390,7 +17119,7 @@ def run_refmac_rfactor_operation(
             verified_root_fallback_state
         )
         updated["parent_retention_used"] = bool(
-            len(child_dir_persistence_failures) > 0
+            _has_non_cleanup_child_dir_failure(child_dir_persistence_failures)
             or not bool(refmac_dir_post_run.get("identity_verified", True))
             or not bool(refmac_dir_post_run.get("writable_post_run", True))
         )
@@ -10539,6 +17268,7 @@ def run_refmac_rfactor_operation(
         parent_retention_dir_status=parent_retention_dir_post_run,
         verified_root_fallback_state=verified_root_fallback_state,
         allow_unpersisted_on_no_verified_anchor=True,
+        refmac_dir_baseline=refmac_dir_baseline,
         refmac_dir_status=refmac_dir_post_run,
         child_dir_persistence_failures=child_dir_persistence_failures,
         caught_persistence_exceptions=caught_persistence_exceptions,
@@ -10567,7 +17297,14 @@ def run_refmac_rfactor_operation(
         and log_info["error"] is None
     ):
         try:
-            raw_log_bytes = log_path.read_bytes()
+            log_abs = os.path.abspath(os.fspath(log_path))
+            raw_log_bytes_obj = raw_output_bytes_by_path.get(log_abs)
+            if not isinstance(raw_log_bytes_obj, (bytes, bytearray, memoryview)):
+                raise ValueError(
+                    f"REFMAC combined log in-memory byte snapshot is unavailable for {log_path}; "
+                    "pathname re-read is forbidden in snapshot mode"
+                )
+            raw_log_bytes = bytes(raw_log_bytes_obj)
             try:
                 log_text = raw_log_bytes.decode("utf-8", errors="strict")
                 log_utf8_exact = True
@@ -10587,6 +17324,7 @@ def run_refmac_rfactor_operation(
                     parent_retention_dir_status=parent_retention_dir_post_run,
                     verified_root_fallback_state=verified_root_fallback_state,
                     allow_unpersisted_on_no_verified_anchor=True,
+                    refmac_dir_baseline=refmac_dir_baseline,
                     refmac_dir_status=refmac_dir_post_run,
                     child_dir_persistence_failures=child_dir_persistence_failures,
                     caught_persistence_exceptions=caught_persistence_exceptions,
@@ -10643,10 +17381,12 @@ def run_refmac_rfactor_operation(
     # Execute and persist all 3 output audits (XMLOUT, HKLOUT raw+audit, XYZOUT) inside isolated failure boundaries.
     xmlout_audit_exception: Exception | None = None
     try:
+        xmlout_abs = os.path.abspath(os.fspath(xmlout_path))
         xmlout_audit = _audit_refmac_xmlout(
             xmlout_path,
             xmlout_info=raw_outputs["xmlout"],
             parsed_log=parsed_log,
+            raw_bytes=raw_output_bytes_by_path.get(xmlout_abs, None),
         )
     except Exception as exc:
         xmlout_audit_exception = exc
@@ -10675,6 +17415,7 @@ def run_refmac_rfactor_operation(
         parent_retention_dir_status=parent_retention_dir_post_run,
         verified_root_fallback_state=verified_root_fallback_state,
         allow_unpersisted_on_no_verified_anchor=True,
+        refmac_dir_baseline=refmac_dir_baseline,
         refmac_dir_status=refmac_dir_post_run,
         child_dir_persistence_failures=child_dir_persistence_failures,
         caught_persistence_exceptions=caught_persistence_exceptions,
@@ -10685,6 +17426,7 @@ def run_refmac_rfactor_operation(
     hklout_audit_exception: Exception | None = None
     retained_raw_export_holder: list[dict[str, Any]] = []
     try:
+        hklout_abs = os.path.abspath(os.fspath(hklout_path))
         hklout_audit, hklout_raw_export_artifact = _export_and_audit_refmac_hklout(
             projected_mtz_path=projected_mtz_path,
             hklout_path=hklout_path,
@@ -10701,11 +17443,13 @@ def run_refmac_rfactor_operation(
             parent_retention_dir_status=parent_retention_dir_post_run,
             verified_root_fallback_state=verified_root_fallback_state,
             allow_unpersisted_on_no_verified_anchor=True,
+            refmac_dir_baseline=refmac_dir_baseline,
             refmac_dir_status=refmac_dir_post_run,
             child_dir_persistence_failures=child_dir_persistence_failures,
             caught_persistence_exceptions=caught_persistence_exceptions,
             child_dir_persistence_causes=child_dir_persistence_causes,
             parent_retention_dir_cause_sink=parent_retention_dir_cause_holder,
+            hklout_raw_bytes=raw_output_bytes_by_path.get(hklout_abs, None),
         )
     except Exception as exc:
         hklout_audit_exception = exc
@@ -10735,6 +17479,7 @@ def run_refmac_rfactor_operation(
                 parent_retention_dir_status=parent_retention_dir_post_run,
                 verified_root_fallback_state=verified_root_fallback_state,
                 allow_unpersisted_on_no_verified_anchor=True,
+                refmac_dir_baseline=refmac_dir_baseline,
                 refmac_dir_status=refmac_dir_post_run,
                 child_dir_persistence_failures=child_dir_persistence_failures,
                 caught_persistence_exceptions=caught_persistence_exceptions,
@@ -10768,6 +17513,7 @@ def run_refmac_rfactor_operation(
         parent_retention_dir_status=parent_retention_dir_post_run,
         verified_root_fallback_state=verified_root_fallback_state,
         allow_unpersisted_on_no_verified_anchor=True,
+        refmac_dir_baseline=refmac_dir_baseline,
         refmac_dir_status=refmac_dir_post_run,
         child_dir_persistence_failures=child_dir_persistence_failures,
         caught_persistence_exceptions=caught_persistence_exceptions,
@@ -10777,11 +17523,13 @@ def run_refmac_rfactor_operation(
 
     xyzout_audit_exception: Exception | None = None
     try:
+        xyzout_abs = os.path.abspath(os.fspath(xyzout_path))
         xyzout_audit = _audit_refmac_xyzout(
             original_pdb_path=original_pdb_path,
             xyzout_path=xyzout_path,
             xyzout_info=raw_outputs["xyzout"],
             xyzin_baseline=staged_input_baseline["original_model_pdb"],
+            xyzout_raw_bytes=raw_output_bytes_by_path.get(xyzout_abs, None),
         )
     except Exception as exc:
         xyzout_audit_exception = exc
@@ -10814,6 +17562,7 @@ def run_refmac_rfactor_operation(
         parent_retention_dir_status=parent_retention_dir_post_run,
         verified_root_fallback_state=verified_root_fallback_state,
         allow_unpersisted_on_no_verified_anchor=True,
+        refmac_dir_baseline=refmac_dir_baseline,
         refmac_dir_status=refmac_dir_post_run,
         child_dir_persistence_failures=child_dir_persistence_failures,
         caught_persistence_exceptions=caught_persistence_exceptions,
@@ -11113,6 +17862,22 @@ def run_refmac_rfactor_operation(
                 (c for c in child_dir_persistence_causes if c is not None),
                 refmac_dir_initial_cause,
             )
+        if stage_name.startswith("verify_historical_"):
+            snap_key = stage_name.removeprefix("verify_historical_").upper()
+            return (
+                history_verification_causes_by_snapshot_id.get(snap_key)
+                or terminal_caught_exception
+            )
+        if stage_name in terminal_failure_causes_by_stage:
+            return (
+                terminal_failure_causes_by_stage.get(stage_name)
+                or terminal_caught_exception
+            )
+        if (
+            publication_terminal_failure is not None
+            and stage_name == publication_terminal_failure.get("stage")
+        ):
+            return terminal_caught_exception
         return base_failure_causes.get(stage_name)
 
     final_artifact_collisions: list[dict[str, Any]] = []
@@ -11121,6 +17886,8 @@ def run_refmac_rfactor_operation(
     collision_latched_primary_stage: str | None = None
     collision_latched_primary_cause: Exception | None = None
     publication_history: list[dict[str, Any]] = []
+    history_verification_causes_by_snapshot_id: dict[str, Exception] = {}
+    terminal_failure_causes_by_stage: dict[str, Exception | None] = {}
     publication_pair_complete: bool = True
     publication_correction_count: int = 0
     terminal_caught_exception: Exception | None = None
@@ -11153,19 +17920,37 @@ def run_refmac_rfactor_operation(
                 collision_latched_stage_prefix.append("refmac_raw_outputs")
             if collision_latched_primary_stage is None:
                 collision_latched_primary_stage = "refmac_raw_outputs"
-                collision_latched_primary_cause = None
+                collision_latched_primary_cause = (
+                    _ACTIVE_COLLISION_CAUSE_CTX.get()
+                    or base_failure_causes.get("refmac_raw_outputs")
+                )
 
     def _record_final_artifact_collision_if_any(
         artifact_key: str,
         canonical_filename: str,
         selected_destination: Path | None,
     ) -> None:
+        nonlocal collision_latched_primary_cause
         if selected_destination is None:
             return
         if selected_destination.name == canonical_filename:
             return
+        active_collision_cause = _ACTIVE_COLLISION_CAUSE_CTX.get()
+        if (
+            active_collision_cause is not None
+            and base_failure_causes.get("refmac_raw_outputs") is None
+            and len(missing_or_invalid_outputs) == 0
+        ):
+            base_failure_causes["refmac_raw_outputs"] = active_collision_cause
         if "refmac_raw_outputs" not in collision_latched_stage_prefix:
             _latch_current_failure_stages(include_pending_collision=True)
+        if (
+            collision_latched_primary_stage == "refmac_raw_outputs"
+            and collision_latched_primary_cause is None
+            and active_collision_cause is not None
+            and len(missing_or_invalid_outputs) == 0
+        ):
+            collision_latched_primary_cause = active_collision_cause
         collided_canonical_path = str(selected_destination.parent / canonical_filename)
         for existing in final_artifact_collisions:
             if (
@@ -11301,32 +18086,56 @@ def run_refmac_rfactor_operation(
                 or parent_retention_dir_post_run_snapshot.get("error")
                 or f"Parent retention directory failed identity/writability verification: {parent_retention_dir}"
             )
-            raw_failures.append(
-                {
-                    "failed_stage": "verify_parent_retention_directory",
-                    "exception_type": parent_exc_type,
-                    "exception_message": parent_exc_msg,
-                    "intended_parent_retention_dir": str(parent_retention_dir),
-                    "parent_retention_directory_baseline": copy.deepcopy(
-                        parent_retention_dir_baseline
-                    ),
-                    "parent_retention_directory_post_run": copy.deepcopy(
-                        parent_retention_dir_post_run_snapshot
-                    ),
-                    "parent_retention_fallback_anchor": copy.deepcopy(
-                        verified_root_fallback_snapshot
-                    ),
-                }
-            )
+            parent_failure_row: dict[str, Any] = {
+                "failed_stage": "verify_parent_retention_directory",
+                "exception_type": parent_exc_type,
+                "exception_message": parent_exc_msg,
+                "intended_parent_retention_dir": str(parent_retention_dir),
+                "parent_retention_directory_baseline": copy.deepcopy(
+                    parent_retention_dir_baseline
+                ),
+                "parent_retention_directory_post_run": copy.deepcopy(
+                    parent_retention_dir_post_run_snapshot
+                ),
+                "parent_retention_fallback_anchor": copy.deepcopy(
+                    verified_root_fallback_snapshot
+                ),
+            }
+            for extra_parent_key in (
+                "directory_close_error",
+                "directory_close_exception_type",
+                "directory_close_exception_message",
+                "directory_close_errno",
+                "directory_close_failures",
+                "cleanup_close_error",
+                "cleanup_close_exception_type",
+                "cleanup_close_exception_message",
+                "cleanup_close_errno",
+                "published_receipt",
+                "temp_cleanup_status",
+                "prior_collision_temp_cleanup_failures",
+            ):
+                if (
+                    parent_retention_dir_post_run_snapshot.get(
+                        extra_parent_key
+                    )
+                    is not None
+                ):
+                    parent_failure_row[extra_parent_key] = copy.deepcopy(
+                        parent_retention_dir_post_run_snapshot[
+                            extra_parent_key
+                        ]
+                    )
+            raw_failures.append(parent_failure_row)
         parent_retention_used = bool(
-            len(child_dir_failures_snapshot) > 0
+            _has_non_cleanup_child_dir_failure(child_dir_failures_snapshot)
             or not refmac_dir_identity_verified
             or not refmac_dir_writable_post_run
         )
         actual_anchor_dir, actual_anchor_kind, actual_anchor_baseline = (
             _current_actual_parent_anchor_info()
         )
-        if parent_retention_used:
+        if parent_retention_used or len(child_dir_failures_snapshot) > 0:
             first_persist_exc_type = (
                 str(child_dir_failures_snapshot[0]["exception_type"])
                 if child_dir_failures_snapshot
@@ -11346,26 +18155,57 @@ def run_refmac_rfactor_operation(
                     or f"Child refmac directory unavailable or unwritable: {refmac_dir}"
                 )
             )
-            if actual_anchor_dir is not None:
-                retention_loc_desc = (
-                    f"retained under {actual_anchor_kind} {actual_anchor_dir}"
+            if not parent_retention_used:
+                term_stage_desc = (
+                    f"; publication terminated incomplete at stage {publication_terminal_failure.get('stage')}"
+                    if publication_terminal_failure is not None
+                    and publication_terminal_failure.get("stage") is not None
+                    else ""
                 )
-            elif publication_terminal_failure is not None:
-                retention_loc_desc = (
-                    "selected admitted correction directory failed during bounded pair "
-                    f"publication ({publication_terminal_failure.get('exception_type')}: "
-                    f"{publication_terminal_failure.get('exception_message')})"
+                persist_exc_message = (
+                    f"Collector JSON artifact(s) published in child refmac directory {refmac_dir}, "
+                    f"but post-write temporary file cleanup failed "
+                    f"({first_persist_exc_type}: {first_persist_exc_msg}); "
+                    f"parent retention was not used{term_stage_desc}"
                 )
             else:
-                retention_loc_desc = "no verified retention anchor available on disk"
-            persist_failure_row: dict[str, Any] = {
-                "failed_stage": "persist_collector_artifacts_in_refmac_dir",
-                "exception_type": first_persist_exc_type,
-                "exception_message": (
+                if actual_anchor_dir is not None:
+                    retention_loc_desc = (
+                        f"retained under {actual_anchor_kind} {actual_anchor_dir}"
+                    )
+                elif publication_terminal_failure is not None:
+                    term_stage = str(
+                        publication_terminal_failure.get("stage") or ""
+                    )
+                    if term_stage in (
+                        "persist_corrected_diagnostics_d1",
+                        "persist_corrected_manifest_m1",
+                        "select_correction_destination",
+                    ):
+                        retention_loc_desc = (
+                            "selected admitted correction directory failed during bounded pair "
+                            f"publication ({publication_terminal_failure.get('exception_type')}: "
+                            f"{publication_terminal_failure.get('exception_message')})"
+                        )
+                    else:
+                        retention_loc_desc = (
+                            f"publication terminated incomplete at stage {term_stage or 'bounded_pair_publication'} "
+                            f"({publication_terminal_failure.get('exception_type')}: "
+                            f"{publication_terminal_failure.get('exception_message')})"
+                        )
+                else:
+                    retention_loc_desc = (
+                        "no verified retention anchor available on disk"
+                    )
+                persist_exc_message = (
                     f"Unable to persist collector JSON artifacts in child refmac directory {refmac_dir} "
                     f"({first_persist_exc_type}: {first_persist_exc_msg}); "
                     f"{retention_loc_desc}"
-                ),
+                )
+            persist_failure_row: dict[str, Any] = {
+                "failed_stage": "persist_collector_artifacts_in_refmac_dir",
+                "exception_type": first_persist_exc_type,
+                "exception_message": persist_exc_message,
                 "parent_retention_dir": str(parent_retention_dir),
                 "intended_parent_retention_dir": str(parent_retention_dir),
                 "actual_parent_retention_anchor_dir": actual_anchor_dir,
@@ -11466,6 +18306,7 @@ def run_refmac_rfactor_operation(
             and parent_retention_dir_identity_verified
             and parent_retention_dir_writable_post_run
             and not parent_retention_used
+            and len(child_dir_failures_snapshot) == 0
         )
         stage2_audits_succeeded = bool(
             xmlout_audit["valid"]
@@ -11796,7 +18637,7 @@ def run_refmac_rfactor_operation(
                 selected_destination is not None
                 and selected_destination.parent != refmac_dir
             )
-            or len(child_dir_persistence_failures) > 0
+            or _has_non_cleanup_child_dir_failure(child_dir_persistence_failures)
             or not bool(refmac_dir_post_run.get("identity_verified", True))
             or not bool(refmac_dir_post_run.get("writable_post_run", True))
         )
@@ -12218,12 +19059,56 @@ def run_refmac_rfactor_operation(
             ),
             "verified_on_disk": False,
             "verification_error": None,
+            "verification_exception_type": None,
+            "verification_exception_message": None,
+            "verification_errno": None,
             "superseded_reason": superseded_reason,
         }
+        if isinstance(artifact_record, Mapping):
+            if "temp_cleanup_succeeded" in artifact_record:
+                entry["temp_cleanup_succeeded"] = bool(
+                    artifact_record["temp_cleanup_succeeded"]
+                )
+            if isinstance(artifact_record.get("temp_cleanup_status"), Mapping):
+                entry["temp_cleanup_status"] = copy.deepcopy(
+                    dict(artifact_record["temp_cleanup_status"])
+                )
+            if isinstance(
+                artifact_record.get("prior_collision_temp_cleanup_failures"),
+                list,
+            ):
+                entry["prior_collision_temp_cleanup_failures"] = copy.deepcopy(
+                    artifact_record["prior_collision_temp_cleanup_failures"]
+                )
+            if "sibling_temp_cleanup_succeeded" in artifact_record:
+                entry["sibling_temp_cleanup_succeeded"] = bool(
+                    artifact_record["sibling_temp_cleanup_succeeded"]
+                )
+            if isinstance(
+                artifact_record.get("sibling_temp_cleanup_status"), Mapping
+            ):
+                entry["sibling_temp_cleanup_status"] = copy.deepcopy(
+                    dict(artifact_record["sibling_temp_cleanup_status"])
+                )
+            if isinstance(
+                artifact_record.get("fallback_for_preexisting_path"), str
+            ):
+                entry["fallback_for_preexisting_path"] = str(
+                    artifact_record["fallback_for_preexisting_path"]
+                )
         if not isinstance(artifact_record, Mapping) or not isinstance(
             artifact_record.get("path"), str
         ):
+            unpersisted_exc = ValueError(
+                "Historical snapshot was not persisted to disk."
+            )
             entry["verification_error"] = "Historical snapshot was not persisted to disk."
+            entry["verification_exception_type"] = "ValueError"
+            entry["verification_exception_message"] = (
+                "Historical snapshot was not persisted to disk."
+            )
+            entry["verification_errno"] = None
+            history_verification_causes_by_snapshot_id[snapshot_id] = unpersisted_exc
             return entry
         disk_path = Path(str(artifact_record["path"]))
         matched_root: Path | None = None
@@ -12234,6 +19119,29 @@ def run_refmac_rfactor_operation(
                 break
             except ValueError:
                 continue
+        observed_sha: str | None = None
+        observed_size: int | None = None
+        observed_dev: int | None = None
+        observed_ino: int | None = None
+        snap_eof_reached = False
+        readback_verified = False
+        post_readback_leaf_verified = False
+        post_leaf_exists: bool | None = None
+        post_leaf_is_regular: bool | None = None
+        post_leaf_is_symlink: bool | None = None
+        post_leaf_dev: int | None = None
+        post_leaf_ino: int | None = None
+        leaf_close_attempted = False
+        leaf_close_succeeded: bool | None = None
+        leaf_close_exc: OSError | None = None
+        parent_close_attempted = False
+        parent_close_succeeded: bool | None = None
+        parent_close_exc: OSError | None = None
+        admit_causes: list[Exception] = []
+        reverify_dir_causes: list[Exception] = []
+        admit_dir_status: dict[str, Any] = {}
+        initial_parent_lookup: dict[str, Any] | None = None
+        initial_parent_descriptor: dict[str, Any] | None = None
         try:
             if matched_root is None:
                 raise ValueError(
@@ -12242,32 +19150,479 @@ def run_refmac_rfactor_operation(
             _ensure_no_symlink_components_under_root(
                 disk_path, matched_root, check_leaf=True
             )
-            st_disk = os.lstat(disk_path)
-            if not stat.S_ISREG(st_disk.st_mode):
-                raise ValueError(
-                    f"Historical snapshot is not a regular file: {disk_path}"
-                )
-            observed_sha = _sha256_regular_file(disk_path)
-            observed_size = int(st_disk.st_size)
-            if entry["sha256"] is not None and observed_sha != entry["sha256"]:
-                raise ValueError(
-                    f"Historical snapshot sha256 mismatch at {disk_path}: "
-                    f"expected {entry['sha256']}, observed {observed_sha}"
-                )
-            if (
-                entry["size_bytes"] is not None
-                and observed_size != entry["size_bytes"]
+            snapshot_dir = disk_path.parent
+            snapshot_dir_baseline: Mapping[str, Any] | None = None
+            verified_anchor_dir_str = verified_root_fallback_state.get(
+                "actual_anchor_dir"
+            )
+            verified_anchor_baseline = verified_root_fallback_state.get(
+                "actual_anchor_baseline"
+            )
+            if isinstance(
+                artifact_record.get("actual_retention_anchor_baseline"), Mapping
             ):
-                raise ValueError(
-                    f"Historical snapshot size_bytes mismatch at {disk_path}: "
-                    f"expected {entry['size_bytes']}, observed {observed_size}"
+                snapshot_dir_baseline = artifact_record[
+                    "actual_retention_anchor_baseline"
+                ]
+            elif snapshot_dir == refmac_dir:
+                snapshot_dir_baseline = refmac_dir_baseline
+            elif snapshot_dir == parent_retention_dir:
+                snapshot_dir_baseline = parent_retention_dir_baseline
+            elif (
+                isinstance(verified_anchor_dir_str, str)
+                and snapshot_dir == Path(verified_anchor_dir_str)
+                and isinstance(verified_anchor_baseline, Mapping)
+            ):
+                snapshot_dir_baseline = verified_anchor_baseline
+
+            dir_cap = _open_admitted_directory(
+                snapshot_dir,
+                dir_baseline=snapshot_dir_baseline,
+                caught_exceptions=admit_causes,
+                dir_status_out=admit_dir_status,
+            )
+            if isinstance(admit_dir_status.get("lookup"), Mapping):
+                initial_parent_lookup = copy.deepcopy(
+                    dict(admit_dir_status["lookup"])
                 )
+            if isinstance(admit_dir_status.get("descriptor"), Mapping):
+                initial_parent_descriptor = copy.deepcopy(
+                    dict(admit_dir_status["descriptor"])
+                )
+            inner_dir_exc: BaseException | None = None
+            try:
+                st_disk = os.stat(
+                    disk_path.name,
+                    dir_fd=dir_cap.fd,
+                    follow_symlinks=False,
+                )
+                if not stat.S_ISREG(st_disk.st_mode):
+                    raise ValueError(
+                        f"Historical snapshot is not a regular file: {disk_path}"
+                    )
+                snap_fd = os.open(
+                    disk_path.name,
+                    os.O_RDONLY
+                    | getattr(os, "O_NONBLOCK", 0)
+                    | getattr(os, "O_NOFOLLOW", 0)
+                    | getattr(os, "O_CLOEXEC", 0),
+                    0o644,
+                    dir_fd=dir_cap.fd,
+                )
+                inner_leaf_exc: BaseException | None = None
+                snap_chunks: list[bytes] = []
+                try:
+                    try:
+                        snap_fd_st = os.fstat(snap_fd)
+                    except OSError as snap_fstat_exc:
+                        try:
+                            setattr(
+                                snap_fstat_exc, "_from_descriptor_fstat", True
+                            )
+                        except Exception:
+                            pass
+                        raise
+                    observed_dev = int(snap_fd_st.st_dev)
+                    observed_ino = int(snap_fd_st.st_ino)
+                    if not stat.S_ISREG(snap_fd_st.st_mode) or (
+                        observed_dev,
+                        observed_ino,
+                    ) != (int(st_disk.st_dev), int(st_disk.st_ino)):
+                        raise ValueError(
+                            f"Historical snapshot inode changed while opening descriptor: {disk_path}"
+                        )
+                    while True:
+                        chunk = os.read(snap_fd, 65536)
+                        if not chunk:
+                            snap_eof_reached = True
+                            break
+                        snap_chunks.append(chunk)
+                    snap_bytes = b"".join(snap_chunks)
+                    observed_sha = _sha256_bytes(snap_bytes)
+                    observed_size = len(snap_bytes)
+                    try:
+                        snap_post_st = os.fstat(snap_fd)
+                    except OSError as snap_post_fstat_exc:
+                        try:
+                            setattr(
+                                snap_post_fstat_exc,
+                                "_from_descriptor_fstat",
+                                True,
+                            )
+                        except Exception:
+                            pass
+                        raise
+                    observed_dev = int(snap_post_st.st_dev)
+                    observed_ino = int(snap_post_st.st_ino)
+                    if not stat.S_ISREG(snap_post_st.st_mode) or (
+                        observed_dev,
+                        observed_ino,
+                    ) != (int(st_disk.st_dev), int(st_disk.st_ino)):
+                        raise ValueError(
+                            f"Historical snapshot inode changed while reading descriptor: {disk_path}"
+                        )
+                except BaseException as leaf_exc:
+                    if snap_chunks or snap_eof_reached:
+                        partial_snap_bytes = b"".join(snap_chunks)
+                        observed_size = len(partial_snap_bytes)
+                        observed_sha = _sha256_bytes(partial_snap_bytes)
+                    inner_leaf_exc = leaf_exc
+                    raise
+                finally:
+                    leaf_close_attempted = True
+                    try:
+                        os.close(snap_fd)
+                        leaf_close_succeeded = True
+                    except OSError as close_exc:
+                        leaf_close_succeeded = False
+                        leaf_close_exc = close_exc
+                        try:
+                            setattr(close_exc, "_is_cleanup_close_error", True)
+                        except Exception:
+                            pass
+                        if inner_leaf_exc is not None:
+                            try:
+                                setattr(
+                                    inner_leaf_exc,
+                                    "cleanup_close_error",
+                                    close_exc,
+                                )
+                                setattr(
+                                    inner_leaf_exc,
+                                    "readback_close_error",
+                                    close_exc,
+                                )
+                                setattr(
+                                    inner_leaf_exc, "close_error", close_exc
+                                )
+                            except Exception:
+                                pass
+                        else:
+                            raise
+
+                if (
+                    entry["sha256"] is not None
+                    and observed_sha != entry["sha256"]
+                ):
+                    sha_mismatch_exc = ValueError(
+                        f"Historical snapshot sha256 mismatch at {disk_path}: "
+                        f"expected {entry['sha256']}, observed {observed_sha}"
+                    )
+                    try:
+                        setattr(
+                            sha_mismatch_exc, "_is_content_mismatch_error", True
+                        )
+                    except Exception:
+                        pass
+                    raise sha_mismatch_exc
+                if (
+                    entry["size_bytes"] is not None
+                    and observed_size != entry["size_bytes"]
+                ):
+                    size_mismatch_exc = ValueError(
+                        f"Historical snapshot size_bytes mismatch at {disk_path}: "
+                        f"expected {entry['size_bytes']}, observed {observed_size}"
+                    )
+                    try:
+                        setattr(
+                            size_mismatch_exc,
+                            "_is_content_mismatch_error",
+                            True,
+                        )
+                    except Exception:
+                        pass
+                    raise size_mismatch_exc
+                readback_verified = True
+                _reverify_admitted_directory_binding(
+                    dir_cap,
+                    caught_exceptions=reverify_dir_causes,
+                    dir_status_out=admit_dir_status,
+                )
+                try:
+                    post_leaf_st = os.stat(
+                        disk_path.name,
+                        dir_fd=dir_cap.fd,
+                        follow_symlinks=False,
+                    )
+                except FileNotFoundError:
+                    post_leaf_exists = False
+                    post_leaf_is_regular = False
+                    post_leaf_is_symlink = False
+                    raise
+                else:
+                    post_leaf_exists = True
+                    post_leaf_is_regular = bool(
+                        stat.S_ISREG(post_leaf_st.st_mode)
+                    )
+                    post_leaf_is_symlink = bool(
+                        stat.S_ISLNK(post_leaf_st.st_mode)
+                    )
+                    post_leaf_dev = int(post_leaf_st.st_dev)
+                    post_leaf_ino = int(post_leaf_st.st_ino)
+                    if not post_leaf_is_regular or (
+                        post_leaf_dev,
+                        post_leaf_ino,
+                    ) != (observed_dev, observed_ino):
+                        raise ValueError(
+                            f"Historical snapshot final leaf rebound or replaced after readback at {disk_path}: "
+                            f"expected regular file (dev={observed_dev}, ino={observed_ino}), "
+                            f"observed (regular={post_leaf_is_regular}, symlink={post_leaf_is_symlink}, "
+                            f"dev={post_leaf_dev}, ino={post_leaf_ino})"
+                        )
+                    post_readback_leaf_verified = True
+            except BaseException as dir_body_exc:
+                inner_dir_exc = dir_body_exc
+                raise
+            finally:
+                parent_close_attempted = True
+                try:
+                    os.close(dir_cap.fd)
+                    parent_close_succeeded = True
+                except OSError as p_close_exc:
+                    parent_close_succeeded = False
+                    parent_close_exc = p_close_exc
+                    try:
+                        setattr(p_close_exc, "_is_cleanup_close_error", True)
+                    except Exception:
+                        pass
+                    if inner_dir_exc is not None:
+                        try:
+                            setattr(
+                                inner_dir_exc, "parent_close_error", p_close_exc
+                            )
+                            if (
+                                getattr(
+                                    inner_dir_exc, "cleanup_close_error", None
+                                )
+                                is None
+                            ):
+                                setattr(
+                                    inner_dir_exc,
+                                    "cleanup_close_error",
+                                    p_close_exc,
+                                )
+                            if (
+                                getattr(inner_dir_exc, "close_error", None)
+                                is None
+                            ):
+                                setattr(
+                                    inner_dir_exc, "close_error", p_close_exc
+                                )
+                        except Exception:
+                            pass
+                    else:
+                        raise
+                finally:
+                    if initial_parent_lookup is not None and not isinstance(
+                        admit_dir_status.get("lookup"), Mapping
+                    ):
+                        admit_dir_status["lookup"] = copy.deepcopy(
+                            initial_parent_lookup
+                        )
+                    if initial_parent_descriptor is not None and not isinstance(
+                        admit_dir_status.get("descriptor"), dict
+                    ):
+                        admit_dir_status["descriptor"] = copy.deepcopy(
+                            initial_parent_descriptor
+                        )
+                    desc_dict = admit_dir_status.get("descriptor")
+                    if isinstance(desc_dict, dict):
+                        desc_dict["close_attempted"] = True
+                        desc_dict["close_succeeded"] = bool(
+                            parent_close_succeeded
+                        )
+                        desc_dict["close_error"] = (
+                            f"{type(parent_close_exc).__name__}: {parent_close_exc}"
+                            if parent_close_exc is not None
+                            else None
+                        )
+                        desc_dict["close_exception_type"] = (
+                            type(parent_close_exc).__name__
+                            if parent_close_exc is not None
+                            else None
+                        )
+                        desc_dict["close_exception_message"] = (
+                            str(parent_close_exc)
+                            if parent_close_exc is not None
+                            else None
+                        )
+                        desc_dict["close_errno"] = (
+                            getattr(parent_close_exc, "errno", None)
+                            if parent_close_exc is not None
+                            else None
+                        )
+                        if not parent_close_succeeded:
+                            desc_dict["verified"] = False
+                    admit_dir_status["descriptor_close_attempted"] = True
+                    admit_dir_status["descriptor_close_succeeded"] = bool(
+                        parent_close_succeeded
+                    )
+                    admit_dir_status["descriptor_close_error"] = (
+                        f"{type(parent_close_exc).__name__}: {parent_close_exc}"
+                        if parent_close_exc is not None
+                        else None
+                    )
+                    admit_dir_status["descriptor_close_exception_type"] = (
+                        type(parent_close_exc).__name__
+                        if parent_close_exc is not None
+                        else None
+                    )
+                    admit_dir_status["descriptor_close_exception_message"] = (
+                        str(parent_close_exc)
+                        if parent_close_exc is not None
+                        else None
+                    )
+                    admit_dir_status["descriptor_close_errno"] = (
+                        getattr(parent_close_exc, "errno", None)
+                        if parent_close_exc is not None
+                        else None
+                    )
             entry["sha256"] = observed_sha
             entry["size_bytes"] = observed_size
+            entry["observed_eof"] = snap_eof_reached
             entry["verified_on_disk"] = True
+            if admit_dir_status:
+                entry["parent_directory_admission"] = copy.deepcopy(
+                    admit_dir_status
+                )
+                entry["parent_lookup"] = copy.deepcopy(
+                    admit_dir_status.get("lookup")
+                )
+                entry["parent_descriptor"] = copy.deepcopy(
+                    admit_dir_status.get("descriptor")
+                )
+            history_verification_causes_by_snapshot_id.pop(snapshot_id, None)
         except Exception as exc:
+            if not parent_close_attempted and bool(
+                admit_dir_status.get("descriptor_close_attempted", False)
+            ):
+                parent_close_attempted = True
+                parent_close_succeeded = bool(
+                    admit_dir_status.get("descriptor_close_succeeded", False)
+                )
+                admit_p_close = getattr(exc, "parent_close_error", None)
+                if not isinstance(admit_p_close, OSError):
+                    admit_p_close = getattr(exc, "cleanup_close_error", None)
+                if isinstance(admit_p_close, OSError):
+                    parent_close_exc = admit_p_close
+            detachment_observed = _is_observed_namespace_detachment(exc)
             entry["verified_on_disk"] = False
+            entry["readback_verified"] = readback_verified
+            entry["post_readback_leaf_verified"] = post_readback_leaf_verified
+            entry["observed_sha256"] = observed_sha
+            entry["observed_size_bytes"] = observed_size
+            entry["observed_eof"] = snap_eof_reached
+            entry["observed_dev"] = observed_dev
+            entry["observed_ino"] = observed_ino
+            entry["available_at_lexical_path"] = (
+                False
+                if detachment_observed
+                else (True if post_readback_leaf_verified else None)
+            )
+            entry["lexical_path_currently_bound"] = (
+                False
+                if detachment_observed
+                else (True if post_readback_leaf_verified else None)
+            )
+            entry["detached_from_lexical_path"] = (
+                True
+                if detachment_observed
+                else (False if post_readback_leaf_verified else None)
+            )
+            entry["post_readback_leaf_exists"] = post_leaf_exists
+            entry["post_readback_leaf_is_regular_file"] = post_leaf_is_regular
+            entry["post_readback_leaf_is_symlink"] = post_leaf_is_symlink
+            entry["post_readback_leaf_dev"] = post_leaf_dev
+            entry["post_readback_leaf_ino"] = post_leaf_ino
+            entry["leaf_close_attempted"] = leaf_close_attempted
+            entry["leaf_close_succeeded"] = leaf_close_succeeded
+            entry["cleanup_close_error"] = (
+                f"{type(leaf_close_exc).__name__}: {leaf_close_exc}"
+                if leaf_close_exc is not None
+                else None
+            )
+            entry["cleanup_close_exception_type"] = (
+                type(leaf_close_exc).__name__
+                if leaf_close_exc is not None
+                else None
+            )
+            entry["cleanup_close_exception_message"] = (
+                str(leaf_close_exc) if leaf_close_exc is not None else None
+            )
+            entry["cleanup_close_errno"] = (
+                getattr(leaf_close_exc, "errno", None)
+                if leaf_close_exc is not None
+                else None
+            )
+            entry["parent_close_attempted"] = parent_close_attempted
+            entry["parent_close_succeeded"] = parent_close_succeeded
+            entry["parent_close_error"] = (
+                f"{type(parent_close_exc).__name__}: {parent_close_exc}"
+                if parent_close_exc is not None
+                else (
+                    str(admit_dir_status["descriptor_close_error"])
+                    if admit_dir_status.get("descriptor_close_error")
+                    is not None
+                    else None
+                )
+            )
+            entry["parent_close_exception_type"] = (
+                type(parent_close_exc).__name__
+                if parent_close_exc is not None
+                else admit_dir_status.get("descriptor_close_exception_type")
+            )
+            entry["parent_close_exception_message"] = (
+                str(parent_close_exc)
+                if parent_close_exc is not None
+                else admit_dir_status.get("descriptor_close_exception_message")
+            )
+            entry["parent_close_errno"] = (
+                getattr(parent_close_exc, "errno", None)
+                if parent_close_exc is not None
+                else admit_dir_status.get("descriptor_close_errno")
+            )
+            if admit_dir_status:
+                entry["parent_directory_admission"] = copy.deepcopy(
+                    admit_dir_status
+                )
+                entry["parent_lookup"] = copy.deepcopy(
+                    admit_dir_status.get("lookup")
+                )
+                entry["parent_descriptor"] = copy.deepcopy(
+                    admit_dir_status.get("descriptor")
+                )
+                entry["parent_admission_failure_phase"] = admit_dir_status.get(
+                    "admission_failure_phase"
+                )
             entry["verification_error"] = f"{type(exc).__name__}: {exc}"
+            entry["verification_exception_type"] = type(exc).__name__
+            entry["verification_exception_message"] = str(exc)
+            entry["verification_errno"] = getattr(exc, "errno", None)
+            existing_pers_ids = {id(c) for c in caught_persistence_exceptions}
+            for a_exc in admit_causes:
+                if id(a_exc) not in existing_pers_ids:
+                    caught_persistence_exceptions.append(a_exc)
+                    existing_pers_ids.add(id(a_exc))
+            for r_exc in reverify_dir_causes:
+                if id(r_exc) not in existing_pers_ids:
+                    caught_persistence_exceptions.append(r_exc)
+                    existing_pers_ids.add(id(r_exc))
+            if id(exc) not in existing_pers_ids:
+                caught_persistence_exceptions.append(exc)
+                existing_pers_ids.add(id(exc))
+            if (
+                leaf_close_exc is not None
+                and id(leaf_close_exc) not in existing_pers_ids
+            ):
+                caught_persistence_exceptions.append(leaf_close_exc)
+                existing_pers_ids.add(id(leaf_close_exc))
+            if (
+                parent_close_exc is not None
+                and id(parent_close_exc) not in existing_pers_ids
+            ):
+                caught_persistence_exceptions.append(parent_close_exc)
+                existing_pers_ids.add(id(parent_close_exc))
+            history_verification_causes_by_snapshot_id[snapshot_id] = exc
         return entry
 
     def _write_to_selected_admitted_directory(
@@ -12279,6 +19634,8 @@ def run_refmac_rfactor_operation(
         target_dir = target_path.parent
         verified_anchor_dir_str = verified_root_fallback_state.get("actual_anchor_dir")
         verified_anchor_baseline = verified_root_fallback_state.get("actual_anchor_baseline")
+        selected_dir_baseline: Mapping[str, Any] | None = None
+        selected_dir_status: dict[str, Any] | None = None
 
         def _refresh_selected_child_dir_status() -> tuple[dict[str, Any], list[Exception]]:
             nonlocal refmac_dir_initial_cause
@@ -12297,17 +19654,90 @@ def run_refmac_rfactor_operation(
             prev_child_write_exc_type = refmac_dir_post_run.get("write_exception_type")
             prev_child_write_exc_msg = refmac_dir_post_run.get("write_exception_message")
             prev_child_write_errno = refmac_dir_post_run.get("write_errno")
+            prev_child_receipt = refmac_dir_post_run.get("published_receipt")
+            prev_child_cleanup = refmac_dir_post_run.get("temp_cleanup_status")
+            preserved_child_admission = {
+                k: copy.deepcopy(refmac_dir_post_run[k])
+                for k in _PRESERVED_ADMISSION_STATUS_KEYS
+                if k in refmac_dir_post_run and k not in live_refmac
+            }
             refmac_dir_post_run.clear()
             refmac_dir_post_run.update(live_refmac)
-            if not prev_child_writable and prev_child_write_err is not None:
+            if preserved_child_admission:
+                refmac_dir_post_run.update(preserved_child_admission)
+            if (
+                bool(live_refmac.get("identity_verified", False))
+                and not prev_child_writable
+                and prev_child_write_err is not None
+            ):
                 refmac_dir_post_run["writable_post_run"] = False
                 refmac_dir_post_run["write_error"] = prev_child_write_err
                 refmac_dir_post_run["write_exception_type"] = prev_child_write_exc_type
                 refmac_dir_post_run["write_exception_message"] = prev_child_write_exc_msg
                 refmac_dir_post_run["write_errno"] = prev_child_write_errno
+            if isinstance(prev_child_receipt, Mapping):
+                refmac_dir_post_run["published_receipt"] = copy.deepcopy(
+                    dict(prev_child_receipt)
+                )
+            if isinstance(prev_child_cleanup, Mapping):
+                refmac_dir_post_run["temp_cleanup_status"] = copy.deepcopy(
+                    dict(prev_child_cleanup)
+                )
             return live_refmac, live_refmac_causes
 
+        def _refresh_selected_parent_dir_status() -> tuple[dict[str, Any], list[Exception]]:
+            live_parent_causes: list[Exception] = []
+            live_parent = _verify_refmac_directory_post_run(
+                parent_retention_dir,
+                refmac_dir_baseline=parent_retention_dir_baseline,
+                caught_exceptions=live_parent_causes,
+            )
+            if live_parent_causes:
+                caught_persistence_exceptions.extend(live_parent_causes)
+            prev_writable = parent_retention_dir_post_run.get("writable_post_run", True)
+            prev_write_err = parent_retention_dir_post_run.get("write_error")
+            prev_write_exc_type = parent_retention_dir_post_run.get("write_exception_type")
+            prev_write_exc_msg = parent_retention_dir_post_run.get("write_exception_message")
+            prev_write_errno = parent_retention_dir_post_run.get("write_errno")
+            prev_parent_receipt = parent_retention_dir_post_run.get("published_receipt")
+            prev_parent_cleanup = parent_retention_dir_post_run.get("temp_cleanup_status")
+            preserved_parent_admission = {
+                k: copy.deepcopy(parent_retention_dir_post_run[k])
+                for k in _PRESERVED_ADMISSION_STATUS_KEYS
+                if k in parent_retention_dir_post_run and k not in live_parent
+            }
+            parent_retention_dir_post_run.clear()
+            parent_retention_dir_post_run.update(live_parent)
+            if preserved_parent_admission:
+                parent_retention_dir_post_run.update(preserved_parent_admission)
+            if (
+                bool(live_parent.get("identity_verified", False))
+                and not prev_writable
+                and prev_write_err is not None
+            ):
+                parent_retention_dir_post_run["writable_post_run"] = False
+                parent_retention_dir_post_run["write_error"] = prev_write_err
+                parent_retention_dir_post_run["write_exception_type"] = prev_write_exc_type
+                parent_retention_dir_post_run["write_exception_message"] = prev_write_exc_msg
+                parent_retention_dir_post_run["write_errno"] = prev_write_errno
+            else:
+                parent_retention_dir_cause_holder.clear()
+                parent_retention_dir_cause_holder.append(
+                    live_parent_causes[0] if live_parent_causes else None
+                )
+            if isinstance(prev_parent_receipt, Mapping):
+                parent_retention_dir_post_run["published_receipt"] = copy.deepcopy(
+                    dict(prev_parent_receipt)
+                )
+            if isinstance(prev_parent_cleanup, Mapping):
+                parent_retention_dir_post_run["temp_cleanup_status"] = copy.deepcopy(
+                    dict(prev_parent_cleanup)
+                )
+            return live_parent, live_parent_causes
+
         if target_dir == refmac_dir:
+            selected_dir_baseline = refmac_dir_baseline
+            selected_dir_status = refmac_dir_post_run
             live_refmac, live_refmac_causes = _refresh_selected_child_dir_status()
             if not bool(live_refmac.get("identity_verified", False)):
                 if live_refmac_causes:
@@ -12332,32 +19762,9 @@ def run_refmac_rfactor_operation(
                     )
                 )
         elif target_dir == parent_retention_dir:
-            live_parent_causes: list[Exception] = []
-            live_parent = _verify_refmac_directory_post_run(
-                parent_retention_dir,
-                refmac_dir_baseline=parent_retention_dir_baseline,
-                caught_exceptions=live_parent_causes,
-            )
-            if live_parent_causes:
-                caught_persistence_exceptions.extend(live_parent_causes)
-            prev_writable = parent_retention_dir_post_run.get("writable_post_run", True)
-            prev_write_err = parent_retention_dir_post_run.get("write_error")
-            prev_write_exc_type = parent_retention_dir_post_run.get("write_exception_type")
-            prev_write_exc_msg = parent_retention_dir_post_run.get("write_exception_message")
-            prev_write_errno = parent_retention_dir_post_run.get("write_errno")
-            parent_retention_dir_post_run.clear()
-            parent_retention_dir_post_run.update(live_parent)
-            if not prev_writable and prev_write_err is not None:
-                parent_retention_dir_post_run["writable_post_run"] = False
-                parent_retention_dir_post_run["write_error"] = prev_write_err
-                parent_retention_dir_post_run["write_exception_type"] = prev_write_exc_type
-                parent_retention_dir_post_run["write_exception_message"] = prev_write_exc_msg
-                parent_retention_dir_post_run["write_errno"] = prev_write_errno
-            else:
-                parent_retention_dir_cause_holder.clear()
-                parent_retention_dir_cause_holder.append(
-                    live_parent_causes[0] if live_parent_causes else None
-                )
+            selected_dir_baseline = parent_retention_dir_baseline
+            selected_dir_status = parent_retention_dir_post_run
+            live_parent, live_parent_causes = _refresh_selected_parent_dir_status()
             if not bool(live_parent.get("identity_verified", False)):
                 if live_parent_causes:
                     raise live_parent_causes[0]
@@ -12385,6 +19792,8 @@ def run_refmac_rfactor_operation(
             and target_dir == Path(verified_anchor_dir_str)
             and isinstance(verified_anchor_baseline, Mapping)
         ):
+            selected_dir_baseline = verified_anchor_baseline
+            selected_dir_status = None
             live_anchor_causes: list[Exception] = []
             live_anchor = _verify_refmac_directory_post_run(
                 target_dir,
@@ -12408,15 +19817,52 @@ def run_refmac_rfactor_operation(
 
         def _factory(dest: Path) -> Mapping[str, Any]:
             if target_dir == refmac_dir:
-                try:
-                    cur_child_mode = stat.S_IMODE(os.lstat(refmac_dir).st_mode)
-                except OSError:
-                    cur_child_mode = None
-                if (
-                    cur_child_mode is not None
-                    and cur_child_mode != refmac_dir_post_run.get("mode")
-                ):
+                live_child_fac, live_child_fac_causes = (
                     _refresh_selected_child_dir_status()
+                )
+                if not bool(live_child_fac.get("identity_verified", False)):
+                    if live_child_fac_causes:
+                        raise live_child_fac_causes[0]
+                    raise ValueError(
+                        str(
+                            live_child_fac.get("error")
+                            or f"Child refmac directory identity verification failed: {refmac_dir}"
+                        )
+                    )
+            elif target_dir == parent_retention_dir:
+                live_parent_fac, live_parent_fac_causes = (
+                    _refresh_selected_parent_dir_status()
+                )
+                if not bool(live_parent_fac.get("identity_verified", False)):
+                    if live_parent_fac_causes:
+                        raise live_parent_fac_causes[0]
+                    raise ValueError(
+                        str(
+                            live_parent_fac.get("error")
+                            or f"Parent retention directory identity verification failed: {parent_retention_dir}"
+                        )
+                    )
+            elif (
+                isinstance(verified_anchor_dir_str, str)
+                and target_dir == Path(verified_anchor_dir_str)
+                and isinstance(verified_anchor_baseline, Mapping)
+            ):
+                fac_anchor_causes: list[Exception] = []
+                fac_anchor = _verify_refmac_directory_post_run(
+                    target_dir,
+                    refmac_dir_baseline=verified_anchor_baseline,
+                    caught_exceptions=fac_anchor_causes,
+                )
+                if not bool(fac_anchor.get("identity_verified", False)):
+                    if fac_anchor_causes:
+                        caught_persistence_exceptions.extend(fac_anchor_causes)
+                        raise fac_anchor_causes[0]
+                    raise ValueError(
+                        str(
+                            fac_anchor.get("error")
+                            or f"Verified evidence_root fallback directory identity verification failed: {target_dir}"
+                        )
+                    )
             materialized = payload_builder(dest)
             if (
                 isinstance(verified_anchor_dir_str, str)
@@ -12453,31 +19899,265 @@ def run_refmac_rfactor_operation(
             return materialized
 
         try:
-            written = _write_json_with_sibling_collision_fallback(
-                _factory,
-                target_path,
-                root=target_dir,
-            )
+            selected_attempt_causes: list[Exception] = []
+            with (
+                _admitted_directory_context(
+                    target_dir,
+                    selected_dir_baseline,
+                    selected_dir_status,
+                    selected_attempt_causes,
+                ),
+                _retained_payload_sink_context(retained_sink),
+            ):
+                written = _write_json_with_sibling_collision_fallback(
+                    _factory,
+                    target_path,
+                    root=target_dir,
+                )
+            if not bool(written.get("temp_cleanup_succeeded", True)):
+                existing_ids = {id(c) for c in caught_persistence_exceptions}
+                for s_exc in selected_attempt_causes:
+                    if id(s_exc) not in existing_ids:
+                        caught_persistence_exceptions.append(s_exc)
+                        existing_ids.add(id(s_exc))
         except (OSError, ValueError) as exc:
-            caught_persistence_exceptions.append(exc)
+            raw_sel_receipt = (
+                exc.published_receipt
+                if isinstance(exc, _PostPublicationBindingError)
+                else getattr(exc, "published_receipt", None)
+            )
+            sel_published_receipt = (
+                copy.deepcopy(dict(raw_sel_receipt))
+                if isinstance(raw_sel_receipt, Mapping)
+                else None
+            )
+            raw_sel_cleanup = getattr(exc, "temp_cleanup_status", None)
+            if not isinstance(raw_sel_cleanup, Mapping) and isinstance(
+                sel_published_receipt, Mapping
+            ):
+                raw_sel_cleanup = sel_published_receipt.get(
+                    "temp_cleanup_status"
+                )
+            sel_cleanup_status = (
+                copy.deepcopy(dict(raw_sel_cleanup))
+                if isinstance(raw_sel_cleanup, Mapping)
+                else None
+            )
+            raw_sel_cleanup_errors = getattr(
+                exc, "temp_cleanup_errors", None
+            )
+            actual_sel_exc: Exception = (
+                exc.cause
+                if isinstance(exc, _PostPublicationBindingError)
+                and exc.cause is not None
+                else exc
+            )
+            if sel_published_receipt is not None:
+                try:
+                    setattr(
+                        actual_sel_exc,
+                        "published_receipt",
+                        copy.deepcopy(sel_published_receipt),
+                    )
+                except Exception:
+                    pass
+            if sel_cleanup_status is not None:
+                try:
+                    setattr(
+                        actual_sel_exc,
+                        "temp_cleanup_status",
+                        copy.deepcopy(sel_cleanup_status),
+                    )
+                except Exception:
+                    pass
+            if isinstance(raw_sel_cleanup_errors, list):
+                try:
+                    setattr(
+                        actual_sel_exc,
+                        "temp_cleanup_errors",
+                        list(raw_sel_cleanup_errors),
+                    )
+                    if raw_sel_cleanup_errors:
+                        setattr(
+                            actual_sel_exc,
+                            "temp_cleanup_error",
+                            raw_sel_cleanup_errors[-1],
+                        )
+                except Exception:
+                    pass
+            raw_sel_dir_close_err = getattr(
+                actual_sel_exc, "directory_close_error", None
+            )
+            if not isinstance(raw_sel_dir_close_err, BaseException):
+                raw_sel_dir_close_err = getattr(
+                    exc, "directory_close_error", None
+                )
+            raw_sel_dir_close_failures = getattr(
+                actual_sel_exc, "directory_close_failures", None
+            )
+            if not isinstance(raw_sel_dir_close_failures, list):
+                raw_sel_dir_close_failures = getattr(
+                    exc, "directory_close_failures", None
+                )
+            raw_sel_prior_collision_cleanup = getattr(
+                actual_sel_exc, "prior_collision_temp_cleanup_failures", None
+            )
+            if not isinstance(raw_sel_prior_collision_cleanup, list):
+                raw_sel_prior_collision_cleanup = getattr(
+                    exc, "prior_collision_temp_cleanup_failures", None
+                )
+            raw_sel_close_err = getattr(
+                actual_sel_exc, "cleanup_close_error", None
+            )
+            if not isinstance(raw_sel_close_err, BaseException):
+                raw_sel_close_err = getattr(exc, "cleanup_close_error", None)
+            if not isinstance(raw_sel_close_err, BaseException) and isinstance(
+                raw_sel_dir_close_err, BaseException
+            ):
+                raw_sel_close_err = raw_sel_dir_close_err
+            caught_persistence_exceptions.append(actual_sel_exc)
+            existing_ids = {id(c) for c in caught_persistence_exceptions}
+            for s_exc in selected_attempt_causes:
+                if (
+                    isinstance(s_exc, Exception)
+                    and id(s_exc) not in existing_ids
+                ):
+                    caught_persistence_exceptions.append(s_exc)
+                    existing_ids.add(id(s_exc))
+            if (
+                isinstance(raw_sel_close_err, Exception)
+                and id(raw_sel_close_err) not in existing_ids
+            ):
+                caught_persistence_exceptions.append(raw_sel_close_err)
+                existing_ids.add(id(raw_sel_close_err))
+            if (
+                isinstance(raw_sel_dir_close_err, Exception)
+                and id(raw_sel_dir_close_err) not in existing_ids
+            ):
+                caught_persistence_exceptions.append(raw_sel_dir_close_err)
+                existing_ids.add(id(raw_sel_dir_close_err))
+            if isinstance(raw_sel_cleanup_errors, list):
+                for s_err in raw_sel_cleanup_errors:
+                    if (
+                        isinstance(s_err, Exception)
+                        and id(s_err) not in existing_ids
+                    ):
+                        caught_persistence_exceptions.append(s_err)
+                        existing_ids.add(id(s_err))
             if target_dir == parent_retention_dir:
-                err_str = f"{type(exc).__name__}: {exc}"
+                err_str = f"{type(actual_sel_exc).__name__}: {actual_sel_exc}"
                 parent_retention_dir_post_run["writable_post_run"] = False
                 parent_retention_dir_post_run["write_error"] = err_str
-                parent_retention_dir_post_run["write_exception_type"] = type(exc).__name__
-                parent_retention_dir_post_run["write_exception_message"] = str(exc)
-                parent_retention_dir_post_run["write_errno"] = getattr(exc, "errno", None)
+                parent_retention_dir_post_run["write_exception_type"] = type(
+                    actual_sel_exc
+                ).__name__
+                parent_retention_dir_post_run["write_exception_message"] = str(
+                    actual_sel_exc
+                )
+                parent_retention_dir_post_run["write_errno"] = getattr(
+                    actual_sel_exc, "errno", None
+                )
+                if isinstance(raw_sel_dir_close_err, BaseException):
+                    parent_retention_dir_post_run["directory_close_error"] = (
+                        f"{type(raw_sel_dir_close_err).__name__}: {raw_sel_dir_close_err}"
+                    )
+                    parent_retention_dir_post_run[
+                        "directory_close_exception_type"
+                    ] = type(raw_sel_dir_close_err).__name__
+                    parent_retention_dir_post_run[
+                        "directory_close_exception_message"
+                    ] = str(raw_sel_dir_close_err)
+                    parent_retention_dir_post_run["directory_close_errno"] = (
+                        getattr(raw_sel_dir_close_err, "errno", None)
+                    )
+                if isinstance(raw_sel_dir_close_failures, list):
+                    parent_retention_dir_post_run["directory_close_failures"] = (
+                        copy.deepcopy(raw_sel_dir_close_failures)
+                    )
+                if isinstance(raw_sel_close_err, BaseException):
+                    parent_retention_dir_post_run["cleanup_close_error"] = (
+                        f"{type(raw_sel_close_err).__name__}: {raw_sel_close_err}"
+                    )
+                    parent_retention_dir_post_run[
+                        "cleanup_close_exception_type"
+                    ] = type(raw_sel_close_err).__name__
+                    parent_retention_dir_post_run[
+                        "cleanup_close_exception_message"
+                    ] = str(raw_sel_close_err)
+                    parent_retention_dir_post_run["cleanup_close_errno"] = (
+                        getattr(raw_sel_close_err, "errno", None)
+                    )
+                if sel_published_receipt is not None:
+                    parent_retention_dir_post_run["published_receipt"] = (
+                        copy.deepcopy(sel_published_receipt)
+                    )
+                if sel_cleanup_status is not None:
+                    parent_retention_dir_post_run["temp_cleanup_status"] = (
+                        copy.deepcopy(sel_cleanup_status)
+                    )
+                if isinstance(raw_sel_prior_collision_cleanup, list):
+                    parent_retention_dir_post_run[
+                        "prior_collision_temp_cleanup_failures"
+                    ] = copy.deepcopy(raw_sel_prior_collision_cleanup)
                 parent_retention_dir_cause_holder.clear()
-                parent_retention_dir_cause_holder.append(exc)
+                parent_retention_dir_cause_holder.append(actual_sel_exc)
             elif target_dir == refmac_dir:
-                err_str = f"{type(exc).__name__}: {exc}"
+                err_str = f"{type(actual_sel_exc).__name__}: {actual_sel_exc}"
                 refmac_dir_post_run["writable_post_run"] = False
                 refmac_dir_post_run["write_error"] = err_str
-                refmac_dir_post_run["write_exception_type"] = type(exc).__name__
-                refmac_dir_post_run["write_exception_message"] = str(exc)
-                refmac_dir_post_run["write_errno"] = getattr(exc, "errno", None)
+                refmac_dir_post_run["write_exception_type"] = type(
+                    actual_sel_exc
+                ).__name__
+                refmac_dir_post_run["write_exception_message"] = str(
+                    actual_sel_exc
+                )
+                refmac_dir_post_run["write_errno"] = getattr(
+                    actual_sel_exc, "errno", None
+                )
                 _refresh_selected_child_dir_status()
-            raise
+                if isinstance(raw_sel_dir_close_err, BaseException):
+                    refmac_dir_post_run["directory_close_error"] = (
+                        f"{type(raw_sel_dir_close_err).__name__}: {raw_sel_dir_close_err}"
+                    )
+                    refmac_dir_post_run[
+                        "directory_close_exception_type"
+                    ] = type(raw_sel_dir_close_err).__name__
+                    refmac_dir_post_run[
+                        "directory_close_exception_message"
+                    ] = str(raw_sel_dir_close_err)
+                    refmac_dir_post_run["directory_close_errno"] = getattr(
+                        raw_sel_dir_close_err, "errno", None
+                    )
+                if isinstance(raw_sel_dir_close_failures, list):
+                    refmac_dir_post_run["directory_close_failures"] = (
+                        copy.deepcopy(raw_sel_dir_close_failures)
+                    )
+                if isinstance(raw_sel_close_err, BaseException):
+                    refmac_dir_post_run["cleanup_close_error"] = (
+                        f"{type(raw_sel_close_err).__name__}: {raw_sel_close_err}"
+                    )
+                    refmac_dir_post_run["cleanup_close_exception_type"] = type(
+                        raw_sel_close_err
+                    ).__name__
+                    refmac_dir_post_run["cleanup_close_exception_message"] = (
+                        str(raw_sel_close_err)
+                    )
+                    refmac_dir_post_run["cleanup_close_errno"] = getattr(
+                        raw_sel_close_err, "errno", None
+                    )
+                if sel_published_receipt is not None:
+                    refmac_dir_post_run["published_receipt"] = copy.deepcopy(
+                        sel_published_receipt
+                    )
+                if sel_cleanup_status is not None:
+                    refmac_dir_post_run["temp_cleanup_status"] = copy.deepcopy(
+                        sel_cleanup_status
+                    )
+                if isinstance(raw_sel_prior_collision_cleanup, list):
+                    refmac_dir_post_run[
+                        "prior_collision_temp_cleanup_failures"
+                    ] = copy.deepcopy(raw_sel_prior_collision_cleanup)
+            raise actual_sel_exc
         if target_dir == parent_retention_dir:
             written["fallback_for_unwritable_or_damaged_child_dir"] = True
             written["intended_child_dir_path"] = str(refmac_dir / target_path.name)
@@ -12485,6 +20165,9 @@ def run_refmac_rfactor_operation(
             written["parent_retention_dir"] = str(parent_retention_dir)
             written["actual_retention_anchor_dir"] = str(parent_retention_dir)
             written["actual_retention_anchor_kind"] = "parent_retention_dir"
+            written["actual_retention_anchor_baseline"] = copy.deepcopy(
+                dict(parent_retention_dir_baseline)
+            )
         elif (
             isinstance(verified_anchor_dir_str, str)
             and target_dir == Path(verified_anchor_dir_str)
@@ -12505,23 +20188,28 @@ def run_refmac_rfactor_operation(
         return written
 
     retained_diagnostics_holder: list[dict[str, Any]] = []
+    d0_write_cleanup_errors: list[OSError] = []
     pre_d0_persistence_exc_len = len(caught_persistence_exceptions)
-    diagnostics_artifact: dict[str, Any] | None = _persist_collector_json_with_fallback(
-        _build_diagnostics_payload,
-        diagnostics_json_path,
-        root=refmac_dir,
-        parent_retention_dir=parent_retention_dir,
-        parent_retention_dir_baseline=parent_retention_dir_baseline,
-        parent_retention_dir_status=parent_retention_dir_post_run,
-        verified_root_fallback_state=verified_root_fallback_state,
-        allow_unpersisted_on_no_verified_anchor=True,
-        refmac_dir_status=refmac_dir_post_run,
-        child_dir_persistence_failures=child_dir_persistence_failures,
-        caught_persistence_exceptions=caught_persistence_exceptions,
-        retained_payload_sink=retained_diagnostics_holder,
-        child_dir_persistence_causes=child_dir_persistence_causes,
-        parent_retention_dir_cause_sink=parent_retention_dir_cause_holder,
-    )
+    with _write_cleanup_errors_sink_context(d0_write_cleanup_errors):
+        diagnostics_artifact: dict[str, Any] | None = (
+            _persist_collector_json_with_fallback(
+                _build_diagnostics_payload,
+                diagnostics_json_path,
+                root=refmac_dir,
+                parent_retention_dir=parent_retention_dir,
+                parent_retention_dir_baseline=parent_retention_dir_baseline,
+                parent_retention_dir_status=parent_retention_dir_post_run,
+                verified_root_fallback_state=verified_root_fallback_state,
+                allow_unpersisted_on_no_verified_anchor=True,
+                refmac_dir_baseline=refmac_dir_baseline,
+                refmac_dir_status=refmac_dir_post_run,
+                child_dir_persistence_failures=child_dir_persistence_failures,
+                caught_persistence_exceptions=caught_persistence_exceptions,
+                retained_payload_sink=retained_diagnostics_holder,
+                child_dir_persistence_causes=child_dir_persistence_causes,
+                parent_retention_dir_cause_sink=parent_retention_dir_cause_holder,
+            )
+        )
     in_initial_d0_publication = False
     d0_persistence_exceptions = caught_persistence_exceptions[
         pre_d0_persistence_exc_len:
@@ -12568,6 +20256,9 @@ def run_refmac_rfactor_operation(
         reason: str,
         rejected_destination: str | None,
         exc: Exception | None,
+        published_receipt: Mapping[str, Any] | None = None,
+        temp_cleanup_status: Mapping[str, Any] | None = None,
+        cleanup_errors: Sequence[OSError] | None = None,
     ) -> None:
         nonlocal publication_pair_complete, publication_terminal_failure
         nonlocal terminal_caught_exception, diagnostics_artifact, manifest_artifact
@@ -12576,6 +20267,48 @@ def run_refmac_rfactor_operation(
         publication_pair_complete = False
         if exc is not None:
             terminal_caught_exception = exc
+        terminal_failure_causes_by_stage[stage] = exc
+        raw_term_receipt = (
+            published_receipt
+            if isinstance(published_receipt, Mapping)
+            else (
+                exc.published_receipt
+                if isinstance(exc, _PostPublicationBindingError)
+                else getattr(exc, "published_receipt", None)
+            )
+        )
+        raw_term_cleanup = (
+            temp_cleanup_status
+            if isinstance(temp_cleanup_status, Mapping)
+            else (
+                getattr(exc, "temp_cleanup_status", None)
+                if exc is not None
+                else None
+            )
+        )
+        if not isinstance(raw_term_cleanup, Mapping) and isinstance(
+            raw_term_receipt, Mapping
+        ):
+            raw_term_cleanup = raw_term_receipt.get("temp_cleanup_status")
+        if exc is not None:
+            try:
+                if isinstance(raw_term_receipt, Mapping):
+                    setattr(
+                        exc,
+                        "published_receipt",
+                        copy.deepcopy(dict(raw_term_receipt)),
+                    )
+                if isinstance(raw_term_cleanup, Mapping):
+                    setattr(
+                        exc,
+                        "temp_cleanup_status",
+                        copy.deepcopy(dict(raw_term_cleanup)),
+                    )
+                if cleanup_errors:
+                    setattr(exc, "temp_cleanup_errors", list(cleanup_errors))
+                    setattr(exc, "temp_cleanup_error", cleanup_errors[-1])
+            except Exception:
+                pass
         publication_terminal_failure = {
             "stage": stage,
             "reason": reason,
@@ -12586,11 +20319,219 @@ def run_refmac_rfactor_operation(
             "exception_message": str(exc) if exc is not None else reason,
             "errno": getattr(exc, "errno", None) if exc is not None else None,
         }
+        raw_term_close_err = (
+            getattr(exc, "cleanup_close_error", None)
+            if exc is not None
+            else None
+        )
+        if isinstance(raw_term_close_err, BaseException):
+            publication_terminal_failure["cleanup_close_error"] = (
+                f"{type(raw_term_close_err).__name__}: {raw_term_close_err}"
+            )
+            publication_terminal_failure["cleanup_close_exception_type"] = (
+                type(raw_term_close_err).__name__
+            )
+            publication_terminal_failure["cleanup_close_exception_message"] = (
+                str(raw_term_close_err)
+            )
+            publication_terminal_failure["cleanup_close_errno"] = getattr(
+                raw_term_close_err, "errno", None
+            )
+        raw_term_parent_close_err = (
+            getattr(exc, "parent_close_error", None)
+            if exc is not None
+            else None
+        )
+        if isinstance(raw_term_parent_close_err, BaseException):
+            publication_terminal_failure["parent_close_error"] = (
+                f"{type(raw_term_parent_close_err).__name__}: {raw_term_parent_close_err}"
+            )
+            publication_terminal_failure["parent_close_exception_type"] = (
+                type(raw_term_parent_close_err).__name__
+            )
+            publication_terminal_failure["parent_close_exception_message"] = (
+                str(raw_term_parent_close_err)
+            )
+            publication_terminal_failure["parent_close_errno"] = getattr(
+                raw_term_parent_close_err, "errno", None
+            )
+        if isinstance(raw_term_receipt, Mapping):
+            publication_terminal_failure["published_receipt"] = copy.deepcopy(
+                dict(raw_term_receipt)
+            )
+        if isinstance(raw_term_cleanup, Mapping):
+            publication_terminal_failure["temp_cleanup_status"] = copy.deepcopy(
+                dict(raw_term_cleanup)
+            )
         verified_root_fallback_state["unpersisted_reason"] = reason
         diagnostics_artifact = None
         manifest_artifact = None
         diagnostics_payload = copy.deepcopy(_build_diagnostics_payload(None))
         manifest_payload = copy.deepcopy(_build_manifest_payload(None))
+
+    def _handle_post_write_cleanup_failure_if_any(
+        artifact_record: Mapping[str, Any] | None,
+        *,
+        stage: str,
+        artifact_label: str,
+        rejected_destination: Path,
+        history_snapshots: Sequence[
+            tuple[str, str, Mapping[str, Any] | None, str]
+        ],
+        write_cleanup_errors: Sequence[OSError],
+        persistence_exceptions_slice: Sequence[Exception],
+    ) -> bool:
+        nonlocal admitted_history_roots
+        if (
+            not isinstance(artifact_record, Mapping)
+            or not bool(artifact_record.get("persisted", True))
+            or not isinstance(artifact_record.get("path"), str)
+            or bool(artifact_record.get("temp_cleanup_succeeded", True))
+        ):
+            return False
+        admitted_history_roots = tuple(
+            p
+            for p in (
+                refmac_dir,
+                parent_retention_dir,
+                (
+                    Path(str(verified_root_fallback_state["actual_anchor_dir"]))
+                    if isinstance(
+                        verified_root_fallback_state.get("actual_anchor_dir"),
+                        str,
+                    )
+                    else None
+                ),
+                fresh_root,
+            )
+            if p is not None
+        )
+        for snap_id, snap_kind, snap_record, snap_reason in history_snapshots:
+            if (
+                isinstance(snap_record, Mapping)
+                and isinstance(snap_record.get("path"), str)
+                and not any(
+                    item.get("snapshot_id") == snap_id
+                    for item in publication_history
+                )
+            ):
+                hist_entry = _verify_saved_snapshot_on_disk(
+                    snap_record,
+                    snapshot_id=snap_id,
+                    artifact_kind=snap_kind,
+                    admitted_roots=admitted_history_roots,
+                    superseded_reason=snap_reason,
+                )
+                publication_history.append(hist_entry)
+        cleanup_err_list: list[OSError] = []
+        seen_cleanup_ids: set[int] = set()
+        for c_err in write_cleanup_errors:
+            if isinstance(c_err, OSError) and id(c_err) not in seen_cleanup_ids:
+                cleanup_err_list.append(c_err)
+                seen_cleanup_ids.add(id(c_err))
+        if not cleanup_err_list:
+            published_path_val = artifact_record.get("path")
+            for p_exc in persistence_exceptions_slice:
+                if (
+                    isinstance(p_exc, OSError)
+                    and id(p_exc) not in seen_cleanup_ids
+                    and getattr(p_exc, "_is_temp_cleanup_error", False) is True
+                ):
+                    p_rec = getattr(p_exc, "published_receipt", None)
+                    if (
+                        isinstance(p_rec, Mapping)
+                        and p_rec.get("path") not in (None, published_path_val)
+                    ):
+                        continue
+                    cleanup_err_list.append(p_exc)
+                    seen_cleanup_ids.add(id(p_exc))
+        raw_cleanup_status = (
+            copy.deepcopy(dict(artifact_record["temp_cleanup_status"]))
+            if isinstance(artifact_record.get("temp_cleanup_status"), Mapping)
+            else None
+        )
+        if cleanup_err_list:
+            primary_cleanup_exc: Exception = cleanup_err_list[0]
+        else:
+            st_msg = (
+                str(
+                    raw_cleanup_status.get("exception_message")
+                    or raw_cleanup_status.get("error")
+                    or f"Temporary file cleanup failed while publishing {artifact_label}"
+                )
+                if isinstance(raw_cleanup_status, Mapping)
+                else f"Temporary file cleanup failed while publishing {artifact_label}"
+            )
+            st_errno = (
+                raw_cleanup_status.get("errno")
+                if isinstance(raw_cleanup_status, Mapping)
+                and isinstance(raw_cleanup_status.get("errno"), int)
+                else None
+            )
+            synthesized_cleanup_exc = (
+                OSError(st_errno, st_msg)
+                if st_errno is not None
+                else OSError(st_msg)
+            )
+            primary_cleanup_exc = synthesized_cleanup_exc
+            cleanup_err_list.append(synthesized_cleanup_exc)
+        for err_obj in (primary_cleanup_exc, *cleanup_err_list):
+            try:
+                setattr(
+                    err_obj,
+                    "published_receipt",
+                    copy.deepcopy(dict(artifact_record)),
+                )
+                if raw_cleanup_status is not None:
+                    setattr(
+                        err_obj,
+                        "temp_cleanup_status",
+                        copy.deepcopy(raw_cleanup_status),
+                    )
+                if cleanup_err_list:
+                    setattr(
+                        err_obj,
+                        "temp_cleanup_errors",
+                        list(cleanup_err_list),
+                    )
+                    setattr(
+                        err_obj,
+                        "temp_cleanup_error",
+                        cleanup_err_list[-1],
+                    )
+                if isinstance(
+                    artifact_record.get(
+                        "prior_collision_temp_cleanup_failures"
+                    ),
+                    list,
+                ):
+                    setattr(
+                        err_obj,
+                        "prior_collision_temp_cleanup_failures",
+                        copy.deepcopy(
+                            artifact_record[
+                                "prior_collision_temp_cleanup_failures"
+                            ]
+                        ),
+                    )
+            except Exception:
+                pass
+        published_path_str = str(artifact_record.get("path"))
+        cleanup_reason = (
+            f"Artifact {artifact_label} ({rejected_destination.name}) was published at "
+            f"{published_path_str}, but temporary file cleanup failed: "
+            f"{type(primary_cleanup_exc).__name__}: {primary_cleanup_exc}"
+        )
+        _terminate_incomplete_publication(
+            stage=stage,
+            reason=cleanup_reason,
+            rejected_destination=str(rejected_destination),
+            exc=primary_cleanup_exc,
+            published_receipt=artifact_record,
+            temp_cleanup_status=raw_cleanup_status,
+            cleanup_errors=cleanup_err_list,
+        )
+        return True
 
     def _run_bounded_pair_correction(
         *,
@@ -12629,6 +20570,14 @@ def run_refmac_rfactor_operation(
             )
             publication_history.append(m0_hist)
         if not bool(d0_hist.get("verified_on_disk", False)):
+            d0_ver_exc = history_verification_causes_by_snapshot_id.get(
+                "D0"
+            ) or ValueError(
+                str(
+                    d0_hist.get("verification_error")
+                    or "D0 verification failed"
+                )
+            )
             _terminate_incomplete_publication(
                 stage="verify_historical_d0",
                 reason=(
@@ -12636,29 +20585,28 @@ def run_refmac_rfactor_operation(
                     f"correction: {d0_hist.get('verification_error')}"
                 ),
                 rejected_destination=d0_hist.get("path"),
-                exc=ValueError(
-                    str(
-                        d0_hist.get("verification_error")
-                        or "D0 verification failed"
-                    )
-                ),
+                exc=d0_ver_exc,
             )
             return
         for hist_item in publication_history:
             if not bool(hist_item.get("verified_on_disk", False)):
+                snap_id_str = str(hist_item.get("snapshot_id", "snapshot"))
+                hist_ver_exc = history_verification_causes_by_snapshot_id.get(
+                    snap_id_str
+                ) or ValueError(
+                    str(
+                        hist_item.get("verification_error")
+                        or "Historical snapshot verification failed"
+                    )
+                )
                 _terminate_incomplete_publication(
-                    stage=f"verify_historical_{str(hist_item.get('snapshot_id', 'snapshot')).lower()}",
+                    stage=f"verify_historical_{snap_id_str.lower()}",
                     reason=(
                         f"Historical snapshot {hist_item.get('snapshot_id')} failed on-disk "
                         f"verification: {hist_item.get('verification_error')}"
                     ),
                     rejected_destination=hist_item.get("path"),
-                    exc=ValueError(
-                        str(
-                            hist_item.get("verification_error")
-                            or "Historical snapshot verification failed"
-                        )
-                    ),
+                    exc=hist_ver_exc,
                 )
                 return
         if publication_correction_count >= 1:
@@ -12700,12 +20648,15 @@ def run_refmac_rfactor_operation(
 
         pre_d1_collision_count = len(final_artifact_collisions)
         retained_d1_holder: list[dict[str, Any]] = []
+        d1_write_cleanup_errors: list[OSError] = []
+        pre_d1_persistence_exc_len = len(caught_persistence_exceptions)
         try:
-            d1_artifact = _write_to_selected_admitted_directory(
-                _build_diagnostics_payload,
-                d1_target,
-                retained_sink=retained_d1_holder,
-            )
+            with _write_cleanup_errors_sink_context(d1_write_cleanup_errors):
+                d1_artifact = _write_to_selected_admitted_directory(
+                    _build_diagnostics_payload,
+                    d1_target,
+                    retained_sink=retained_d1_holder,
+                )
         except Exception as exc:
             _terminate_incomplete_publication(
                 stage="persist_corrected_diagnostics_d1",
@@ -12717,6 +20668,26 @@ def run_refmac_rfactor_operation(
                 rejected_destination=str(d1_target),
                 exc=exc,
             )
+            return
+        d1_persistence_exceptions = caught_persistence_exceptions[
+            pre_d1_persistence_exc_len:
+        ]
+        if _handle_post_write_cleanup_failure_if_any(
+            d1_artifact,
+            stage="persist_corrected_diagnostics_d1",
+            artifact_label="D1",
+            rejected_destination=d1_target,
+            history_snapshots=(
+                (
+                    "D1",
+                    "diagnostics_json",
+                    d1_artifact,
+                    "Corrected diagnostics D1 published on disk, but post-write temporary file cleanup failed; pair (D1, M1) is incomplete.",
+                ),
+            ),
+            write_cleanup_errors=d1_write_cleanup_errors,
+            persistence_exceptions_slice=d1_persistence_exceptions,
+        ):
             return
         if len(final_artifact_collisions) > pre_d1_collision_count:
             d1_hist = _verify_saved_snapshot_on_disk(
@@ -12754,12 +20725,15 @@ def run_refmac_rfactor_operation(
 
         pre_m1_collision_count = len(final_artifact_collisions)
         retained_m1_holder: list[dict[str, Any]] = []
+        m1_write_cleanup_errors: list[OSError] = []
+        pre_m1_persistence_exc_len = len(caught_persistence_exceptions)
         try:
-            m1_artifact = _write_to_selected_admitted_directory(
-                _build_manifest_payload,
-                m1_target,
-                retained_sink=retained_m1_holder,
-            )
+            with _write_cleanup_errors_sink_context(m1_write_cleanup_errors):
+                m1_artifact = _write_to_selected_admitted_directory(
+                    _build_manifest_payload,
+                    m1_target,
+                    retained_sink=retained_m1_holder,
+                )
         except Exception as exc:
             d1_hist = _verify_saved_snapshot_on_disk(
                 d1_artifact,
@@ -12781,6 +20755,32 @@ def run_refmac_rfactor_operation(
                 rejected_destination=str(m1_target),
                 exc=exc,
             )
+            return
+        m1_persistence_exceptions = caught_persistence_exceptions[
+            pre_m1_persistence_exc_len:
+        ]
+        if _handle_post_write_cleanup_failure_if_any(
+            m1_artifact,
+            stage="persist_corrected_manifest_m1",
+            artifact_label="M1",
+            rejected_destination=m1_target,
+            history_snapshots=(
+                (
+                    "D1",
+                    "diagnostics_json",
+                    d1_artifact,
+                    "M1 published on disk after D1 was saved, but M1 post-write temporary file cleanup failed; pair (D1, M1) is incomplete.",
+                ),
+                (
+                    "M1",
+                    "manifest_json",
+                    m1_artifact,
+                    "Corrected manifest M1 published on disk, but post-write temporary file cleanup failed; second correction is forbidden.",
+                ),
+            ),
+            write_cleanup_errors=m1_write_cleanup_errors,
+            persistence_exceptions_slice=m1_persistence_exceptions,
+        ):
             return
 
         m1_payload = retained_m1_holder[0]
@@ -12847,10 +20847,16 @@ def run_refmac_rfactor_operation(
             or verified_root_fallback_state.get("unpersisted_reason")
             or "Diagnostics D0 could not be persisted in any verified retention anchor."
         )
-        d0_terminal_exc: Exception | None = (
+        d0_terminal_exc: Exception | None = next(
+            (
+                exc_item
+                for exc_item in reversed(d0_persistence_exceptions)
+                if not getattr(exc_item, "_is_temp_cleanup_error", False)
+                and not getattr(exc_item, "_is_cleanup_close_error", False)
+            ),
             d0_persistence_exceptions[-1]
             if d0_persistence_exceptions
-            else None
+            else None,
         )
         _terminate_incomplete_publication(
             stage="persist_diagnostics_d0",
@@ -12858,20 +20864,47 @@ def run_refmac_rfactor_operation(
             rejected_destination=str(diagnostics_json_path),
             exc=d0_terminal_exc,
         )
+    elif _handle_post_write_cleanup_failure_if_any(
+        d0_artifact_record,
+        stage="persist_diagnostics_d0",
+        artifact_label="D0",
+        rejected_destination=diagnostics_json_path,
+        history_snapshots=(
+            (
+                "D0",
+                "diagnostics_json",
+                d0_artifact_record,
+                "Diagnostics D0 published on disk, but post-write temporary file cleanup failed; publication terminated incomplete.",
+            ),
+        ),
+        write_cleanup_errors=d0_write_cleanup_errors,
+        persistence_exceptions_slice=d0_persistence_exceptions,
+    ):
+        pass
     elif publication_terminal_failure is None:
         d0_saved_path = Path(str(d0_artifact_record["path"]))
         d0_saved_dir = d0_saved_path.parent
         retained_manifest_holder: list[dict[str, Any]] = []
         m0_artifact: dict[str, Any] | None = None
+        m0_write_cleanup_errors: list[OSError] = []
         m0_persistence_exceptions: list[Exception] = []
+        m0_intended_destination: Path = (
+            d0_saved_dir / manifest_json_path.name
+            if d0_saved_dir != refmac_dir
+            else manifest_json_path
+        )
         if d0_saved_dir != refmac_dir:
             m0_target_in_selected_dir = d0_saved_dir / manifest_json_path.name
+            pre_m0_sel_exc_len = len(caught_persistence_exceptions)
             try:
-                m0_artifact = _write_to_selected_admitted_directory(
-                    _build_manifest_payload,
-                    m0_target_in_selected_dir,
-                    retained_sink=retained_manifest_holder,
-                )
+                with _write_cleanup_errors_sink_context(
+                    m0_write_cleanup_errors
+                ):
+                    m0_artifact = _write_to_selected_admitted_directory(
+                        _build_manifest_payload,
+                        m0_target_in_selected_dir,
+                        retained_sink=retained_manifest_holder,
+                    )
             except Exception as exc:
                 d0_hist = _verify_saved_snapshot_on_disk(
                     d0_artifact_record,
@@ -12894,24 +20927,29 @@ def run_refmac_rfactor_operation(
                     rejected_destination=str(m0_target_in_selected_dir),
                     exc=exc,
                 )
+            m0_persistence_exceptions = caught_persistence_exceptions[
+                pre_m0_sel_exc_len:
+            ]
         else:
             pre_m0_persistence_exc_len = len(caught_persistence_exceptions)
-            m0_artifact = _persist_collector_json_with_fallback(
-                _build_manifest_payload,
-                manifest_json_path,
-                root=refmac_dir,
-                parent_retention_dir=parent_retention_dir,
-                parent_retention_dir_baseline=parent_retention_dir_baseline,
-                parent_retention_dir_status=parent_retention_dir_post_run,
-                verified_root_fallback_state=verified_root_fallback_state,
-                allow_unpersisted_on_no_verified_anchor=True,
-                refmac_dir_status=refmac_dir_post_run,
-                child_dir_persistence_failures=child_dir_persistence_failures,
-                caught_persistence_exceptions=caught_persistence_exceptions,
-                retained_payload_sink=retained_manifest_holder,
-                child_dir_persistence_causes=child_dir_persistence_causes,
-                parent_retention_dir_cause_sink=parent_retention_dir_cause_holder,
-            )
+            with _write_cleanup_errors_sink_context(m0_write_cleanup_errors):
+                m0_artifact = _persist_collector_json_with_fallback(
+                    _build_manifest_payload,
+                    manifest_json_path,
+                    root=refmac_dir,
+                    parent_retention_dir=parent_retention_dir,
+                    parent_retention_dir_baseline=parent_retention_dir_baseline,
+                    parent_retention_dir_status=parent_retention_dir_post_run,
+                    verified_root_fallback_state=verified_root_fallback_state,
+                    allow_unpersisted_on_no_verified_anchor=True,
+                    refmac_dir_baseline=refmac_dir_baseline,
+                    refmac_dir_status=refmac_dir_post_run,
+                    child_dir_persistence_failures=child_dir_persistence_failures,
+                    caught_persistence_exceptions=caught_persistence_exceptions,
+                    retained_payload_sink=retained_manifest_holder,
+                    child_dir_persistence_causes=child_dir_persistence_causes,
+                    parent_retention_dir_cause_sink=parent_retention_dir_cause_holder,
+                )
             m0_persistence_exceptions = caught_persistence_exceptions[
                 pre_m0_persistence_exc_len:
             ]
@@ -12950,10 +20988,20 @@ def run_refmac_rfactor_operation(
                     or verified_root_fallback_state.get("unpersisted_reason")
                     or "Manifest M0 could not be persisted in any verified retention anchor."
                 )
-                m0_terminal_exc: Exception | None = (
+                m0_terminal_exc: Exception | None = next(
+                    (
+                        exc_item
+                        for exc_item in reversed(m0_persistence_exceptions)
+                        if not getattr(
+                            exc_item, "_is_temp_cleanup_error", False
+                        )
+                        and not getattr(
+                            exc_item, "_is_cleanup_close_error", False
+                        )
+                    ),
                     m0_persistence_exceptions[-1]
                     if m0_persistence_exceptions
-                    else None
+                    else None,
                 )
                 _terminate_incomplete_publication(
                     stage="persist_manifest_m0",
@@ -12961,6 +21009,29 @@ def run_refmac_rfactor_operation(
                     rejected_destination=str(manifest_json_path),
                     exc=m0_terminal_exc,
                 )
+            elif _handle_post_write_cleanup_failure_if_any(
+                m0_artifact,
+                stage="persist_manifest_m0",
+                artifact_label="M0",
+                rejected_destination=m0_intended_destination,
+                history_snapshots=(
+                    (
+                        "D0",
+                        "diagnostics_json",
+                        d0_artifact_record,
+                        "M0 published on disk after D0 was saved, but M0 post-write temporary file cleanup failed; pair (D0, M0) is incomplete.",
+                    ),
+                    (
+                        "M0",
+                        "manifest_json",
+                        m0_artifact,
+                        "Manifest M0 published on disk, but post-write temporary file cleanup failed; publication terminated incomplete.",
+                    ),
+                ),
+                write_cleanup_errors=m0_write_cleanup_errors,
+                persistence_exceptions_slice=m0_persistence_exceptions,
+            ):
+                pass
             else:
                 m0_payload = (
                     retained_manifest_holder[0]
@@ -12991,8 +21062,8 @@ def run_refmac_rfactor_operation(
                         )
                     else:
                         superseded_why = (
-                            "Manifest persistence encountered a new failure or destination "
-                            "collision after D0 was written."
+                            "Retained collection outcome or directory admission provenance "
+                            "metadata changed between D0 and M0 persistence."
                         )
                     _run_bounded_pair_correction(
                         superseded_reason=superseded_why,

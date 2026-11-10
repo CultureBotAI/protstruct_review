@@ -17,6 +17,8 @@ Scope boundary:
 
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import errno
 import hashlib
 import json
@@ -25,11 +27,37 @@ import stat
 from dataclasses import dataclass
 from fractions import Fraction
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Iterator, Mapping
 
 
 TRACE_SCHEMA_ID = "protstruct_refmac_native_trace_v1"
 TRACE_DECIMAL_ENCODING = "exact_from_captured_binary32_bits"
+
+TRACE_INPUT_MODE_FILESYSTEM_PATH = "filesystem_path"
+TRACE_INPUT_MODE_RETAINED_BYTES_SNAPSHOT = "retained_bytes_snapshot"
+
+_FILESYSTEM_VERIFIED_BINDING_NOTE = (
+    "Opened with O_RDONLY (+ O_NOFOLLOW when available) and bound via pre/post "
+    "fstat/lstat inode/device/size/mtime comparison; detects path replacement across "
+    "the inspection window without claiming kernel-atomic protection against transient swaps."
+)
+_FILESYSTEM_UNVERIFIED_BINDING_NOTE = (
+    "Filesystem path mode selected, but pre/post fstat/lstat descriptor identity binding "
+    "did not complete in refmac_diagnostic_trace; see errors for failure stage."
+)
+_RETAINED_SNAPSHOT_PARSED_BINDING_NOTE = (
+    "Parsed from caller-supplied in-memory trace byte snapshot without opening or statting "
+    "path in refmac_diagnostic_trace; verifies byte length, SHA-256 pin, and wire-envelope/"
+    "binary32 encoding only, while filesystem descriptor admission must be established "
+    "separately by caller capture."
+)
+_RETAINED_SNAPSHOT_UNAVAILABLE_BINDING_NOTE = (
+    "Retained trace byte snapshot mode selected without opening or statting path in "
+    "refmac_diagnostic_trace, but no valid in-memory byte snapshot was available for "
+    "inspection; see errors for snapshot_binding failure."
+)
+
+_RAW_BYTES_OMITTED = object()
 
 READ_CHUNK_BYTES = 65536
 MAX_RECORD_BYTES = 65536
@@ -522,30 +550,93 @@ def _check_non_symlink_regular_path(
     return current, last_info
 
 
+_PREVERIFIED_TRACE_BYTES_CTX: contextvars.ContextVar[
+    tuple[str, bool, bytes | None, str | None] | None
+] = contextvars.ContextVar("_PREVERIFIED_TRACE_BYTES_CTX", default=None)
+
+
+@contextlib.contextmanager
+def _preverified_trace_bytes_scope(
+    path: Path | str, raw_bytes: bytes | bytearray | memoryview | None
+) -> Iterator[None]:
+    """Bind a retained trace byte snapshot scope for ``path`` across one envelope inspection.
+
+    Always pushes a context frame (even when ``raw_bytes is None``) and resets
+    it on exit so that:
+    - missing/unavailable retained snapshots fail closed in retained-snapshot
+      mode instead of reopening ``path`` on disk, and
+    - nested scopes with ``raw_bytes=None`` shadow any outer scope snapshot
+      and cleanly restore the outer scope on exit.
+    """
+    if isinstance(path, (str, os.PathLike)) and str(path) != "":
+        raw_fspath = os.fspath(path)
+        raw_text = (
+            raw_fspath.decode("utf-8", errors="surrogateescape")
+            if isinstance(raw_fspath, bytes)
+            else str(raw_fspath)
+        )
+        scope_has_trailing_sep = len(raw_text) > 1 and raw_text.endswith(
+            tuple(sep for sep in (os.sep, os.altsep) if sep)
+        )
+        norm = os.path.abspath(raw_text)
+    else:
+        norm = ""
+        scope_has_trailing_sep = False
+
+    if raw_bytes is None:
+        snapshot_bytes: bytes | None = None
+        invalid_type_name: str | None = None
+    elif isinstance(raw_bytes, (bytes, bytearray, memoryview)):
+        snapshot_bytes = bytes(raw_bytes)
+        invalid_type_name = None
+    else:
+        snapshot_bytes = None
+        invalid_type_name = type(raw_bytes).__name__
+
+    token = _PREVERIFIED_TRACE_BYTES_CTX.set(
+        (norm, scope_has_trailing_sep, snapshot_bytes, invalid_type_name)
+    )
+    try:
+        yield
+    finally:
+        _PREVERIFIED_TRACE_BYTES_CTX.reset(token)
+
+
+def inspect_native_trace_bytes(
+    path: Path | str,
+    raw_bytes: bytes | bytearray | memoryview | None,
+    *,
+    expected_sha256: str,
+    expected_size_bytes: int,
+) -> dict[str, Any]:
+    """Verify a retained in-memory native diagnostic trace byte snapshot without filesystem I/O."""
+    return inspect_native_trace_envelope(
+        path,
+        expected_sha256=expected_sha256,
+        expected_size_bytes=expected_size_bytes,
+        raw_bytes=raw_bytes,
+    )
+
+
 def inspect_native_trace_envelope(
     path: Path | str,
     *,
     expected_sha256: str,
     expected_size_bytes: int,
+    raw_bytes: bytes | bytearray | memoryview | None | object = _RAW_BYTES_OMITTED,
 ) -> dict[str, Any]:
-    """Stream, hash, and verify a native diagnostic trace JSONL file against its envelope contract.
+    """Stream, hash, and verify a native diagnostic trace JSONL file or retained byte snapshot.
 
-    Returns a JSON-safe dictionary containing:
-    - ``valid``: True iff pins, file identity, header, all records, writer_close,
-      and raw SHA-256 / byte size all pass.
-    - ``closed``: True iff header, 0..N valid data records, and writer_close at
-      EOF are all structurally valid with no trailing data.
-    - ``read_complete``: True iff the opened regular file was read through EOF.
-    - ``observed_sha256`` / ``observed_size_bytes``: Streaming SHA-256 and byte
-      count across the entire regular file through EOF (or None if EOF was not
-      reached).
-    - ``bytes_read`` / ``partial_sha256`` / ``partial_size_bytes``: Explicit byte
-      progress and prefix SHA-256 when a read or descriptor failure prevents
-      reaching EOF.
-    - ``event_count`` / ``record_count``: Number of valid data event records
-      observed before ``writer_close``.
-    - ``representation_header``: Validated header record dictionary (or None).
-    - ``first_failure`` and ``errors``: Explicit failure locations, stages, and reasons.
+    Supports two strictly separated acquisition modes:
+    - ``filesystem_path`` (legacy pathname mode when ``raw_bytes`` is omitted and no
+      ``_preverified_trace_bytes_scope`` is active): opens ``path`` with ``O_RDONLY``
+      (+ ``O_NOFOLLOW`` when available) and binds descriptor identity via pre/post
+      ``fstat``/``lstat``.
+    - ``retained_bytes_snapshot`` (when ``raw_bytes`` is passed or
+      ``_preverified_trace_bytes_scope`` is active): parses only the in-memory byte
+      snapshot without opening or statting ``path``, and fails closed with
+      ``retained_trace_snapshot_unavailable`` or ``retained_trace_snapshot_path_mismatch``
+      if the snapshot is missing or bound to a different path.
     """
     errors: list[dict[str, Any]] = []
 
@@ -573,6 +664,18 @@ def inspect_native_trace_envelope(
             }
         )
 
+    ctx_entry = _PREVERIFIED_TRACE_BYTES_CTX.get()
+    retained_snapshot_mode = (raw_bytes is not _RAW_BYTES_OMITTED) or (
+        ctx_entry is not None
+    )
+    input_mode = (
+        TRACE_INPUT_MODE_RETAINED_BYTES_SNAPSHOT
+        if retained_snapshot_mode
+        else TRACE_INPUT_MODE_FILESYSTEM_PATH
+    )
+    filesystem_descriptor_opened = False
+    filesystem_identity_verified_by_trace_reader = False
+
     sanitized_expected_sha256: str | None = None
     sanitized_expected_size: int | None = None
     pins_valid = False
@@ -598,6 +701,11 @@ def inspect_native_trace_envelope(
     def _early_failure_result(path_repr: str) -> dict[str, Any]:
         return _build_result(
             path_str=path_repr,
+            input_mode=input_mode,
+            filesystem_descriptor_opened=filesystem_descriptor_opened,
+            filesystem_identity_verified_by_trace_reader=(
+                filesystem_identity_verified_by_trace_reader
+            ),
             valid=False,
             closed=False,
             event_count=0,
@@ -637,134 +745,252 @@ def inspect_native_trace_envelope(
     path_obj = Path(raw_path_text)
     path_str = str(path_obj)
 
-    try:
-        checked_path, lstat_pre = _check_non_symlink_regular_path(
-            path_obj, has_trailing_sep=has_trailing_sep
-        )
-    except FileNotFoundError as exc:
-        add_error(
-            "trace_file_not_found",
-            str(exc),
-            line_number=None,
-            byte_offset=0,
-            stage="path_inspection",
-            errno_value=exc.errno,
-            exception_type=type(exc).__name__,
-        )
-        return _early_failure_result(path_str)
-    except NotADirectoryError as exc:
-        add_error(
-            "not_a_directory",
-            f"Trace path traverses a non-directory component: {exc}",
-            line_number=None,
-            byte_offset=0,
-            stage="path_inspection",
-            errno_value=exc.errno,
-            exception_type=type(exc).__name__,
-        )
-        return _early_failure_result(path_str)
-    except PermissionError as exc:
-        add_error(
-            "permission_denied",
-            f"Permission denied while inspecting trace path: {exc}",
-            line_number=None,
-            byte_offset=0,
-            stage="path_inspection",
-            errno_value=exc.errno,
-            exception_type=type(exc).__name__,
-        )
-        return _early_failure_result(path_str)
-    except OSError as exc:
-        err_code = (
-            "symlink_rejected"
-            if exc.errno == getattr(errno, "ELOOP", -1)
-            else "path_inspection_os_error"
-        )
-        add_error(
-            err_code,
-            f"OS error while inspecting trace path: {exc}",
-            line_number=None,
-            byte_offset=0,
-            stage="path_inspection",
-            errno_value=exc.errno,
-            exception_type=type(exc).__name__,
-        )
-        return _early_failure_result(path_str)
-    except ValueError as exc:
-        msg = str(exc)
-        err_code = "symlink_rejected" if "Symlink" in msg else "not_regular_file"
-        add_error(
-            err_code,
-            msg,
-            line_number=None,
-            byte_offset=0,
-            stage="path_inspection",
-            exception_type=type(exc).__name__,
-        )
-        return _early_failure_result(path_str)
+    effective_raw_bytes: bytes | None = None
+    if retained_snapshot_mode:
+        norm_req_path = os.path.abspath(raw_path_text)
+        if ctx_entry is not None:
+            (
+                scope_norm_path,
+                scope_has_trailing_sep,
+                scope_bytes,
+                scope_invalid_type,
+            ) = ctx_entry
+            if (
+                scope_norm_path == ""
+                or scope_has_trailing_sep
+                or has_trailing_sep
+                or norm_req_path != scope_norm_path
+            ):
+                add_error(
+                    "retained_trace_snapshot_path_mismatch",
+                    (
+                        f"Retained trace byte snapshot scope path {scope_norm_path!r} "
+                        f"does not match requested trace path {path_str!r}"
+                    ),
+                    line_number=None,
+                    byte_offset=0,
+                    stage="snapshot_binding",
+                )
+                return _early_failure_result(path_str)
+        else:
+            scope_bytes = None
+            scope_invalid_type = None
 
-    open_flags = os.O_RDONLY
-    if hasattr(os, "O_CLOEXEC"):
-        open_flags |= os.O_CLOEXEC
-    if hasattr(os, "O_NOFOLLOW"):
-        open_flags |= os.O_NOFOLLOW
+        if raw_bytes is not _RAW_BYTES_OMITTED:
+            if has_trailing_sep:
+                add_error(
+                    "invalid_trace_path",
+                    f"Trace path has trailing directory separator: {path_str}",
+                    line_number=None,
+                    byte_offset=0,
+                    stage="snapshot_binding",
+                )
+                return _early_failure_result(path_str)
+            if raw_bytes is None:
+                add_error(
+                    "retained_trace_snapshot_unavailable",
+                    f"Retained trace byte snapshot is unavailable for {path_str}",
+                    line_number=None,
+                    byte_offset=0,
+                    stage="snapshot_binding",
+                )
+                return _early_failure_result(path_str)
+            if not isinstance(raw_bytes, (bytes, bytearray, memoryview)):
+                add_error(
+                    "retained_trace_snapshot_unavailable",
+                    (
+                        f"Retained trace byte snapshot must be bytes-like, "
+                        f"got {type(raw_bytes).__name__}"
+                    ),
+                    line_number=None,
+                    byte_offset=0,
+                    stage="snapshot_binding",
+                )
+                return _early_failure_result(path_str)
+            candidate_bytes = bytes(raw_bytes)
+            if ctx_entry is not None:
+                if scope_bytes is None:
+                    add_error(
+                        "retained_trace_snapshot_unavailable",
+                        (
+                            f"Retained trace byte snapshot is unavailable in active "
+                            f"scope for {path_str}"
+                        ),
+                        line_number=None,
+                        byte_offset=0,
+                        stage="snapshot_binding",
+                    )
+                    return _early_failure_result(path_str)
+                if candidate_bytes != scope_bytes:
+                    add_error(
+                        "retained_trace_snapshot_mismatch",
+                        (
+                            f"Explicit raw_bytes argument does not match active "
+                            f"retained trace byte snapshot scope for {path_str}"
+                        ),
+                        line_number=None,
+                        byte_offset=0,
+                        stage="snapshot_binding",
+                    )
+                    return _early_failure_result(path_str)
+            effective_raw_bytes = candidate_bytes
+        else:
+            if scope_invalid_type is not None:
+                add_error(
+                    "retained_trace_snapshot_unavailable",
+                    (
+                        f"Retained trace byte snapshot must be bytes-like, "
+                        f"got {scope_invalid_type}"
+                    ),
+                    line_number=None,
+                    byte_offset=0,
+                    stage="snapshot_binding",
+                )
+                return _early_failure_result(path_str)
+            if scope_bytes is None:
+                add_error(
+                    "retained_trace_snapshot_unavailable",
+                    f"Retained trace byte snapshot is unavailable for {path_str}",
+                    line_number=None,
+                    byte_offset=0,
+                    stage="snapshot_binding",
+                )
+                return _early_failure_result(path_str)
+            effective_raw_bytes = scope_bytes
 
-    try:
-        fd = os.open(checked_path, open_flags)
-    except PermissionError as exc:
-        add_error(
-            "permission_denied",
-            f"Permission denied opening trace file: {exc}",
-            line_number=None,
-            byte_offset=0,
-            stage="open",
-            errno_value=exc.errno,
-            exception_type=type(exc).__name__,
-        )
-        return _early_failure_result(path_str)
-    except FileNotFoundError as exc:
-        add_error(
-            "trace_file_not_found",
-            f"Trace file disappeared before open: {exc}",
-            line_number=None,
-            byte_offset=0,
-            stage="open",
-            errno_value=exc.errno,
-            exception_type=type(exc).__name__,
-        )
-        return _early_failure_result(path_str)
-    except NotADirectoryError as exc:
-        add_error(
-            "not_a_directory",
-            f"Not a directory opening trace file: {exc}",
-            line_number=None,
-            byte_offset=0,
-            stage="open",
-            errno_value=exc.errno,
-            exception_type=type(exc).__name__,
-        )
-        return _early_failure_result(path_str)
-    except OSError as exc:
-        err_code = (
-            "symlink_rejected"
-            if exc.errno == getattr(errno, "ELOOP", -1)
-            else "open_failed"
-        )
-        add_error(
-            err_code,
-            f"Failed to open trace file: {exc}",
-            line_number=None,
-            byte_offset=0,
-            stage="open",
-            errno_value=exc.errno,
-            exception_type=type(exc).__name__,
-        )
-        return _early_failure_result(path_str)
+    checked_path: Path | None = None
+    lstat_pre: os.stat_result | None = None
+    fd: int | None = None
+
+    if not retained_snapshot_mode:
+        try:
+            checked_path, lstat_pre = _check_non_symlink_regular_path(
+                path_obj, has_trailing_sep=has_trailing_sep
+            )
+        except FileNotFoundError as exc:
+            add_error(
+                "trace_file_not_found",
+                str(exc),
+                line_number=None,
+                byte_offset=0,
+                stage="path_inspection",
+                errno_value=exc.errno,
+                exception_type=type(exc).__name__,
+            )
+            return _early_failure_result(path_str)
+        except NotADirectoryError as exc:
+            add_error(
+                "not_a_directory",
+                f"Trace path traverses a non-directory component: {exc}",
+                line_number=None,
+                byte_offset=0,
+                stage="path_inspection",
+                errno_value=exc.errno,
+                exception_type=type(exc).__name__,
+            )
+            return _early_failure_result(path_str)
+        except PermissionError as exc:
+            add_error(
+                "permission_denied",
+                f"Permission denied while inspecting trace path: {exc}",
+                line_number=None,
+                byte_offset=0,
+                stage="path_inspection",
+                errno_value=exc.errno,
+                exception_type=type(exc).__name__,
+            )
+            return _early_failure_result(path_str)
+        except OSError as exc:
+            err_code = (
+                "symlink_rejected"
+                if exc.errno == getattr(errno, "ELOOP", -1)
+                else "path_inspection_os_error"
+            )
+            add_error(
+                err_code,
+                f"OS error while inspecting trace path: {exc}",
+                line_number=None,
+                byte_offset=0,
+                stage="path_inspection",
+                errno_value=exc.errno,
+                exception_type=type(exc).__name__,
+            )
+            return _early_failure_result(path_str)
+        except ValueError as exc:
+            msg = str(exc)
+            err_code = "symlink_rejected" if "Symlink" in msg else "not_regular_file"
+            add_error(
+                err_code,
+                msg,
+                line_number=None,
+                byte_offset=0,
+                stage="path_inspection",
+                exception_type=type(exc).__name__,
+            )
+            return _early_failure_result(path_str)
+
+        open_flags = os.O_RDONLY
+        if hasattr(os, "O_CLOEXEC"):
+            open_flags |= os.O_CLOEXEC
+        if hasattr(os, "O_NOFOLLOW"):
+            open_flags |= os.O_NOFOLLOW
+
+        try:
+            fd = os.open(checked_path, open_flags)
+            filesystem_descriptor_opened = True
+        except PermissionError as exc:
+            add_error(
+                "permission_denied",
+                f"Permission denied opening trace file: {exc}",
+                line_number=None,
+                byte_offset=0,
+                stage="open",
+                errno_value=exc.errno,
+                exception_type=type(exc).__name__,
+            )
+            return _early_failure_result(path_str)
+        except FileNotFoundError as exc:
+            add_error(
+                "trace_file_not_found",
+                f"Trace file disappeared before open: {exc}",
+                line_number=None,
+                byte_offset=0,
+                stage="open",
+                errno_value=exc.errno,
+                exception_type=type(exc).__name__,
+            )
+            return _early_failure_result(path_str)
+        except NotADirectoryError as exc:
+            add_error(
+                "not_a_directory",
+                f"Not a directory opening trace file: {exc}",
+                line_number=None,
+                byte_offset=0,
+                stage="open",
+                errno_value=exc.errno,
+                exception_type=type(exc).__name__,
+            )
+            return _early_failure_result(path_str)
+        except OSError as exc:
+            err_code = (
+                "symlink_rejected"
+                if exc.errno == getattr(errno, "ELOOP", -1)
+                else "open_failed"
+            )
+            add_error(
+                err_code,
+                f"Failed to open trace file: {exc}",
+                line_number=None,
+                byte_offset=0,
+                stage="open",
+                errno_value=exc.errno,
+                exception_type=type(exc).__name__,
+            )
+            return _early_failure_result(path_str)
 
     hasher = hashlib.sha256()
     bytes_read = 0
     read_complete = False
-    descriptor_ok = False
     representation_header: dict[str, Any] | None = None
     event_count = 0
     footer_record_count: int | None = None
@@ -1235,43 +1461,48 @@ def inspect_native_trace_envelope(
     try:
         fstat_pre: os.stat_result | None = None
         can_stream_fd = False
-        try:
-            fstat_pre = os.fstat(fd)
-        except OSError as exc:
-            add_error(
-                "pre_read_fstat_failed",
-                f"Failed to fstat opened trace descriptor before reading: {exc}",
-                line_number=None,
-                byte_offset=0,
-                stage="pre_read_fstat",
-                errno_value=exc.errno,
-                exception_type=type(exc).__name__,
-            )
-            parse_aborted = True
+        if effective_raw_bytes is not None:
+            can_stream_fd = True
         else:
-            if not stat.S_ISREG(fstat_pre.st_mode):
+            assert fd is not None
+            assert lstat_pre is not None
+            try:
+                fstat_pre = os.fstat(fd)
+            except OSError as exc:
                 add_error(
-                    "not_regular_file",
-                    "Opened descriptor is not a regular file",
+                    "pre_read_fstat_failed",
+                    f"Failed to fstat opened trace descriptor before reading: {exc}",
                     line_number=None,
                     byte_offset=0,
                     stage="pre_read_fstat",
-                )
-                parse_aborted = True
-            elif (fstat_pre.st_dev, fstat_pre.st_ino) != (
-                lstat_pre.st_dev,
-                lstat_pre.st_ino,
-            ):
-                add_error(
-                    "descriptor_or_path_changed",
-                    "Opened descriptor inode/device did not match pre-open lstat identity",
-                    line_number=None,
-                    byte_offset=0,
-                    stage="pre_read_fstat",
+                    errno_value=exc.errno,
+                    exception_type=type(exc).__name__,
                 )
                 parse_aborted = True
             else:
-                can_stream_fd = True
+                if not stat.S_ISREG(fstat_pre.st_mode):
+                    add_error(
+                        "not_regular_file",
+                        "Opened descriptor is not a regular file",
+                        line_number=None,
+                        byte_offset=0,
+                        stage="pre_read_fstat",
+                    )
+                    parse_aborted = True
+                elif (fstat_pre.st_dev, fstat_pre.st_ino) != (
+                    lstat_pre.st_dev,
+                    lstat_pre.st_ino,
+                ):
+                    add_error(
+                        "descriptor_or_path_changed",
+                        "Opened descriptor inode/device did not match pre-open lstat identity",
+                        line_number=None,
+                        byte_offset=0,
+                        stage="pre_read_fstat",
+                    )
+                    parse_aborted = True
+                else:
+                    can_stream_fd = True
 
         if can_stream_fd:
             pending = bytearray()
@@ -1279,21 +1510,27 @@ def inspect_native_trace_envelope(
             current_line_start_offset = 0
 
             while True:
-                try:
-                    chunk = os.read(fd, READ_CHUNK_BYTES)
-                except OSError as exc:
-                    add_error(
-                        "descriptor_read_failed",
-                        f"Failed while reading trace file descriptor at byte offset {bytes_read}: {exc}",
-                        line_number=line_number + 1 if not parse_aborted else None,
-                        byte_offset=bytes_read,
-                        stage="read",
-                        errno_value=exc.errno,
-                        exception_type=type(exc).__name__,
-                    )
-                    pending.clear()
-                    parse_aborted = True
-                    break
+                if effective_raw_bytes is not None:
+                    chunk = effective_raw_bytes[
+                        bytes_read : bytes_read + READ_CHUNK_BYTES
+                    ]
+                else:
+                    assert fd is not None
+                    try:
+                        chunk = os.read(fd, READ_CHUNK_BYTES)
+                    except OSError as exc:
+                        add_error(
+                            "descriptor_read_failed",
+                            f"Failed while reading trace file descriptor at byte offset {bytes_read}: {exc}",
+                            line_number=line_number + 1 if not parse_aborted else None,
+                            byte_offset=bytes_read,
+                            stage="read",
+                            errno_value=exc.errno,
+                            exception_type=type(exc).__name__,
+                        )
+                        pending.clear()
+                        parse_aborted = True
+                        break
 
                 if not chunk:
                     read_complete = True
@@ -1386,69 +1623,73 @@ def inspect_native_trace_envelope(
                             stage="eof_validation",
                         )
 
-            assert fstat_pre is not None
-            try:
-                fstat_post = os.fstat(fd)
-            except OSError as exc:
-                add_error(
-                    "post_read_fstat_failed",
-                    f"Post-read fstat failed on trace descriptor: {exc}",
-                    line_number=None,
-                    byte_offset=bytes_read,
-                    stage="post_read_fstat",
-                    errno_value=exc.errno,
-                    exception_type=type(exc).__name__,
-                )
-            else:
+            if not retained_snapshot_mode:
+                assert fd is not None
+                assert checked_path is not None
+                assert fstat_pre is not None
                 try:
-                    lstat_post = os.lstat(checked_path)
+                    fstat_post = os.fstat(fd)
                 except OSError as exc:
                     add_error(
-                        "descriptor_or_path_changed",
-                        f"Post-read lstat failed on trace path: {exc}",
+                        "post_read_fstat_failed",
+                        f"Post-read fstat failed on trace descriptor: {exc}",
                         line_number=None,
                         byte_offset=bytes_read,
-                        stage="post_read_lstat",
+                        stage="post_read_fstat",
                         errno_value=exc.errno,
                         exception_type=type(exc).__name__,
                     )
                 else:
-                    if (
-                        not stat.S_ISREG(fstat_post.st_mode)
-                        or not stat.S_ISREG(lstat_post.st_mode)
-                        or stat.S_ISLNK(lstat_post.st_mode)
-                        or (fstat_post.st_dev, fstat_post.st_ino)
-                        != (fstat_pre.st_dev, fstat_pre.st_ino)
-                        or (lstat_post.st_dev, lstat_post.st_ino)
-                        != (fstat_pre.st_dev, fstat_pre.st_ino)
-                        or (read_complete and fstat_post.st_size != bytes_read)
-                        or (read_complete and lstat_post.st_size != bytes_read)
-                        or (read_complete and fstat_pre.st_size != bytes_read)
-                        or fstat_post.st_mtime_ns != fstat_pre.st_mtime_ns
-                    ):
+                    try:
+                        lstat_post = os.lstat(checked_path)
+                    except OSError as exc:
                         add_error(
                             "descriptor_or_path_changed",
-                            "Trace file descriptor or path identity/size/mtime changed during inspection",
+                            f"Post-read lstat failed on trace path: {exc}",
                             line_number=None,
                             byte_offset=bytes_read,
-                            stage="post_read_identity",
+                            stage="post_read_lstat",
+                            errno_value=exc.errno,
+                            exception_type=type(exc).__name__,
                         )
                     else:
-                        descriptor_ok = True
+                        if (
+                            not stat.S_ISREG(fstat_post.st_mode)
+                            or not stat.S_ISREG(lstat_post.st_mode)
+                            or stat.S_ISLNK(lstat_post.st_mode)
+                            or (fstat_post.st_dev, fstat_post.st_ino)
+                            != (fstat_pre.st_dev, fstat_pre.st_ino)
+                            or (lstat_post.st_dev, lstat_post.st_ino)
+                            != (fstat_pre.st_dev, fstat_pre.st_ino)
+                            or (read_complete and fstat_post.st_size != bytes_read)
+                            or (read_complete and lstat_post.st_size != bytes_read)
+                            or (read_complete and fstat_pre.st_size != bytes_read)
+                            or fstat_post.st_mtime_ns != fstat_pre.st_mtime_ns
+                        ):
+                            add_error(
+                                "descriptor_or_path_changed",
+                                "Trace file descriptor or path identity/size/mtime changed during inspection",
+                                line_number=None,
+                                byte_offset=bytes_read,
+                                stage="post_read_identity",
+                            )
+                        else:
+                            filesystem_identity_verified_by_trace_reader = True
     finally:
-        try:
-            os.close(fd)
-        except OSError as exc:
-            descriptor_ok = False
-            add_error(
-                "close_failed",
-                f"Failed to close trace file descriptor: {exc}",
-                line_number=None,
-                byte_offset=bytes_read,
-                stage="close",
-                errno_value=exc.errno,
-                exception_type=type(exc).__name__,
-            )
+        if fd is not None:
+            try:
+                os.close(fd)
+            except OSError as exc:
+                filesystem_identity_verified_by_trace_reader = False
+                add_error(
+                    "close_failed",
+                    f"Failed to close trace file descriptor: {exc}",
+                    line_number=None,
+                    byte_offset=bytes_read,
+                    stage="close",
+                    errno_value=exc.errno,
+                    exception_type=type(exc).__name__,
+                )
 
     if read_complete:
         observed_sha256: str | None = hasher.hexdigest()
@@ -1489,9 +1730,14 @@ def inspect_native_trace_envelope(
         sha256_match = False
         size_bytes_match = False
 
+    source_binding_ok = (
+        (effective_raw_bytes is not None)
+        if retained_snapshot_mode
+        else filesystem_identity_verified_by_trace_reader
+    )
     envelope_closed = bool(
         read_complete
-        and descriptor_ok
+        and source_binding_ok
         and header_seen
         and close_seen
         and not parse_aborted
@@ -1507,6 +1753,11 @@ def inspect_native_trace_envelope(
 
     return _build_result(
         path_str=path_str,
+        input_mode=input_mode,
+        filesystem_descriptor_opened=filesystem_descriptor_opened,
+        filesystem_identity_verified_by_trace_reader=(
+            filesystem_identity_verified_by_trace_reader
+        ),
         valid=valid,
         closed=envelope_closed,
         event_count=event_count,
@@ -1526,9 +1777,27 @@ def inspect_native_trace_envelope(
     )
 
 
+def _descriptor_binding_note_for_mode(
+    *,
+    input_mode: str,
+    filesystem_identity_verified_by_trace_reader: bool,
+    snapshot_streamed: bool,
+) -> str:
+    if input_mode == TRACE_INPUT_MODE_RETAINED_BYTES_SNAPSHOT:
+        if snapshot_streamed:
+            return _RETAINED_SNAPSHOT_PARSED_BINDING_NOTE
+        return _RETAINED_SNAPSHOT_UNAVAILABLE_BINDING_NOTE
+    if filesystem_identity_verified_by_trace_reader:
+        return _FILESYSTEM_VERIFIED_BINDING_NOTE
+    return _FILESYSTEM_UNVERIFIED_BINDING_NOTE
+
+
 def _build_result(
     *,
     path_str: str,
+    input_mode: str,
+    filesystem_descriptor_opened: bool,
+    filesystem_identity_verified_by_trace_reader: bool,
     valid: bool,
     closed: bool,
     event_count: int,
@@ -1551,10 +1820,20 @@ def _build_result(
         "envelope_only": True,
         "scientific_capture_established": False,
         "scientific_eligibility_established": False,
-        "descriptor_binding_note": (
-            "Opened with O_RDONLY (+ O_NOFOLLOW when available) and bound via pre/post "
-            "fstat/lstat inode/device/size/mtime comparison; detects path replacement across "
-            "the inspection window without claiming kernel-atomic protection against transient swaps."
+        "input_mode": input_mode,
+        "filesystem_descriptor_opened": filesystem_descriptor_opened,
+        "filesystem_identity_verified_by_trace_reader": (
+            filesystem_identity_verified_by_trace_reader
+        ),
+        "descriptor_binding_note": _descriptor_binding_note_for_mode(
+            input_mode=input_mode,
+            filesystem_identity_verified_by_trace_reader=(
+                filesystem_identity_verified_by_trace_reader
+            ),
+            snapshot_streamed=bool(
+                input_mode == TRACE_INPUT_MODE_RETAINED_BYTES_SNAPSHOT
+                and read_complete
+            ),
         ),
         "path": path_str,
         "valid": valid,

@@ -24272,6 +24272,723 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                             ebadf_rec.exception.errno, errno.EBADF
                         )
 
+    def test_scan_refmac_directory_entries_nullable_refusal_observations_task_968(
+        self,
+    ) -> None:
+        """Verify nullable exists/is_symlink/lookup observations and uninvented exception fields across both _scan_refmac_directory_entries refusal branches (#1050)."""
+        real_open = os.open
+        real_read = os.read
+        real_close = os.close
+        real_lstat = os.lstat
+        real_fstat = os.fstat
+        real_scandir = os.scandir
+
+        with tempfile.TemporaryDirectory() as outer_tmp:
+            outer_dir = Path(outer_tmp).resolve(strict=True)
+            sentinel_path = outer_dir / "sentinel.bin"
+            sentinel_bytes = b"unrelated-sentinel-payload-968\n"
+            sentinel_path.write_bytes(sentinel_bytes)
+            sentinel_st_before = real_lstat(sentinel_path)
+            sentinel_fd = real_open(sentinel_path, os.O_RDONLY)
+            try:
+                # 1. Both refusal branches (initial_refmac_dir_status and late_chain_check) across real verifier outcomes.
+                for branch in ("initial_refmac_dir_status", "late_chain_check"):
+                    for case in (
+                        "ancestor_replaced",
+                        "target_lookup_eacces",
+                        "target_lookup_eio",
+                        "confirmed_enoent",
+                        "actual_symlink",
+                    ):
+                        with self.subTest(branch=branch, case=case):
+                            with tempfile.TemporaryDirectory(
+                                dir=outer_dir
+                            ) as case_tmp:
+                                case_root = Path(case_tmp).resolve(strict=True)
+                                ev_root = case_root / "ev_root"
+                                ev_root.mkdir()
+                                refmac_dir = ev_root / "refmac"
+                                refmac_dir.mkdir()
+                                extra_file = refmac_dir / "extra_note.txt"
+                                extra_bytes = b"untouched-extra-968\n"
+                                extra_file.write_bytes(extra_bytes)
+                                extra_st_before = real_lstat(extra_file)
+                                baseline = onesar_refmac._capture_directory_identity_baseline(
+                                    refmac_dir, evidence_root=ev_root
+                                )
+
+                                parked_root = case_root / "parked_ev_root"
+                                parked_refmac = ev_root / "parked_refmac"
+                                symlink_target = case_root / "outside_dir"
+                                symlink_target.mkdir()
+
+                                if case == "ancestor_replaced":
+                                    ev_root.rename(parked_root)
+                                    ev_root.mkdir()
+                                elif case == "confirmed_enoent":
+                                    refmac_dir.rename(parked_refmac)
+                                elif case == "actual_symlink":
+                                    refmac_dir.rename(parked_refmac)
+                                    refmac_dir.symlink_to(symlink_target)
+
+                                injected_lstat_exc: OSError | None = None
+                                if case == "target_lookup_eacces":
+                                    injected_lstat_exc = PermissionError(
+                                        errno.EACCES,
+                                        "owned target lookup EACCES",
+                                        str(refmac_dir),
+                                    )
+                                elif case == "target_lookup_eio":
+                                    injected_lstat_exc = OSError(
+                                        errno.EIO,
+                                        "owned target lookup EIO",
+                                        str(refmac_dir),
+                                    )
+
+                                def _lstat_hook(
+                                    path_arg: Any, *args: Any, **kwargs: Any
+                                ) -> os.stat_result:
+                                    if (
+                                        injected_lstat_exc is not None
+                                        and os.fsdecode(path_arg)
+                                        == str(refmac_dir)
+                                    ):
+                                        raise injected_lstat_exc
+                                    return real_lstat(
+                                        path_arg, *args, **kwargs
+                                    )
+
+                                opened_fds: list[int] = []
+                                read_calls: list[int] = []
+                                scandir_calls: list[Any] = []
+
+                                def _track_open(
+                                    path_arg: Any,
+                                    flags: int,
+                                    *args: Any,
+                                    **kwargs: Any,
+                                ) -> int:
+                                    fd = real_open(
+                                        path_arg, flags, *args, **kwargs
+                                    )
+                                    opened_fds.append(fd)
+                                    return fd
+
+                                def _forbid_read(fd: int, n: int) -> bytes:
+                                    read_calls.append(fd)
+                                    return real_read(fd, n)
+
+                                def _forbid_scandir(
+                                    *args: Any, **kwargs: Any
+                                ) -> Any:
+                                    scandir_calls.append((args, kwargs))
+                                    return real_scandir(*args, **kwargs)
+
+                                caught: list[Exception] = []
+                                scan_causes: list[Exception | None] = []
+                                with (
+                                    patch.object(
+                                        onesar_refmac.os,
+                                        "lstat",
+                                        side_effect=_lstat_hook,
+                                    ),
+                                    patch.object(
+                                        onesar_refmac.os,
+                                        "open",
+                                        side_effect=_track_open,
+                                    ),
+                                    patch.object(
+                                        onesar_refmac.os,
+                                        "read",
+                                        side_effect=_forbid_read,
+                                    ),
+                                    patch.object(
+                                        onesar_refmac.os,
+                                        "scandir",
+                                        side_effect=_forbid_scandir,
+                                    ),
+                                ):
+                                    if branch == "initial_refmac_dir_status":
+                                        pre_causes: list[Exception] = []
+                                        pre_status = onesar_refmac._verify_refmac_directory_post_run(
+                                            refmac_dir,
+                                            refmac_dir_baseline=baseline,
+                                            caught_exceptions=pre_causes,
+                                        )
+                                        self.assertIs(
+                                            pre_status["identity_verified"],
+                                            False,
+                                        )
+                                        res = onesar_refmac._scan_refmac_directory_entries(
+                                            refmac_dir,
+                                            known_paths={},
+                                            expected_root_identity=baseline,
+                                            refmac_dir_status=pre_status,
+                                            refmac_dir_initial_cause=(
+                                                pre_causes[0]
+                                                if pre_causes
+                                                else None
+                                            ),
+                                            caught_exceptions=caught,
+                                            scandir_cause_out=scan_causes,
+                                        )
+                                    else:
+                                        res = onesar_refmac._scan_refmac_directory_entries(
+                                            refmac_dir,
+                                            known_paths={},
+                                            expected_root_identity=baseline,
+                                            caught_exceptions=caught,
+                                            scandir_cause_out=scan_causes,
+                                        )
+
+                                json.dumps(res)
+                                self.assertEqual(opened_fds, [])
+                                self.assertEqual(read_calls, [])
+                                self.assertEqual(scandir_calls, [])
+                                self.assertEqual(res["additional_files"], {})
+                                self.assertEqual(
+                                    len(res["inspection_errors"]), 1
+                                )
+                                sc_err = res["scandir_error"]
+                                self.assertIsNotNone(sc_err)
+                                assert sc_err is not None
+                                self.assertIs(
+                                    res["inspection_errors"][0], sc_err
+                                )
+                                self.assertEqual(
+                                    sc_err["output_key"], "refmac_dir_scan"
+                                )
+                                self.assertEqual(
+                                    sc_err["path"], str(refmac_dir)
+                                )
+                                self.assertIs(sc_err["is_regular_file"], False)
+                                self.assertIs(
+                                    sc_err["within_refmac_dir"], False
+                                )
+                                self.assertIsNone(sc_err["size_bytes"])
+                                self.assertEqual(len(scan_causes), 1)
+                                self.assertIsNotNone(scan_causes[0])
+                                if branch == "late_chain_check":
+                                    self.assertEqual(len(caught), 1)
+                                    self.assertIs(caught[0], scan_causes[0])
+
+                                if case == "ancestor_replaced":
+                                    self.assertIs(
+                                        sc_err["lookup_attempted"], False
+                                    )
+                                    self.assertIs(
+                                        sc_err["lookup_succeeded"], False
+                                    )
+                                    self.assertIsNone(sc_err["exists"])
+                                    self.assertIsNone(sc_err["is_symlink"])
+                                    self.assertIsNone(sc_err["is_directory"])
+                                    self.assertEqual(
+                                        res["unexpected_symlinks"], []
+                                    )
+                                    self.assertEqual(
+                                        sc_err["exception_type"], "ValueError"
+                                    )
+                                    self.assertIn(
+                                        "Evidence root inode changed",
+                                        str(sc_err["exception_message"]),
+                                    )
+                                    self.assertIsNone(sc_err["errno"])
+                                    parked_extra = (
+                                        parked_root
+                                        / "refmac"
+                                        / "extra_note.txt"
+                                    )
+                                    self.assertEqual(
+                                        parked_extra.read_bytes(), extra_bytes
+                                    )
+                                    self.assertEqual(
+                                        (
+                                            int(
+                                                real_lstat(parked_extra).st_dev
+                                            ),
+                                            int(
+                                                real_lstat(parked_extra).st_ino
+                                            ),
+                                        ),
+                                        (
+                                            int(extra_st_before.st_dev),
+                                            int(extra_st_before.st_ino),
+                                        ),
+                                    )
+                                elif case in (
+                                    "target_lookup_eacces",
+                                    "target_lookup_eio",
+                                ):
+                                    expected_errno = (
+                                        errno.EACCES
+                                        if case == "target_lookup_eacces"
+                                        else errno.EIO
+                                    )
+                                    expected_exc_type = (
+                                        "PermissionError"
+                                        if case == "target_lookup_eacces"
+                                        else "OSError"
+                                    )
+                                    self.assertIs(
+                                        sc_err["lookup_attempted"], True
+                                    )
+                                    self.assertIs(
+                                        sc_err["lookup_succeeded"], False
+                                    )
+                                    self.assertIsNone(sc_err["exists"])
+                                    self.assertIsNone(sc_err["is_symlink"])
+                                    self.assertIsNone(sc_err["is_directory"])
+                                    self.assertEqual(
+                                        res["unexpected_symlinks"], []
+                                    )
+                                    self.assertEqual(
+                                        sc_err["exception_type"],
+                                        expected_exc_type,
+                                    )
+                                    self.assertEqual(
+                                        sc_err["errno"], expected_errno
+                                    )
+                                    self.assertIs(
+                                        scan_causes[0], injected_lstat_exc
+                                    )
+                                elif case == "confirmed_enoent":
+                                    self.assertIs(
+                                        sc_err["lookup_attempted"], True
+                                    )
+                                    self.assertIs(
+                                        sc_err["lookup_succeeded"], False
+                                    )
+                                    self.assertIs(sc_err["exists"], False)
+                                    self.assertIs(sc_err["is_symlink"], False)
+                                    self.assertIs(
+                                        sc_err["is_directory"], False
+                                    )
+                                    self.assertEqual(
+                                        res["unexpected_symlinks"], []
+                                    )
+                                    self.assertEqual(
+                                        sc_err["exception_type"],
+                                        "FileNotFoundError",
+                                    )
+                                    self.assertEqual(
+                                        sc_err["errno"], errno.ENOENT
+                                    )
+                                elif case == "actual_symlink":
+                                    self.assertIs(
+                                        sc_err["lookup_attempted"], True
+                                    )
+                                    self.assertIs(
+                                        sc_err["lookup_succeeded"], True
+                                    )
+                                    self.assertIs(sc_err["exists"], True)
+                                    self.assertIs(sc_err["is_symlink"], True)
+                                    self.assertIs(
+                                        sc_err["is_directory"], False
+                                    )
+                                    self.assertEqual(
+                                        sc_err["symlink_target"],
+                                        str(symlink_target),
+                                    )
+                                    self.assertEqual(
+                                        res["unexpected_symlinks"],
+                                        [str(refmac_dir)],
+                                    )
+                                    self.assertEqual(
+                                        sc_err["exception_type"], "ValueError"
+                                    )
+                                    self.assertIsNone(sc_err["errno"])
+
+                # 2. Actual _open_admitted_directory refusal status fed into the initial-status scanner branch.
+                for adm_case in (
+                    "post_open_ancestor_replaced",
+                    "pre_open_target_lookup_eio",
+                ):
+                    with self.subTest(admission_to_scan_case=adm_case):
+                        with tempfile.TemporaryDirectory(
+                            dir=outer_dir
+                        ) as adm_tmp:
+                            adm_root = Path(adm_tmp).resolve(strict=True)
+                            ev_root = adm_root / "ev_root"
+                            ev_root.mkdir()
+                            refmac_dir = ev_root / "refmac"
+                            refmac_dir.mkdir()
+                            parked_root = adm_root / "parked_ev_root"
+                            baseline = onesar_refmac._capture_directory_identity_baseline(
+                                refmac_dir, evidence_root=ev_root
+                            )
+                            opened_adm: list[int] = []
+                            adm_causes: list[Exception] = []
+                            adm_status: dict[str, Any] = {}
+                            injected_adm_eio = OSError(
+                                errno.EIO,
+                                "owned pre-open target lookup EIO",
+                                str(refmac_dir),
+                            )
+
+                            def _open_adm_hook(
+                                path_arg: Any,
+                                flags: int,
+                                *args: Any,
+                                **kwargs: Any,
+                            ) -> int:
+                                fd = real_open(path_arg, flags, *args, **kwargs)
+                                opened_adm.append(fd)
+                                if (
+                                    adm_case == "post_open_ancestor_replaced"
+                                    and os.fsdecode(path_arg)
+                                    == str(refmac_dir)
+                                    and not parked_root.exists()
+                                ):
+                                    ev_root.rename(parked_root)
+                                    ev_root.mkdir()
+                                return fd
+
+                            def _lstat_adm_hook(
+                                path_arg: Any, *args: Any, **kwargs: Any
+                            ) -> os.stat_result:
+                                if (
+                                    adm_case == "pre_open_target_lookup_eio"
+                                    and os.fsdecode(path_arg)
+                                    == str(refmac_dir)
+                                ):
+                                    raise injected_adm_eio
+                                return real_lstat(path_arg, *args, **kwargs)
+
+                            with (
+                                patch.object(
+                                    onesar_refmac.os,
+                                    "open",
+                                    side_effect=_open_adm_hook,
+                                ),
+                                patch.object(
+                                    onesar_refmac.os,
+                                    "lstat",
+                                    side_effect=_lstat_adm_hook,
+                                ),
+                            ):
+                                with self.assertRaises(Exception) as adm_cm:
+                                    onesar_refmac._open_admitted_directory(
+                                        refmac_dir,
+                                        dir_baseline=baseline,
+                                        caught_exceptions=adm_causes,
+                                        dir_status_out=adm_status,
+                                    )
+
+                            for fd in set(opened_adm):
+                                with self.assertRaises(OSError) as ebadf_adm:
+                                    real_fstat(fd)
+                                self.assertEqual(
+                                    ebadf_adm.exception.errno, errno.EBADF
+                                )
+
+                            self.assertIs(
+                                adm_status["identity_verified"], False
+                            )
+                            self.assertGreaterEqual(len(adm_causes), 1)
+                            self.assertIs(adm_causes[0], adm_cm.exception)
+
+                            scan_causes_adm: list[Exception | None] = []
+                            with (
+                                patch.object(
+                                    onesar_refmac.os,
+                                    "scandir",
+                                    side_effect=AssertionError(
+                                        "scandir must not run on admitted-dir refusal"
+                                    ),
+                                ),
+                                patch.object(
+                                    onesar_refmac.os,
+                                    "read",
+                                    side_effect=AssertionError(
+                                        "read must not run on admitted-dir refusal"
+                                    ),
+                                ),
+                            ):
+                                res_adm = onesar_refmac._scan_refmac_directory_entries(
+                                    refmac_dir,
+                                    known_paths={},
+                                    expected_root_identity=baseline,
+                                    refmac_dir_status=adm_status,
+                                    refmac_dir_initial_cause=adm_causes[0],
+                                    scandir_cause_out=scan_causes_adm,
+                                )
+
+                            json.dumps(res_adm)
+                            self.assertEqual(res_adm["additional_files"], {})
+                            self.assertEqual(res_adm["unexpected_symlinks"], [])
+                            self.assertEqual(scan_causes_adm, [adm_causes[0]])
+                            sc_adm = res_adm["scandir_error"]
+                            self.assertIsNotNone(sc_adm)
+                            assert sc_adm is not None
+                            self.assertIsNone(sc_adm["exists"])
+                            self.assertIsNone(sc_adm["is_symlink"])
+                            self.assertIsNone(sc_adm["is_directory"])
+
+                            if adm_case == "post_open_ancestor_replaced":
+                                # Initial lookup and descriptor open/fstat succeeded, while descriptor["verified"] stays False because post-open namespace reverify failed on ancestor before target lstat (#1246).
+                                self.assertIs(
+                                    sc_adm["lookup_attempted"], True
+                                )
+                                self.assertIs(
+                                    sc_adm["lookup_succeeded"], True
+                                )
+                                self.assertIs(
+                                    sc_adm["lookup"]["lookup_attempted"], True
+                                )
+                                self.assertIs(
+                                    sc_adm["lookup"]["lookup_succeeded"], True
+                                )
+                                self.assertIs(
+                                    sc_adm["lookup"]["exists"], True
+                                )
+                                self.assertIs(
+                                    sc_adm["lookup"]["is_symlink"], False
+                                )
+                                self.assertIs(
+                                    sc_adm["lookup"]["verified"], True
+                                )
+                                self.assertIs(
+                                    sc_adm["descriptor"]["opened"], True
+                                )
+                                self.assertIs(
+                                    sc_adm["descriptor"]["fstat_succeeded"],
+                                    True,
+                                )
+                                self.assertIs(
+                                    sc_adm["descriptor"]["verified"], False
+                                )
+                                self.assertIs(
+                                    sc_adm["descriptor_verified"], False
+                                )
+                                self.assertIs(
+                                    sc_adm["descriptor"]["close_attempted"],
+                                    True,
+                                )
+                                self.assertIs(
+                                    sc_adm["descriptor"]["close_succeeded"],
+                                    True,
+                                )
+                                self.assertIs(
+                                    sc_adm["post_open_lookup"][
+                                        "lookup_attempted"
+                                    ],
+                                    False,
+                                )
+                                self.assertIs(
+                                    sc_adm["post_open_lookup"][
+                                        "lookup_succeeded"
+                                    ],
+                                    False,
+                                )
+                                self.assertIsNone(
+                                    sc_adm["post_open_lookup"]["exists"]
+                                )
+                                self.assertIsNone(
+                                    sc_adm["post_open_lookup"]["is_symlink"]
+                                )
+                                self.assertIs(
+                                    sc_adm["post_open_lookup"]["verified"],
+                                    False,
+                                )
+                                self.assertIs(
+                                    sc_adm["post_open_lookup_attempted"], False
+                                )
+                                self.assertIs(
+                                    sc_adm["post_open_lookup_succeeded"], False
+                                )
+                                self.assertIsNone(
+                                    sc_adm["post_open_lookup_exists"]
+                                )
+                                self.assertIsNone(
+                                    sc_adm["post_open_lookup_is_symlink"]
+                                )
+                                self.assertEqual(
+                                    sc_adm["admission_failure_phase"],
+                                    "parent_dir_post_open_namespace_reverify",
+                                )
+                                self.assertEqual(
+                                    sc_adm["failure_phase"],
+                                    "parent_dir_post_open_namespace_reverify",
+                                )
+                                self.assertEqual(
+                                    sc_adm["exception_type"], "ValueError"
+                                )
+                                self.assertIsNone(sc_adm["errno"])
+                            else:
+                                self.assertIs(
+                                    sc_adm["lookup_attempted"], True
+                                )
+                                self.assertIs(
+                                    sc_adm["lookup_succeeded"], False
+                                )
+                                self.assertIs(
+                                    sc_adm["descriptor"]["opened"], False
+                                )
+                                self.assertEqual(
+                                    sc_adm["admission_failure_phase"],
+                                    "parent_dir_lookup",
+                                )
+                                self.assertEqual(
+                                    sc_adm["failure_phase"],
+                                    "parent_dir_lookup",
+                                )
+                                self.assertEqual(
+                                    sc_adm["exception_type"], "OSError"
+                                )
+                                self.assertEqual(sc_adm["errno"], errno.EIO)
+
+                # 3. Missing optional provenance-field control: do not invent ValueError or copy generic refusal prose into exception_message.
+                for custom_error in (None, "Owned caller refusal prose"):
+                    with self.subTest(missing_optional_fields_error=custom_error):
+                        with tempfile.TemporaryDirectory(
+                            dir=outer_dir
+                        ) as min_tmp:
+                            min_root = Path(min_tmp).resolve(strict=True)
+                            refmac_dir = min_root / "refmac"
+                            refmac_dir.mkdir()
+                            minimal_status: dict[str, Any] = {
+                                "identity_verified": False,
+                            }
+                            if custom_error is not None:
+                                minimal_status["error"] = custom_error
+                            explicit_cause = RuntimeError(
+                                "owned upstream cause object"
+                            )
+                            min_causes: list[Exception | None] = []
+                            with (
+                                patch.object(
+                                    onesar_refmac.os,
+                                    "scandir",
+                                    side_effect=AssertionError(
+                                        "scandir must not run on minimal status refusal"
+                                    ),
+                                ),
+                                patch.object(
+                                    onesar_refmac.os,
+                                    "read",
+                                    side_effect=AssertionError(
+                                        "read must not run on minimal status refusal"
+                                    ),
+                                ),
+                            ):
+                                res_min = onesar_refmac._scan_refmac_directory_entries(
+                                    refmac_dir,
+                                    known_paths={},
+                                    refmac_dir_status=minimal_status,
+                                    refmac_dir_initial_cause=explicit_cause,
+                                    scandir_cause_out=min_causes,
+                                )
+
+                            json.dumps(res_min)
+                            self.assertEqual(res_min["additional_files"], {})
+                            self.assertEqual(res_min["unexpected_symlinks"], [])
+                            self.assertEqual(min_causes, [explicit_cause])
+                            sc_min = res_min["scandir_error"]
+                            self.assertIsNotNone(sc_min)
+                            assert sc_min is not None
+                            self.assertIsNone(sc_min["lookup_attempted"])
+                            self.assertIsNone(sc_min["lookup_succeeded"])
+                            self.assertIsNone(sc_min["exists"])
+                            self.assertIsNone(sc_min["is_symlink"])
+                            self.assertIsNone(sc_min["is_directory"])
+                            self.assertIsNone(sc_min["exception_type"])
+                            self.assertIsNone(sc_min["exception_message"])
+                            self.assertIsNone(sc_min["errno"])
+                            expected_err_str = (
+                                custom_error
+                                if custom_error is not None
+                                else f"Refmac working directory identity verification failed: {refmac_dir}"
+                            )
+                            self.assertEqual(sc_min["error"], expected_err_str)
+
+                # 4. Healthy directory control.
+                with tempfile.TemporaryDirectory(dir=outer_dir) as ok_tmp:
+                    ok_root = Path(ok_tmp).resolve(strict=True)
+                    ev_root = ok_root / "ev_root"
+                    ev_root.mkdir()
+                    refmac_dir = ev_root / "refmac"
+                    refmac_dir.mkdir()
+                    known_log = refmac_dir / "refmac.log"
+                    known_log.write_bytes(b"known-log-bytes\n")
+                    extra_note = refmac_dir / "extra_note.txt"
+                    extra_payload = b"healthy-extra-note-968\n"
+                    extra_note.write_bytes(extra_payload)
+                    ok_baseline = onesar_refmac._capture_directory_identity_baseline(
+                        refmac_dir, evidence_root=ev_root
+                    )
+                    ok_status = onesar_refmac._verify_refmac_directory_post_run(
+                        refmac_dir, refmac_dir_baseline=ok_baseline
+                    )
+                    self.assertIs(ok_status["identity_verified"], True)
+
+                    opened_ok: list[int] = []
+
+                    def _track_open_ok(
+                        path_arg: Any,
+                        flags: int,
+                        *args: Any,
+                        **kwargs: Any,
+                    ) -> int:
+                        fd = real_open(path_arg, flags, *args, **kwargs)
+                        opened_ok.append(fd)
+                        return fd
+
+                    caught_ok: list[Exception] = []
+                    causes_ok: list[Exception | None] = []
+                    with patch.object(
+                        onesar_refmac.os, "open", side_effect=_track_open_ok
+                    ):
+                        res_ok = onesar_refmac._scan_refmac_directory_entries(
+                            refmac_dir,
+                            known_paths={"log": known_log},
+                            expected_root_identity=ok_baseline,
+                            refmac_dir_status=ok_status,
+                            caught_exceptions=caught_ok,
+                            scandir_cause_out=causes_ok,
+                        )
+
+                    json.dumps(res_ok)
+                    for fd in set(opened_ok):
+                        with self.assertRaises(OSError) as ebadf_ok:
+                            real_fstat(fd)
+                        self.assertEqual(ebadf_ok.exception.errno, errno.EBADF)
+                    self.assertIsNone(res_ok["scandir_error"])
+                    self.assertEqual(res_ok["inspection_errors"], [])
+                    self.assertEqual(res_ok["unexpected_symlinks"], [])
+                    self.assertEqual(caught_ok, [])
+                    self.assertEqual(causes_ok, [])
+                    self.assertEqual(
+                        set(res_ok["additional_files"]), {"extra_note.txt"}
+                    )
+                    self.assertEqual(
+                        res_ok["additional_files"]["extra_note.txt"]["sha256"],
+                        hashlib.sha256(extra_payload).hexdigest(),
+                    )
+                    self.assertEqual(
+                        res_ok["additional_files"]["extra_note.txt"][
+                            "size_bytes"
+                        ],
+                        len(extra_payload),
+                    )
+
+                # Verify unrelated sentinel descriptor and file identity/bytes remain untouched.
+                sentinel_st_after = real_lstat(sentinel_path)
+                self.assertEqual(
+                    (
+                        int(sentinel_st_after.st_dev),
+                        int(sentinel_st_after.st_ino),
+                    ),
+                    (
+                        int(sentinel_st_before.st_dev),
+                        int(sentinel_st_before.st_ino),
+                    ),
+                )
+                self.assertEqual(
+                    real_read(sentinel_fd, 256), sentinel_bytes
+                )
+            finally:
+                real_close(sentinel_fd)
+
 
 if __name__ == "__main__":
     unittest.main()

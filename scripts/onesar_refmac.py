@@ -10398,39 +10398,119 @@ def _scan_refmac_directory_entries(
     scandir_error: dict[str, Any] | None = None
     normalized_refmac_dir = Path(os.path.abspath(os.fspath(refmac_dir)))
 
-    if refmac_dir_status is not None and not bool(
-        refmac_dir_status.get("identity_verified", True)
-    ):
-        err_msg = str(
-            refmac_dir_status.get("error")
-            or f"Refmac working directory identity verification failed: {refmac_dir}"
+    def _build_scan_refusal_result(
+        status_map: Mapping[str, Any],
+        *,
+        default_error: str,
+        cause_obj: Exception | None,
+    ) -> dict[str, Any]:
+        raw_error = status_map.get("error")
+        err_msg = (
+            str(raw_error)
+            if isinstance(raw_error, str) and raw_error
+            else default_error
         )
-        is_sym = bool(refmac_dir_status.get("is_symlink", False))
-        scandir_error = {
+        raw_exists = status_map.get("exists")
+        obs_exists = raw_exists if isinstance(raw_exists, bool) else None
+        raw_is_sym = status_map.get("is_symlink")
+        obs_is_sym = raw_is_sym if isinstance(raw_is_sym, bool) else None
+        raw_is_dir = status_map.get("is_directory")
+        obs_is_dir = raw_is_dir if isinstance(raw_is_dir, bool) else None
+        raw_lookup_attempted = status_map.get("lookup_attempted")
+        obs_lookup_attempted = (
+            raw_lookup_attempted
+            if isinstance(raw_lookup_attempted, bool)
+            else None
+        )
+        raw_lookup_succeeded = status_map.get("lookup_succeeded")
+        obs_lookup_succeeded = (
+            raw_lookup_succeeded
+            if isinstance(raw_lookup_succeeded, bool)
+            else None
+        )
+        raw_exc_type = status_map.get("exception_type")
+        obs_exc_type = (
+            str(raw_exc_type)
+            if isinstance(raw_exc_type, str) and raw_exc_type
+            else None
+        )
+        raw_exc_msg = status_map.get("exception_message")
+        obs_exc_msg = (
+            str(raw_exc_msg)
+            if isinstance(raw_exc_msg, str)
+            and (raw_exc_msg or obs_exc_type is not None)
+            else None
+        )
+        raw_errno = status_map.get("errno")
+        obs_errno = (
+            int(raw_errno)
+            if isinstance(raw_errno, int) and not isinstance(raw_errno, bool)
+            else None
+        )
+        refusal_error: dict[str, Any] = {
             "output_key": "refmac_dir_scan",
             "path": str(refmac_dir),
-            "exists": bool(refmac_dir_status.get("exists", False)),
-            "is_symlink": is_sym,
+            "lookup_attempted": obs_lookup_attempted,
+            "lookup_succeeded": obs_lookup_succeeded,
+            "exists": obs_exists,
+            "is_symlink": obs_is_sym,
+            "is_directory": obs_is_dir,
             "is_regular_file": False,
             "within_refmac_dir": False,
             "size_bytes": None,
             "error": err_msg,
-            "exception_type": str(
-                refmac_dir_status.get("exception_type") or "ValueError"
-            ),
-            "exception_message": str(
-                refmac_dir_status.get("exception_message") or err_msg
-            ),
-            "errno": refmac_dir_status.get("errno"),
+            "exception_type": obs_exc_type,
+            "exception_message": obs_exc_msg,
+            "errno": obs_errno,
         }
+        for obs_key in (
+            "resolved_path",
+            "symlink_target",
+            "dev",
+            "ino",
+            "mode",
+            "expected_dev",
+            "expected_ino",
+            "expected_resolved_path",
+            "expected_mode",
+            "mode_changed",
+            "identity_verified",
+            "writable_post_run",
+        ):
+            if obs_key in status_map:
+                refusal_error[obs_key] = copy.deepcopy(status_map[obs_key])
+        for adm_key in _PRESERVED_ADMISSION_STATUS_KEYS:
+            if adm_key in status_map and adm_key not in (
+                "lookup_attempted",
+                "lookup_succeeded",
+            ):
+                refusal_error[adm_key] = copy.deepcopy(status_map[adm_key])
+        raw_phase = status_map.get("failure_phase") or status_map.get(
+            "admission_failure_phase"
+        )
+        if isinstance(raw_phase, str) and raw_phase:
+            refusal_error["failure_phase"] = raw_phase
         if scandir_cause_out is not None:
-            scandir_cause_out.append(refmac_dir_initial_cause)
+            scandir_cause_out.append(cause_obj)
         return {
             "additional_files": additional_files,
-            "unexpected_symlinks": [str(refmac_dir)] if is_sym else [],
-            "inspection_errors": [scandir_error],
-            "scandir_error": scandir_error,
+            "unexpected_symlinks": (
+                [str(refmac_dir)] if obs_is_sym is True else []
+            ),
+            "inspection_errors": [refusal_error],
+            "scandir_error": refusal_error,
         }
+
+    if refmac_dir_status is not None and not bool(
+        refmac_dir_status.get("identity_verified", True)
+    ):
+        return _build_scan_refusal_result(
+            refmac_dir_status,
+            default_error=(
+                f"Refmac working directory identity verification failed: {refmac_dir}"
+            ),
+            cause_obj=refmac_dir_initial_cause,
+        )
 
     expected_scan_dev: int | None = None
     expected_scan_ino: int | None = None
@@ -10444,38 +10524,13 @@ def _scan_refmac_directory_entries(
         if caught_exceptions is not None:
             caught_exceptions.extend(chain_causes)
         if not bool(chain_check.get("identity_verified", False)):
-            err_msg = str(
-                chain_check.get("error")
-                or f"Refmac working directory chain verification failed: {refmac_dir}"
+            return _build_scan_refusal_result(
+                chain_check,
+                default_error=(
+                    f"Refmac working directory chain verification failed: {refmac_dir}"
+                ),
+                cause_obj=chain_causes[0] if chain_causes else None,
             )
-            is_sym = bool(chain_check.get("is_symlink", False))
-            scandir_error = {
-                "output_key": "refmac_dir_scan",
-                "path": str(refmac_dir),
-                "exists": bool(chain_check.get("exists", False)),
-                "is_symlink": is_sym,
-                "is_regular_file": False,
-                "within_refmac_dir": False,
-                "size_bytes": None,
-                "error": err_msg,
-                "exception_type": str(
-                    chain_check.get("exception_type") or "ValueError"
-                ),
-                "exception_message": str(
-                    chain_check.get("exception_message") or err_msg
-                ),
-                "errno": chain_check.get("errno"),
-            }
-            if scandir_cause_out is not None:
-                scandir_cause_out.append(
-                    chain_causes[0] if chain_causes else None
-                )
-            return {
-                "additional_files": additional_files,
-                "unexpected_symlinks": [str(refmac_dir)] if is_sym else [],
-                "inspection_errors": [scandir_error],
-                "scandir_error": scandir_error,
-            }
         expected_scan_dev = int(chain_check["dev"])
         expected_scan_ino = int(chain_check["ino"])
     else:

@@ -268,6 +268,35 @@ def _validate_canonical_no_traversal_abs_path(
     return raw
 
 
+def _validate_root_relative_member_path(value: Any, *, field_name: str) -> str:
+    """Validate a canonical relative POSIX member path inside a controlled root."""
+    if type(value) is not str:
+        raise ValueError(f"{field_name} must be a str, got {type(value).__name__}")
+    if not value or "\x00" in value:
+        raise ValueError(
+            f"{field_name} must be a non-empty relative POSIX path without NUL bytes: {value!r}"
+        )
+    if (
+        value.startswith("/")
+        or value.endswith("/")
+        or os.path.isabs(value)
+        or Path(value).is_absolute()
+    ):
+        raise ValueError(
+            f"{field_name} must be a relative POSIX path without leading or trailing '/': {value!r}"
+        )
+    parts = value.split("/")
+    if any(not part or part in (".", "..") for part in parts):
+        raise ValueError(
+            f"{field_name} must not contain empty, '.', or '..' path segments: {value!r}"
+        )
+    if os.path.normpath(value) != value:
+        raise ValueError(
+            f"{field_name} is not in normalized canonical relative form: {value!r}"
+        )
+    return value
+
+
 def _validate_sha256_digest(value: Any, *, field_name: str) -> str:
     """Validate that ``value`` is a 64-character lowercase hexadecimal SHA-256 string."""
     if type(value) is not str:
@@ -908,6 +937,3013 @@ class PreOpenLookupSnapshot:
         }
 
 
+VALID_PARTIAL_READ_FAILURE_PHASES: tuple[str, ...] = (
+    "open",
+    "initial_fstat",
+    "pre_read_size_check",
+    "stream_read",
+    "stream_size_overflow",
+    "end_fstat",
+    "descriptor_identity_comparison",
+    "descriptor_size_comparison",
+    "final_kernel_lookup",
+    "final_path_traversal",
+    "final_target_resolution",
+    "post_read_namespace_comparison",
+)
+
+POST_EOF_PARTIAL_READ_FAILURE_PHASES: tuple[str, ...] = (
+    "end_fstat",
+    "descriptor_identity_comparison",
+    "descriptor_size_comparison",
+    "final_kernel_lookup",
+    "final_path_traversal",
+    "final_target_resolution",
+    "post_read_namespace_comparison",
+)
+
+
+@dataclass(frozen=True, eq=False)
+class ObservedStatSnapshot:
+    """Immutable general observational stat/lstat/fstat snapshot preserving any POSIX file kind.
+
+    ``file_type`` and the ``is_*`` kind flags describe the same ``st_mode`` rather
+    than independent measurements: when all kind flags use their default ``False``
+    values, the matching flag is derived from the supplied ``file_type`` mask, and
+    any explicitly set positive kind flag must agree with ``file_type``.
+    """
+
+    dev: int
+    ino: int
+    mode: int
+    uid: int
+    gid: int
+    size_bytes: int
+    is_symlink: bool = False
+    is_regular: bool = False
+    is_directory: bool = False
+    is_fifo: bool = False
+    is_socket: bool = False
+    is_char_device: bool = False
+    is_block_device: bool = False
+    file_type: int | None = None
+
+    def __post_init__(self) -> None:
+        for attr_name in ("dev", "ino", "mode", "uid", "gid", "size_bytes"):
+            val = getattr(self, attr_name)
+            if type(val) is not int:
+                raise ValueError(
+                    f"ObservedStatSnapshot.{attr_name} must be a non-boolean int"
+                )
+        if (
+            (self.dev, self.ino, self.mode) == (0, 0, 0)
+            or self.dev <= 0
+            or self.ino <= 0
+        ):
+            raise ValueError(
+                "ObservedStatSnapshot cannot use fabricated zero or non-positive dev/ino identity"
+            )
+        if (
+            self.mode < 0
+            or self.uid < 0
+            or self.gid < 0
+            or self.size_bytes < 0
+        ):
+            raise ValueError(
+                "ObservedStatSnapshot mode/uid/gid/size_bytes must be non-negative"
+            )
+        if self.mode != int(stat.S_IMODE(self.mode)):
+            raise ValueError(
+                f"ObservedStatSnapshot.mode must be permission bits only (S_IMODE), got {self.mode:#o}"
+            )
+        kind_flag_specs: tuple[tuple[str, bool, int], ...] = (
+            ("is_symlink", self.is_symlink, int(stat.S_IFLNK)),
+            ("is_regular", self.is_regular, int(stat.S_IFREG)),
+            ("is_directory", self.is_directory, int(stat.S_IFDIR)),
+            ("is_fifo", self.is_fifo, int(stat.S_IFIFO)),
+            ("is_socket", self.is_socket, int(stat.S_IFSOCK)),
+            ("is_char_device", self.is_char_device, int(stat.S_IFCHR)),
+            ("is_block_device", self.is_block_device, int(stat.S_IFBLK)),
+        )
+        for flag_name, flag_val, _fmt in kind_flag_specs:
+            if type(flag_val) is not bool:
+                raise ValueError(
+                    f"ObservedStatSnapshot.{flag_name} must be a bool"
+                )
+        if self.file_type is not None:
+            if (
+                type(self.file_type) is not int
+                or self.file_type <= 0
+                or int(stat.S_IFMT(self.file_type)) != self.file_type
+            ):
+                raise ValueError(
+                    f"ObservedStatSnapshot.file_type must be a positive S_IFMT file-type mask, got {self.file_type!r}"
+                )
+
+        true_specs = [
+            (name, fmt) for name, val, fmt in kind_flag_specs if val
+        ]
+        if len(true_specs) > 1:
+            raise ValueError(
+                "ObservedStatSnapshot cannot set more than one file-kind boolean flag"
+            )
+        if len(true_specs) == 1:
+            _flag_name, expected_fmt = true_specs[0]
+            if self.file_type is None:
+                object.__setattr__(self, "file_type", expected_fmt)
+            elif self.file_type != expected_fmt:
+                raise ValueError(
+                    f"ObservedStatSnapshot.file_type {self.file_type:#o} does not match {_flag_name}=True ({expected_fmt:#o})"
+                )
+        else:
+            if self.file_type is None:
+                raise ValueError(
+                    "ObservedStatSnapshot must specify a file kind via a kind flag or file_type"
+                )
+            matched_flag = next(
+                (name for name, _val, fmt in kind_flag_specs if fmt == self.file_type),
+                None,
+            )
+            if matched_flag is not None:
+                object.__setattr__(self, matched_flag, True)
+
+    @classmethod
+    def from_stat_result(cls, st: os.stat_result) -> ObservedStatSnapshot:
+        fmt = int(stat.S_IFMT(st.st_mode))
+        return cls(
+            dev=int(st.st_dev),
+            ino=int(st.st_ino),
+            mode=int(stat.S_IMODE(st.st_mode)),
+            uid=int(st.st_uid),
+            gid=int(st.st_gid),
+            size_bytes=int(st.st_size),
+            is_symlink=bool(stat.S_ISLNK(st.st_mode)),
+            is_regular=bool(stat.S_ISREG(st.st_mode)),
+            is_directory=bool(stat.S_ISDIR(st.st_mode)),
+            is_fifo=bool(stat.S_ISFIFO(st.st_mode)),
+            is_socket=bool(stat.S_ISSOCK(st.st_mode)),
+            is_char_device=bool(stat.S_ISCHR(st.st_mode)),
+            is_block_device=bool(stat.S_ISBLK(st.st_mode)),
+            file_type=fmt if fmt > 0 else None,
+        )
+
+    @classmethod
+    def from_lookup_stat_observation(
+        cls, obs: LookupStatObservation
+    ) -> ObservedStatSnapshot:
+        if type(obs) is not LookupStatObservation:
+            raise ValueError(
+                "ObservedStatSnapshot.from_lookup_stat_observation requires a LookupStatObservation"
+            )
+        return cls(
+            dev=obs.dev,
+            ino=obs.ino,
+            mode=obs.mode,
+            uid=obs.uid,
+            gid=obs.gid,
+            size_bytes=obs.size_bytes,
+            is_symlink=obs.is_symlink,
+            is_regular=obs.is_regular,
+        )
+
+    @property
+    def identity_tuple(self) -> tuple[int, int, int, int, int]:
+        return (self.dev, self.ino, self.mode, self.uid, self.gid)
+
+    @property
+    def raw_mode(self) -> int:
+        assert self.file_type is not None
+        return int(self.file_type | self.mode)
+
+    @property
+    def st_fmt(self) -> int:
+        assert self.file_type is not None
+        return self.file_type
+
+    @property
+    def kind(self) -> str:
+        if self.is_regular:
+            return "regular"
+        if self.is_symlink:
+            return "symlink"
+        if self.is_directory:
+            return "directory"
+        if self.is_fifo:
+            return "fifo"
+        if self.is_socket:
+            return "socket"
+        if self.is_char_device:
+            return "char_device"
+        if self.is_block_device:
+            return "block_device"
+        return "other"
+
+    def __eq__(self, other: object) -> bool:
+        if type(other) is ObservedStatSnapshot:
+            return (
+                self.dev,
+                self.ino,
+                self.mode,
+                self.uid,
+                self.gid,
+                self.size_bytes,
+                self.is_symlink,
+                self.is_regular,
+                self.is_directory,
+                self.is_fifo,
+                self.is_socket,
+                self.is_char_device,
+                self.is_block_device,
+                self.file_type,
+            ) == (
+                other.dev,
+                other.ino,
+                other.mode,
+                other.uid,
+                other.gid,
+                other.size_bytes,
+                other.is_symlink,
+                other.is_regular,
+                other.is_directory,
+                other.is_fifo,
+                other.is_socket,
+                other.is_char_device,
+                other.is_block_device,
+                other.file_type,
+            )
+        if type(other) is LookupStatObservation:
+            return (
+                not (
+                    self.is_directory
+                    or self.is_fifo
+                    or self.is_socket
+                    or self.is_char_device
+                    or self.is_block_device
+                )
+                and (self.is_symlink != self.is_regular)
+                and (
+                    self.dev,
+                    self.ino,
+                    self.mode,
+                    self.uid,
+                    self.gid,
+                    self.size_bytes,
+                    self.is_symlink,
+                    self.is_regular,
+                )
+                == (
+                    other.dev,
+                    other.ino,
+                    other.mode,
+                    other.uid,
+                    other.gid,
+                    other.size_bytes,
+                    other.is_symlink,
+                    other.is_regular,
+                )
+            )
+        return NotImplemented
+
+    def __hash__(self) -> int:
+        if (self.is_regular != self.is_symlink) and not (
+            self.is_directory
+            or self.is_fifo
+            or self.is_socket
+            or self.is_char_device
+            or self.is_block_device
+        ):
+            return hash(
+                (
+                    self.dev,
+                    self.ino,
+                    self.mode,
+                    self.uid,
+                    self.gid,
+                    self.size_bytes,
+                    self.is_symlink,
+                    self.is_regular,
+                )
+            )
+        return hash(
+            (
+                self.dev,
+                self.ino,
+                self.mode,
+                self.uid,
+                self.gid,
+                self.size_bytes,
+                self.is_symlink,
+                self.is_regular,
+                self.is_directory,
+                self.is_fifo,
+                self.is_socket,
+                self.is_char_device,
+                self.is_block_device,
+                self.file_type,
+            )
+        )
+
+    def __getitem__(self, key: str) -> Any:
+        d = self.to_dict()
+        if key in d:
+            return d[key]
+        raise KeyError(key)
+
+    def keys(self):
+        return self.to_dict().keys()
+
+    def __contains__(self, item: object) -> bool:
+        return item in self.to_dict()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "dev": self.dev,
+            "ino": self.ino,
+            "mode": self.mode,
+            "raw_mode": self.raw_mode,
+            "file_type": self.file_type,
+            "kind": self.kind,
+            "uid": self.uid,
+            "gid": self.gid,
+            "size_bytes": self.size_bytes,
+            "is_symlink": self.is_symlink,
+            "is_regular": self.is_regular,
+            "is_directory": self.is_directory,
+            "is_fifo": self.is_fifo,
+            "is_socket": self.is_socket,
+            "is_char_device": self.is_char_device,
+            "is_block_device": self.is_block_device,
+        }
+
+
+PostReadStatObservation = ObservedStatSnapshot
+
+
+def _stat_to_observed_stat_or_none(
+    st: os.stat_result | None,
+) -> ObservedStatSnapshot | None:
+    """Convert an ``os.stat_result`` to :class:`ObservedStatSnapshot`, preserving any file kind and reserving ``None`` for unavailable facts."""
+    if st is None:
+        return None
+    return ObservedStatSnapshot.from_stat_result(st)
+
+
+def _stat_to_lookup_obs_or_none(
+    st: os.stat_result | None,
+) -> ObservedStatSnapshot | None:
+    """Convert an ``os.stat_result`` to :class:`ObservedStatSnapshot`, preserving any file kind and reserving ``None`` for unavailable facts."""
+    return _stat_to_observed_stat_or_none(st)
+
+
+def _coerce_observed_stat_snapshot_or_none(
+    val: ObservedStatSnapshot | LookupStatObservation | None,
+    *,
+    field_name: str,
+) -> ObservedStatSnapshot | None:
+    if val is None:
+        return None
+    if type(val) is ObservedStatSnapshot:
+        return val
+    if type(val) is LookupStatObservation:
+        return ObservedStatSnapshot.from_lookup_stat_observation(val)
+    raise ValueError(
+        f"{field_name} must be an ObservedStatSnapshot or None"
+    )
+
+
+VALID_PATH_TRAVERSAL_FAILURE_STAGES: tuple[str, ...] = (
+    "preliminary_kernel_lookup",
+    "preliminary_kernel_lookup_directory_suffix",
+    "preliminary_kernel_lstat",
+    "preliminary_kernel_stat",
+    "preliminary_kernel_not_regular",
+    "lexical_root_directory",
+    "root_component_lstat",
+    "root_component_not_canonical_directory",
+    "leaf_dot_component",
+    "leaf_dotdot_component",
+    "component_lstat",
+    "symlink_expansion_limit",
+    "symlink_readlink",
+    "symlink_target_invalid",
+    "leaf_symlink_directory_suffix",
+    "symlink_target_changed",
+    "symlink_identity_changed",
+    "leaf_symlink_resolves_to_root",
+    "leaf_component_directory",
+    "directory_identity_changed",
+    "non_leaf_component_regular_file",
+    "component_unsupported_file_type",
+    "traversal_target_unresolved",
+    "target_identity_mismatch",
+    "target_size_mismatch",
+)
+
+
+@dataclass(frozen=True)
+class TraversalComponentObservation:
+    """Immutable observation of a single path component inspected during ``_traverse_path_components``."""
+
+    path: str
+    lstat: ObservedStatSnapshot
+    is_root: bool = False
+    is_leaf: bool = False
+    accepted: bool = True
+    readlink_target: str | None = None
+    directory_identity: _ObservedDirectoryIdentity | None = None
+    symlink_edge: _SymlinkEdge | None = None
+    symlink_identity: _ObservedSymlinkIdentity | None = None
+
+    def __post_init__(self) -> None:
+        for bool_field in ("is_root", "is_leaf", "accepted"):
+            if type(getattr(self, bool_field)) is not bool:
+                raise ValueError(
+                    f"TraversalComponentObservation.{bool_field} must be a bool"
+                )
+        if self.is_root:
+            if self.path != "/":
+                raise ValueError(
+                    f"TraversalComponentObservation.path must be '/' when is_root=True, got {self.path!r}"
+                )
+            if self.is_leaf:
+                raise ValueError(
+                    "TraversalComponentObservation.is_leaf must be False when is_root=True"
+                )
+        else:
+            _validate_canonical_no_traversal_abs_path(
+                self.path,
+                field_name="TraversalComponentObservation.path",
+                allow_root=False,
+            )
+        coerced_lstat = _coerce_observed_stat_snapshot_or_none(
+            self.lstat, field_name="TraversalComponentObservation.lstat"
+        )
+        if coerced_lstat is None:
+            raise ValueError(
+                "TraversalComponentObservation.lstat must be an ObservedStatSnapshot"
+            )
+        object.__setattr__(self, "lstat", coerced_lstat)
+
+        if self.readlink_target is not None:
+            if type(self.readlink_target) is not str:
+                raise ValueError(
+                    "TraversalComponentObservation.readlink_target must be a str or None"
+                )
+            if not self.lstat.is_symlink:
+                raise ValueError(
+                    "TraversalComponentObservation.readlink_target requires a symlink lstat"
+                )
+            if self.accepted and (
+                not self.readlink_target or "\x00" in self.readlink_target
+            ):
+                raise ValueError(
+                    "TraversalComponentObservation.readlink_target must be non-empty without NUL bytes when accepted=True"
+                )
+
+        if self.lstat.is_directory and not self.lstat.is_symlink:
+            if (
+                self.readlink_target is not None
+                or self.symlink_edge is not None
+                or self.symlink_identity is not None
+            ):
+                raise ValueError(
+                    "TraversalComponentObservation directory component cannot set symlink fields"
+                )
+            if self.accepted and self.is_leaf:
+                raise ValueError(
+                    "TraversalComponentObservation directory component cannot have accepted=True when is_leaf=True"
+                )
+            expected_dir_id = _ObservedDirectoryIdentity(
+                path=self.path,
+                resolved_path=self.path,
+                dev=self.lstat.dev,
+                ino=self.lstat.ino,
+                mode=self.lstat.mode,
+                uid=self.lstat.uid,
+                gid=self.lstat.gid,
+            )
+            if self.directory_identity is None:
+                object.__setattr__(
+                    self, "directory_identity", expected_dir_id
+                )
+            elif (
+                type(self.directory_identity) is not _ObservedDirectoryIdentity
+                or self.directory_identity != expected_dir_id
+            ):
+                raise ValueError(
+                    "TraversalComponentObservation.directory_identity must match path and lstat"
+                )
+        elif self.lstat.is_symlink:
+            if self.directory_identity is not None:
+                raise ValueError(
+                    "TraversalComponentObservation symlink component cannot set directory_identity"
+                )
+            if self.accepted and self.is_root:
+                raise ValueError(
+                    "TraversalComponentObservation root component cannot be an accepted symlink"
+                )
+            if self.accepted and self.readlink_target is None:
+                raise ValueError(
+                    "TraversalComponentObservation accepted symlink component requires readlink_target"
+                )
+            if (
+                self.readlink_target is not None
+                and len(self.readlink_target) > 0
+                and "\x00" not in self.readlink_target
+                and not self.is_root
+            ):
+                expected_edge = _SymlinkEdge(
+                    path=self.path, target=self.readlink_target
+                )
+                expected_sym_id = _ObservedSymlinkIdentity(
+                    path=self.path,
+                    target=self.readlink_target,
+                    dev=self.lstat.dev,
+                    ino=self.lstat.ino,
+                    mode=self.lstat.mode,
+                    uid=self.lstat.uid,
+                    gid=self.lstat.gid,
+                )
+                if self.symlink_edge is None:
+                    object.__setattr__(self, "symlink_edge", expected_edge)
+                elif (
+                    type(self.symlink_edge) is not _SymlinkEdge
+                    or self.symlink_edge != expected_edge
+                ):
+                    raise ValueError(
+                        "TraversalComponentObservation.symlink_edge must match path and readlink_target"
+                    )
+                if self.symlink_identity is None:
+                    object.__setattr__(self, "symlink_identity", expected_sym_id)
+                elif (
+                    type(self.symlink_identity) is not _ObservedSymlinkIdentity
+                    or self.symlink_identity != expected_sym_id
+                ):
+                    raise ValueError(
+                        "TraversalComponentObservation.symlink_identity must match path, readlink_target, and lstat"
+                    )
+            else:
+                if (
+                    self.symlink_edge is not None
+                    or self.symlink_identity is not None
+                ):
+                    raise ValueError(
+                        "TraversalComponentObservation symlink_edge/symlink_identity require a valid non-root readlink_target"
+                    )
+            if self.accepted:
+                assert self.readlink_target is not None
+                if self.is_leaf and self.readlink_target.endswith(
+                    ("/", "/.", "/..")
+                ):
+                    raise ValueError(
+                        "TraversalComponentObservation accepted leaf symlink cannot have a directory suffix target"
+                    )
+                if self.is_leaf and not [
+                    c for c in self.readlink_target.split("/") if c
+                ]:
+                    raise ValueError(
+                        "TraversalComponentObservation accepted leaf symlink cannot resolve to root"
+                    )
+        elif self.lstat.is_regular:
+            if (
+                self.directory_identity is not None
+                or self.symlink_edge is not None
+                or self.symlink_identity is not None
+            ):
+                raise ValueError(
+                    "TraversalComponentObservation regular-file component cannot set directory or symlink fields"
+                )
+            if self.accepted and (self.is_root or not self.is_leaf):
+                raise ValueError(
+                    "TraversalComponentObservation regular-file component can only have accepted=True when is_leaf=True and is_root=False"
+                )
+        else:
+            if (
+                self.directory_identity is not None
+                or self.symlink_edge is not None
+                or self.symlink_identity is not None
+            ):
+                raise ValueError(
+                    "TraversalComponentObservation unsupported file-type component cannot set directory or symlink fields"
+                )
+            if self.accepted:
+                raise ValueError(
+                    "TraversalComponentObservation unsupported file-type component cannot have accepted=True"
+                )
+
+    def __getitem__(self, key: str) -> Any:
+        d = self.to_dict()
+        if key in d:
+            return d[key]
+        raise KeyError(key)
+
+    def keys(self):
+        return self.to_dict().keys()
+
+    def __contains__(self, item: object) -> bool:
+        return item in self.to_dict()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "path": self.path,
+            "is_root": self.is_root,
+            "is_leaf": self.is_leaf,
+            "accepted": self.accepted,
+            "lstat": self.lstat.to_dict(),
+            "readlink_target": self.readlink_target,
+            "directory_identity": (
+                self.directory_identity.to_dict()
+                if self.directory_identity is not None
+                else None
+            ),
+            "symlink_edge": (
+                self.symlink_edge.to_dict()
+                if self.symlink_edge is not None
+                else None
+            ),
+            "symlink_identity": (
+                self.symlink_identity.to_dict()
+                if self.symlink_identity is not None
+                else None
+            ),
+        }
+
+
+@dataclass(frozen=True)
+class FinalPathTraversalObservation:
+    """Immutable stage-aware observation of post-EOF ``_traverse_path_components`` when traversal fails.
+
+    Separately retains preliminary kernel lookup stats, root ``'/'`` inspection,
+    accepted unique-path directory/symlink maps, ordered per-step component
+    observations, earlier accepted observations of a revisited path, and the
+    current rejected component's ``lstat`` and literal ``os.readlink`` target
+    without promoting a rejected terminal directory or other non-regular
+    component to a completed regular traversal result.
+    """
+
+    failed_stage: str | None = None
+    lexical_path: str | None = None
+    preliminary_lexical_lstat: ObservedStatSnapshot | None = None
+    preliminary_lexical_stat: ObservedStatSnapshot | None = None
+    root_lstat: ObservedStatSnapshot | None = None
+    root_directory_identity: _ObservedDirectoryIdentity | None = None
+    accepted_symlinks: tuple[_SymlinkEdge, ...] = ()
+    accepted_symlink_identities: tuple[_ObservedSymlinkIdentity, ...] = ()
+    accepted_directories: tuple[_ObservedDirectoryIdentity, ...] = ()
+    component_observations: tuple[TraversalComponentObservation, ...] = ()
+    resolved_path: str | None = None
+    target_lstat: ObservedStatSnapshot | None = None
+    failed_component_path: str | None = None
+    failed_component_is_leaf: bool | None = None
+    failed_component_lstat: ObservedStatSnapshot | None = None
+    failed_component_readlink_target: str | None = None
+    failed_component_symlink_edge: _SymlinkEdge | None = None
+    failed_component_symlink_identity: _ObservedSymlinkIdentity | None = None
+    failed_component_directory_identity: _ObservedDirectoryIdentity | None = None
+    rejected_component: TraversalComponentObservation | None = None
+    prior_component_lstat: ObservedStatSnapshot | None = None
+    prior_symlink_edge: _SymlinkEdge | None = None
+    prior_symlink_identity: _ObservedSymlinkIdentity | None = None
+    prior_directory_identity: _ObservedDirectoryIdentity | None = None
+    symlink_expansions_count: int = 0
+
+    def __post_init__(self) -> None:
+        if self.failed_stage is not None and (
+            type(self.failed_stage) is not str
+            or self.failed_stage not in VALID_PATH_TRAVERSAL_FAILURE_STAGES
+        ):
+            raise ValueError(
+                f"FinalPathTraversalObservation.failed_stage must be one of {VALID_PATH_TRAVERSAL_FAILURE_STAGES} or None, got {self.failed_stage!r}"
+            )
+        if self.lexical_path is not None:
+            _validate_lexical_abs_path(
+                self.lexical_path,
+                field_name="FinalPathTraversalObservation.lexical_path",
+            )
+        for field_name in (
+            "preliminary_lexical_lstat",
+            "preliminary_lexical_stat",
+            "root_lstat",
+            "target_lstat",
+            "failed_component_lstat",
+            "prior_component_lstat",
+        ):
+            coerced = _coerce_observed_stat_snapshot_or_none(
+                getattr(self, field_name),
+                field_name=f"FinalPathTraversalObservation.{field_name}",
+            )
+            object.__setattr__(self, field_name, coerced)
+        if (
+            self.preliminary_lexical_stat is not None
+            and self.preliminary_lexical_lstat is None
+        ):
+            raise ValueError(
+                "FinalPathTraversalObservation.preliminary_lexical_stat requires preliminary_lexical_lstat"
+            )
+        _validate_nonnegative_int(
+            self.symlink_expansions_count,
+            field_name="FinalPathTraversalObservation.symlink_expansions_count",
+        )
+
+        if self.root_directory_identity is not None:
+            if (
+                type(self.root_directory_identity)
+                is not _ObservedDirectoryIdentity
+                or self.root_directory_identity.path != "/"
+                or self.root_directory_identity.resolved_path != "/"
+            ):
+                raise ValueError(
+                    "FinalPathTraversalObservation.root_directory_identity must be an _ObservedDirectoryIdentity for '/'"
+                )
+            if self.root_lstat is not None and (
+                self.root_lstat.is_symlink
+                or not self.root_lstat.is_directory
+                or self.root_lstat.identity_tuple
+                != self.root_directory_identity.identity_tuple
+            ):
+                raise ValueError(
+                    "FinalPathTraversalObservation.root_directory_identity must match root_lstat"
+                )
+        elif (
+            self.root_lstat is not None
+            and not self.root_lstat.is_symlink
+            and self.root_lstat.is_directory
+        ):
+            object.__setattr__(
+                self,
+                "root_directory_identity",
+                _ObservedDirectoryIdentity(
+                    path="/",
+                    resolved_path="/",
+                    dev=self.root_lstat.dev,
+                    ino=self.root_lstat.ino,
+                    mode=self.root_lstat.mode,
+                    uid=self.root_lstat.uid,
+                    gid=self.root_lstat.gid,
+                ),
+            )
+
+        if not isinstance(self.accepted_symlinks, tuple) or not all(
+            type(e) is _SymlinkEdge for e in self.accepted_symlinks
+        ):
+            raise ValueError(
+                "FinalPathTraversalObservation.accepted_symlinks must be a tuple of _SymlinkEdge"
+            )
+        edge_paths = [e.path for e in self.accepted_symlinks]
+        if edge_paths != sorted(set(edge_paths)) or any(
+            ep == "/" for ep in edge_paths
+        ):
+            raise ValueError(
+                "FinalPathTraversalObservation.accepted_symlinks must be strictly sorted by unique non-root edge.path"
+            )
+        if not isinstance(self.accepted_symlink_identities, tuple) or not all(
+            type(s) is _ObservedSymlinkIdentity
+            for s in self.accepted_symlink_identities
+        ):
+            raise ValueError(
+                "FinalPathTraversalObservation.accepted_symlink_identities must be a tuple of _ObservedSymlinkIdentity"
+            )
+        expected_pairs = [(e.path, e.target) for e in self.accepted_symlinks]
+        observed_pairs = [
+            (s.path, s.target) for s in self.accepted_symlink_identities
+        ]
+        it = iter(expected_pairs)
+        if not all(pair in it for pair in observed_pairs):
+            raise ValueError(
+                "FinalPathTraversalObservation.accepted_symlink_identities must be an ordered subset of accepted_symlinks"
+            )
+
+        if not isinstance(self.accepted_directories, tuple) or not all(
+            type(d) is _ObservedDirectoryIdentity
+            for d in self.accepted_directories
+        ):
+            raise ValueError(
+                "FinalPathTraversalObservation.accepted_directories must be a tuple of _ObservedDirectoryIdentity"
+            )
+        dir_paths = [d.path for d in self.accepted_directories]
+        if len(dir_paths) != len(set(dir_paths)) or any(
+            d.path != d.resolved_path for d in self.accepted_directories
+        ):
+            raise ValueError(
+                "FinalPathTraversalObservation.accepted_directories must have unique canonical paths"
+            )
+        if len(self.accepted_directories) > 0:
+            root_dirs = [
+                d for d in self.accepted_directories if d.path == "/"
+            ]
+            if len(root_dirs) != 1:
+                raise ValueError(
+                    "FinalPathTraversalObservation.accepted_directories must include root '/' when non-empty"
+                )
+            if self.root_directory_identity is None:
+                object.__setattr__(
+                    self, "root_directory_identity", root_dirs[0]
+                )
+            elif self.root_directory_identity != root_dirs[0]:
+                raise ValueError(
+                    "FinalPathTraversalObservation root entry in accepted_directories must match root_directory_identity"
+                )
+        elif len(self.accepted_symlinks) > 0:
+            raise ValueError(
+                "FinalPathTraversalObservation.accepted_symlinks requires non-empty accepted_directories"
+            )
+
+        if (self.resolved_path is None) != (self.target_lstat is None):
+            raise ValueError(
+                "FinalPathTraversalObservation.resolved_path and target_lstat must be both present or both None"
+            )
+        if self.resolved_path is not None:
+            _validate_canonical_no_traversal_abs_path(
+                self.resolved_path,
+                field_name="FinalPathTraversalObservation.resolved_path",
+                allow_root=False,
+            )
+            assert self.target_lstat is not None
+            if not self.target_lstat.is_regular or self.target_lstat.is_symlink:
+                raise ValueError(
+                    "FinalPathTraversalObservation.target_lstat must represent a regular non-symlink file"
+                )
+            if len(self.accepted_directories) == 0:
+                raise ValueError(
+                    "FinalPathTraversalObservation.resolved_path requires non-empty accepted_directories"
+                )
+
+        if self.failed_component_path is not None:
+            if self.failed_component_path == "/":
+                if self.failed_stage not in (
+                    None,
+                    "root_component_lstat",
+                    "root_component_not_canonical_directory",
+                ):
+                    raise ValueError(
+                        f"FinalPathTraversalObservation.failed_component_path cannot be '/' when failed_stage={self.failed_stage!r}"
+                    )
+            else:
+                _validate_canonical_no_traversal_abs_path(
+                    self.failed_component_path,
+                    field_name="FinalPathTraversalObservation.failed_component_path",
+                    allow_root=False,
+                )
+        if (
+            self.failed_component_is_leaf is not None
+            and type(self.failed_component_is_leaf) is not bool
+        ):
+            raise ValueError(
+                "FinalPathTraversalObservation.failed_component_is_leaf must be a bool or None"
+            )
+        if (
+            self.failed_component_readlink_target is not None
+            and type(self.failed_component_readlink_target) is not str
+        ):
+            raise ValueError(
+                "FinalPathTraversalObservation.failed_component_readlink_target must be a str or None"
+            )
+        if (
+            self.failed_component_symlink_edge is not None
+            and type(self.failed_component_symlink_edge) is not _SymlinkEdge
+        ):
+            raise ValueError(
+                "FinalPathTraversalObservation.failed_component_symlink_edge must be a _SymlinkEdge or None"
+            )
+        if (
+            self.failed_component_symlink_identity is not None
+            and type(self.failed_component_symlink_identity)
+            is not _ObservedSymlinkIdentity
+        ):
+            raise ValueError(
+                "FinalPathTraversalObservation.failed_component_symlink_identity must be an _ObservedSymlinkIdentity or None"
+            )
+        if (
+            self.failed_component_directory_identity is not None
+            and type(self.failed_component_directory_identity)
+            is not _ObservedDirectoryIdentity
+        ):
+            raise ValueError(
+                "FinalPathTraversalObservation.failed_component_directory_identity must be an _ObservedDirectoryIdentity or None"
+            )
+        if self.rejected_component is not None:
+            if type(self.rejected_component) is not TraversalComponentObservation:
+                raise ValueError(
+                    "FinalPathTraversalObservation.rejected_component must be a TraversalComponentObservation or None"
+                )
+            if self.rejected_component.accepted:
+                raise ValueError(
+                    "FinalPathTraversalObservation.rejected_component must have accepted=False"
+                )
+
+        if not isinstance(self.component_observations, tuple) or not all(
+            type(c) is TraversalComponentObservation
+            for c in self.component_observations
+        ):
+            raise ValueError(
+                "FinalPathTraversalObservation.component_observations must be a tuple of TraversalComponentObservation"
+            )
+        if (
+            len(self.component_observations) > 0
+            and not self.component_observations[-1].accepted
+            and self.rejected_component is None
+        ):
+            object.__setattr__(
+                self, "rejected_component", self.component_observations[-1]
+            )
+
+        if self.rejected_component is not None:
+            rej = self.rejected_component
+            if self.failed_component_path is None:
+                object.__setattr__(self, "failed_component_path", rej.path)
+            elif self.failed_component_path != rej.path:
+                raise ValueError(
+                    "FinalPathTraversalObservation.failed_component_path must match rejected_component.path"
+                )
+            if self.failed_component_is_leaf is None:
+                object.__setattr__(
+                    self, "failed_component_is_leaf", rej.is_leaf
+                )
+            elif self.failed_component_is_leaf != rej.is_leaf:
+                raise ValueError(
+                    "FinalPathTraversalObservation.failed_component_is_leaf must match rejected_component.is_leaf"
+                )
+            if self.failed_component_lstat is None:
+                object.__setattr__(self, "failed_component_lstat", rej.lstat)
+            elif self.failed_component_lstat != rej.lstat:
+                raise ValueError(
+                    "FinalPathTraversalObservation.failed_component_lstat must match rejected_component.lstat"
+                )
+            if self.failed_component_readlink_target is None:
+                object.__setattr__(
+                    self,
+                    "failed_component_readlink_target",
+                    rej.readlink_target,
+                )
+            elif self.failed_component_readlink_target != rej.readlink_target:
+                raise ValueError(
+                    "FinalPathTraversalObservation.failed_component_readlink_target must match rejected_component.readlink_target"
+                )
+            if self.failed_component_symlink_edge is None:
+                object.__setattr__(
+                    self, "failed_component_symlink_edge", rej.symlink_edge
+                )
+            elif self.failed_component_symlink_edge != rej.symlink_edge:
+                raise ValueError(
+                    "FinalPathTraversalObservation.failed_component_symlink_edge must match rejected_component.symlink_edge"
+                )
+            if self.failed_component_symlink_identity is None:
+                object.__setattr__(
+                    self,
+                    "failed_component_symlink_identity",
+                    rej.symlink_identity,
+                )
+            elif self.failed_component_symlink_identity != rej.symlink_identity:
+                raise ValueError(
+                    "FinalPathTraversalObservation.failed_component_symlink_identity must match rejected_component.symlink_identity"
+                )
+            if self.failed_component_directory_identity is None:
+                object.__setattr__(
+                    self,
+                    "failed_component_directory_identity",
+                    rej.directory_identity,
+                )
+            elif (
+                self.failed_component_directory_identity
+                != rej.directory_identity
+            ):
+                raise ValueError(
+                    "FinalPathTraversalObservation.failed_component_directory_identity must match rejected_component.directory_identity"
+                )
+        elif self.failed_component_lstat is not None:
+            if self.failed_component_path is None:
+                if (
+                    self.failed_stage
+                    == "root_component_not_canonical_directory"
+                ):
+                    object.__setattr__(self, "failed_component_path", "/")
+                else:
+                    raise ValueError(
+                        "FinalPathTraversalObservation.failed_component_lstat requires failed_component_path"
+                    )
+            assert self.failed_component_path is not None
+            is_root_comp = self.failed_component_path == "/"
+            if self.failed_component_is_leaf is None:
+                if is_root_comp or self.failed_stage in (
+                    "root_component_not_canonical_directory",
+                    "directory_identity_changed",
+                    "non_leaf_component_regular_file",
+                ):
+                    inferred_leaf = False
+                elif self.failed_stage in (
+                    "leaf_symlink_directory_suffix",
+                    "leaf_symlink_resolves_to_root",
+                    "leaf_component_directory",
+                ):
+                    inferred_leaf = True
+                else:
+                    raise ValueError(
+                        f"FinalPathTraversalObservation.failed_component_is_leaf is required when failed_stage={self.failed_stage!r} does not establish leaf position"
+                    )
+                object.__setattr__(
+                    self, "failed_component_is_leaf", inferred_leaf
+                )
+            assert self.failed_component_is_leaf is not None
+            rej = TraversalComponentObservation(
+                path=self.failed_component_path,
+                lstat=self.failed_component_lstat,
+                is_root=is_root_comp,
+                is_leaf=self.failed_component_is_leaf,
+                accepted=False,
+                readlink_target=self.failed_component_readlink_target,
+                directory_identity=self.failed_component_directory_identity,
+                symlink_edge=self.failed_component_symlink_edge,
+                symlink_identity=self.failed_component_symlink_identity,
+            )
+            object.__setattr__(self, "rejected_component", rej)
+            object.__setattr__(
+                self, "failed_component_symlink_edge", rej.symlink_edge
+            )
+            object.__setattr__(
+                self, "failed_component_symlink_identity", rej.symlink_identity
+            )
+            object.__setattr__(
+                self,
+                "failed_component_directory_identity",
+                rej.directory_identity,
+            )
+        else:
+            if any(
+                v is not None
+                for v in (
+                    self.failed_component_readlink_target,
+                    self.failed_component_symlink_edge,
+                    self.failed_component_symlink_identity,
+                    self.failed_component_directory_identity,
+                )
+            ):
+                raise ValueError(
+                    "FinalPathTraversalObservation failed_component readlink/symlink/directory fields require failed_component_lstat"
+                )
+            if (
+                self.failed_component_is_leaf is not None
+                and self.failed_component_path is None
+            ):
+                raise ValueError(
+                    "FinalPathTraversalObservation.failed_component_is_leaf requires failed_component_path"
+                )
+            if self.failed_component_path == "/":
+                if self.failed_component_is_leaf is True:
+                    raise ValueError(
+                        "FinalPathTraversalObservation root failed_component_path cannot have failed_component_is_leaf=True"
+                    )
+                if self.failed_component_is_leaf is None:
+                    object.__setattr__(self, "failed_component_is_leaf", False)
+            elif (
+                self.failed_component_path is not None
+                and self.failed_component_is_leaf is None
+            ):
+                raise ValueError(
+                    "FinalPathTraversalObservation.failed_component_is_leaf is required when failed_component_path is non-root"
+                )
+
+        if (
+            self.prior_symlink_edge is not None
+            and type(self.prior_symlink_edge) is not _SymlinkEdge
+        ):
+            raise ValueError(
+                "FinalPathTraversalObservation.prior_symlink_edge must be a _SymlinkEdge or None"
+            )
+        if (
+            self.prior_symlink_identity is not None
+            and type(self.prior_symlink_identity)
+            is not _ObservedSymlinkIdentity
+        ):
+            raise ValueError(
+                "FinalPathTraversalObservation.prior_symlink_identity must be an _ObservedSymlinkIdentity or None"
+            )
+        if (
+            self.prior_directory_identity is not None
+            and type(self.prior_directory_identity)
+            is not _ObservedDirectoryIdentity
+        ):
+            raise ValueError(
+                "FinalPathTraversalObservation.prior_directory_identity must be an _ObservedDirectoryIdentity or None"
+            )
+        if any(
+            v is not None
+            for v in (
+                self.prior_component_lstat,
+                self.prior_symlink_edge,
+                self.prior_symlink_identity,
+                self.prior_directory_identity,
+            )
+        ):
+            if self.failed_component_path is None:
+                raise ValueError(
+                    "FinalPathTraversalObservation prior component observations require failed_component_path"
+                )
+        if self.prior_symlink_identity is not None:
+            if self.prior_symlink_identity.path != self.failed_component_path:
+                raise ValueError(
+                    "FinalPathTraversalObservation.prior_symlink_identity.path must match failed_component_path"
+                )
+            if (
+                self.prior_symlink_identity
+                not in self.accepted_symlink_identities
+            ):
+                raise ValueError(
+                    "FinalPathTraversalObservation.prior_symlink_identity must be present in accepted_symlink_identities"
+                )
+            if self.prior_symlink_edge is None:
+                object.__setattr__(
+                    self,
+                    "prior_symlink_edge",
+                    _SymlinkEdge(
+                        path=self.prior_symlink_identity.path,
+                        target=self.prior_symlink_identity.target,
+                    ),
+                )
+            elif (
+                self.prior_symlink_edge.path != self.prior_symlink_identity.path
+                or self.prior_symlink_edge.target
+                != self.prior_symlink_identity.target
+            ):
+                raise ValueError(
+                    "FinalPathTraversalObservation.prior_symlink_edge must match prior_symlink_identity"
+                )
+        if self.prior_symlink_edge is not None:
+            if self.prior_symlink_edge.path != self.failed_component_path:
+                raise ValueError(
+                    "FinalPathTraversalObservation.prior_symlink_edge.path must match failed_component_path"
+                )
+            if self.prior_symlink_edge not in self.accepted_symlinks:
+                raise ValueError(
+                    "FinalPathTraversalObservation.prior_symlink_edge must be present in accepted_symlinks"
+                )
+        if self.prior_directory_identity is not None:
+            if self.prior_directory_identity.path != self.failed_component_path:
+                raise ValueError(
+                    "FinalPathTraversalObservation.prior_directory_identity.path must match failed_component_path"
+                )
+            if self.prior_directory_identity not in self.accepted_directories:
+                raise ValueError(
+                    "FinalPathTraversalObservation.prior_directory_identity must be present in accepted_directories"
+                )
+        if self.prior_component_lstat is not None:
+            if len(self.component_observations) > 0:
+                matching_accepted = [
+                    c
+                    for c in self.component_observations
+                    if c.accepted and c.path == self.failed_component_path
+                ]
+                if (
+                    not matching_accepted
+                    or self.prior_component_lstat != matching_accepted[-1].lstat
+                ):
+                    raise ValueError(
+                        "FinalPathTraversalObservation.prior_component_lstat must match the latest accepted component lstat for failed_component_path"
+                    )
+            else:
+                if (
+                    self.prior_symlink_identity is not None
+                    and self.prior_directory_identity is None
+                ):
+                    if (
+                        not self.prior_component_lstat.is_symlink
+                        or self.prior_component_lstat.identity_tuple
+                        != self.prior_symlink_identity.identity_tuple
+                    ):
+                        raise ValueError(
+                            "FinalPathTraversalObservation.prior_component_lstat must match prior_symlink_identity"
+                        )
+                elif (
+                    self.prior_directory_identity is not None
+                    and self.prior_symlink_identity is None
+                ):
+                    if (
+                        self.prior_component_lstat.is_symlink
+                        or not self.prior_component_lstat.is_directory
+                        or self.prior_component_lstat.identity_tuple
+                        != self.prior_directory_identity.identity_tuple
+                    ):
+                        raise ValueError(
+                            "FinalPathTraversalObservation.prior_component_lstat must match prior_directory_identity"
+                        )
+                elif (
+                    self.prior_symlink_identity is not None
+                    and self.prior_directory_identity is not None
+                ):
+                    matches_sym = (
+                        self.prior_component_lstat.is_symlink
+                        and self.prior_component_lstat.identity_tuple
+                        == self.prior_symlink_identity.identity_tuple
+                    )
+                    matches_dir = (
+                        self.prior_component_lstat.is_directory
+                        and not self.prior_component_lstat.is_symlink
+                        and self.prior_component_lstat.identity_tuple
+                        == self.prior_directory_identity.identity_tuple
+                    )
+                    if not (matches_sym or matches_dir):
+                        raise ValueError(
+                            "FinalPathTraversalObservation.prior_component_lstat must match prior_symlink_identity or prior_directory_identity"
+                        )
+                else:
+                    if (
+                        self.prior_symlink_edge is not None
+                        and not self.prior_component_lstat.is_symlink
+                    ):
+                        raise ValueError(
+                            "FinalPathTraversalObservation.prior_component_lstat must be a symlink when prior_symlink_edge is present"
+                        )
+                    if not (
+                        self.prior_component_lstat.is_symlink
+                        or self.prior_component_lstat.is_directory
+                    ):
+                        raise ValueError(
+                            "FinalPathTraversalObservation.prior_component_lstat must represent a previously accepted symlink or directory"
+                        )
+
+        if len(self.component_observations) > 0:
+            first_comp = self.component_observations[0]
+            if not first_comp.is_root or first_comp.path != "/":
+                raise ValueError(
+                    "FinalPathTraversalObservation.component_observations[0] must be root '/'"
+                )
+            if any(c.is_root for c in self.component_observations[1:]):
+                raise ValueError(
+                    "FinalPathTraversalObservation non-initial component_observations cannot have is_root=True"
+                )
+            if any(not c.accepted for c in self.component_observations[:-1]):
+                raise ValueError(
+                    "FinalPathTraversalObservation non-trailing component_observations must have accepted=True"
+                )
+            if any(
+                c.lstat.is_regular and not c.lstat.is_symlink
+                for c in self.component_observations[:-1]
+            ):
+                raise ValueError(
+                    "FinalPathTraversalObservation non-trailing component_observations cannot be accepted regular files"
+                )
+            if self.root_lstat is None:
+                object.__setattr__(self, "root_lstat", first_comp.lstat)
+                if (
+                    first_comp.accepted
+                    and self.root_directory_identity is None
+                ):
+                    object.__setattr__(
+                        self,
+                        "root_directory_identity",
+                        first_comp.directory_identity,
+                    )
+            elif self.root_lstat != first_comp.lstat:
+                raise ValueError(
+                    "FinalPathTraversalObservation.component_observations[0].lstat must match root_lstat"
+                )
+
+            last_comp = self.component_observations[-1]
+            if not last_comp.accepted:
+                if self.rejected_component != last_comp:
+                    raise ValueError(
+                        "FinalPathTraversalObservation.component_observations[-1] must match rejected_component"
+                    )
+                if self.resolved_path is not None or self.target_lstat is not None:
+                    raise ValueError(
+                        "FinalPathTraversalObservation with rejected_component cannot set resolved_path or target_lstat"
+                    )
+            else:
+                if self.rejected_component is not None:
+                    raise ValueError(
+                        "FinalPathTraversalObservation.component_observations must end with rejected_component when rejected_component is present"
+                    )
+                if self.resolved_path is not None:
+                    if (
+                        not last_comp.is_leaf
+                        or not last_comp.lstat.is_regular
+                        or last_comp.lstat.is_symlink
+                        or last_comp.path != self.resolved_path
+                        or last_comp.lstat != self.target_lstat
+                    ):
+                        raise ValueError(
+                            "FinalPathTraversalObservation with resolved_path must end with matching accepted regular-file leaf component"
+                        )
+                elif last_comp.lstat.is_regular and not last_comp.lstat.is_symlink:
+                    raise ValueError(
+                        "FinalPathTraversalObservation ending with an accepted regular-file leaf component requires resolved_path and target_lstat"
+                    )
+
+            comp_dirs: dict[str, _ObservedDirectoryIdentity] = {}
+            comp_edges: dict[str, _SymlinkEdge] = {}
+            comp_syms: dict[str, _ObservedSymlinkIdentity] = {}
+            for comp in self.component_observations:
+                if not comp.accepted:
+                    continue
+                if comp.directory_identity is not None:
+                    if (
+                        comp.path in comp_dirs
+                        and comp_dirs[comp.path] != comp.directory_identity
+                    ):
+                        raise ValueError(
+                            f"FinalPathTraversalObservation.component_observations contains conflicting accepted directory identities for {comp.path!r}"
+                        )
+                    comp_dirs[comp.path] = comp.directory_identity
+                if comp.symlink_edge is not None:
+                    if (
+                        comp.path in comp_edges
+                        and comp_edges[comp.path] != comp.symlink_edge
+                    ):
+                        raise ValueError(
+                            f"FinalPathTraversalObservation.component_observations contains conflicting accepted symlink edges for {comp.path!r}"
+                        )
+                    comp_edges[comp.path] = comp.symlink_edge
+                if comp.symlink_identity is not None:
+                    if (
+                        comp.path in comp_syms
+                        and comp_syms[comp.path] != comp.symlink_identity
+                    ):
+                        raise ValueError(
+                            f"FinalPathTraversalObservation.component_observations contains conflicting accepted symlink identities for {comp.path!r}"
+                        )
+                    comp_syms[comp.path] = comp.symlink_identity
+            acc_dirs = {d.path: d for d in self.accepted_directories}
+            acc_edges = {e.path: e for e in self.accepted_symlinks}
+            acc_syms = {s.path: s for s in self.accepted_symlink_identities}
+            if comp_dirs != acc_dirs:
+                raise ValueError(
+                    "FinalPathTraversalObservation.accepted_directories must match accepted directory components in component_observations"
+                )
+            if comp_edges != acc_edges or comp_syms != acc_syms:
+                raise ValueError(
+                    "FinalPathTraversalObservation.accepted_symlinks/accepted_symlink_identities must match accepted symlink components in component_observations"
+                )
+            expected_symlink_expansions = sum(
+                1
+                for comp in self.component_observations
+                if not comp.is_root and comp.lstat.is_symlink
+            )
+            if self.symlink_expansions_count != expected_symlink_expansions:
+                raise ValueError(
+                    f"FinalPathTraversalObservation.symlink_expansions_count ({self.symlink_expansions_count}) must match non-root symlink components in component_observations ({expected_symlink_expansions})"
+                )
+        else:
+            if (
+                self.rejected_component is not None
+                and self.resolved_path is not None
+            ):
+                raise ValueError(
+                    "FinalPathTraversalObservation with rejected_component cannot set resolved_path or target_lstat"
+                )
+
+        if self.failed_stage is None:
+            return
+
+        prelim_stages = (
+            "preliminary_kernel_lookup",
+            "preliminary_kernel_lookup_directory_suffix",
+            "preliminary_kernel_lstat",
+            "preliminary_kernel_stat",
+            "preliminary_kernel_not_regular",
+        )
+        if self.failed_stage in prelim_stages:
+            if (
+                self.root_lstat is not None
+                or self.root_directory_identity is not None
+                or len(self.accepted_symlinks) > 0
+                or len(self.accepted_symlink_identities) > 0
+                or len(self.accepted_directories) > 0
+                or len(self.component_observations) > 0
+                or self.resolved_path is not None
+                or self.target_lstat is not None
+                or self.failed_component_path is not None
+                or self.failed_component_lstat is not None
+                or self.rejected_component is not None
+                or self.symlink_expansions_count != 0
+            ):
+                raise ValueError(
+                    f"FinalPathTraversalObservation post-preliminary fields must be empty when failed_stage={self.failed_stage!r}"
+                )
+            if self.failed_stage in (
+                "preliminary_kernel_lookup_directory_suffix",
+                "preliminary_kernel_lstat",
+            ):
+                if (
+                    self.preliminary_lexical_lstat is not None
+                    or self.preliminary_lexical_stat is not None
+                ):
+                    raise ValueError(
+                        f"FinalPathTraversalObservation preliminary stats must be None when failed_stage={self.failed_stage!r}"
+                    )
+            elif self.failed_stage == "preliminary_kernel_stat":
+                if (
+                    self.preliminary_lexical_lstat is None
+                    or self.preliminary_lexical_stat is not None
+                ):
+                    raise ValueError(
+                        "FinalPathTraversalObservation preliminary_kernel_stat requires preliminary_lexical_lstat and None preliminary_lexical_stat"
+                    )
+            elif self.failed_stage == "preliminary_kernel_not_regular":
+                if (
+                    self.preliminary_lexical_lstat is None
+                    or self.preliminary_lexical_stat is None
+                    or (
+                        self.preliminary_lexical_stat.is_regular
+                        and not self.preliminary_lexical_stat.is_symlink
+                    )
+                ):
+                    raise ValueError(
+                        "FinalPathTraversalObservation preliminary_kernel_not_regular requires preliminary_lexical_lstat and non-regular preliminary_lexical_stat"
+                    )
+            return
+
+        if self.preliminary_lexical_stat is not None and (
+            not self.preliminary_lexical_stat.is_regular
+            or self.preliminary_lexical_stat.is_symlink
+        ):
+            raise ValueError(
+                "FinalPathTraversalObservation.preliminary_lexical_stat must represent a regular non-symlink file after preliminary kernel lookup"
+            )
+
+        if self.failed_stage == "lexical_root_directory":
+            if (
+                self.root_lstat is not None
+                or self.root_directory_identity is not None
+                or len(self.accepted_directories) > 0
+                or len(self.accepted_symlinks) > 0
+                or len(self.component_observations) > 0
+                or self.resolved_path is not None
+                or self.failed_component_path is not None
+                or self.rejected_component is not None
+                or self.symlink_expansions_count != 0
+            ):
+                raise ValueError(
+                    "FinalPathTraversalObservation lexical_root_directory cannot have root or component traversal observations"
+                )
+            return
+
+        if self.failed_stage == "root_component_lstat":
+            if (
+                self.root_lstat is not None
+                or self.root_directory_identity is not None
+                or len(self.accepted_directories) > 0
+                or len(self.accepted_symlinks) > 0
+                or len(self.component_observations) > 0
+                or self.resolved_path is not None
+                or self.failed_component_lstat is not None
+                or self.rejected_component is not None
+                or self.symlink_expansions_count != 0
+            ):
+                raise ValueError(
+                    "FinalPathTraversalObservation root_component_lstat cannot have root_lstat or accepted/rejected components"
+                )
+            if self.failed_component_path is None:
+                object.__setattr__(self, "failed_component_path", "/")
+            elif self.failed_component_path != "/":
+                raise ValueError(
+                    "FinalPathTraversalObservation.failed_component_path must be '/' for root_component_lstat"
+                )
+            if self.failed_component_is_leaf is None:
+                object.__setattr__(self, "failed_component_is_leaf", False)
+            elif self.failed_component_is_leaf is not False:
+                raise ValueError(
+                    "FinalPathTraversalObservation.failed_component_is_leaf must be False for root_component_lstat"
+                )
+            return
+
+        if self.failed_stage == "root_component_not_canonical_directory":
+            if (
+                self.root_directory_identity is not None
+                or len(self.accepted_directories) > 0
+                or len(self.accepted_symlinks) > 0
+                or self.resolved_path is not None
+                or self.symlink_expansions_count != 0
+            ):
+                raise ValueError(
+                    "FinalPathTraversalObservation root_component_not_canonical_directory cannot have accepted directories or symlinks"
+                )
+            if self.root_lstat is None and self.rejected_component is not None:
+                object.__setattr__(
+                    self, "root_lstat", self.rejected_component.lstat
+                )
+            if (
+                self.root_lstat is None
+                or (
+                    not self.root_lstat.is_symlink
+                    and self.root_lstat.is_directory
+                )
+            ):
+                raise ValueError(
+                    "FinalPathTraversalObservation root_component_not_canonical_directory requires non-directory or symlink root_lstat"
+                )
+            if self.rejected_component is None:
+                rej_root = TraversalComponentObservation(
+                    path="/",
+                    lstat=self.root_lstat,
+                    is_root=True,
+                    is_leaf=False,
+                    accepted=False,
+                )
+                object.__setattr__(self, "rejected_component", rej_root)
+                object.__setattr__(self, "failed_component_path", "/")
+                object.__setattr__(self, "failed_component_is_leaf", False)
+                object.__setattr__(
+                    self, "failed_component_lstat", self.root_lstat
+                )
+            elif (
+                not self.rejected_component.is_root
+                or self.rejected_component.path != "/"
+                or self.rejected_component.lstat != self.root_lstat
+            ):
+                raise ValueError(
+                    "FinalPathTraversalObservation root_component_not_canonical_directory rejected_component must match root_lstat at '/'"
+                )
+            return
+
+        if (
+            self.root_directory_identity is None
+            or len(self.accepted_directories) == 0
+        ):
+            raise ValueError(
+                f"FinalPathTraversalObservation.failed_stage={self.failed_stage!r} requires accepted root directory in accepted_directories"
+            )
+
+        if self.failed_stage in ("leaf_dot_component", "leaf_dotdot_component"):
+            if (
+                self.resolved_path is not None
+                or self.failed_component_path is not None
+                or self.failed_component_lstat is not None
+                or self.rejected_component is not None
+            ):
+                raise ValueError(
+                    f"FinalPathTraversalObservation {self.failed_stage} cannot have resolved_path or failed_component fields"
+                )
+        elif self.failed_stage == "component_lstat":
+            if (
+                self.resolved_path is not None
+                or self.failed_component_path is None
+                or self.failed_component_path == "/"
+                or self.failed_component_lstat is not None
+                or self.rejected_component is not None
+            ):
+                raise ValueError(
+                    "FinalPathTraversalObservation component_lstat requires non-root failed_component_path and None failed_component_lstat/rejected_component/resolved_path"
+                )
+            if self.failed_component_is_leaf is None:
+                raise ValueError(
+                    "FinalPathTraversalObservation component_lstat requires failed_component_is_leaf"
+                )
+        elif self.failed_stage == "symlink_expansion_limit":
+            if (
+                self.resolved_path is not None
+                or self.rejected_component is None
+                or not self.rejected_component.lstat.is_symlink
+                or self.rejected_component.readlink_target is not None
+                or self.symlink_expansions_count <= _MAX_SYMLINK_EXPANSIONS
+            ):
+                raise ValueError(
+                    "FinalPathTraversalObservation symlink_expansion_limit requires symlink rejected_component with readlink_target=None and symlink_expansions_count > _MAX_SYMLINK_EXPANSIONS"
+                )
+        elif self.failed_stage == "symlink_readlink":
+            if (
+                self.resolved_path is not None
+                or self.rejected_component is None
+                or not self.rejected_component.lstat.is_symlink
+                or self.rejected_component.readlink_target is not None
+            ):
+                raise ValueError(
+                    "FinalPathTraversalObservation symlink_readlink requires symlink rejected_component with readlink_target=None"
+                )
+        elif self.failed_stage == "symlink_target_invalid":
+            if (
+                self.resolved_path is not None
+                or self.rejected_component is None
+                or not self.rejected_component.lstat.is_symlink
+                or self.rejected_component.readlink_target is None
+                or (
+                    len(self.rejected_component.readlink_target) > 0
+                    and "\x00" not in self.rejected_component.readlink_target
+                )
+            ):
+                raise ValueError(
+                    "FinalPathTraversalObservation symlink_target_invalid requires symlink rejected_component with empty or NUL-containing readlink_target"
+                )
+        elif self.failed_stage == "leaf_symlink_directory_suffix":
+            if (
+                self.resolved_path is not None
+                or self.rejected_component is None
+                or not self.rejected_component.lstat.is_symlink
+                or not self.rejected_component.is_leaf
+                or self.rejected_component.readlink_target is None
+                or not self.rejected_component.readlink_target.endswith(
+                    ("/", "/.", "/..")
+                )
+            ):
+                raise ValueError(
+                    "FinalPathTraversalObservation leaf_symlink_directory_suffix requires leaf symlink rejected_component with directory-suffix readlink_target"
+                )
+        elif self.failed_stage == "symlink_target_changed":
+            if (
+                self.resolved_path is not None
+                or self.rejected_component is None
+                or not self.rejected_component.lstat.is_symlink
+                or self.rejected_component.readlink_target is None
+                or self.prior_symlink_edge is None
+                or self.prior_symlink_edge.target
+                == self.rejected_component.readlink_target
+            ):
+                raise ValueError(
+                    "FinalPathTraversalObservation symlink_target_changed requires symlink rejected_component and conflicting prior_symlink_edge"
+                )
+        elif self.failed_stage == "symlink_identity_changed":
+            if (
+                self.resolved_path is not None
+                or self.rejected_component is None
+                or not self.rejected_component.lstat.is_symlink
+                or self.rejected_component.symlink_identity is None
+                or self.prior_symlink_identity is None
+                or self.prior_symlink_identity
+                == self.rejected_component.symlink_identity
+            ):
+                raise ValueError(
+                    "FinalPathTraversalObservation symlink_identity_changed requires symlink rejected_component and conflicting prior_symlink_identity"
+                )
+        elif self.failed_stage == "leaf_symlink_resolves_to_root":
+            if (
+                self.resolved_path is not None
+                or self.rejected_component is None
+                or not self.rejected_component.lstat.is_symlink
+                or not self.rejected_component.is_leaf
+                or self.rejected_component.readlink_target is None
+                or bool(
+                    [
+                        c
+                        for c in self.rejected_component.readlink_target.split(
+                            "/"
+                        )
+                        if c
+                    ]
+                )
+            ):
+                raise ValueError(
+                    "FinalPathTraversalObservation leaf_symlink_resolves_to_root requires leaf symlink rejected_component whose target resolves to '/'"
+                )
+        elif self.failed_stage == "leaf_component_directory":
+            if (
+                self.resolved_path is not None
+                or self.target_lstat is not None
+                or self.rejected_component is None
+                or not self.rejected_component.is_leaf
+                or self.rejected_component.lstat.is_symlink
+                or not self.rejected_component.lstat.is_directory
+                or self.rejected_component.directory_identity is None
+            ):
+                raise ValueError(
+                    "FinalPathTraversalObservation leaf_component_directory requires leaf directory rejected_component and None resolved_path/target_lstat"
+                )
+        elif self.failed_stage == "directory_identity_changed":
+            if (
+                self.resolved_path is not None
+                or self.rejected_component is None
+                or self.rejected_component.is_leaf
+                or self.rejected_component.lstat.is_symlink
+                or not self.rejected_component.lstat.is_directory
+                or self.rejected_component.directory_identity is None
+                or self.prior_directory_identity is None
+                or self.prior_directory_identity
+                == self.rejected_component.directory_identity
+            ):
+                raise ValueError(
+                    "FinalPathTraversalObservation directory_identity_changed requires non-leaf directory rejected_component and conflicting prior_directory_identity"
+                )
+        elif self.failed_stage == "non_leaf_component_regular_file":
+            if (
+                self.resolved_path is not None
+                or self.rejected_component is None
+                or self.rejected_component.is_leaf
+                or self.rejected_component.lstat.is_symlink
+                or not self.rejected_component.lstat.is_regular
+            ):
+                raise ValueError(
+                    "FinalPathTraversalObservation non_leaf_component_regular_file requires non-leaf regular-file rejected_component and None resolved_path"
+                )
+        elif self.failed_stage == "component_unsupported_file_type":
+            if (
+                self.resolved_path is not None
+                or self.rejected_component is None
+                or self.rejected_component.lstat.is_symlink
+                or self.rejected_component.lstat.is_directory
+                or self.rejected_component.lstat.is_regular
+            ):
+                raise ValueError(
+                    "FinalPathTraversalObservation component_unsupported_file_type requires non-regular/non-directory/non-symlink rejected_component and None resolved_path"
+                )
+        elif self.failed_stage == "traversal_target_unresolved":
+            if (
+                self.resolved_path is not None
+                or self.target_lstat is not None
+                or self.failed_component_path is not None
+                or self.rejected_component is not None
+            ):
+                raise ValueError(
+                    "FinalPathTraversalObservation traversal_target_unresolved requires None resolved_path/target_lstat/rejected_component"
+                )
+        elif self.failed_stage == "target_identity_mismatch":
+            if (
+                self.resolved_path is None
+                or self.target_lstat is None
+                or self.preliminary_lexical_stat is None
+                or self.preliminary_lexical_stat.identity_tuple
+                == self.target_lstat.identity_tuple
+                or self.failed_component_path is not None
+                or self.rejected_component is not None
+            ):
+                raise ValueError(
+                    "FinalPathTraversalObservation target_identity_mismatch requires resolved_path, target_lstat, conflicting preliminary_lexical_stat, and None rejected_component"
+                )
+        elif self.failed_stage == "target_size_mismatch":
+            if (
+                self.resolved_path is None
+                or self.target_lstat is None
+                or self.preliminary_lexical_stat is None
+                or self.preliminary_lexical_stat.identity_tuple
+                != self.target_lstat.identity_tuple
+                or self.preliminary_lexical_stat.size_bytes
+                == self.target_lstat.size_bytes
+                or self.failed_component_path is not None
+                or self.rejected_component is not None
+            ):
+                raise ValueError(
+                    "FinalPathTraversalObservation target_size_mismatch requires resolved_path, target_lstat with matching identity and differing size from preliminary_lexical_stat, and None rejected_component"
+                )
+
+    def __getitem__(self, key: str) -> Any:
+        d = self.to_dict()
+        if key in d:
+            return d[key]
+        raise KeyError(key)
+
+    def keys(self):
+        return self.to_dict().keys()
+
+    def __contains__(self, item: object) -> bool:
+        return item in self.to_dict()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "lexical_path": self.lexical_path,
+            "failed_stage": self.failed_stage,
+            "preliminary_lexical_lstat": (
+                self.preliminary_lexical_lstat.to_dict()
+                if self.preliminary_lexical_lstat is not None
+                else None
+            ),
+            "preliminary_lexical_stat": (
+                self.preliminary_lexical_stat.to_dict()
+                if self.preliminary_lexical_stat is not None
+                else None
+            ),
+            "root_lstat": (
+                self.root_lstat.to_dict()
+                if self.root_lstat is not None
+                else None
+            ),
+            "root_directory_identity": (
+                self.root_directory_identity.to_dict()
+                if self.root_directory_identity is not None
+                else None
+            ),
+            "accepted_symlinks": [
+                edge.to_dict() for edge in self.accepted_symlinks
+            ],
+            "accepted_symlink_identities": [
+                sym.to_dict() for sym in self.accepted_symlink_identities
+            ],
+            "accepted_directories": [
+                d.to_dict() for d in self.accepted_directories
+            ],
+            "component_observations": [
+                comp.to_dict() for comp in self.component_observations
+            ],
+            "resolved_path": self.resolved_path,
+            "target_lstat": (
+                self.target_lstat.to_dict()
+                if self.target_lstat is not None
+                else None
+            ),
+            "failed_component_path": self.failed_component_path,
+            "failed_component_is_leaf": self.failed_component_is_leaf,
+            "failed_component_lstat": (
+                self.failed_component_lstat.to_dict()
+                if self.failed_component_lstat is not None
+                else None
+            ),
+            "failed_component_readlink_target": (
+                self.failed_component_readlink_target
+            ),
+            "failed_component_symlink_edge": (
+                self.failed_component_symlink_edge.to_dict()
+                if self.failed_component_symlink_edge is not None
+                else None
+            ),
+            "failed_component_symlink_identity": (
+                self.failed_component_symlink_identity.to_dict()
+                if self.failed_component_symlink_identity is not None
+                else None
+            ),
+            "failed_component_directory_identity": (
+                self.failed_component_directory_identity.to_dict()
+                if self.failed_component_directory_identity is not None
+                else None
+            ),
+            "rejected_component": (
+                self.rejected_component.to_dict()
+                if self.rejected_component is not None
+                else None
+            ),
+            "prior_component_lstat": (
+                self.prior_component_lstat.to_dict()
+                if self.prior_component_lstat is not None
+                else None
+            ),
+            "prior_symlink_edge": (
+                self.prior_symlink_edge.to_dict()
+                if self.prior_symlink_edge is not None
+                else None
+            ),
+            "prior_symlink_identity": (
+                self.prior_symlink_identity.to_dict()
+                if self.prior_symlink_identity is not None
+                else None
+            ),
+            "prior_directory_identity": (
+                self.prior_directory_identity.to_dict()
+                if self.prior_directory_identity is not None
+                else None
+            ),
+            "symlink_expansions_count": self.symlink_expansions_count,
+        }
+
+
+VALID_TARGET_RESOLUTION_FAILURE_STAGES: tuple[str, ...] = (
+    "resolve_strict",
+    "resolved_path_dotdot",
+    "initial_target_component_lstat",
+    "initial_target_component_symlink",
+    "ancestor_component_lstat",
+    "ancestor_component_symlink",
+    "ancestor_component_not_directory",
+    "final_target_lstat",
+    "final_target_not_regular",
+)
+
+
+@dataclass(frozen=True)
+class ResolutionComponentObservation:
+    """Immutable lstat observation of a single component (resolved target or ancestor) during strict target resolution."""
+
+    path: str
+    is_target: bool
+    lstat: ObservedStatSnapshot
+
+    def __post_init__(self) -> None:
+        _validate_lexical_abs_path(
+            self.path, field_name="ResolutionComponentObservation.path"
+        )
+        if ".." in Path(self.path).parts:
+            raise ValueError(
+                f"ResolutionComponentObservation.path must not contain '..': {self.path!r}"
+            )
+        if type(self.is_target) is not bool:
+            raise ValueError(
+                "ResolutionComponentObservation.is_target must be a bool"
+            )
+        coerced = _coerce_observed_stat_snapshot_or_none(
+            self.lstat, field_name="ResolutionComponentObservation.lstat"
+        )
+        if coerced is None:
+            raise ValueError(
+                "ResolutionComponentObservation.lstat must be an ObservedStatSnapshot"
+            )
+        object.__setattr__(self, "lstat", coerced)
+
+    def __getitem__(self, key: str) -> Any:
+        d = self.to_dict()
+        if key in d:
+            return d[key]
+        raise KeyError(key)
+
+    def keys(self):
+        return self.to_dict().keys()
+
+    def __contains__(self, item: object) -> bool:
+        return item in self.to_dict()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "path": self.path,
+            "is_target": self.is_target,
+            "lstat": self.lstat.to_dict(),
+        }
+
+
+@dataclass(frozen=True)
+class FinalTargetResolutionObservation:
+    """Immutable failed-stage snapshot of post-EOF strict target resolution.
+
+    Separately retains the ordered component-check observations (first target
+    ``lstat`` at the start of the component loop followed by each obtained
+    ancestor ``lstat``) and the final target ``lstat`` performed after the
+    component loop completes.
+    """
+
+    failed_stage: str
+    lexical_path: str | None = None
+    resolved_path: str | None = None
+    first_target_lstat: ObservedStatSnapshot | None = None
+    ancestor_lstats: tuple[ResolutionComponentObservation, ...] = ()
+    component_observations: tuple[ResolutionComponentObservation, ...] = ()
+    final_target_lstat: ObservedStatSnapshot | None = None
+    failed_component_path: str | None = None
+    failed_component_lstat: ObservedStatSnapshot | None = None
+
+    def __post_init__(self) -> None:
+        if self.lexical_path is not None:
+            _validate_lexical_abs_path(
+                self.lexical_path,
+                field_name="FinalTargetResolutionObservation.lexical_path",
+            )
+        if (
+            type(self.failed_stage) is not str
+            or self.failed_stage not in VALID_TARGET_RESOLUTION_FAILURE_STAGES
+        ):
+            raise ValueError(
+                f"FinalTargetResolutionObservation.failed_stage must be one of {VALID_TARGET_RESOLUTION_FAILURE_STAGES}, got {self.failed_stage!r}"
+            )
+        for field_name in (
+            "first_target_lstat",
+            "final_target_lstat",
+            "failed_component_lstat",
+        ):
+            coerced = _coerce_observed_stat_snapshot_or_none(
+                getattr(self, field_name),
+                field_name=f"FinalTargetResolutionObservation.{field_name}",
+            )
+            object.__setattr__(self, field_name, coerced)
+
+        if self.failed_component_path is not None:
+            _validate_lexical_abs_path(
+                self.failed_component_path,
+                field_name="FinalTargetResolutionObservation.failed_component_path",
+            )
+
+        if not isinstance(self.ancestor_lstats, tuple) or not all(
+            type(c) is ResolutionComponentObservation
+            for c in self.ancestor_lstats
+        ):
+            raise ValueError(
+                "FinalTargetResolutionObservation.ancestor_lstats must be a tuple of ResolutionComponentObservation"
+            )
+        if any(c.is_target for c in self.ancestor_lstats):
+            raise ValueError(
+                "FinalTargetResolutionObservation.ancestor_lstats entries must have is_target=False"
+            )
+        if not isinstance(self.component_observations, tuple) or not all(
+            type(c) is ResolutionComponentObservation
+            for c in self.component_observations
+        ):
+            raise ValueError(
+                "FinalTargetResolutionObservation.component_observations must be a tuple of ResolutionComponentObservation"
+            )
+
+        if self.failed_stage in ("resolve_strict", "resolved_path_dotdot"):
+            if self.resolved_path is not None:
+                raise ValueError(
+                    f"FinalTargetResolutionObservation.resolved_path must be None when failed_stage={self.failed_stage!r}"
+                )
+            if (
+                self.first_target_lstat is not None
+                or len(self.ancestor_lstats) > 0
+                or len(self.component_observations) > 0
+                or self.final_target_lstat is not None
+                or self.failed_component_lstat is not None
+            ):
+                raise ValueError(
+                    f"FinalTargetResolutionObservation component/target lstats must be empty when failed_stage={self.failed_stage!r}"
+                )
+            if (
+                self.failed_stage == "resolve_strict"
+                and self.failed_component_path is not None
+            ):
+                raise ValueError(
+                    "FinalTargetResolutionObservation.failed_component_path must be None when failed_stage='resolve_strict'"
+                )
+            return
+
+        if self.resolved_path is None:
+            raise ValueError(
+                f"FinalTargetResolutionObservation.resolved_path is required when failed_stage={self.failed_stage!r}"
+            )
+        _validate_lexical_abs_path(
+            self.resolved_path,
+            field_name="FinalTargetResolutionObservation.resolved_path",
+        )
+        if ".." in Path(self.resolved_path).parts:
+            raise ValueError(
+                f"FinalTargetResolutionObservation.resolved_path must not contain '..': {self.resolved_path!r}"
+            )
+
+        if (
+            self.first_target_lstat is None
+            and len(self.ancestor_lstats) == 0
+            and len(self.component_observations) > 0
+        ):
+            comp0 = self.component_observations[0]
+            if (
+                not comp0.is_target
+                or comp0.path != self.resolved_path
+                or any(c.is_target for c in self.component_observations[1:])
+            ):
+                raise ValueError(
+                    "FinalTargetResolutionObservation.component_observations must start with target component at resolved_path followed by ancestor components"
+                )
+            object.__setattr__(self, "first_target_lstat", comp0.lstat)
+            object.__setattr__(
+                self, "ancestor_lstats", self.component_observations[1:]
+            )
+
+        if self.first_target_lstat is None:
+            if len(self.ancestor_lstats) > 0 or len(self.component_observations) > 0:
+                raise ValueError(
+                    "FinalTargetResolutionObservation ancestor/component observations require first_target_lstat"
+                )
+            if self.final_target_lstat is not None:
+                raise ValueError(
+                    "FinalTargetResolutionObservation.final_target_lstat requires first_target_lstat"
+                )
+        else:
+            expected_first_comp = ResolutionComponentObservation(
+                path=self.resolved_path,
+                is_target=True,
+                lstat=self.first_target_lstat,
+            )
+            expected_all_comps = (expected_first_comp, *self.ancestor_lstats)
+            if len(self.component_observations) == 0:
+                object.__setattr__(
+                    self, "component_observations", expected_all_comps
+                )
+            elif self.component_observations != expected_all_comps:
+                raise ValueError(
+                    "FinalTargetResolutionObservation.component_observations must equal (first_target_lstat, *ancestor_lstats) in order"
+                )
+
+        expected_parent_paths = tuple(
+            str(p) for p in Path(self.resolved_path).parents
+        )
+        actual_anc_paths = tuple(c.path for c in self.ancestor_lstats)
+        if (
+            len(actual_anc_paths) > len(expected_parent_paths)
+            or actual_anc_paths != expected_parent_paths[: len(actual_anc_paths)]
+        ):
+            raise ValueError(
+                "FinalTargetResolutionObservation.ancestor_lstats paths must be an ordered prefix of Path(resolved_path).parents"
+            )
+        if any(
+            c.lstat.is_symlink or not c.lstat.is_directory
+            for c in self.ancestor_lstats[:-1]
+        ):
+            raise ValueError(
+                "FinalTargetResolutionObservation non-trailing ancestor_lstats must be non-symlink directories"
+            )
+
+        if self.failed_stage == "initial_target_component_lstat":
+            if (
+                self.first_target_lstat is not None
+                or len(self.ancestor_lstats) > 0
+                or self.final_target_lstat is not None
+                or self.failed_component_lstat is not None
+            ):
+                raise ValueError(
+                    "FinalTargetResolutionObservation initial_target_component_lstat cannot have obtained component/target lstats"
+                )
+            if self.failed_component_path is None:
+                object.__setattr__(
+                    self, "failed_component_path", self.resolved_path
+                )
+            elif self.failed_component_path != self.resolved_path:
+                raise ValueError(
+                    "FinalTargetResolutionObservation.failed_component_path must equal resolved_path for initial_target_component_lstat"
+                )
+        elif self.failed_stage == "initial_target_component_symlink":
+            if (
+                self.first_target_lstat is None
+                or not self.first_target_lstat.is_symlink
+                or len(self.ancestor_lstats) > 0
+                or self.final_target_lstat is not None
+            ):
+                raise ValueError(
+                    "FinalTargetResolutionObservation initial_target_component_symlink requires symlink first_target_lstat and no ancestor/final lstats"
+                )
+            if self.failed_component_path is None:
+                object.__setattr__(
+                    self, "failed_component_path", self.resolved_path
+                )
+            elif self.failed_component_path != self.resolved_path:
+                raise ValueError(
+                    "FinalTargetResolutionObservation.failed_component_path must equal resolved_path for initial_target_component_symlink"
+                )
+            if self.failed_component_lstat is None:
+                object.__setattr__(
+                    self, "failed_component_lstat", self.first_target_lstat
+                )
+            elif self.failed_component_lstat != self.first_target_lstat:
+                raise ValueError(
+                    "FinalTargetResolutionObservation.failed_component_lstat must equal first_target_lstat for initial_target_component_symlink"
+                )
+        elif self.failed_stage == "ancestor_component_lstat":
+            if (
+                self.first_target_lstat is None
+                or self.first_target_lstat.is_symlink
+                or len(actual_anc_paths) >= len(expected_parent_paths)
+                or any(
+                    c.lstat.is_symlink or not c.lstat.is_directory
+                    for c in self.ancestor_lstats
+                )
+                or self.final_target_lstat is not None
+                or self.failed_component_lstat is not None
+            ):
+                raise ValueError(
+                    "FinalTargetResolutionObservation ancestor_component_lstat requires non-symlink first_target_lstat, valid directory ancestor prefix, and None final_target_lstat/failed_component_lstat"
+                )
+            expected_failed_anc = expected_parent_paths[len(actual_anc_paths)]
+            if self.failed_component_path is None:
+                object.__setattr__(
+                    self, "failed_component_path", expected_failed_anc
+                )
+            elif self.failed_component_path != expected_failed_anc:
+                raise ValueError(
+                    f"FinalTargetResolutionObservation.failed_component_path must equal {expected_failed_anc!r} for ancestor_component_lstat"
+                )
+        elif self.failed_stage == "ancestor_component_symlink":
+            if (
+                self.first_target_lstat is None
+                or self.first_target_lstat.is_symlink
+                or len(self.ancestor_lstats) == 0
+                or not self.ancestor_lstats[-1].lstat.is_symlink
+                or self.final_target_lstat is not None
+            ):
+                raise ValueError(
+                    "FinalTargetResolutionObservation ancestor_component_symlink requires trailing symlink ancestor lstat and None final_target_lstat"
+                )
+            trailing_anc = self.ancestor_lstats[-1]
+            if self.failed_component_path is None:
+                object.__setattr__(
+                    self, "failed_component_path", trailing_anc.path
+                )
+            elif self.failed_component_path != trailing_anc.path:
+                raise ValueError(
+                    "FinalTargetResolutionObservation.failed_component_path must equal trailing ancestor path for ancestor_component_symlink"
+                )
+            if self.failed_component_lstat is None:
+                object.__setattr__(
+                    self, "failed_component_lstat", trailing_anc.lstat
+                )
+            elif self.failed_component_lstat != trailing_anc.lstat:
+                raise ValueError(
+                    "FinalTargetResolutionObservation.failed_component_lstat must equal trailing ancestor lstat for ancestor_component_symlink"
+                )
+        elif self.failed_stage == "ancestor_component_not_directory":
+            if (
+                self.first_target_lstat is None
+                or self.first_target_lstat.is_symlink
+                or len(self.ancestor_lstats) == 0
+                or self.ancestor_lstats[-1].lstat.is_symlink
+                or self.ancestor_lstats[-1].lstat.is_directory
+                or self.final_target_lstat is not None
+            ):
+                raise ValueError(
+                    "FinalTargetResolutionObservation ancestor_component_not_directory requires trailing non-directory ancestor lstat and None final_target_lstat"
+                )
+            trailing_anc = self.ancestor_lstats[-1]
+            if self.failed_component_path is None:
+                object.__setattr__(
+                    self, "failed_component_path", trailing_anc.path
+                )
+            elif self.failed_component_path != trailing_anc.path:
+                raise ValueError(
+                    "FinalTargetResolutionObservation.failed_component_path must equal trailing ancestor path for ancestor_component_not_directory"
+                )
+            if self.failed_component_lstat is None:
+                object.__setattr__(
+                    self, "failed_component_lstat", trailing_anc.lstat
+                )
+            elif self.failed_component_lstat != trailing_anc.lstat:
+                raise ValueError(
+                    "FinalTargetResolutionObservation.failed_component_lstat must equal trailing ancestor lstat for ancestor_component_not_directory"
+                )
+        elif self.failed_stage == "final_target_lstat":
+            if (
+                self.first_target_lstat is None
+                or self.first_target_lstat.is_symlink
+                or actual_anc_paths != expected_parent_paths
+                or any(
+                    c.lstat.is_symlink or not c.lstat.is_directory
+                    for c in self.ancestor_lstats
+                )
+                or self.final_target_lstat is not None
+                or self.failed_component_lstat is not None
+            ):
+                raise ValueError(
+                    "FinalTargetResolutionObservation final_target_lstat requires completed component loop and None final_target_lstat"
+                )
+            if self.failed_component_path is None:
+                object.__setattr__(
+                    self, "failed_component_path", self.resolved_path
+                )
+            elif self.failed_component_path != self.resolved_path:
+                raise ValueError(
+                    "FinalTargetResolutionObservation.failed_component_path must equal resolved_path for final_target_lstat"
+                )
+        elif self.failed_stage == "final_target_not_regular":
+            if (
+                self.first_target_lstat is None
+                or self.first_target_lstat.is_symlink
+                or actual_anc_paths != expected_parent_paths
+                or any(
+                    c.lstat.is_symlink or not c.lstat.is_directory
+                    for c in self.ancestor_lstats
+                )
+                or self.final_target_lstat is None
+                or (
+                    self.final_target_lstat.is_regular
+                    and not self.final_target_lstat.is_symlink
+                )
+            ):
+                raise ValueError(
+                    "FinalTargetResolutionObservation final_target_not_regular requires completed component loop and non-regular/symlink final_target_lstat"
+                )
+            if self.failed_component_path is None:
+                object.__setattr__(
+                    self, "failed_component_path", self.resolved_path
+                )
+            elif self.failed_component_path != self.resolved_path:
+                raise ValueError(
+                    "FinalTargetResolutionObservation.failed_component_path must equal resolved_path for final_target_not_regular"
+                )
+            if self.failed_component_lstat is None:
+                object.__setattr__(
+                    self, "failed_component_lstat", self.final_target_lstat
+                )
+            elif self.failed_component_lstat != self.final_target_lstat:
+                raise ValueError(
+                    "FinalTargetResolutionObservation.failed_component_lstat must equal final_target_lstat for final_target_not_regular"
+                )
+
+    def __getitem__(self, key: str) -> Any:
+        d = self.to_dict()
+        if key in d:
+            return d[key]
+        raise KeyError(key)
+
+    def keys(self):
+        return self.to_dict().keys()
+
+    def __contains__(self, item: object) -> bool:
+        return item in self.to_dict()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "lexical_path": self.lexical_path,
+            "failed_stage": self.failed_stage,
+            "resolved_path": self.resolved_path,
+            "first_target_lstat": (
+                self.first_target_lstat.to_dict()
+                if self.first_target_lstat is not None
+                else None
+            ),
+            "ancestor_lstats": [
+                comp.to_dict() for comp in self.ancestor_lstats
+            ],
+            "component_observations": [
+                comp.to_dict() for comp in self.component_observations
+            ],
+            "final_target_lstat": (
+                self.final_target_lstat.to_dict()
+                if self.final_target_lstat is not None
+                else None
+            ),
+            "failed_component_path": self.failed_component_path,
+            "failed_component_lstat": (
+                self.failed_component_lstat.to_dict()
+                if self.failed_component_lstat is not None
+                else None
+            ),
+        }
+
+
+@dataclass(frozen=True)
+class PostReadVerificationObservation:
+    """Immutable observation of stream/EOF digest, descriptor fstats, and completed post-EOF verification stages."""
+
+    observed_eof: bool
+    streamed_size_bytes: int
+    observed_stream_sha256: str | None = None
+    observed_eof_sha256: str | None = None
+    initial_fstat: ObservedStatSnapshot | None = None
+    end_fstat: ObservedStatSnapshot | None = None
+    final_lexical_lstat: ObservedStatSnapshot | None = None
+    final_lexical_stat: ObservedStatSnapshot | None = None
+    final_traversal_resolved_path: str | None = None
+    final_traversal_target_lstat: ObservedStatSnapshot | None = None
+    final_symlinks: tuple[_SymlinkEdge, ...] | None = None
+    final_symlink_identities: tuple[_ObservedSymlinkIdentity, ...] | None = None
+    final_traversed_directories: tuple[_ObservedDirectoryIdentity, ...] | None = None
+    final_resolved_path: str | None = None
+    final_resolved_target_lstat: ObservedStatSnapshot | None = None
+    final_traversal_observation: FinalPathTraversalObservation | None = None
+    final_resolution_observation: FinalTargetResolutionObservation | None = None
+    failure_phase: str | None = None
+
+    def __post_init__(self) -> None:
+        if type(self.observed_eof) is not bool:
+            raise ValueError(
+                "PostReadVerificationObservation.observed_eof must be a bool"
+            )
+        _validate_nonnegative_int(
+            self.streamed_size_bytes,
+            field_name="PostReadVerificationObservation.streamed_size_bytes",
+        )
+        if self.observed_stream_sha256 is not None:
+            object.__setattr__(
+                self,
+                "observed_stream_sha256",
+                _validate_sha256_digest(
+                    self.observed_stream_sha256,
+                    field_name="PostReadVerificationObservation.observed_stream_sha256",
+                ),
+            )
+        if self.observed_eof_sha256 is not None:
+            object.__setattr__(
+                self,
+                "observed_eof_sha256",
+                _validate_sha256_digest(
+                    self.observed_eof_sha256,
+                    field_name="PostReadVerificationObservation.observed_eof_sha256",
+                ),
+            )
+        for field_name in (
+            "initial_fstat",
+            "end_fstat",
+            "final_lexical_lstat",
+            "final_lexical_stat",
+            "final_traversal_target_lstat",
+            "final_resolved_target_lstat",
+        ):
+            coerced = _coerce_observed_stat_snapshot_or_none(
+                getattr(self, field_name),
+                field_name=f"PostReadVerificationObservation.{field_name}",
+            )
+            object.__setattr__(self, field_name, coerced)
+        if self.initial_fstat is not None and (
+            not self.initial_fstat.is_regular or self.initial_fstat.is_symlink
+        ):
+            raise ValueError(
+                "PostReadVerificationObservation.initial_fstat must represent a regular non-symlink file"
+            )
+        if (
+            self.final_lexical_stat is not None
+            and self.final_lexical_lstat is None
+        ):
+            raise ValueError(
+                "PostReadVerificationObservation.final_lexical_stat requires final_lexical_lstat"
+            )
+
+        if self.final_traversal_observation is not None:
+            if (
+                type(self.final_traversal_observation)
+                is not FinalPathTraversalObservation
+            ):
+                raise ValueError(
+                    "PostReadVerificationObservation.final_traversal_observation must be a FinalPathTraversalObservation or None"
+                )
+            if (
+                self.final_traversal_resolved_path is None
+                and self.final_traversal_target_lstat is None
+                and self.final_traversal_observation.resolved_path is not None
+                and self.final_traversal_observation.target_lstat is not None
+            ):
+                object.__setattr__(
+                    self,
+                    "final_traversal_resolved_path",
+                    self.final_traversal_observation.resolved_path,
+                )
+                object.__setattr__(
+                    self,
+                    "final_traversal_target_lstat",
+                    self.final_traversal_observation.target_lstat,
+                )
+            if (
+                self.final_symlinks is None
+                and self.final_symlink_identities is None
+                and self.final_traversed_directories is None
+                and len(self.final_traversal_observation.accepted_directories)
+                > 0
+            ):
+                object.__setattr__(
+                    self,
+                    "final_symlinks",
+                    self.final_traversal_observation.accepted_symlinks,
+                )
+                object.__setattr__(
+                    self,
+                    "final_symlink_identities",
+                    self.final_traversal_observation.accepted_symlink_identities,
+                )
+                object.__setattr__(
+                    self,
+                    "final_traversed_directories",
+                    self.final_traversal_observation.accepted_directories,
+                )
+
+        if (self.final_traversal_resolved_path is None) != (
+            self.final_traversal_target_lstat is None
+        ):
+            raise ValueError(
+                "PostReadVerificationObservation.final_traversal_resolved_path and final_traversal_target_lstat must be both present or both None"
+            )
+        if self.final_traversal_resolved_path is not None:
+            _validate_lexical_abs_path(
+                self.final_traversal_resolved_path,
+                field_name="PostReadVerificationObservation.final_traversal_resolved_path",
+            )
+            if ".." in Path(self.final_traversal_resolved_path).parts:
+                raise ValueError(
+                    f"PostReadVerificationObservation.final_traversal_resolved_path must not contain '..': {self.final_traversal_resolved_path!r}"
+                )
+            assert self.final_traversal_target_lstat is not None
+            if (
+                not self.final_traversal_target_lstat.is_regular
+                or self.final_traversal_target_lstat.is_symlink
+            ):
+                raise ValueError(
+                    "PostReadVerificationObservation.final_traversal_target_lstat must represent a regular non-symlink file"
+                )
+
+        traversal_tuples = (
+            self.final_symlinks,
+            self.final_symlink_identities,
+            self.final_traversed_directories,
+        )
+        if any(v is not None for v in traversal_tuples):
+            if not all(v is not None for v in traversal_tuples):
+                raise ValueError(
+                    "PostReadVerificationObservation.(final_symlinks, final_symlink_identities, final_traversed_directories) must be all present or all None"
+                )
+            assert (
+                self.final_symlinks is not None
+                and self.final_symlink_identities is not None
+                and self.final_traversed_directories is not None
+            )
+            if not isinstance(self.final_symlinks, tuple) or not all(
+                type(e) is _SymlinkEdge for e in self.final_symlinks
+            ):
+                raise ValueError(
+                    "PostReadVerificationObservation.final_symlinks must be a tuple of _SymlinkEdge"
+                )
+            edge_paths = [e.path for e in self.final_symlinks]
+            if edge_paths != sorted(set(edge_paths)):
+                raise ValueError(
+                    "PostReadVerificationObservation.final_symlinks must be strictly sorted by unique edge.path"
+                )
+            if not isinstance(
+                self.final_symlink_identities, tuple
+            ) or not all(
+                type(s) is _ObservedSymlinkIdentity
+                for s in self.final_symlink_identities
+            ):
+                raise ValueError(
+                    "PostReadVerificationObservation.final_symlink_identities must be a tuple of _ObservedSymlinkIdentity"
+                )
+            expected_pairs = [
+                (e.path, e.target) for e in self.final_symlinks
+            ]
+            observed_pairs = [
+                (s.path, s.target) for s in self.final_symlink_identities
+            ]
+            it = iter(expected_pairs)
+            if not all(pair in it for pair in observed_pairs):
+                raise ValueError(
+                    "PostReadVerificationObservation.final_symlink_identities must be an ordered subset of final_symlinks"
+                )
+            if (
+                not isinstance(self.final_traversed_directories, tuple)
+                or len(self.final_traversed_directories) == 0
+                or not all(
+                    type(d) is _ObservedDirectoryIdentity
+                    for d in self.final_traversed_directories
+                )
+            ):
+                raise ValueError(
+                    "PostReadVerificationObservation.final_traversed_directories must be a non-empty tuple of _ObservedDirectoryIdentity"
+                )
+            dir_paths = [d.path for d in self.final_traversed_directories]
+            if len(dir_paths) != len(set(dir_paths)):
+                raise ValueError(
+                    "PostReadVerificationObservation.final_traversed_directories must have unique paths"
+                )
+        elif self.final_traversal_resolved_path is not None:
+            raise ValueError(
+                "PostReadVerificationObservation.final_traversal_resolved_path requires final_traversed_directories and final_symlinks"
+            )
+
+        if self.final_resolved_path is not None:
+            _validate_lexical_abs_path(
+                self.final_resolved_path,
+                field_name="PostReadVerificationObservation.final_resolved_path",
+            )
+            if ".." in Path(self.final_resolved_path).parts:
+                raise ValueError(
+                    f"PostReadVerificationObservation.final_resolved_path must not contain '..': {self.final_resolved_path!r}"
+                )
+        elif self.final_resolved_target_lstat is not None:
+            raise ValueError(
+                "PostReadVerificationObservation.final_resolved_target_lstat requires final_resolved_path"
+            )
+
+        if (
+            self.final_resolution_observation is not None
+            and type(self.final_resolution_observation)
+            is not FinalTargetResolutionObservation
+        ):
+            raise ValueError(
+                "PostReadVerificationObservation.final_resolution_observation must be a FinalTargetResolutionObservation or None"
+            )
+
+        if self.failure_phase is not None and (
+            type(self.failure_phase) is not str
+            or self.failure_phase not in VALID_PARTIAL_READ_FAILURE_PHASES
+        ):
+            raise ValueError(
+                f"PostReadVerificationObservation.failure_phase must be one of {VALID_PARTIAL_READ_FAILURE_PHASES} or None, got {self.failure_phase!r}"
+            )
+
+        if self.observed_eof:
+            if self.initial_fstat is None:
+                raise ValueError(
+                    "PostReadVerificationObservation.initial_fstat is required when observed_eof=True"
+                )
+            if self.observed_eof_sha256 is None:
+                raise ValueError(
+                    "PostReadVerificationObservation.observed_eof_sha256 is required when observed_eof=True"
+                )
+            if self.observed_stream_sha256 != self.observed_eof_sha256:
+                raise ValueError(
+                    "PostReadVerificationObservation.observed_stream_sha256 must match observed_eof_sha256 when observed_eof=True"
+                )
+            if (
+                self.failure_phase is not None
+                and self.failure_phase not in POST_EOF_PARTIAL_READ_FAILURE_PHASES
+            ):
+                raise ValueError(
+                    f"PostReadVerificationObservation.failure_phase must be a post-EOF phase when observed_eof=True, got {self.failure_phase!r}"
+                )
+            if self.final_lexical_lstat is not None and self.end_fstat is None:
+                raise ValueError(
+                    "PostReadVerificationObservation.final_lexical_lstat requires end_fstat"
+                )
+            if (
+                self.final_traversed_directories is not None
+                and self.final_lexical_stat is None
+            ):
+                raise ValueError(
+                    "PostReadVerificationObservation.final_traversed_directories requires final_lexical_stat"
+                )
+            if (
+                self.final_resolved_path is not None
+                and self.final_traversal_resolved_path is None
+            ):
+                raise ValueError(
+                    "PostReadVerificationObservation.final_resolved_path requires final_traversal_resolved_path"
+                )
+            if self.final_traversal_observation is not None:
+                if self.failure_phase != "final_path_traversal":
+                    raise ValueError(
+                        "PostReadVerificationObservation.final_traversal_observation requires failure_phase='final_path_traversal'"
+                    )
+                if self.final_lexical_stat is None:
+                    raise ValueError(
+                        "PostReadVerificationObservation.final_traversal_observation requires final_lexical_stat"
+                    )
+                if (
+                    self.final_resolved_path is not None
+                    or self.final_resolution_observation is not None
+                ):
+                    raise ValueError(
+                        "PostReadVerificationObservation.final_traversal_observation cannot coexist with final target resolution observations"
+                    )
+                if (
+                    self.final_traversal_resolved_path
+                    != self.final_traversal_observation.resolved_path
+                ):
+                    raise ValueError(
+                        "PostReadVerificationObservation.final_traversal_resolved_path must match final_traversal_observation.resolved_path"
+                    )
+                if (
+                    self.final_traversal_target_lstat
+                    != self.final_traversal_observation.target_lstat
+                ):
+                    raise ValueError(
+                        "PostReadVerificationObservation.final_traversal_target_lstat must match final_traversal_observation.target_lstat"
+                    )
+                if (
+                    len(self.final_traversal_observation.accepted_directories)
+                    > 0
+                ):
+                    if (
+                        self.final_symlinks
+                        != self.final_traversal_observation.accepted_symlinks
+                        or self.final_symlink_identities
+                        != self.final_traversal_observation.accepted_symlink_identities
+                        or self.final_traversed_directories
+                        != self.final_traversal_observation.accepted_directories
+                    ):
+                        raise ValueError(
+                            "PostReadVerificationObservation.(final_symlinks, final_symlink_identities, final_traversed_directories) must match final_traversal_observation"
+                        )
+                elif (
+                    self.final_symlinks is not None
+                    or self.final_symlink_identities is not None
+                    or self.final_traversed_directories is not None
+                ):
+                    raise ValueError(
+                        "PostReadVerificationObservation.(final_symlinks, final_symlink_identities, final_traversed_directories) must be None when final_traversal_observation.accepted_directories is empty"
+                    )
+            if self.final_resolution_observation is not None:
+                if self.failure_phase != "final_target_resolution":
+                    raise ValueError(
+                        "PostReadVerificationObservation.final_resolution_observation requires failure_phase='final_target_resolution'"
+                    )
+                if self.final_traversal_resolved_path is None:
+                    raise ValueError(
+                        "PostReadVerificationObservation.final_resolution_observation requires final_traversal_resolved_path"
+                    )
+                if (
+                    self.final_resolved_path
+                    != self.final_resolution_observation.resolved_path
+                ):
+                    raise ValueError(
+                        "PostReadVerificationObservation.final_resolved_path must match final_resolution_observation.resolved_path"
+                    )
+                if (
+                    self.final_resolved_target_lstat
+                    != self.final_resolution_observation.final_target_lstat
+                ):
+                    raise ValueError(
+                        "PostReadVerificationObservation.final_resolved_target_lstat must match final_resolution_observation.final_target_lstat"
+                    )
+        else:
+            if self.observed_eof_sha256 is not None:
+                raise ValueError(
+                    "PostReadVerificationObservation.observed_eof_sha256 must be None when observed_eof=False"
+                )
+            if self.initial_fstat is None and (
+                self.streamed_size_bytes != 0
+                or self.observed_stream_sha256 is not None
+            ):
+                raise ValueError(
+                    "PostReadVerificationObservation stream progress requires initial_fstat"
+                )
+            if (
+                self.failure_phase is not None
+                and self.failure_phase in POST_EOF_PARTIAL_READ_FAILURE_PHASES
+            ):
+                raise ValueError(
+                    f"PostReadVerificationObservation.failure_phase cannot be a post-EOF phase when observed_eof=False, got {self.failure_phase!r}"
+                )
+            if any(
+                v is not None
+                for v in (
+                    self.end_fstat,
+                    self.final_lexical_lstat,
+                    self.final_lexical_stat,
+                    self.final_traversal_resolved_path,
+                    self.final_traversal_target_lstat,
+                    self.final_symlinks,
+                    self.final_symlink_identities,
+                    self.final_traversed_directories,
+                    self.final_resolved_path,
+                    self.final_resolved_target_lstat,
+                    self.final_traversal_observation,
+                    self.final_resolution_observation,
+                )
+            ):
+                raise ValueError(
+                    "PostReadVerificationObservation post-EOF fields must be None when observed_eof=False"
+                )
+
+    @property
+    def final_traversal_failed_stage(self) -> str | None:
+        return (
+            self.final_traversal_observation.failed_stage
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_preliminary_lexical_lstat(
+        self,
+    ) -> ObservedStatSnapshot | None:
+        return (
+            self.final_traversal_observation.preliminary_lexical_lstat
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_preliminary_lexical_stat(
+        self,
+    ) -> ObservedStatSnapshot | None:
+        return (
+            self.final_traversal_observation.preliminary_lexical_stat
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_root_lstat(self) -> ObservedStatSnapshot | None:
+        return (
+            self.final_traversal_observation.root_lstat
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_root_directory_identity(
+        self,
+    ) -> _ObservedDirectoryIdentity | None:
+        return (
+            self.final_traversal_observation.root_directory_identity
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_component_observations(
+        self,
+    ) -> tuple[TraversalComponentObservation, ...] | None:
+        return (
+            self.final_traversal_observation.component_observations
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_rejected_component(
+        self,
+    ) -> TraversalComponentObservation | None:
+        return (
+            self.final_traversal_observation.rejected_component
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_failed_component_path(self) -> str | None:
+        return (
+            self.final_traversal_observation.failed_component_path
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_failed_component_is_leaf(self) -> bool | None:
+        return (
+            self.final_traversal_observation.failed_component_is_leaf
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_failed_component_lstat(
+        self,
+    ) -> ObservedStatSnapshot | None:
+        return (
+            self.final_traversal_observation.failed_component_lstat
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_failed_component_readlink_target(self) -> str | None:
+        return (
+            self.final_traversal_observation.failed_component_readlink_target
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_failed_component_symlink_edge(
+        self,
+    ) -> _SymlinkEdge | None:
+        return (
+            self.final_traversal_observation.failed_component_symlink_edge
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_failed_component_symlink_identity(
+        self,
+    ) -> _ObservedSymlinkIdentity | None:
+        return (
+            self.final_traversal_observation.failed_component_symlink_identity
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_failed_component_directory_identity(
+        self,
+    ) -> _ObservedDirectoryIdentity | None:
+        return (
+            self.final_traversal_observation.failed_component_directory_identity
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_prior_component_lstat(
+        self,
+    ) -> ObservedStatSnapshot | None:
+        return (
+            self.final_traversal_observation.prior_component_lstat
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_prior_symlink_edge(self) -> _SymlinkEdge | None:
+        return (
+            self.final_traversal_observation.prior_symlink_edge
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_prior_symlink_identity(
+        self,
+    ) -> _ObservedSymlinkIdentity | None:
+        return (
+            self.final_traversal_observation.prior_symlink_identity
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_prior_directory_identity(
+        self,
+    ) -> _ObservedDirectoryIdentity | None:
+        return (
+            self.final_traversal_observation.prior_directory_identity
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_symlink_expansions_count(self) -> int | None:
+        return (
+            self.final_traversal_observation.symlink_expansions_count
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_resolution_first_target_lstat(self) -> ObservedStatSnapshot | None:
+        return (
+            self.final_resolution_observation.first_target_lstat
+            if self.final_resolution_observation is not None
+            else None
+        )
+
+    @property
+    def final_resolution_ancestor_lstats(
+        self,
+    ) -> tuple[ResolutionComponentObservation, ...] | None:
+        return (
+            self.final_resolution_observation.ancestor_lstats
+            if self.final_resolution_observation is not None
+            else None
+        )
+
+    @property
+    def final_resolution_component_observations(
+        self,
+    ) -> tuple[ResolutionComponentObservation, ...] | None:
+        return (
+            self.final_resolution_observation.component_observations
+            if self.final_resolution_observation is not None
+            else None
+        )
+
+    @property
+    def final_resolution_failed_stage(self) -> str | None:
+        return (
+            self.final_resolution_observation.failed_stage
+            if self.final_resolution_observation is not None
+            else None
+        )
+
+    @property
+    def final_resolution_failed_component_path(self) -> str | None:
+        return (
+            self.final_resolution_observation.failed_component_path
+            if self.final_resolution_observation is not None
+            else None
+        )
+
+    @property
+    def final_resolution_failed_component_lstat(
+        self,
+    ) -> ObservedStatSnapshot | None:
+        return (
+            self.final_resolution_observation.failed_component_lstat
+            if self.final_resolution_observation is not None
+            else None
+        )
+
+    def __getitem__(self, key: str) -> Any:
+        d = self.to_dict()
+        if key in d:
+            return d[key]
+        raise KeyError(key)
+
+    def keys(self):
+        return self.to_dict().keys()
+
+    def __contains__(self, item: object) -> bool:
+        return item in self.to_dict()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "observed_eof": self.observed_eof,
+            "streamed_size_bytes": self.streamed_size_bytes,
+            "observed_stream_sha256": self.observed_stream_sha256,
+            "observed_eof_sha256": self.observed_eof_sha256,
+            "initial_fstat": (
+                self.initial_fstat.to_dict()
+                if self.initial_fstat is not None
+                else None
+            ),
+            "end_fstat": (
+                self.end_fstat.to_dict()
+                if self.end_fstat is not None
+                else None
+            ),
+            "final_lexical_lstat": (
+                self.final_lexical_lstat.to_dict()
+                if self.final_lexical_lstat is not None
+                else None
+            ),
+            "final_lexical_stat": (
+                self.final_lexical_stat.to_dict()
+                if self.final_lexical_stat is not None
+                else None
+            ),
+            "final_traversal_resolved_path": self.final_traversal_resolved_path,
+            "final_traversal_target_lstat": (
+                self.final_traversal_target_lstat.to_dict()
+                if self.final_traversal_target_lstat is not None
+                else None
+            ),
+            "final_symlinks": (
+                [edge.to_dict() for edge in self.final_symlinks]
+                if self.final_symlinks is not None
+                else None
+            ),
+            "final_symlink_identities": (
+                [sym.to_dict() for sym in self.final_symlink_identities]
+                if self.final_symlink_identities is not None
+                else None
+            ),
+            "final_traversed_directories": (
+                [d.to_dict() for d in self.final_traversed_directories]
+                if self.final_traversed_directories is not None
+                else None
+            ),
+            "final_traversal_observation": (
+                self.final_traversal_observation.to_dict()
+                if self.final_traversal_observation is not None
+                else None
+            ),
+            "final_resolved_path": self.final_resolved_path,
+            "final_resolved_target_lstat": (
+                self.final_resolved_target_lstat.to_dict()
+                if self.final_resolved_target_lstat is not None
+                else None
+            ),
+            "final_resolution_observation": (
+                self.final_resolution_observation.to_dict()
+                if self.final_resolution_observation is not None
+                else None
+            ),
+            "failure_phase": self.failure_phase,
+        }
+
+
 @dataclass(frozen=True)
 class PartialFileReadObservation:
     """Immutable partial file-read observation retained when a regular-file read fails after lookup/fstat."""
@@ -931,6 +3967,14 @@ class PartialFileReadObservation:
     verified: bool = False
     errors: tuple[str, ...] = ()
     lookup_snapshot: PreOpenLookupSnapshot | None = None
+    observed_eof: bool = False
+    observed_stream_sha256: str | None = None
+    observed_eof_sha256: str | None = None
+    end_fstat: ObservedStatSnapshot | None = None
+    failure_phase: str | None = None
+    post_read_observation: PostReadVerificationObservation | None = None
+    final_resolution_observation: FinalTargetResolutionObservation | None = None
+    final_traversal_observation: FinalPathTraversalObservation | None = None
 
     def __post_init__(self) -> None:
         _validate_lexical_abs_path(
@@ -966,6 +4010,43 @@ class PartialFileReadObservation:
             raise ValueError(
                 "PartialFileReadObservation.read_complete must be False"
             )
+        if type(self.observed_eof) is not bool:
+            raise ValueError(
+                "PartialFileReadObservation.observed_eof must be a bool"
+            )
+        if self.observed_stream_sha256 is not None:
+            object.__setattr__(
+                self,
+                "observed_stream_sha256",
+                _validate_sha256_digest(
+                    self.observed_stream_sha256,
+                    field_name="PartialFileReadObservation.observed_stream_sha256",
+                ),
+            )
+        if self.observed_eof_sha256 is not None:
+            object.__setattr__(
+                self,
+                "observed_eof_sha256",
+                _validate_sha256_digest(
+                    self.observed_eof_sha256,
+                    field_name="PartialFileReadObservation.observed_eof_sha256",
+                ),
+            )
+        object.__setattr__(
+            self,
+            "end_fstat",
+            _coerce_observed_stat_snapshot_or_none(
+                self.end_fstat,
+                field_name="PartialFileReadObservation.end_fstat",
+            ),
+        )
+        if self.failure_phase is not None and (
+            type(self.failure_phase) is not str
+            or self.failure_phase not in VALID_PARTIAL_READ_FAILURE_PHASES
+        ):
+            raise ValueError(
+                f"PartialFileReadObservation.failure_phase must be one of {VALID_PARTIAL_READ_FAILURE_PHASES} or None, got {self.failure_phase!r}"
+            )
 
         id_fields = (self.dev, self.ino, self.mode, self.uid, self.gid)
         if any(v is not None for v in id_fields):
@@ -992,6 +4073,10 @@ class PartialFileReadObservation:
                 raise ValueError(
                     "PartialFileReadObservation mode/uid/gid must be non-negative"
                 )
+            if self.mode != int(stat.S_IMODE(self.mode)):
+                raise ValueError(
+                    f"PartialFileReadObservation.mode must be permission bits only (S_IMODE), got {self.mode:#o}"
+                )
             if self.stat_size_bytes is None:
                 raise ValueError(
                     "PartialFileReadObservation.stat_size_bytes must be present when fstat identity is measured"
@@ -1004,6 +4089,196 @@ class PartialFileReadObservation:
             if self.streamed_size_bytes != 0:
                 raise ValueError(
                     "PartialFileReadObservation.streamed_size_bytes must be 0 when fstat identity was not measured"
+                )
+            if (
+                self.observed_eof
+                or self.observed_stream_sha256 is not None
+                or self.observed_eof_sha256 is not None
+                or self.end_fstat is not None
+            ):
+                raise ValueError(
+                    "PartialFileReadObservation stream/EOF/end_fstat observations require measured initial fstat identity"
+                )
+
+        if self.observed_eof:
+            if self.observed_eof_sha256 is None:
+                raise ValueError(
+                    "PartialFileReadObservation.observed_eof_sha256 is required when observed_eof=True"
+                )
+            if self.observed_stream_sha256 != self.observed_eof_sha256:
+                raise ValueError(
+                    "PartialFileReadObservation.observed_stream_sha256 must match observed_eof_sha256 when observed_eof=True"
+                )
+            if (
+                self.failure_phase is not None
+                and self.failure_phase not in POST_EOF_PARTIAL_READ_FAILURE_PHASES
+            ):
+                raise ValueError(
+                    f"PartialFileReadObservation.failure_phase must be a post-EOF phase when observed_eof=True, got {self.failure_phase!r}"
+                )
+        else:
+            if self.observed_eof_sha256 is not None:
+                raise ValueError(
+                    "PartialFileReadObservation.observed_eof_sha256 must be None when observed_eof=False"
+                )
+            if self.end_fstat is not None:
+                raise ValueError(
+                    "PartialFileReadObservation.end_fstat must be None when observed_eof=False"
+                )
+            if (
+                self.failure_phase is not None
+                and self.failure_phase in POST_EOF_PARTIAL_READ_FAILURE_PHASES
+            ):
+                raise ValueError(
+                    f"PartialFileReadObservation.failure_phase cannot be a post-EOF phase when observed_eof=False, got {self.failure_phase!r}"
+                )
+
+        if self.post_read_observation is not None:
+            if type(self.post_read_observation) is not PostReadVerificationObservation:
+                raise ValueError(
+                    "PartialFileReadObservation.post_read_observation must be a PostReadVerificationObservation or None"
+                )
+            if self.post_read_observation.observed_eof != self.observed_eof:
+                raise ValueError(
+                    "PartialFileReadObservation.post_read_observation.observed_eof must match observed_eof"
+                )
+            if (
+                self.post_read_observation.streamed_size_bytes
+                != self.streamed_size_bytes
+            ):
+                raise ValueError(
+                    "PartialFileReadObservation.post_read_observation.streamed_size_bytes must match streamed_size_bytes"
+                )
+            if (
+                self.post_read_observation.observed_stream_sha256
+                != self.observed_stream_sha256
+            ):
+                raise ValueError(
+                    "PartialFileReadObservation.post_read_observation.observed_stream_sha256 must match observed_stream_sha256"
+                )
+            if (
+                self.post_read_observation.observed_eof_sha256
+                != self.observed_eof_sha256
+            ):
+                raise ValueError(
+                    "PartialFileReadObservation.post_read_observation.observed_eof_sha256 must match observed_eof_sha256"
+                )
+            if self.post_read_observation.end_fstat != self.end_fstat:
+                raise ValueError(
+                    "PartialFileReadObservation.post_read_observation.end_fstat must match end_fstat"
+                )
+            if self.post_read_observation.failure_phase != self.failure_phase:
+                raise ValueError(
+                    "PartialFileReadObservation.post_read_observation.failure_phase must match failure_phase"
+                )
+            expected_init_fstat = (
+                ObservedStatSnapshot(
+                    dev=self.dev,
+                    ino=self.ino,
+                    mode=self.mode,
+                    uid=self.uid,
+                    gid=self.gid,
+                    size_bytes=self.stat_size_bytes,
+                    is_symlink=False,
+                    is_regular=True,
+                )
+                if (
+                    self.dev is not None
+                    and self.ino is not None
+                    and self.mode is not None
+                    and self.uid is not None
+                    and self.gid is not None
+                    and self.stat_size_bytes is not None
+                )
+                else None
+            )
+            if self.post_read_observation.initial_fstat != expected_init_fstat:
+                raise ValueError(
+                    "PartialFileReadObservation.post_read_observation.initial_fstat must match initial fstat identity/size fields"
+                )
+            if (
+                self.final_traversal_observation is None
+                and self.post_read_observation.final_traversal_observation
+                is not None
+            ):
+                object.__setattr__(
+                    self,
+                    "final_traversal_observation",
+                    self.post_read_observation.final_traversal_observation,
+                )
+            if (
+                self.final_resolution_observation is None
+                and self.post_read_observation.final_resolution_observation
+                is not None
+            ):
+                object.__setattr__(
+                    self,
+                    "final_resolution_observation",
+                    self.post_read_observation.final_resolution_observation,
+                )
+
+        if self.final_traversal_observation is not None:
+            if (
+                type(self.final_traversal_observation)
+                is not FinalPathTraversalObservation
+            ):
+                raise ValueError(
+                    "PartialFileReadObservation.final_traversal_observation must be a FinalPathTraversalObservation or None"
+                )
+            if not self.observed_eof:
+                raise ValueError(
+                    "PartialFileReadObservation.final_traversal_observation must be None when observed_eof=False"
+                )
+            if self.failure_phase != "final_path_traversal":
+                raise ValueError(
+                    "PartialFileReadObservation.final_traversal_observation requires failure_phase='final_path_traversal'"
+                )
+            if (
+                self.final_traversal_observation.lexical_path is not None
+                and self.final_traversal_observation.lexical_path != self.path
+            ):
+                raise ValueError(
+                    "PartialFileReadObservation.final_traversal_observation.lexical_path must match path"
+                )
+            if (
+                self.post_read_observation is not None
+                and self.post_read_observation.final_traversal_observation
+                != self.final_traversal_observation
+            ):
+                raise ValueError(
+                    "PartialFileReadObservation.post_read_observation.final_traversal_observation must match final_traversal_observation"
+                )
+
+        if self.final_resolution_observation is not None:
+            if (
+                type(self.final_resolution_observation)
+                is not FinalTargetResolutionObservation
+            ):
+                raise ValueError(
+                    "PartialFileReadObservation.final_resolution_observation must be a FinalTargetResolutionObservation or None"
+                )
+            if not self.observed_eof:
+                raise ValueError(
+                    "PartialFileReadObservation.final_resolution_observation must be None when observed_eof=False"
+                )
+            if self.failure_phase != "final_target_resolution":
+                raise ValueError(
+                    "PartialFileReadObservation.final_resolution_observation requires failure_phase='final_target_resolution'"
+                )
+            if (
+                self.final_resolution_observation.lexical_path is not None
+                and self.final_resolution_observation.lexical_path != self.path
+            ):
+                raise ValueError(
+                    "PartialFileReadObservation.final_resolution_observation.lexical_path must match path"
+                )
+            if (
+                self.post_read_observation is not None
+                and self.post_read_observation.final_resolution_observation
+                != self.final_resolution_observation
+            ):
+                raise ValueError(
+                    "PartialFileReadObservation.post_read_observation.final_resolution_observation must match final_resolution_observation"
                 )
 
         if self.lookup_snapshot is not None:
@@ -1100,9 +4375,339 @@ class PartialFileReadObservation:
             return (self.dev, self.ino, self.mode, self.uid, self.gid)
         return None
 
+    @property
+    def initial_fstat(self) -> ObservedStatSnapshot | None:
+        if self.post_read_observation is not None:
+            return self.post_read_observation.initial_fstat
+        if (
+            self.dev is not None
+            and self.ino is not None
+            and self.mode is not None
+            and self.uid is not None
+            and self.gid is not None
+            and self.stat_size_bytes is not None
+        ):
+            return ObservedStatSnapshot(
+                dev=self.dev,
+                ino=self.ino,
+                mode=self.mode,
+                uid=self.uid,
+                gid=self.gid,
+                size_bytes=self.stat_size_bytes,
+                is_symlink=False,
+                is_regular=True,
+            )
+        return None
+
+    @property
+    def final_lexical_lstat(self) -> ObservedStatSnapshot | None:
+        return (
+            self.post_read_observation.final_lexical_lstat
+            if self.post_read_observation is not None
+            else None
+        )
+
+    @property
+    def final_lexical_stat(self) -> ObservedStatSnapshot | None:
+        return (
+            self.post_read_observation.final_lexical_stat
+            if self.post_read_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_resolved_path(self) -> str | None:
+        return (
+            self.post_read_observation.final_traversal_resolved_path
+            if self.post_read_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_target_lstat(self) -> ObservedStatSnapshot | None:
+        return (
+            self.post_read_observation.final_traversal_target_lstat
+            if self.post_read_observation is not None
+            else None
+        )
+
+    @property
+    def final_symlinks(self) -> tuple[_SymlinkEdge, ...] | None:
+        return (
+            self.post_read_observation.final_symlinks
+            if self.post_read_observation is not None
+            else None
+        )
+
+    @property
+    def final_symlink_identities(
+        self,
+    ) -> tuple[_ObservedSymlinkIdentity, ...] | None:
+        return (
+            self.post_read_observation.final_symlink_identities
+            if self.post_read_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversed_directories(
+        self,
+    ) -> tuple[_ObservedDirectoryIdentity, ...] | None:
+        return (
+            self.post_read_observation.final_traversed_directories
+            if self.post_read_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_failed_stage(self) -> str | None:
+        return (
+            self.final_traversal_observation.failed_stage
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_preliminary_lexical_lstat(
+        self,
+    ) -> ObservedStatSnapshot | None:
+        return (
+            self.final_traversal_observation.preliminary_lexical_lstat
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_preliminary_lexical_stat(
+        self,
+    ) -> ObservedStatSnapshot | None:
+        return (
+            self.final_traversal_observation.preliminary_lexical_stat
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_root_lstat(self) -> ObservedStatSnapshot | None:
+        return (
+            self.final_traversal_observation.root_lstat
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_root_directory_identity(
+        self,
+    ) -> _ObservedDirectoryIdentity | None:
+        return (
+            self.final_traversal_observation.root_directory_identity
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_component_observations(
+        self,
+    ) -> tuple[TraversalComponentObservation, ...] | None:
+        return (
+            self.final_traversal_observation.component_observations
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_rejected_component(
+        self,
+    ) -> TraversalComponentObservation | None:
+        return (
+            self.final_traversal_observation.rejected_component
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_failed_component_path(self) -> str | None:
+        return (
+            self.final_traversal_observation.failed_component_path
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_failed_component_is_leaf(self) -> bool | None:
+        return (
+            self.final_traversal_observation.failed_component_is_leaf
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_failed_component_lstat(
+        self,
+    ) -> ObservedStatSnapshot | None:
+        return (
+            self.final_traversal_observation.failed_component_lstat
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_failed_component_readlink_target(self) -> str | None:
+        return (
+            self.final_traversal_observation.failed_component_readlink_target
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_failed_component_symlink_edge(
+        self,
+    ) -> _SymlinkEdge | None:
+        return (
+            self.final_traversal_observation.failed_component_symlink_edge
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_failed_component_symlink_identity(
+        self,
+    ) -> _ObservedSymlinkIdentity | None:
+        return (
+            self.final_traversal_observation.failed_component_symlink_identity
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_failed_component_directory_identity(
+        self,
+    ) -> _ObservedDirectoryIdentity | None:
+        return (
+            self.final_traversal_observation.failed_component_directory_identity
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_prior_component_lstat(
+        self,
+    ) -> ObservedStatSnapshot | None:
+        return (
+            self.final_traversal_observation.prior_component_lstat
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_prior_symlink_edge(self) -> _SymlinkEdge | None:
+        return (
+            self.final_traversal_observation.prior_symlink_edge
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_prior_symlink_identity(
+        self,
+    ) -> _ObservedSymlinkIdentity | None:
+        return (
+            self.final_traversal_observation.prior_symlink_identity
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_prior_directory_identity(
+        self,
+    ) -> _ObservedDirectoryIdentity | None:
+        return (
+            self.final_traversal_observation.prior_directory_identity
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_traversal_symlink_expansions_count(self) -> int | None:
+        return (
+            self.final_traversal_observation.symlink_expansions_count
+            if self.final_traversal_observation is not None
+            else None
+        )
+
+    @property
+    def final_resolved_path(self) -> str | None:
+        return (
+            self.post_read_observation.final_resolved_path
+            if self.post_read_observation is not None
+            else None
+        )
+
+    @property
+    def final_resolved_target_lstat(self) -> ObservedStatSnapshot | None:
+        return (
+            self.post_read_observation.final_resolved_target_lstat
+            if self.post_read_observation is not None
+            else None
+        )
+
+    @property
+    def final_resolution_first_target_lstat(self) -> ObservedStatSnapshot | None:
+        return (
+            self.final_resolution_observation.first_target_lstat
+            if self.final_resolution_observation is not None
+            else None
+        )
+
+    @property
+    def final_resolution_ancestor_lstats(
+        self,
+    ) -> tuple[ResolutionComponentObservation, ...] | None:
+        return (
+            self.final_resolution_observation.ancestor_lstats
+            if self.final_resolution_observation is not None
+            else None
+        )
+
+    @property
+    def final_resolution_component_observations(
+        self,
+    ) -> tuple[ResolutionComponentObservation, ...] | None:
+        return (
+            self.final_resolution_observation.component_observations
+            if self.final_resolution_observation is not None
+            else None
+        )
+
+    @property
+    def final_resolution_failed_stage(self) -> str | None:
+        return (
+            self.final_resolution_observation.failed_stage
+            if self.final_resolution_observation is not None
+            else None
+        )
+
+    @property
+    def final_resolution_failed_component_path(self) -> str | None:
+        return (
+            self.final_resolution_observation.failed_component_path
+            if self.final_resolution_observation is not None
+            else None
+        )
+
+    @property
+    def final_resolution_failed_component_lstat(
+        self,
+    ) -> ObservedStatSnapshot | None:
+        return (
+            self.final_resolution_observation.failed_component_lstat
+            if self.final_resolution_observation is not None
+            else None
+        )
+
     def as_file_pin(self) -> FilePin:
         raise ValueError(
-            "PartialFileReadObservation cannot be converted to a FilePin because full stream read did not complete"
+            "PartialFileReadObservation cannot be converted to a FilePin because stream read or post-read verification did not complete"
         )
 
     def __getitem__(self, key: str) -> Any:
@@ -1142,6 +4747,35 @@ class PartialFileReadObservation:
             "lookup_snapshot": (
                 self.lookup_snapshot.to_dict()
                 if self.lookup_snapshot is not None
+                else None
+            ),
+            "observed_eof": self.observed_eof,
+            "observed_stream_sha256": self.observed_stream_sha256,
+            "observed_eof_sha256": self.observed_eof_sha256,
+            "initial_fstat": (
+                self.initial_fstat.to_dict()
+                if self.initial_fstat is not None
+                else None
+            ),
+            "end_fstat": (
+                self.end_fstat.to_dict()
+                if self.end_fstat is not None
+                else None
+            ),
+            "failure_phase": self.failure_phase,
+            "final_traversal_observation": (
+                self.final_traversal_observation.to_dict()
+                if self.final_traversal_observation is not None
+                else None
+            ),
+            "final_resolution_observation": (
+                self.final_resolution_observation.to_dict()
+                if self.final_resolution_observation is not None
+                else None
+            ),
+            "post_read_observation": (
+                self.post_read_observation.to_dict()
+                if self.post_read_observation is not None
                 else None
             ),
         }
@@ -1196,20 +4830,53 @@ def _validate_kernel_regular_lookup(
 ) -> tuple[os.stat_result, os.stat_result]:
     """Validate ``raw_lexical`` using un-normalized kernel lookup semantics."""
     if raw_lexical.endswith(("/", "/.", "/..")):
-        raise ValueError(
+        err = ValueError(
             f"Regular-file path must not end with a directory suffix ('/', '/.', or '/..'): {raw_lexical!r}"
         )
+        err._partial_kernel_lookup_stage = (  # type: ignore[attr-defined]
+            "preliminary_kernel_lookup_directory_suffix"
+        )
+        raise err
+    lex_lstat: os.stat_result | None = None
+    lex_stat: os.stat_result | None = None
     try:
         lex_lstat = os.lstat(raw_lexical)
         lex_stat = os.stat(raw_lexical)
     except OSError as exc:
-        raise ValueError(
+        err = ValueError(
             f"Kernel path lookup failed for {raw_lexical!r} ({type(exc).__name__}): {exc}"
-        ) from exc
+        )
+        err._partial_kernel_lookup_stage = (  # type: ignore[attr-defined]
+            "preliminary_kernel_lstat"
+            if lex_lstat is None
+            else "preliminary_kernel_stat"
+        )
+        if lex_lstat is not None:
+            err._partial_lexical_lstat = lex_lstat  # type: ignore[attr-defined]
+        if lex_stat is not None:
+            err._partial_lexical_stat = lex_stat  # type: ignore[attr-defined]
+        raise err from exc
+    except Exception as exc:
+        exc._partial_kernel_lookup_stage = (  # type: ignore[attr-defined]
+            "preliminary_kernel_lstat"
+            if lex_lstat is None
+            else "preliminary_kernel_stat"
+        )
+        if lex_lstat is not None:
+            exc._partial_lexical_lstat = lex_lstat  # type: ignore[attr-defined]
+        if lex_stat is not None:
+            exc._partial_lexical_stat = lex_stat  # type: ignore[attr-defined]
+        raise
     if not stat.S_ISREG(lex_stat.st_mode):
-        raise ValueError(
+        err = ValueError(
             f"Target is not a regular file: {raw_lexical!r}"
         )
+        err._partial_kernel_lookup_stage = (  # type: ignore[attr-defined]
+            "preliminary_kernel_not_regular"
+        )
+        err._partial_lexical_lstat = lex_lstat  # type: ignore[attr-defined]
+        err._partial_lexical_stat = lex_stat  # type: ignore[attr-defined]
+        raise err
     return lex_lstat, lex_stat
 
 
@@ -1235,178 +4902,542 @@ def _traverse_path_components(raw_lexical: str) -> _PathTraversalResult:
     symlink targets as well as non-directory intermediate components (e.g. ``regular_file/..``).
     """
     raw_lexical = _validate_lexical_abs_path(raw_lexical, field_name="path")
-    _lex_lstat, lex_stat = _validate_kernel_regular_lookup(raw_lexical)
-
-    current_parts: list[str] = []
-    remaining: list[str] = [
-        comp for comp in reversed(raw_lexical.split("/")) if comp
-    ]
-    if not remaining:
-        raise ValueError(
-            f"Expected regular file at {raw_lexical!r}, got root directory"
-        )
-
-    try:
-        root_st = os.lstat("/")
-    except OSError as exc:
-        raise ValueError(
-            f"Cannot inspect path component '/' ({type(exc).__name__}): {exc}"
-        ) from exc
-    if stat.S_ISLNK(root_st.st_mode) or not stat.S_ISDIR(root_st.st_mode):
-        raise ValueError("Root '/' is not a canonical directory")
-    root_dir_obs = _ObservedDirectoryIdentity(
-        path="/",
-        resolved_path="/",
-        dev=int(root_st.st_dev),
-        ino=int(root_st.st_ino),
-        mode=int(stat.S_IMODE(root_st.st_mode)),
-        uid=int(root_st.st_uid),
-        gid=int(root_st.st_gid),
-    )
-
-    dir_paths_seen: dict[str, None] = {"/": None}
-    dir_identities_seen: dict[str, _ObservedDirectoryIdentity] = {
-        "/": root_dir_obs
-    }
+    prelim_lex_lstat_obs: ObservedStatSnapshot | None = None
+    prelim_lex_stat_obs: ObservedStatSnapshot | None = None
+    root_lstat_obs: ObservedStatSnapshot | None = None
+    root_dir_obs: _ObservedDirectoryIdentity | None = None
+    dir_paths_seen: dict[str, None] = {}
+    dir_identities_seen: dict[str, _ObservedDirectoryIdentity] = {}
     edges: dict[str, str] = {}
     symlink_identities_seen: dict[str, _ObservedSymlinkIdentity] = {}
+    component_lstats_seen: dict[str, ObservedStatSnapshot] = {}
+    component_observations: list[TraversalComponentObservation] = []
     symlink_traversals = 0
     resolved_path: str | None = None
     target_lstat: os.stat_result | None = None
+    failed_stage: str | None = None
+    failed_component_path: str | None = None
+    failed_component_is_leaf: bool | None = None
+    rejected_component: TraversalComponentObservation | None = None
+    prior_component_lstat: ObservedStatSnapshot | None = None
+    prior_symlink_edge: _SymlinkEdge | None = None
+    prior_symlink_identity: _ObservedSymlinkIdentity | None = None
+    prior_directory_identity: _ObservedDirectoryIdentity | None = None
 
-    while remaining:
-        comp = remaining.pop()
-        is_last_component = len(remaining) == 0
+    def _capture_prior_component_state(c_path: str) -> None:
+        nonlocal prior_component_lstat, prior_symlink_edge, prior_symlink_identity, prior_directory_identity
+        prior_component_lstat = component_lstats_seen.get(c_path)
+        if c_path in edges:
+            prior_symlink_edge = _SymlinkEdge(path=c_path, target=edges[c_path])
+        prior_symlink_identity = symlink_identities_seen.get(c_path)
+        prior_directory_identity = dir_identities_seen.get(c_path)
 
-        if comp == ".":
-            if is_last_component:
-                raise ValueError(
-                    f"Regular-file path or symlink target must not end with '.': {raw_lexical!r}"
-                )
-            cur_dir = "/" + "/".join(current_parts) if current_parts else "/"
-            dir_paths_seen[cur_dir] = None
-            continue
-
-        if comp == "..":
-            if is_last_component:
-                raise ValueError(
-                    f"Regular-file path or symlink target must not end with '..': {raw_lexical!r}"
-                )
-            cur_dir = "/" + "/".join(current_parts) if current_parts else "/"
-            dir_paths_seen[cur_dir] = None
-            if current_parts:
-                current_parts.pop()
-            parent_dir = "/" + "/".join(current_parts) if current_parts else "/"
-            dir_paths_seen[parent_dir] = None
-            continue
-
-        cand_path = "/" + "/".join([*current_parts, comp])
+    try:
         try:
-            st = os.lstat(cand_path)
+            _lex_lstat, lex_stat = _validate_kernel_regular_lookup(raw_lexical)
+        except Exception as exc:
+            p_lex_lstat = getattr(exc, "_partial_lexical_lstat", None)
+            if isinstance(p_lex_lstat, os.stat_result):
+                prelim_lex_lstat_obs = _stat_to_lookup_obs_or_none(p_lex_lstat)
+            p_lex_stat = getattr(exc, "_partial_lexical_stat", None)
+            if isinstance(p_lex_stat, os.stat_result):
+                prelim_lex_stat_obs = _stat_to_lookup_obs_or_none(p_lex_stat)
+            k_stage = getattr(exc, "_partial_kernel_lookup_stage", None)
+            if (
+                isinstance(k_stage, str)
+                and k_stage in VALID_PATH_TRAVERSAL_FAILURE_STAGES
+            ):
+                failed_stage = k_stage
+            raise
+        prelim_lex_lstat_obs = _stat_to_lookup_obs_or_none(_lex_lstat)
+        prelim_lex_stat_obs = _stat_to_lookup_obs_or_none(lex_stat)
+
+        current_parts: list[str] = []
+        remaining: list[str] = [
+            comp for comp in reversed(raw_lexical.split("/")) if comp
+        ]
+        if not remaining:
+            failed_stage = "lexical_root_directory"
+            raise ValueError(
+                f"Expected regular file at {raw_lexical!r}, got root directory"
+            )
+
+        failed_stage = "root_component_lstat"
+        failed_component_path = "/"
+        failed_component_is_leaf = False
+        try:
+            root_st = os.lstat("/")
         except OSError as exc:
             raise ValueError(
-                f"Cannot inspect path component {cand_path!r} ({type(exc).__name__}): {exc}"
+                f"Cannot inspect path component '/' ({type(exc).__name__}): {exc}"
             ) from exc
+        failed_stage = None
+        failed_component_path = None
+        failed_component_is_leaf = None
+        root_lstat_obs = ObservedStatSnapshot.from_stat_result(root_st)
+        if stat.S_ISLNK(root_st.st_mode) or not stat.S_ISDIR(root_st.st_mode):
+            failed_stage = "root_component_not_canonical_directory"
+            failed_component_path = "/"
+            failed_component_is_leaf = False
+            rejected_component = TraversalComponentObservation(
+                path="/",
+                lstat=root_lstat_obs,
+                is_root=True,
+                is_leaf=False,
+                accepted=False,
+            )
+            component_observations.append(rejected_component)
+            raise ValueError("Root '/' is not a canonical directory")
+        root_dir_obs = _ObservedDirectoryIdentity(
+            path="/",
+            resolved_path="/",
+            dev=int(root_st.st_dev),
+            ino=int(root_st.st_ino),
+            mode=int(stat.S_IMODE(root_st.st_mode)),
+            uid=int(root_st.st_uid),
+            gid=int(root_st.st_gid),
+        )
+        dir_paths_seen["/"] = None
+        dir_identities_seen["/"] = root_dir_obs
+        component_lstats_seen["/"] = root_lstat_obs
+        component_observations.append(
+            TraversalComponentObservation(
+                path="/",
+                lstat=root_lstat_obs,
+                is_root=True,
+                is_leaf=False,
+                accepted=True,
+                directory_identity=root_dir_obs,
+            )
+        )
 
-        if stat.S_ISLNK(st.st_mode):
-            symlink_traversals += 1
-            if symlink_traversals > _MAX_SYMLINK_EXPANSIONS:
-                raise ValueError(
-                    f"Symlink expansion limit ({_MAX_SYMLINK_EXPANSIONS}) exceeded at {cand_path!r}"
-                )
+        while remaining:
+            comp = remaining.pop()
+            is_last_component = len(remaining) == 0
+
+            if comp == ".":
+                if is_last_component:
+                    failed_stage = "leaf_dot_component"
+                    raise ValueError(
+                        f"Regular-file path or symlink target must not end with '.': {raw_lexical!r}"
+                    )
+                cur_dir = "/" + "/".join(current_parts) if current_parts else "/"
+                dir_paths_seen[cur_dir] = None
+                continue
+
+            if comp == "..":
+                if is_last_component:
+                    failed_stage = "leaf_dotdot_component"
+                    raise ValueError(
+                        f"Regular-file path or symlink target must not end with '..': {raw_lexical!r}"
+                    )
+                cur_dir = "/" + "/".join(current_parts) if current_parts else "/"
+                dir_paths_seen[cur_dir] = None
+                if current_parts:
+                    current_parts.pop()
+                parent_dir = "/" + "/".join(current_parts) if current_parts else "/"
+                dir_paths_seen[parent_dir] = None
+                continue
+
+            cand_path = "/" + "/".join([*current_parts, comp])
+            failed_stage = "component_lstat"
+            failed_component_path = cand_path
+            failed_component_is_leaf = is_last_component
             try:
-                target = os.readlink(cand_path)
+                st = os.lstat(cand_path)
             except OSError as exc:
+                _capture_prior_component_state(cand_path)
                 raise ValueError(
-                    f"Cannot read symlink target at {cand_path!r} ({type(exc).__name__}): {exc}"
+                    f"Cannot inspect path component {cand_path!r} ({type(exc).__name__}): {exc}"
                 ) from exc
-            if not target or "\x00" in target:
-                raise ValueError(
-                    f"Invalid symlink target at {cand_path!r}: {target!r}"
-                )
-            if is_last_component and target.endswith(("/", "/.", "/..")):
-                raise ValueError(
-                    f"Regular-file target path must not end with a directory suffix: {target!r}"
-                )
-            prev_target = edges.get(cand_path)
-            if prev_target is not None and prev_target != target:
-                raise ValueError(
-                    f"Symlink target changed during traversal at {cand_path!r}: "
-                    f"before={prev_target!r}, after={target!r}"
-                )
-            cand_sym_obs = _ObservedSymlinkIdentity(
-                path=cand_path,
-                target=target,
-                dev=int(st.st_dev),
-                ino=int(st.st_ino),
-                mode=int(stat.S_IMODE(st.st_mode)),
-                uid=int(st.st_uid),
-                gid=int(st.st_gid),
-            )
-            prev_sym_obs = symlink_identities_seen.get(cand_path)
-            if prev_sym_obs is not None and prev_sym_obs != cand_sym_obs:
-                raise ValueError(
-                    f"Symlink identity changed during traversal at {cand_path!r}: "
-                    f"before={prev_sym_obs.to_dict()}, after={cand_sym_obs.to_dict()}"
-                )
-            edges[cand_path] = target
-            symlink_identities_seen[cand_path] = cand_sym_obs
-            if target.startswith("/"):
-                current_parts = []
-                dir_paths_seen["/"] = None
-            target_comps = [c for c in reversed(target.split("/")) if c]
-            if not target_comps and is_last_component:
-                raise ValueError(
-                    f"Symlink target at {cand_path!r} resolves to root directory, not a regular file"
-                )
-            remaining.extend(target_comps)
-        elif stat.S_ISDIR(st.st_mode):
-            if is_last_component:
-                raise ValueError(
-                    f"Target is not a regular file: {raw_lexical!r} (resolved to directory {cand_path!r})"
-                )
-            cand_dir_obs = _ObservedDirectoryIdentity(
-                path=cand_path,
-                resolved_path=cand_path,
-                dev=int(st.st_dev),
-                ino=int(st.st_ino),
-                mode=int(stat.S_IMODE(st.st_mode)),
-                uid=int(st.st_uid),
-                gid=int(st.st_gid),
-            )
-            prev_dir_obs = dir_identities_seen.get(cand_path)
-            if prev_dir_obs is not None and prev_dir_obs != cand_dir_obs:
-                raise ValueError(
-                    f"Directory identity changed during traversal at {cand_path!r}: "
-                    f"before={prev_dir_obs.to_dict()}, after={cand_dir_obs.to_dict()}"
-                )
-            current_parts.append(comp)
-            dir_paths_seen[cand_path] = None
-            dir_identities_seen[cand_path] = cand_dir_obs
-        elif stat.S_ISREG(st.st_mode):
-            if not is_last_component:
-                raise ValueError(
-                    f"Non-leaf component {cand_path!r} is a regular file, not a directory"
-                )
-            resolved_path = cand_path
-            target_lstat = st
-        else:
-            raise ValueError(
-                f"Path component {cand_path!r} is neither a regular file, directory, nor symlink"
-            )
+            except Exception:
+                _capture_prior_component_state(cand_path)
+                raise
+            failed_stage = None
+            failed_component_path = None
+            failed_component_is_leaf = None
+            cand_lstat_obs = ObservedStatSnapshot.from_stat_result(st)
 
-    if resolved_path is None or target_lstat is None:
-        raise ValueError(
-            f"Path {raw_lexical!r} did not resolve to a regular file"
+            if stat.S_ISLNK(st.st_mode):
+                symlink_traversals += 1
+                if symlink_traversals > _MAX_SYMLINK_EXPANSIONS:
+                    failed_stage = "symlink_expansion_limit"
+                    failed_component_path = cand_path
+                    failed_component_is_leaf = is_last_component
+                    _capture_prior_component_state(cand_path)
+                    rejected_component = TraversalComponentObservation(
+                        path=cand_path,
+                        lstat=cand_lstat_obs,
+                        is_root=False,
+                        is_leaf=is_last_component,
+                        accepted=False,
+                    )
+                    component_observations.append(rejected_component)
+                    raise ValueError(
+                        f"Symlink expansion limit ({_MAX_SYMLINK_EXPANSIONS}) exceeded at {cand_path!r}"
+                    )
+                try:
+                    target = os.readlink(cand_path)
+                except OSError as exc:
+                    failed_stage = "symlink_readlink"
+                    failed_component_path = cand_path
+                    failed_component_is_leaf = is_last_component
+                    _capture_prior_component_state(cand_path)
+                    rejected_component = TraversalComponentObservation(
+                        path=cand_path,
+                        lstat=cand_lstat_obs,
+                        is_root=False,
+                        is_leaf=is_last_component,
+                        accepted=False,
+                    )
+                    component_observations.append(rejected_component)
+                    raise ValueError(
+                        f"Cannot read symlink target at {cand_path!r} ({type(exc).__name__}): {exc}"
+                    ) from exc
+                except Exception:
+                    failed_stage = "symlink_readlink"
+                    failed_component_path = cand_path
+                    failed_component_is_leaf = is_last_component
+                    _capture_prior_component_state(cand_path)
+                    rejected_component = TraversalComponentObservation(
+                        path=cand_path,
+                        lstat=cand_lstat_obs,
+                        is_root=False,
+                        is_leaf=is_last_component,
+                        accepted=False,
+                    )
+                    component_observations.append(rejected_component)
+                    raise
+                if not target or "\x00" in target:
+                    failed_stage = "symlink_target_invalid"
+                    failed_component_path = cand_path
+                    failed_component_is_leaf = is_last_component
+                    _capture_prior_component_state(cand_path)
+                    rejected_component = TraversalComponentObservation(
+                        path=cand_path,
+                        lstat=cand_lstat_obs,
+                        is_root=False,
+                        is_leaf=is_last_component,
+                        accepted=False,
+                        readlink_target=target,
+                    )
+                    component_observations.append(rejected_component)
+                    raise ValueError(
+                        f"Invalid symlink target at {cand_path!r}: {target!r}"
+                    )
+                cand_sym_edge = _SymlinkEdge(path=cand_path, target=target)
+                cand_sym_obs = _ObservedSymlinkIdentity(
+                    path=cand_path,
+                    target=target,
+                    dev=int(st.st_dev),
+                    ino=int(st.st_ino),
+                    mode=int(stat.S_IMODE(st.st_mode)),
+                    uid=int(st.st_uid),
+                    gid=int(st.st_gid),
+                )
+                if is_last_component and target.endswith(("/", "/.", "/..")):
+                    failed_stage = "leaf_symlink_directory_suffix"
+                    failed_component_path = cand_path
+                    failed_component_is_leaf = True
+                    _capture_prior_component_state(cand_path)
+                    rejected_component = TraversalComponentObservation(
+                        path=cand_path,
+                        lstat=cand_lstat_obs,
+                        is_root=False,
+                        is_leaf=True,
+                        accepted=False,
+                        readlink_target=target,
+                        symlink_edge=cand_sym_edge,
+                        symlink_identity=cand_sym_obs,
+                    )
+                    component_observations.append(rejected_component)
+                    raise ValueError(
+                        f"Regular-file target path must not end with a directory suffix: {target!r}"
+                    )
+                prev_target = edges.get(cand_path)
+                if prev_target is not None and prev_target != target:
+                    failed_stage = "symlink_target_changed"
+                    failed_component_path = cand_path
+                    failed_component_is_leaf = is_last_component
+                    _capture_prior_component_state(cand_path)
+                    rejected_component = TraversalComponentObservation(
+                        path=cand_path,
+                        lstat=cand_lstat_obs,
+                        is_root=False,
+                        is_leaf=is_last_component,
+                        accepted=False,
+                        readlink_target=target,
+                        symlink_edge=cand_sym_edge,
+                        symlink_identity=cand_sym_obs,
+                    )
+                    component_observations.append(rejected_component)
+                    raise ValueError(
+                        f"Symlink target changed during traversal at {cand_path!r}: "
+                        f"before={prev_target!r}, after={target!r}"
+                    )
+                prev_sym_obs = symlink_identities_seen.get(cand_path)
+                if prev_sym_obs is not None and prev_sym_obs != cand_sym_obs:
+                    failed_stage = "symlink_identity_changed"
+                    failed_component_path = cand_path
+                    failed_component_is_leaf = is_last_component
+                    _capture_prior_component_state(cand_path)
+                    rejected_component = TraversalComponentObservation(
+                        path=cand_path,
+                        lstat=cand_lstat_obs,
+                        is_root=False,
+                        is_leaf=is_last_component,
+                        accepted=False,
+                        readlink_target=target,
+                        symlink_edge=cand_sym_edge,
+                        symlink_identity=cand_sym_obs,
+                    )
+                    component_observations.append(rejected_component)
+                    raise ValueError(
+                        f"Symlink identity changed during traversal at {cand_path!r}: "
+                        f"before={prev_sym_obs.to_dict()}, after={cand_sym_obs.to_dict()}"
+                    )
+                target_comps = [c for c in reversed(target.split("/")) if c]
+                if not target_comps and is_last_component:
+                    failed_stage = "leaf_symlink_resolves_to_root"
+                    failed_component_path = cand_path
+                    failed_component_is_leaf = True
+                    _capture_prior_component_state(cand_path)
+                    rejected_component = TraversalComponentObservation(
+                        path=cand_path,
+                        lstat=cand_lstat_obs,
+                        is_root=False,
+                        is_leaf=True,
+                        accepted=False,
+                        readlink_target=target,
+                        symlink_edge=cand_sym_edge,
+                        symlink_identity=cand_sym_obs,
+                    )
+                    component_observations.append(rejected_component)
+                    raise ValueError(
+                        f"Symlink target at {cand_path!r} resolves to root directory, not a regular file"
+                    )
+                edges[cand_path] = target
+                symlink_identities_seen[cand_path] = cand_sym_obs
+                component_lstats_seen[cand_path] = cand_lstat_obs
+                component_observations.append(
+                    TraversalComponentObservation(
+                        path=cand_path,
+                        lstat=cand_lstat_obs,
+                        is_root=False,
+                        is_leaf=is_last_component,
+                        accepted=True,
+                        readlink_target=target,
+                        symlink_edge=cand_sym_edge,
+                        symlink_identity=cand_sym_obs,
+                    )
+                )
+                if target.startswith("/"):
+                    current_parts = []
+                    dir_paths_seen["/"] = None
+                remaining.extend(target_comps)
+            elif stat.S_ISDIR(st.st_mode):
+                cand_dir_obs = _ObservedDirectoryIdentity(
+                    path=cand_path,
+                    resolved_path=cand_path,
+                    dev=int(st.st_dev),
+                    ino=int(st.st_ino),
+                    mode=int(stat.S_IMODE(st.st_mode)),
+                    uid=int(st.st_uid),
+                    gid=int(st.st_gid),
+                )
+                if is_last_component:
+                    failed_stage = "leaf_component_directory"
+                    failed_component_path = cand_path
+                    failed_component_is_leaf = True
+                    _capture_prior_component_state(cand_path)
+                    rejected_component = TraversalComponentObservation(
+                        path=cand_path,
+                        lstat=cand_lstat_obs,
+                        is_root=False,
+                        is_leaf=True,
+                        accepted=False,
+                        directory_identity=cand_dir_obs,
+                    )
+                    component_observations.append(rejected_component)
+                    raise ValueError(
+                        f"Target is not a regular file: {raw_lexical!r} (resolved to directory {cand_path!r})"
+                    )
+                prev_dir_obs = dir_identities_seen.get(cand_path)
+                if prev_dir_obs is not None and prev_dir_obs != cand_dir_obs:
+                    failed_stage = "directory_identity_changed"
+                    failed_component_path = cand_path
+                    failed_component_is_leaf = False
+                    _capture_prior_component_state(cand_path)
+                    rejected_component = TraversalComponentObservation(
+                        path=cand_path,
+                        lstat=cand_lstat_obs,
+                        is_root=False,
+                        is_leaf=False,
+                        accepted=False,
+                        directory_identity=cand_dir_obs,
+                    )
+                    component_observations.append(rejected_component)
+                    raise ValueError(
+                        f"Directory identity changed during traversal at {cand_path!r}: "
+                        f"before={prev_dir_obs.to_dict()}, after={cand_dir_obs.to_dict()}"
+                    )
+                current_parts.append(comp)
+                dir_paths_seen[cand_path] = None
+                dir_identities_seen[cand_path] = cand_dir_obs
+                component_lstats_seen[cand_path] = cand_lstat_obs
+                component_observations.append(
+                    TraversalComponentObservation(
+                        path=cand_path,
+                        lstat=cand_lstat_obs,
+                        is_root=False,
+                        is_leaf=False,
+                        accepted=True,
+                        directory_identity=cand_dir_obs,
+                    )
+                )
+            elif stat.S_ISREG(st.st_mode):
+                if not is_last_component:
+                    failed_stage = "non_leaf_component_regular_file"
+                    failed_component_path = cand_path
+                    failed_component_is_leaf = False
+                    _capture_prior_component_state(cand_path)
+                    rejected_component = TraversalComponentObservation(
+                        path=cand_path,
+                        lstat=cand_lstat_obs,
+                        is_root=False,
+                        is_leaf=False,
+                        accepted=False,
+                    )
+                    component_observations.append(rejected_component)
+                    raise ValueError(
+                        f"Non-leaf component {cand_path!r} is a regular file, not a directory"
+                    )
+                resolved_path = cand_path
+                target_lstat = st
+                component_lstats_seen[cand_path] = cand_lstat_obs
+                component_observations.append(
+                    TraversalComponentObservation(
+                        path=cand_path,
+                        lstat=cand_lstat_obs,
+                        is_root=False,
+                        is_leaf=True,
+                        accepted=True,
+                    )
+                )
+            else:
+                failed_stage = "component_unsupported_file_type"
+                failed_component_path = cand_path
+                failed_component_is_leaf = is_last_component
+                _capture_prior_component_state(cand_path)
+                rejected_component = TraversalComponentObservation(
+                    path=cand_path,
+                    lstat=cand_lstat_obs,
+                    is_root=False,
+                    is_leaf=is_last_component,
+                    accepted=False,
+                )
+                component_observations.append(rejected_component)
+                raise ValueError(
+                    f"Path component {cand_path!r} is neither a regular file, directory, nor symlink"
+                )
+
+        if resolved_path is None or target_lstat is None:
+            failed_stage = "traversal_target_unresolved"
+            raise ValueError(
+                f"Path {raw_lexical!r} did not resolve to a regular file"
+            )
+        if _stat_identity_tuple(lex_stat) != _stat_identity_tuple(target_lstat):
+            failed_stage = "target_identity_mismatch"
+            raise ValueError(
+                f"Target identity changed during component traversal for {raw_lexical!r}"
+            )
+        if int(lex_stat.st_size) != int(target_lstat.st_size):
+            failed_stage = "target_size_mismatch"
+            raise ValueError(
+                f"Target size changed during component traversal for {raw_lexical!r}"
+            )
+    except Exception as exc:
+        partial_dirs: dict[str, _ObservedDirectoryIdentity] = {}
+        if resolved_path is not None:
+            for anc in Path(resolved_path).parents:
+                anc_str = str(anc)
+                if anc_str in dir_identities_seen:
+                    partial_dirs[anc_str] = dir_identities_seen[anc_str]
+        for d_path in dir_paths_seen:
+            if d_path in dir_identities_seen:
+                partial_dirs.setdefault(d_path, dir_identities_seen[d_path])
+        sorted_e_paths = sorted(edges)
+        partial_edges = tuple(
+            _SymlinkEdge(path=ep, target=edges[ep]) for ep in sorted_e_paths
         )
-    if _stat_identity_tuple(lex_stat) != _stat_identity_tuple(target_lstat):
-        raise ValueError(
-            f"Target identity changed during component traversal for {raw_lexical!r}"
+        partial_sym_ids = tuple(
+            symlink_identities_seen[ep]
+            for ep in sorted_e_paths
+            if ep in symlink_identities_seen
         )
-    if int(lex_stat.st_size) != int(target_lstat.st_size):
-        raise ValueError(
-            f"Target size changed during component traversal for {raw_lexical!r}"
+        partial_dirs_tuple = tuple(partial_dirs.values())
+        exc._partial_traversal = (  # type: ignore[attr-defined]
+            resolved_path,
+            target_lstat,
+            partial_edges,
+            partial_sym_ids,
+            partial_dirs_tuple,
         )
+        if (
+            failed_stage is not None
+            or prelim_lex_lstat_obs is not None
+            or prelim_lex_stat_obs is not None
+        ):
+            exc._partial_traversal_observation = (  # type: ignore[attr-defined]
+                FinalPathTraversalObservation(
+                    failed_stage=failed_stage,
+                    lexical_path=raw_lexical,
+                    preliminary_lexical_lstat=prelim_lex_lstat_obs,
+                    preliminary_lexical_stat=prelim_lex_stat_obs,
+                    root_lstat=root_lstat_obs,
+                    root_directory_identity=root_dir_obs,
+                    accepted_symlinks=partial_edges,
+                    accepted_symlink_identities=partial_sym_ids,
+                    accepted_directories=partial_dirs_tuple,
+                    component_observations=tuple(component_observations),
+                    resolved_path=resolved_path,
+                    target_lstat=_stat_to_lookup_obs_or_none(target_lstat),
+                    failed_component_path=failed_component_path,
+                    failed_component_is_leaf=failed_component_is_leaf,
+                    failed_component_lstat=(
+                        rejected_component.lstat
+                        if rejected_component is not None
+                        else None
+                    ),
+                    failed_component_readlink_target=(
+                        rejected_component.readlink_target
+                        if rejected_component is not None
+                        else None
+                    ),
+                    failed_component_symlink_edge=(
+                        rejected_component.symlink_edge
+                        if rejected_component is not None
+                        else None
+                    ),
+                    failed_component_symlink_identity=(
+                        rejected_component.symlink_identity
+                        if rejected_component is not None
+                        else None
+                    ),
+                    failed_component_directory_identity=(
+                        rejected_component.directory_identity
+                        if rejected_component is not None
+                        else None
+                    ),
+                    rejected_component=rejected_component,
+                    prior_component_lstat=prior_component_lstat,
+                    prior_symlink_edge=prior_symlink_edge,
+                    prior_symlink_identity=prior_symlink_identity,
+                    prior_directory_identity=prior_directory_identity,
+                    symlink_expansions_count=symlink_traversals,
+                )
+            )
+        raise
 
     ordered_dir_identities: dict[str, _ObservedDirectoryIdentity] = {}
     for anc in Path(resolved_path).parents:
@@ -1447,46 +5478,156 @@ def _discover_symlink_edges(raw_lexical: str) -> tuple[_SymlinkEdge, ...]:
 
 def _resolve_regular_target_strict(raw_lexical: str) -> tuple[str, os.stat_result]:
     """Resolve ``raw_lexical`` strictly and verify the resolved path is a regular non-symlink file."""
+    lexical_for_obs = (
+        raw_lexical
+        if (
+            type(raw_lexical) is str
+            and raw_lexical.startswith("/")
+            and "\x00" not in raw_lexical
+        )
+        else None
+    )
     lexical_path_obj = Path(raw_lexical)
     try:
         resolved_path_obj = lexical_path_obj.resolve(strict=True)
     except (OSError, RuntimeError) as exc:
-        raise ValueError(
+        err = ValueError(
             f"Failed to resolve path {raw_lexical!r} ({type(exc).__name__}): {exc}"
-        ) from exc
+        )
+        err._partial_resolution_observation = (  # type: ignore[attr-defined]
+            FinalTargetResolutionObservation(
+                failed_stage="resolve_strict",
+                lexical_path=lexical_for_obs,
+            )
+        )
+        raise err from exc
+    except Exception as exc:
+        exc._partial_resolution_observation = (  # type: ignore[attr-defined]
+            FinalTargetResolutionObservation(
+                failed_stage="resolve_strict",
+                lexical_path=lexical_for_obs,
+            )
+        )
+        raise
 
     resolved_str = str(resolved_path_obj)
     if ".." in resolved_path_obj.parts:
-        raise ValueError(
+        err = ValueError(
             f"Resolved path must not contain '..': {resolved_str!r}"
         )
-    for anc in (resolved_path_obj, *resolved_path_obj.parents):
-        try:
-            anc_st = os.lstat(str(anc))
-        except OSError as exc:
-            raise ValueError(
-                f"Failed to lstat resolved component {anc} ({type(exc).__name__}): {exc}"
-            ) from exc
-        if stat.S_ISLNK(anc_st.st_mode):
-            raise ValueError(
-                f"Resolved path still contains a symlink component at {anc}"
+        err._partial_resolution_observation = (  # type: ignore[attr-defined]
+            FinalTargetResolutionObservation(
+                failed_stage="resolved_path_dotdot",
+                lexical_path=lexical_for_obs,
+                failed_component_path=(
+                    resolved_str
+                    if (
+                        resolved_str.startswith("/")
+                        and "\x00" not in resolved_str
+                    )
+                    else None
+                ),
             )
-        if anc != resolved_path_obj and not stat.S_ISDIR(anc_st.st_mode):
-            raise ValueError(
-                f"Resolved ancestor is not a directory at {anc}"
-            )
+        )
+        raise err
+
+    first_target_lstat_obs: ObservedStatSnapshot | None = None
+    ancestor_observations: list[ResolutionComponentObservation] = []
+    component_observations: list[ResolutionComponentObservation] = []
+    final_target_lstat_raw: os.stat_result | None = None
+    final_target_lstat_obs: ObservedStatSnapshot | None = None
+    failed_stage: str | None = None
+    failed_component_path: str | None = None
+    failed_component_lstat: ObservedStatSnapshot | None = None
 
     try:
-        target_lstat = os.lstat(resolved_str)
-    except OSError as exc:
-        raise ValueError(
-            f"Failed to lstat resolved target {resolved_str!r} ({type(exc).__name__}): {exc}"
-        ) from exc
+        for anc in (resolved_path_obj, *resolved_path_obj.parents):
+            anc_str = str(anc)
+            is_target_comp = anc == resolved_path_obj
+            failed_stage = (
+                "initial_target_component_lstat"
+                if is_target_comp
+                else "ancestor_component_lstat"
+            )
+            failed_component_path = anc_str
+            failed_component_lstat = None
+            try:
+                anc_st = os.lstat(anc_str)
+            except OSError as exc:
+                raise ValueError(
+                    f"Failed to lstat resolved component {anc} ({type(exc).__name__}): {exc}"
+                ) from exc
+            anc_obs = ObservedStatSnapshot.from_stat_result(anc_st)
+            comp_obs = ResolutionComponentObservation(
+                path=anc_str,
+                is_target=is_target_comp,
+                lstat=anc_obs,
+            )
+            if is_target_comp:
+                first_target_lstat_obs = anc_obs
+            else:
+                ancestor_observations.append(comp_obs)
+            component_observations.append(comp_obs)
+            if stat.S_ISLNK(anc_st.st_mode):
+                failed_stage = (
+                    "initial_target_component_symlink"
+                    if is_target_comp
+                    else "ancestor_component_symlink"
+                )
+                failed_component_path = anc_str
+                failed_component_lstat = anc_obs
+                raise ValueError(
+                    f"Resolved path still contains a symlink component at {anc}"
+                )
+            if anc != resolved_path_obj and not stat.S_ISDIR(anc_st.st_mode):
+                failed_stage = "ancestor_component_not_directory"
+                failed_component_path = anc_str
+                failed_component_lstat = anc_obs
+                raise ValueError(
+                    f"Resolved ancestor is not a directory at {anc}"
+                )
 
-    if stat.S_ISLNK(target_lstat.st_mode) or not stat.S_ISREG(target_lstat.st_mode):
-        raise ValueError(
-            f"Target is not a regular file: {raw_lexical!r} (resolved to {resolved_str!r})"
+        failed_stage = "final_target_lstat"
+        failed_component_path = resolved_str
+        failed_component_lstat = None
+        try:
+            target_lstat = os.lstat(resolved_str)
+        except OSError as exc:
+            raise ValueError(
+                f"Failed to lstat resolved target {resolved_str!r} ({type(exc).__name__}): {exc}"
+            ) from exc
+
+        final_target_lstat_raw = target_lstat
+        final_target_lstat_obs = ObservedStatSnapshot.from_stat_result(
+            target_lstat
         )
+        if stat.S_ISLNK(target_lstat.st_mode) or not stat.S_ISREG(target_lstat.st_mode):
+            failed_stage = "final_target_not_regular"
+            failed_component_path = resolved_str
+            failed_component_lstat = final_target_lstat_obs
+            raise ValueError(
+                f"Target is not a regular file: {raw_lexical!r} (resolved to {resolved_str!r})"
+            )
+        failed_stage = None
+    except Exception as exc:
+        exc._partial_resolved_path = resolved_str  # type: ignore[attr-defined]
+        if final_target_lstat_raw is not None:
+            exc._partial_target_lstat = final_target_lstat_raw  # type: ignore[attr-defined]
+        if failed_stage is not None:
+            exc._partial_resolution_observation = (  # type: ignore[attr-defined]
+                FinalTargetResolutionObservation(
+                    failed_stage=failed_stage,
+                    lexical_path=lexical_for_obs,
+                    resolved_path=resolved_str,
+                    first_target_lstat=first_target_lstat_obs,
+                    ancestor_lstats=tuple(ancestor_observations),
+                    component_observations=tuple(component_observations),
+                    final_target_lstat=final_target_lstat_obs,
+                    failed_component_path=failed_component_path,
+                    failed_component_lstat=failed_component_lstat,
+                )
+            )
+        raise
     return resolved_str, target_lstat
 
 
@@ -1549,19 +5690,182 @@ def _stream_observe_regular_file(
     )
 
     fstat_before: os.stat_result | None = None
-    in_open_or_initial_fstat = False
-    pre_eof_after_fstat = False
+    fstat_after: os.stat_result | None = None
+    eof_reached = False
+    eof_digest: str | None = None
+    lex_lstat_after: os.stat_result | None = None
+    lex_stat_after: os.stat_result | None = None
+    traversal_after: _PathTraversalResult | None = None
+    partial_traversal_after: (
+        tuple[
+            str | None,
+            os.stat_result | None,
+            tuple[_SymlinkEdge, ...],
+            tuple[_ObservedSymlinkIdentity, ...],
+            tuple[_ObservedDirectoryIdentity, ...],
+        ]
+        | None
+    ) = None
+    final_traversal_after: FinalPathTraversalObservation | None = None
+    resolved_after: str | None = None
+    target_lstat_after: os.stat_result | None = None
+    final_resolution_after: FinalTargetResolutionObservation | None = None
+    current_phase: str | None = None
 
     def _build_partial_read_obs(
         err_msg: str,
         *,
         fstat_st: os.stat_result | None,
         streamed_bytes: int,
+        failure_phase: str | None = None,
     ) -> PartialFileReadObservation:
         anc_tuple = traversal_before.directory_identities
         sym_ids = traversal_before.symlink_identities
         deps_complete = (
             len(anc_tuple) > 0 and len(sym_ids) == len(symlinks_before)
+        )
+        init_fstat_obs = _stat_to_lookup_obs_or_none(fstat_st)
+        end_fstat_obs = (
+            _stat_to_lookup_obs_or_none(fstat_after) if eof_reached else None
+        )
+        final_lex_lstat_obs = (
+            _stat_to_lookup_obs_or_none(lex_lstat_after)
+            if (eof_reached and end_fstat_obs is not None)
+            else None
+        )
+        final_lex_stat_obs = (
+            _stat_to_lookup_obs_or_none(lex_stat_after)
+            if (eof_reached and final_lex_lstat_obs is not None)
+            else None
+        )
+
+        final_trav_res_path: str | None = None
+        final_trav_target_lstat: ObservedStatSnapshot | None = None
+        final_syms: tuple[_SymlinkEdge, ...] | None = None
+        final_sym_ids: tuple[_ObservedSymlinkIdentity, ...] | None = None
+        final_trav_dirs: tuple[_ObservedDirectoryIdentity, ...] | None = None
+        if eof_reached and final_lex_stat_obs is not None:
+            if traversal_after is not None:
+                final_trav_res_path = traversal_after.resolved_path
+                final_trav_target_lstat = _stat_to_lookup_obs_or_none(
+                    traversal_after.target_lstat
+                )
+                final_syms = traversal_after.symlink_edges
+                final_sym_ids = traversal_after.symlink_identities
+                final_trav_dirs = traversal_after.directory_identities
+            elif final_traversal_after is not None:
+                if len(final_traversal_after.accepted_directories) > 0:
+                    if (
+                        final_traversal_after.resolved_path is not None
+                        and final_traversal_after.target_lstat is not None
+                    ):
+                        final_trav_res_path = (
+                            final_traversal_after.resolved_path
+                        )
+                        final_trav_target_lstat = (
+                            final_traversal_after.target_lstat
+                        )
+                    final_syms = final_traversal_after.accepted_symlinks
+                    final_sym_ids = (
+                        final_traversal_after.accepted_symlink_identities
+                    )
+                    final_trav_dirs = (
+                        final_traversal_after.accepted_directories
+                    )
+            elif partial_traversal_after is not None:
+                (
+                    p_res_path,
+                    p_target_lstat,
+                    p_edges,
+                    p_sym_ids,
+                    p_dirs,
+                ) = partial_traversal_after
+                if len(p_dirs) > 0:
+                    p_target_obs = _stat_to_lookup_obs_or_none(p_target_lstat)
+                    if (
+                        p_res_path is not None
+                        and p_target_obs is not None
+                        and p_target_obs.is_regular
+                        and not p_target_obs.is_symlink
+                    ):
+                        final_trav_res_path = p_res_path
+                        final_trav_target_lstat = p_target_obs
+                    final_syms = p_edges
+                    final_sym_ids = p_sym_ids
+                    final_trav_dirs = p_dirs
+
+        final_res_path: str | None = (
+            resolved_after
+            if (eof_reached and final_trav_res_path is not None)
+            else None
+        )
+        final_res_target_lstat = (
+            _stat_to_lookup_obs_or_none(target_lstat_after)
+            if (eof_reached and final_res_path is not None)
+            else None
+        )
+
+        stream_sha = (
+            eof_digest
+            if eof_reached
+            else (
+                hasher.hexdigest()
+                if (fstat_st is not None and streamed_bytes > 0)
+                else None
+            )
+        )
+        eof_sha = eof_digest if eof_reached else None
+
+        post_fstat_phase = failure_phase if fstat_st is not None else None
+        known_phase = (
+            failure_phase
+            if (
+                fstat_st is not None
+                or failure_phase in ("open", "initial_fstat")
+            )
+            else None
+        )
+        final_trav_obs: FinalPathTraversalObservation | None = (
+            final_traversal_after
+            if (
+                eof_reached
+                and final_lex_stat_obs is not None
+                and post_fstat_phase == "final_path_traversal"
+            )
+            else None
+        )
+        final_res_obs: FinalTargetResolutionObservation | None = (
+            final_resolution_after
+            if (
+                eof_reached
+                and final_trav_res_path is not None
+                and post_fstat_phase == "final_target_resolution"
+            )
+            else None
+        )
+        post_read_obs = (
+            PostReadVerificationObservation(
+                observed_eof=eof_reached,
+                streamed_size_bytes=streamed_bytes,
+                observed_stream_sha256=stream_sha,
+                observed_eof_sha256=eof_sha,
+                initial_fstat=init_fstat_obs,
+                end_fstat=end_fstat_obs,
+                final_lexical_lstat=final_lex_lstat_obs,
+                final_lexical_stat=final_lex_stat_obs,
+                final_traversal_resolved_path=final_trav_res_path,
+                final_traversal_target_lstat=final_trav_target_lstat,
+                final_symlinks=final_syms,
+                final_symlink_identities=final_sym_ids,
+                final_traversed_directories=final_trav_dirs,
+                final_traversal_observation=final_trav_obs,
+                final_resolved_path=final_res_path,
+                final_resolved_target_lstat=final_res_target_lstat,
+                final_resolution_observation=final_res_obs,
+                failure_phase=post_fstat_phase,
+            )
+            if fstat_st is not None
+            else None
         )
         return PartialFileReadObservation(
             path=raw_lexical,
@@ -1589,13 +5893,22 @@ def _stream_observe_regular_file(
             verified=False,
             errors=(err_msg,),
             lookup_snapshot=lookup_snapshot_before,
+            observed_eof=eof_reached,
+            observed_stream_sha256=stream_sha,
+            observed_eof_sha256=eof_sha,
+            end_fstat=end_fstat_obs,
+            failure_phase=known_phase,
+            post_read_observation=post_read_obs,
+            final_resolution_observation=final_res_obs,
+            final_traversal_observation=final_trav_obs,
         )
 
     try:
-        in_open_or_initial_fstat = True
+        current_phase = "open"
         fd = os.open(resolved_before, open_flags)
+        current_phase = "initial_fstat"
         fstat_before = os.fstat(fd)
-        in_open_or_initial_fstat = False
+        current_phase = None
         if not stat.S_ISREG(fstat_before.st_mode):
             raise ValueError(
                 f"Opened descriptor is not a regular file: {resolved_before!r}"
@@ -1606,7 +5919,6 @@ def _stream_observe_regular_file(
             raise ValueError(
                 f"File identity changed between lstat and open at {resolved_before!r}"
             )
-        pre_eof_after_fstat = True
         if max_allowed_bytes is not None and int(fstat_before.st_size) != max_allowed_bytes:
             label = "Pinned JSON size mismatch" if retain_bytes else "Size mismatch"
             suffix = " before parse" if retain_bytes else ""
@@ -1621,9 +5933,11 @@ def _stream_observe_regular_file(
                     err_msg,
                     fstat_st=fstat_before,
                     streamed_bytes=0,
+                    failure_phase="pre_read_size_check",
                 ),
                 is_size_mismatch=True,
             ) from size_err
+        current_phase = "stream_read"
         _clear_nonblock_flag(fd)
         handle = os.fdopen(fd, "rb")
         fd_owned_by_fileobj = True
@@ -1636,8 +5950,11 @@ def _stream_observe_regular_file(
                 )
                 chunk = handle.read(read_len)
                 if not chunk:
+                    eof_reached = True
+                    eof_digest = hasher.hexdigest()
                     break
                 total_bytes += len(chunk)
+                hasher.update(chunk)
                 if max_allowed_bytes is not None and total_bytes > max_allowed_bytes:
                     label = "Pinned JSON size mismatch" if retain_bytes else "Size mismatch"
                     suffix = " before parse" if retain_bytes else ""
@@ -1652,42 +5969,40 @@ def _stream_observe_regular_file(
                             err_msg,
                             fstat_st=fstat_before,
                             streamed_bytes=total_bytes,
+                            failure_phase="stream_size_overflow",
                         ),
                         is_size_mismatch=True,
                     ) from overflow_err
-                hasher.update(chunk)
                 if retain_bytes:
                     chunks.append(chunk)
-            pre_eof_after_fstat = False
+            current_phase = "end_fstat"
             fstat_after = os.fstat(handle.fileno())
     except _PartialFileReadError:
         raise
     except Exception as exc:
-        if (
-            not in_open_or_initial_fstat
-            and not pre_eof_after_fstat
-            and isinstance(exc, ValueError)
-        ):
+        if current_phase is None and isinstance(exc, ValueError):
             raise
         err_msg = (
             f"Failed reading regular file {raw_lexical!r} ({type(exc).__name__}): {exc}"
         )
-        if in_open_or_initial_fstat:
+        if current_phase in ("open", "initial_fstat"):
             raise _PartialFileReadError(
                 err_msg,
                 observation=_build_partial_read_obs(
                     err_msg,
                     fstat_st=None,
                     streamed_bytes=0,
+                    failure_phase=current_phase,
                 ),
             ) from exc
-        if pre_eof_after_fstat and fstat_before is not None:
+        if current_phase in ("stream_read", "end_fstat") and fstat_before is not None:
             raise _PartialFileReadError(
                 err_msg,
                 observation=_build_partial_read_obs(
                     err_msg,
                     fstat_st=fstat_before,
                     streamed_bytes=total_bytes,
+                    failure_phase=current_phase,
                 ),
             ) from exc
         raise ValueError(err_msg) from exc
@@ -1698,59 +6013,152 @@ def _stream_observe_regular_file(
             except OSError:
                 pass
 
+    def _raise_post_read_partial(
+        err_msg: str,
+        *,
+        failure_phase: str,
+        cause: BaseException | None = None,
+    ) -> None:
+        cause_exc = cause if cause is not None else ValueError(err_msg)
+        raise _PartialFileReadError(
+            err_msg,
+            observation=_build_partial_read_obs(
+                err_msg,
+                fstat_st=fstat_before,
+                streamed_bytes=total_bytes,
+                failure_phase=failure_phase,
+            ),
+        ) from cause_exc
+
     if _stat_identity_tuple(fstat_after) != _stat_identity_tuple(fstat_before):
-        raise ValueError(
-            f"File identity changed during read at {resolved_before!r}"
+        _raise_post_read_partial(
+            f"File identity changed during read at {resolved_before!r}",
+            failure_phase="descriptor_identity_comparison",
         )
     if total_bytes != int(fstat_before.st_size) or total_bytes != int(
         fstat_after.st_size
     ):
-        raise ValueError(
+        _raise_post_read_partial(
             f"File size changed during streaming read at {resolved_before!r}: "
             f"stat_before={int(fstat_before.st_size)}, streamed={total_bytes}, "
-            f"stat_after={int(fstat_after.st_size)}"
+            f"stat_after={int(fstat_after.st_size)}",
+            failure_phase="descriptor_size_comparison",
         )
 
-    lex_lstat_after, lex_stat_after = _validate_kernel_regular_lookup(raw_lexical)
-    traversal_after = _traverse_path_components(raw_lexical)
+    try:
+        lex_lstat_after, lex_stat_after = _validate_kernel_regular_lookup(
+            raw_lexical
+        )
+    except Exception as exc:
+        partial_lex_lstat = getattr(exc, "_partial_lexical_lstat", None)
+        if isinstance(partial_lex_lstat, os.stat_result):
+            lex_lstat_after = partial_lex_lstat
+        partial_lex_stat = getattr(exc, "_partial_lexical_stat", None)
+        if isinstance(partial_lex_stat, os.stat_result):
+            lex_stat_after = partial_lex_stat
+        err_msg = (
+            str(exc)
+            if isinstance(exc, ValueError)
+            else f"Kernel path lookup failed for {raw_lexical!r} ({type(exc).__name__}): {exc}"
+        )
+        _raise_post_read_partial(
+            err_msg,
+            failure_phase="final_kernel_lookup",
+            cause=exc,
+        )
+
+    try:
+        traversal_after = _traverse_path_components(raw_lexical)
+    except Exception as exc:
+        p_trav = getattr(exc, "_partial_traversal", None)
+        if isinstance(p_trav, tuple) and len(p_trav) == 5:
+            partial_traversal_after = p_trav
+        p_trav_obs = getattr(exc, "_partial_traversal_observation", None)
+        if isinstance(p_trav_obs, FinalPathTraversalObservation):
+            final_traversal_after = p_trav_obs
+        err_msg = (
+            str(exc)
+            if isinstance(exc, ValueError)
+            else f"Path traversal failed for {raw_lexical!r} ({type(exc).__name__}): {exc}"
+        )
+        _raise_post_read_partial(
+            err_msg,
+            failure_phase="final_path_traversal",
+            cause=exc,
+        )
+    assert traversal_after is not None
     symlinks_after = traversal_after.symlink_edges
-    resolved_after, target_lstat_after = _resolve_regular_target_strict(raw_lexical)
+
+    try:
+        resolved_after, target_lstat_after = _resolve_regular_target_strict(
+            raw_lexical
+        )
+    except Exception as exc:
+        p_res = getattr(exc, "_partial_resolved_path", None)
+        if isinstance(p_res, str):
+            resolved_after = p_res
+        p_target_lstat = getattr(exc, "_partial_target_lstat", None)
+        if isinstance(p_target_lstat, os.stat_result):
+            target_lstat_after = p_target_lstat
+        p_res_obs = getattr(exc, "_partial_resolution_observation", None)
+        if isinstance(p_res_obs, FinalTargetResolutionObservation):
+            final_resolution_after = p_res_obs
+        err_msg = (
+            str(exc)
+            if isinstance(exc, ValueError)
+            else f"Failed to resolve path {raw_lexical!r} ({type(exc).__name__}): {exc}"
+        )
+        _raise_post_read_partial(
+            err_msg,
+            failure_phase="final_target_resolution",
+            cause=exc,
+        )
+    assert resolved_after is not None and target_lstat_after is not None
 
     if _stat_identity_tuple(lex_lstat_after) != _stat_identity_tuple(lex_lstat_before):
-        raise ValueError(
-            f"Lexical path identity changed during read for {raw_lexical!r}"
+        _raise_post_read_partial(
+            f"Lexical path identity changed during read for {raw_lexical!r}",
+            failure_phase="post_read_namespace_comparison",
         )
     if symlinks_after != symlinks_before:
-        raise ValueError(
-            f"Symlink edges changed during read for {raw_lexical!r}"
+        _raise_post_read_partial(
+            f"Symlink edges changed during read for {raw_lexical!r}",
+            failure_phase="post_read_namespace_comparison",
         )
     if traversal_after.directory_identities != traversal_before.directory_identities:
-        raise ValueError(
-            f"Traversed directory identities changed during read for {raw_lexical!r}"
+        _raise_post_read_partial(
+            f"Traversed directory identities changed during read for {raw_lexical!r}",
+            failure_phase="post_read_namespace_comparison",
         )
     if resolved_after != resolved_before:
-        raise ValueError(
+        _raise_post_read_partial(
             f"Resolved target path changed during read for {raw_lexical!r}: "
-            f"before={resolved_before!r}, after={resolved_after!r}"
+            f"before={resolved_before!r}, after={resolved_after!r}",
+            failure_phase="post_read_namespace_comparison",
         )
     if _stat_identity_tuple(target_lstat_after) != _stat_identity_tuple(fstat_after):
-        raise ValueError(
-            f"Resolved target identity changed after read for {raw_lexical!r}"
+        _raise_post_read_partial(
+            f"Resolved target identity changed after read for {raw_lexical!r}",
+            failure_phase="post_read_namespace_comparison",
         )
     if int(target_lstat_after.st_size) != total_bytes:
-        raise ValueError(
-            f"Resolved target size changed after read for {raw_lexical!r}"
+        _raise_post_read_partial(
+            f"Resolved target size changed after read for {raw_lexical!r}",
+            failure_phase="post_read_namespace_comparison",
         )
     if _stat_identity_tuple(lex_stat_after) != _stat_identity_tuple(fstat_after):
-        raise ValueError(
-            f"Lexical target identity changed after read for {raw_lexical!r}"
+        _raise_post_read_partial(
+            f"Lexical target identity changed after read for {raw_lexical!r}",
+            failure_phase="post_read_namespace_comparison",
         )
     if int(lex_stat_after.st_size) != total_bytes:
-        raise ValueError(
-            f"Lexical target size changed after read for {raw_lexical!r}"
+        _raise_post_read_partial(
+            f"Lexical target size changed after read for {raw_lexical!r}",
+            failure_phase="post_read_namespace_comparison",
         )
 
-    digest = hasher.hexdigest()
+    assert eof_digest is not None
+    digest = eof_digest
     observation = _ObservedRegularFilePin(
         path=raw_lexical,
         resolved_path=resolved_after,
@@ -2648,6 +7056,9 @@ class _ObservedRootInventory:
     scan_complete: bool = True
     verified: bool = True
     errors: tuple[str, ...] = ()
+    partial_member_observations: Mapping[str, PartialFileReadObservation] = field(
+        default_factory=_empty_mapping_proxy
+    )
 
     def __post_init__(self) -> None:
         if self.name not in EXPECTED_ROOT_NAMES:
@@ -2697,6 +7108,29 @@ class _ObservedRootInventory:
             raise ValueError(
                 "_ObservedRootInventory.member_observations must map rel_posix -> _ObservedRegularFilePin"
             )
+        if not isinstance(self.partial_member_observations, Mapping) or not all(
+            type(k) is str and type(v) is PartialFileReadObservation
+            for k, v in self.partial_member_observations.items()
+        ):
+            raise ValueError(
+                "_ObservedRootInventory.partial_member_observations must map rel_posix -> PartialFileReadObservation"
+            )
+        for rel_posix, pobs in self.partial_member_observations.items():
+            _validate_root_relative_member_path(
+                rel_posix,
+                field_name="_ObservedRootInventory.partial_member_observations key",
+            )
+            expected_member_path = f"{self.path}/{rel_posix}"
+            if pobs.path != expected_member_path:
+                raise ValueError(
+                    f"_ObservedRootInventory.partial_member_observations[{rel_posix!r}].path "
+                    f"{pobs.path!r} must equal {expected_member_path!r}"
+                )
+            if rel_posix in self.member_pins or rel_posix in self.member_observations:
+                raise ValueError(
+                    f"_ObservedRootInventory.partial_member_observations key {rel_posix!r} "
+                    "overlaps verified member_pins/member_observations"
+                )
         if type(self.excluded_root_git_present) is not bool:
             raise ValueError(
                 "_ObservedRootInventory.excluded_root_git_present must be a bool"
@@ -2713,6 +7147,17 @@ class _ObservedRootInventory:
             raise ValueError(
                 "_ObservedRootInventory cannot be verified when scan_complete is False or errors are present"
             )
+        if len(self.partial_member_observations) > 0:
+            if (
+                self.scan_complete
+                or self.verified
+                or len(self.errors) == 0
+                or not all(type(e) is str and e for e in self.errors)
+            ):
+                raise ValueError(
+                    "_ObservedRootInventory with non-empty partial_member_observations requires "
+                    "scan_complete=False, verified=False, and non-empty errors"
+                )
         object.__setattr__(
             self,
             "subdirectory_identities",
@@ -2727,6 +7172,11 @@ class _ObservedRootInventory:
             self,
             "member_observations",
             MappingProxyType(dict(sorted(self.member_observations.items()))),
+        )
+        object.__setattr__(
+            self,
+            "partial_member_observations",
+            MappingProxyType(dict(sorted(self.partial_member_observations.items()))),
         )
         object.__setattr__(self, "errors", tuple(self.errors))
 
@@ -3163,7 +7613,12 @@ class _CheckedOuterProfileState:
                 "_CheckedOuterProfileState requires outer_files_verified=True"
             )
         for r_name, r_inv in self.observed_roots.items():
-            if not r_inv.scan_complete or not r_inv.verified or r_inv.errors:
+            if (
+                not r_inv.scan_complete
+                or not r_inv.verified
+                or r_inv.errors
+                or r_inv.partial_member_observations
+            ):
                 raise ValueError(
                     f"_CheckedOuterProfileState cannot accept unverified or incomplete root {r_name!r}"
                 )
@@ -3851,6 +8306,7 @@ def _observe_controlled_root(
     subdir_identities: dict[str, _ObservedDirectoryIdentity] = {}
     member_pins: dict[str, FilePin] = {}
     member_observations: dict[str, _ObservedRegularFilePin] = {}
+    partial_member_observations: dict[str, PartialFileReadObservation] = {}
     excluded_git_present = False
 
     try:
@@ -3895,8 +8351,12 @@ def _observe_controlled_root(
                     raise ValueError(
                         f"Controlled root {root_name!r} contains non-regular member: {fstr!r}"
                     )
-                f_obs = _observe_regular_file_pin(fstr, chunk_size=chunk_size)
                 rel_file = fpath.relative_to(root_path_obj).as_posix()
+                try:
+                    f_obs = _observe_regular_file_pin(fstr, chunk_size=chunk_size)
+                except _PartialFileReadError as exc:
+                    partial_member_observations[rel_file] = exc.observation
+                    raise
                 member_pins[rel_file] = f_obs.as_file_pin()
                 member_observations[rel_file] = f_obs
                 if f_obs.path != f_obs.resolved_path or f_obs.symlinks:
@@ -3952,6 +8412,7 @@ def _observe_controlled_root(
                 scan_complete=False,
                 verified=False,
                 errors=(err_msg,),
+                partial_member_observations=partial_member_observations,
             )
             if root_dir_obs is not None
             else None
@@ -4008,6 +8469,7 @@ def _observe_controlled_root(
             scan_complete=True,
             verified=False,
             errors=tuple(root_errors),
+            partial_member_observations=partial_member_observations,
         )
         raise _ControlledRootObservationError(
             root_errors[0],
@@ -4030,6 +8492,7 @@ def _observe_controlled_root(
         scan_complete=True,
         verified=True,
         errors=(),
+        partial_member_observations=partial_member_observations,
     )
 
 
@@ -4773,6 +9236,7 @@ def _reobserve_outer_profile_state(
                     scan_complete=actual_root.scan_complete,
                     verified=False,
                     errors=(mut_err,),
+                    partial_member_observations=actual_root.partial_member_observations,
                 )
                 errors.append(mut_err)
                 r_errs.append(mut_err)
@@ -4942,6 +9406,40 @@ def _reobserve_outer_profile_state(
                         else ()
                     ),
                     *(d.path for d in partial_obs.ancestors),
+                    *(
+                        (
+                            str(p)
+                            for p in Path(
+                                partial_obs.final_traversal_resolved_path
+                            ).parents
+                        )
+                        if partial_obs.final_traversal_resolved_path is not None
+                        else ()
+                    ),
+                    *(
+                        (
+                            str(p)
+                            for p in Path(partial_obs.final_resolved_path).parents
+                        )
+                        if partial_obs.final_resolved_path is not None
+                        else ()
+                    ),
+                    *(
+                        d.path
+                        for d in (partial_obs.final_traversed_directories or ())
+                    ),
+                ]
+            )
+        )
+
+    def _current_partial_sym_paths(
+        partial_obs: PartialFileReadObservation,
+    ) -> tuple[str, ...]:
+        return tuple(
+            dict.fromkeys(
+                [
+                    *(e.path for e in partial_obs.symlinks),
+                    *(e.path for e in (partial_obs.final_symlinks or ())),
                 ]
             )
         )
@@ -5136,7 +9634,7 @@ def _reobserve_outer_profile_state(
         tuple(e.path for e in manifest_after.symlinks)
         if manifest_after is not None
         else (
-            tuple(e.path for e in partial_manifest_after.symlinks)
+            _current_partial_sym_paths(partial_manifest_after)
             if partial_manifest_after is not None
             else ()
         )
@@ -5200,7 +9698,7 @@ def _reobserve_outer_profile_state(
             tuple(e.path for e in actual_fobs.symlinks)
             if actual_fobs is not None
             else (
-                tuple(e.path for e in partial_fobs.symlinks)
+                _current_partial_sym_paths(partial_fobs)
                 if partial_fobs is not None
                 else ()
             )
@@ -5290,6 +9788,7 @@ def _reobserve_outer_profile_state(
                     scan_complete=cur_rinv.scan_complete,
                     verified=False,
                     errors=tuple(r_errs),
+                    partial_member_observations=cur_rinv.partial_member_observations,
                 )
 
     for anc_path, a_cause in sorted(ancestor_causes_map.items()):
@@ -5744,6 +10243,10 @@ class RootObservation:
     scan_complete: bool = True
     verified: bool = True
     errors: tuple[str, ...] = ()
+    partial_member_observations: (
+        tuple[tuple[str, PartialFileReadObservation], ...]
+        | Mapping[str, PartialFileReadObservation]
+    ) = ()
 
     def __post_init__(self) -> None:
         if self.name not in EXPECTED_ROOT_NAMES:
@@ -5798,6 +10301,52 @@ class RootObservation:
             type(e) is str for e in self.errors
         ):
             raise ValueError("RootObservation.errors must be a tuple of str")
+        if not isinstance(self.partial_member_observations, (Mapping, tuple, list)):
+            raise ValueError(
+                "RootObservation.partial_member_observations must be a Mapping or sequence of "
+                "(rel_posix, PartialFileReadObservation) pairs"
+            )
+        raw_partials = _FrozenPairTable(self.partial_member_observations)
+        member_rel_paths = set(frozen_members.keys())
+        for rel_posix, pobs in raw_partials:
+            _validate_root_relative_member_path(
+                rel_posix,
+                field_name="RootObservation.partial_member_observations key",
+            )
+            if type(pobs) is not PartialFileReadObservation:
+                raise ValueError(
+                    "RootObservation.partial_member_observations values must be PartialFileReadObservation"
+                )
+            expected_member_path = f"{self.path}/{rel_posix}"
+            if pobs.path != expected_member_path:
+                raise ValueError(
+                    f"RootObservation.partial_member_observations[{rel_posix!r}].path "
+                    f"{pobs.path!r} must equal {expected_member_path!r}"
+                )
+            if rel_posix in member_rel_paths:
+                raise ValueError(
+                    f"RootObservation.partial_member_observations key {rel_posix!r} "
+                    "overlaps RootObservation.members"
+                )
+        frozen_partials = _FrozenPairTable(
+            sorted(raw_partials.items(), key=lambda kv: kv[0])
+        )
+        object.__setattr__(self, "partial_member_observations", frozen_partials)
+        if self.verified and (not self.scan_complete or len(self.errors) > 0):
+            raise ValueError(
+                "RootObservation cannot have verified=True when scan_complete is False or errors are present"
+            )
+        if len(frozen_partials) > 0:
+            if (
+                self.scan_complete
+                or self.verified
+                or len(self.errors) == 0
+                or not all(type(e) is str and e for e in self.errors)
+            ):
+                raise ValueError(
+                    "RootObservation with non-empty partial_member_observations requires "
+                    "scan_complete=False, verified=False, and non-empty errors"
+                )
 
     @property
     def identity_tuple(self) -> tuple[int, int, int, int, int]:
@@ -5835,6 +10384,11 @@ class RootObservation:
         }
         if self.errors:
             result["errors"] = list(self.errors)
+        if len(self.partial_member_observations) > 0:
+            result["partial_member_observations"] = {
+                rel_posix: pobs.to_dict()
+                for rel_posix, pobs in self.partial_member_observations
+            }
         return result
 
     def to_provenance(self) -> dict[str, Any]:
@@ -5931,7 +10485,12 @@ class ValidatedProfile:
                 raise ValueError(
                     f"ValidatedProfile.roots[{rid!r}] must be a valid RootObservation"
                 )
-            if not robs.scan_complete or not robs.verified or robs.errors:
+            if (
+                not robs.scan_complete
+                or not robs.verified
+                or robs.errors
+                or robs.partial_member_observations
+            ):
                 raise ValueError(
                     f"ValidatedProfile.roots[{rid!r}] must be scan_complete and verified"
                 )
@@ -6715,6 +11274,14 @@ def _build_partial_file_observation(
         verified=False,
         errors=err_tuple,
         lookup_snapshot=partial_obs.lookup_snapshot,
+        observed_eof=partial_obs.observed_eof,
+        observed_stream_sha256=partial_obs.observed_stream_sha256,
+        observed_eof_sha256=partial_obs.observed_eof_sha256,
+        end_fstat=partial_obs.end_fstat,
+        failure_phase=partial_obs.failure_phase,
+        post_read_observation=partial_obs.post_read_observation,
+        final_resolution_observation=partial_obs.final_resolution_observation,
+        final_traversal_observation=partial_obs.final_traversal_observation,
     )
 
 
@@ -6759,6 +11326,7 @@ def _build_root_observation(
         scan_complete=root_inv.scan_complete,
         verified=root_inv.verified,
         errors=root_inv.errors,
+        partial_member_observations=root_inv.partial_member_observations,
     )
 
 
@@ -8293,10 +12861,36 @@ def recheck_profile(
                         else ()
                     ),
                     *(d.path for d in p_m.ancestors),
+                    *(
+                        (
+                            str(p)
+                            for p in Path(
+                                p_m.final_traversal_resolved_path
+                            ).parents
+                        )
+                        if p_m.final_traversal_resolved_path is not None
+                        else ()
+                    ),
+                    *(
+                        (str(p) for p in Path(p_m.final_resolved_path).parents)
+                        if p_m.final_resolved_path is not None
+                        else ()
+                    ),
+                    *(
+                        d.path
+                        for d in (p_m.final_traversed_directories or ())
+                    ),
                 ]
             )
         )
-        m_curr_syms = tuple(e.path for e in p_m.symlinks)
+        m_curr_syms = tuple(
+            dict.fromkeys(
+                [
+                    *(e.path for e in p_m.symlinks),
+                    *(e.path for e in (p_m.final_symlinks or ())),
+                ]
+            )
+        )
     else:
         m_curr_ancs = ()
         m_curr_syms = ()
@@ -8431,10 +13025,47 @@ def recheck_profile(
                             else ()
                         ),
                         *(d.path for d in partial_f_obs.ancestors),
+                        *(
+                            (
+                                str(p)
+                                for p in Path(
+                                    partial_f_obs.final_traversal_resolved_path
+                                ).parents
+                            )
+                            if partial_f_obs.final_traversal_resolved_path
+                            is not None
+                            else ()
+                        ),
+                        *(
+                            (
+                                str(p)
+                                for p in Path(
+                                    partial_f_obs.final_resolved_path
+                                ).parents
+                            )
+                            if partial_f_obs.final_resolved_path is not None
+                            else ()
+                        ),
+                        *(
+                            d.path
+                            for d in (
+                                partial_f_obs.final_traversed_directories or ()
+                            )
+                        ),
                     ]
                 )
             )
-            f_curr_syms = tuple(e.path for e in partial_f_obs.symlinks)
+            f_curr_syms = tuple(
+                dict.fromkeys(
+                    [
+                        *(e.path for e in partial_f_obs.symlinks),
+                        *(
+                            e.path
+                            for e in (partial_f_obs.final_symlinks or ())
+                        ),
+                    ]
+                )
+            )
         else:
             f_curr_ancs = ()
             f_curr_syms = ()
@@ -8532,6 +13163,7 @@ def recheck_profile(
             and r_obs_obj is not None
             and r_obs_obj.scan_complete
             and r_obs_obj.verified
+            and len(r_obs_obj.partial_member_observations) == 0
             and len(r_errs_tuple) == 0
             and r_observed == r_expected
             and not added_rels

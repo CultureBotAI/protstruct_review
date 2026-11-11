@@ -735,6 +735,56 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
         self._reopen_and_verify_json_artifact(result["hklout_audit_json"])
         self._reopen_and_verify_json_artifact(result["xyzout_audit_json"])
 
+        json_artifact_keys = (
+            "manifest_json",
+            "diagnostics_json",
+            "pre_execution_checkpoint_json",
+            "post_execution_checkpoint_json",
+            "parsed_log_json",
+            "xmlout_audit_json",
+            "hklout_raw_export_json",
+            "hklout_audit_json",
+            "xyzout_audit_json",
+        )
+        for art_key in json_artifact_keys:
+            art_ref = result[art_key]
+            self.assertIs(art_ref["temp_cleanup_succeeded"], False)
+            self.assertEqual(
+                art_ref["temp_handling_policy"],
+                onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+            )
+            self.assertIs(art_ref["temp_handling_succeeded"], True)
+            self.assertEqual(
+                art_ref["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+            )
+            art_cleanup = art_ref["temp_cleanup_status"]
+            self.assertIs(art_cleanup["unlink_attempted"], False)
+            self.assertEqual(art_cleanup["unlink_attempt_count"], 0)
+            self.assertIs(art_cleanup["unlinked"], False)
+            self.assertIs(art_cleanup["cleanup_verified"], False)
+            self.assertIs(art_cleanup["temp_present_after_cleanup"], True)
+            self.assertEqual(
+                art_cleanup["temp_handling_policy"],
+                onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+            )
+            self.assertIs(art_cleanup["temp_handling_succeeded"], True)
+            self.assertEqual(
+                art_cleanup["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+            )
+            art_path = Path(art_ref["path"])
+            art_tmp_path = art_path.parent / str(art_cleanup["temp_name"])
+            self.assertTrue(art_tmp_path.is_file())
+            art_st = os.lstat(art_path)
+            art_tmp_st = os.lstat(art_tmp_path)
+            self.assertEqual(
+                (int(art_tmp_st.st_dev), int(art_tmp_st.st_ino)),
+                (int(art_st.st_dev), int(art_st.st_ino)),
+            )
+            self.assertGreaterEqual(int(art_st.st_nlink), 2)
+            self.assertEqual(art_tmp_path.read_bytes(), art_path.read_bytes())
+
         self.assertEqual(
             parsed_log_on_disk["reconciled_final_cycle"]["nr_used_sum"], 6532
         )
@@ -761,14 +811,85 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
         self.assertFalse(Path(result["paths"]["xmlout_path"]).exists())
 
         # Verify status, operation_checks, and scientific/admission refusals.
+        outcome_keys = (
+            "status",
+            "failed_stage",
+            "failures",
+            "child_dir_persistence_failures",
+            "refmac_directory_post_run",
+            "parent_retention_directory_post_run",
+            "actual_parent_retention_anchor_dir",
+            "actual_parent_retention_anchor_kind",
+            "parent_retention_used",
+        )
+        expected_fingerprint = tuple(result[k] for k in outcome_keys)
+        pre_ckpt_tmp_name = str(
+            result["pre_execution_checkpoint_json"]["temp_cleanup_status"][
+                "temp_name"
+            ]
+        )
+        pre_ckpt_tmp_path = (
+            Path(result["pre_execution_checkpoint_json"]["path"]).parent
+            / pre_ckpt_tmp_name
+        )
+        pre_ckpt_tmp_bytes = pre_ckpt_tmp_path.read_bytes()
+        pre_ckpt_tmp_sha256 = _sha256_bytes(pre_ckpt_tmp_bytes)
+        pre_ckpt_tmp_size = len(pre_ckpt_tmp_bytes)
         for payload in (result, manifest_on_disk, diagnostics_on_disk):
+            self.assertEqual(
+                tuple(payload[k] for k in outcome_keys),
+                expected_fingerprint,
+            )
             self.assertEqual(
                 payload["status"], "diagnostic_captured_gates_unproven"
             )
             self.assertIsNone(payload["failed_stage"])
             self.assertEqual(payload["failures"], [])
+            self.assertEqual(payload["child_dir_persistence_failures"], [])
+            self.assertEqual(payload["publication_history"], [])
             self.assertIs(payload["publication_pair_complete"], True)
             self.assertIsNone(payload["publication_terminal_failure"])
+            self.assertEqual(
+                set(payload["raw_outputs"].keys()),
+                {"log", "xyzout", "hklout", "xmlout"},
+            )
+            additional_by_name = payload["additional_refmac_dir_files"]
+            self.assertIsInstance(additional_by_name, Mapping)
+            self.assertIn(pre_ckpt_tmp_name, additional_by_name)
+            pre_tmp_scan = additional_by_name[pre_ckpt_tmp_name]
+            self.assertEqual(pre_tmp_scan["path"], str(pre_ckpt_tmp_path))
+            self.assertIs(pre_tmp_scan["exists"], True)
+            self.assertIs(pre_tmp_scan["leaf_existence_known"], True)
+            self.assertIs(pre_tmp_scan["is_regular_file"], True)
+            self.assertIs(pre_tmp_scan["is_symlink"], False)
+            self.assertIs(pre_tmp_scan["within_refmac_dir"], True)
+            self.assertIsNone(pre_tmp_scan["error"])
+            self.assertIsNone(pre_tmp_scan["failure_phase"])
+            self.assertEqual(pre_tmp_scan["sha256"], pre_ckpt_tmp_sha256)
+            self.assertEqual(
+                pre_tmp_scan["observed_read_sha256"], pre_ckpt_tmp_sha256
+            )
+            self.assertEqual(pre_tmp_scan["size_bytes"], pre_ckpt_tmp_size)
+            self.assertEqual(pre_tmp_scan["stat_size_bytes"], pre_ckpt_tmp_size)
+            self.assertEqual(
+                pre_tmp_scan["observed_read_bytes"], pre_ckpt_tmp_size
+            )
+            self.assertIs(pre_tmp_scan["observed_eof"], True)
+            self.assertIs(pre_tmp_scan["read_complete"], True)
+            for later_key in (
+                "post_execution_checkpoint_json",
+                "parsed_log_json",
+                "xmlout_audit_json",
+                "hklout_raw_export_json",
+                "hklout_audit_json",
+                "xyzout_audit_json",
+                "diagnostics_json",
+                "manifest_json",
+            ):
+                later_tmp_name = str(
+                    result[later_key]["temp_cleanup_status"]["temp_name"]
+                )
+                self.assertNotIn(later_tmp_name, additional_by_name)
             checks = payload["operation_checks"]
             self.assertIs(checks["preflight_toolchain_resolved"], True)
             self.assertIs(checks["worker_launched"], True)
@@ -8610,6 +8731,158 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 _sha256_bytes(tmp_1b.read_bytes()), orig_tmp_sha
             )
 
+        with self.subTest(fixture="1c_atomic_canonical_symlink"):
+            root_1c = (
+                self.repo_root.parent
+                / f"atomic_canonical_symlink_1c_{pid}"
+            )
+            markers_1c = (
+                self.repo_root.parent
+                / f"atomic_canonical_symlink_1c_markers_{pid}"
+            )
+            root_1c.mkdir(parents=True, exist_ok=True)
+            markers_1c.mkdir(parents=True, exist_ok=True)
+            sym_target_1c = markers_1c / "canonical_symlink_target_1c.json"
+            sym_target_1c_bytes = (
+                b'{"marker": "canonical-symlink-1c", "preserve": true}\n'
+            )
+            sym_target_1c.write_bytes(sym_target_1c_bytes)
+            orig_sym_target_1c_st = os.lstat(sym_target_1c)
+            orig_sym_target_1c_sha = _sha256_bytes(sym_target_1c_bytes)
+
+            target_1c = root_1c / "record.json"
+            tmp_1c = root_1c / f".record.json.tmp.{pid}"
+            if os.path.lexists(target_1c):
+                os.unlink(target_1c)
+            os.symlink(sym_target_1c, target_1c)
+            orig_1c_linktext = os.readlink(target_1c)
+            orig_1c_lstat = os.lstat(target_1c)
+
+            factory_calls_1c: list[Path | None] = []
+            unlink_calls_1c: list[str] = []
+            real_unlink_1c = os.unlink
+
+            def _factory_1c(dest: Path | None) -> Mapping[str, Any]:
+                factory_calls_1c.append(dest)
+                return {"unexpected": True, "destination_path": str(dest)}
+
+            def _track_unlink_1c(
+                path: Any, *, dir_fd: int | None = None
+            ) -> None:
+                unlink_calls_1c.append(os.fspath(path))
+                return real_unlink_1c(path, dir_fd=dir_fd)
+
+            with patch.object(onesar_refmac.os, "unlink", _track_unlink_1c):
+                with self.assertRaises(FileExistsError):
+                    onesar_refmac._atomic_write_new_json_file(
+                        _factory_1c,
+                        target_1c,
+                        root=root_1c,
+                    )
+
+            self.assertEqual(factory_calls_1c, [])
+            self.assertEqual(unlink_calls_1c, [])
+            self.assertFalse(os.path.lexists(tmp_1c))
+            self.assertTrue(os.path.islink(target_1c))
+            self.assertEqual(os.readlink(target_1c), orig_1c_linktext)
+            after_1c_lstat = os.lstat(target_1c)
+            self.assertEqual(
+                (int(after_1c_lstat.st_dev), int(after_1c_lstat.st_ino)),
+                (int(orig_1c_lstat.st_dev), int(orig_1c_lstat.st_ino)),
+            )
+            after_sym_target_1c_st = os.lstat(sym_target_1c)
+            self.assertEqual(
+                (
+                    int(after_sym_target_1c_st.st_dev),
+                    int(after_sym_target_1c_st.st_ino),
+                ),
+                (
+                    int(orig_sym_target_1c_st.st_dev),
+                    int(orig_sym_target_1c_st.st_ino),
+                ),
+            )
+            self.assertEqual(sym_target_1c.read_bytes(), sym_target_1c_bytes)
+            self.assertEqual(
+                _sha256_bytes(sym_target_1c.read_bytes()),
+                orig_sym_target_1c_sha,
+            )
+
+        with self.subTest(fixture="1d_atomic_preexisting_temp_symlink"):
+            root_1d = (
+                self.repo_root.parent
+                / f"atomic_preexisting_temp_symlink_1d_{pid}"
+            )
+            markers_1d = (
+                self.repo_root.parent
+                / f"atomic_preexisting_temp_symlink_1d_markers_{pid}"
+            )
+            root_1d.mkdir(parents=True, exist_ok=True)
+            markers_1d.mkdir(parents=True, exist_ok=True)
+            sym_target_1d = markers_1d / "temp_symlink_target_1d.json"
+            sym_target_1d_bytes = (
+                b'{"marker": "preexisting-temp-symlink-1d", "unowned": true}\n'
+            )
+            sym_target_1d.write_bytes(sym_target_1d_bytes)
+            orig_sym_target_1d_st = os.lstat(sym_target_1d)
+            orig_sym_target_1d_sha = _sha256_bytes(sym_target_1d_bytes)
+
+            target_1d = root_1d / "record.json"
+            tmp_1d = root_1d / f".record.json.tmp.{pid}"
+            if os.path.lexists(tmp_1d):
+                os.unlink(tmp_1d)
+            os.symlink(sym_target_1d, tmp_1d)
+            orig_1d_linktext = os.readlink(tmp_1d)
+            orig_1d_lstat = os.lstat(tmp_1d)
+
+            factory_calls_1d: list[Path | None] = []
+            unlink_calls_1d: list[str] = []
+            real_unlink_1d = os.unlink
+
+            def _factory_1d(dest: Path | None) -> Mapping[str, Any]:
+                factory_calls_1d.append(dest)
+                return {"unexpected": True, "destination_path": str(dest)}
+
+            def _track_unlink_1d(
+                path: Any, *, dir_fd: int | None = None
+            ) -> None:
+                unlink_calls_1d.append(os.fspath(path))
+                return real_unlink_1d(path, dir_fd=dir_fd)
+
+            with patch.object(onesar_refmac.os, "unlink", _track_unlink_1d):
+                with self.assertRaises(FileExistsError):
+                    onesar_refmac._atomic_write_new_json_file(
+                        _factory_1d,
+                        target_1d,
+                        root=root_1d,
+                    )
+
+            self.assertEqual(factory_calls_1d, [])
+            self.assertEqual(unlink_calls_1d, [])
+            self.assertFalse(os.path.lexists(target_1d))
+            self.assertTrue(os.path.islink(tmp_1d))
+            self.assertEqual(os.readlink(tmp_1d), orig_1d_linktext)
+            after_1d_lstat = os.lstat(tmp_1d)
+            self.assertEqual(
+                (int(after_1d_lstat.st_dev), int(after_1d_lstat.st_ino)),
+                (int(orig_1d_lstat.st_dev), int(orig_1d_lstat.st_ino)),
+            )
+            after_sym_target_1d_st = os.lstat(sym_target_1d)
+            self.assertEqual(
+                (
+                    int(after_sym_target_1d_st.st_dev),
+                    int(after_sym_target_1d_st.st_ino),
+                ),
+                (
+                    int(orig_sym_target_1d_st.st_dev),
+                    int(orig_sym_target_1d_st.st_ino),
+                ),
+            )
+            self.assertEqual(sym_target_1d.read_bytes(), sym_target_1d_bytes)
+            self.assertEqual(
+                _sha256_bytes(sym_target_1d.read_bytes()),
+                orig_sym_target_1d_sha,
+            )
+
     def test_write_json_with_sibling_collision_fallback_regular_and_symlink_collisions(
         self,
     ) -> None:
@@ -8730,9 +9003,39 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
             for cand_tmp in (
                 root_2 / f".record.json.tmp.{pid}",
                 root_2 / f".record.parent.{pid}.json.tmp.{pid}",
-                root_2 / f".record.parent.{pid}.1.json.tmp.{pid}",
             ):
                 self.assertFalse(os.path.lexists(cand_tmp))
+            second_sib_tmp_2 = (
+                root_2 / f".record.parent.{pid}.1.json.tmp.{pid}"
+            )
+            self.assertTrue(second_sib_tmp_2.is_file())
+            self.assertFalse(second_sib_tmp_2.is_symlink())
+            second_sib_2_st = os.lstat(second_sib_2)
+            second_sib_tmp_2_st = os.lstat(second_sib_tmp_2)
+            self.assertEqual(
+                (
+                    int(second_sib_tmp_2_st.st_dev),
+                    int(second_sib_tmp_2_st.st_ino),
+                ),
+                (int(second_sib_2_st.st_dev), int(second_sib_2_st.st_ino)),
+            )
+            self.assertGreaterEqual(int(second_sib_2_st.st_nlink), 2)
+            self.assertEqual(
+                second_sib_tmp_2.read_bytes(), second_sib_2.read_bytes()
+            )
+            self.assertIs(art_2["temp_cleanup_succeeded"], False)
+            self.assertEqual(
+                art_2["temp_handling_policy"],
+                onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+            )
+            self.assertIs(art_2["temp_handling_succeeded"], True)
+            self.assertEqual(
+                art_2["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+            )
+            self.assertNotIn("prior_collision_temp_cleanup_statuses", art_2)
+            self.assertNotIn("prior_collision_retained_temporaries", art_2)
+            self.assertNotIn("prior_collision_temp_cleanup_failures", art_2)
 
         with self.subTest(
             fixture="3_temp_symlink_and_occupied_sibling_temp"
@@ -8799,11 +9102,37 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
             )
             self.assertFalse(os.path.lexists(record_3))
             self.assertFalse(os.path.lexists(first_sib_3))
-            self.assertFalse(
-                os.path.lexists(
-                    root_3 / f".record.parent.{pid}.1.json.tmp.{pid}"
-                )
+            second_sib_tmp_3 = (
+                root_3 / f".record.parent.{pid}.1.json.tmp.{pid}"
             )
+            self.assertTrue(second_sib_tmp_3.is_file())
+            self.assertFalse(second_sib_tmp_3.is_symlink())
+            second_sib_3_st = os.lstat(second_sib_3)
+            second_sib_tmp_3_st = os.lstat(second_sib_tmp_3)
+            self.assertEqual(
+                (
+                    int(second_sib_tmp_3_st.st_dev),
+                    int(second_sib_tmp_3_st.st_ino),
+                ),
+                (int(second_sib_3_st.st_dev), int(second_sib_3_st.st_ino)),
+            )
+            self.assertGreaterEqual(int(second_sib_3_st.st_nlink), 2)
+            self.assertEqual(
+                second_sib_tmp_3.read_bytes(), second_sib_3.read_bytes()
+            )
+            self.assertIs(art_3["temp_cleanup_succeeded"], False)
+            self.assertEqual(
+                art_3["temp_handling_policy"],
+                onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+            )
+            self.assertIs(art_3["temp_handling_succeeded"], True)
+            self.assertEqual(
+                art_3["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+            )
+            self.assertNotIn("prior_collision_temp_cleanup_statuses", art_3)
+            self.assertNotIn("prior_collision_retained_temporaries", art_3)
+            self.assertNotIn("prior_collision_temp_cleanup_failures", art_3)
 
             reopened_3 = self._reopen_and_verify_json_artifact(art_3)
             self.assertEqual(
@@ -9128,6 +9457,43 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 _sha256_bytes(parent_sym_target_4.read_bytes()),
                 orig_parent_sym_target_4_sha,
             )
+            for absent_parent_tmp in (
+                parent_dir_4 / f".record.json.tmp.{pid}",
+                parent_dir_4 / f".record.parent.{pid}.json.tmp.{pid}",
+            ):
+                self.assertFalse(os.path.lexists(absent_parent_tmp))
+            parent_second_sib_tmp_4 = (
+                parent_dir_4 / f".record.parent.{pid}.1.json.tmp.{pid}"
+            )
+            self.assertTrue(parent_second_sib_tmp_4.is_file())
+            self.assertFalse(parent_second_sib_tmp_4.is_symlink())
+            parent_second_sib_4_st = os.lstat(parent_second_sib_4)
+            parent_second_sib_tmp_4_st = os.lstat(parent_second_sib_tmp_4)
+            self.assertEqual(
+                (
+                    int(parent_second_sib_tmp_4_st.st_dev),
+                    int(parent_second_sib_tmp_4_st.st_ino),
+                ),
+                (
+                    int(parent_second_sib_4_st.st_dev),
+                    int(parent_second_sib_4_st.st_ino),
+                ),
+            )
+            self.assertGreaterEqual(int(parent_second_sib_4_st.st_nlink), 2)
+            self.assertEqual(
+                parent_second_sib_tmp_4.read_bytes(),
+                parent_second_sib_4.read_bytes(),
+            )
+            self.assertIs(art_4["temp_cleanup_succeeded"], False)
+            self.assertEqual(
+                art_4["temp_handling_policy"],
+                onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+            )
+            self.assertIs(art_4["temp_handling_succeeded"], True)
+            self.assertEqual(
+                art_4["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+            )
 
         with self.subTest(
             fixture="5_no_anchor_memory_with_immutable_mappingproxy"
@@ -9300,6 +9666,412 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 str(caught_exc_5[2]),
             )
 
+        with self.subTest(
+            fixture="6_verified_root_exclusive_anchor_routing_healthy_and_stat_error"
+        ):
+            base_6 = (
+                self.repo_root.parent
+                / f"persist_verified_root_anchor_6_{pid}"
+            )
+            child_dir_6 = base_6 / "refmac"
+            parent_dir_6 = base_6 / "refmac_parent_retention"
+            child_dir_6.mkdir(parents=True, exist_ok=True)
+            parent_dir_6.mkdir(parents=True, exist_ok=True)
+
+            child_baseline_6 = (
+                onesar_refmac._capture_directory_identity_baseline(
+                    child_dir_6, evidence_root=base_6
+                )
+            )
+            parent_baseline_6 = (
+                onesar_refmac._capture_directory_identity_baseline(
+                    parent_dir_6, evidence_root=base_6
+                )
+            )
+            child_status_6 = onesar_refmac._verify_refmac_directory_post_run(
+                child_dir_6, refmac_dir_baseline=child_baseline_6
+            )
+            parent_status_6 = onesar_refmac._verify_refmac_directory_post_run(
+                parent_dir_6, refmac_dir_baseline=parent_baseline_6
+            )
+
+            child_target_6 = child_dir_6 / "anchor_ok.json"
+            child_tmp_6_abs = os.path.abspath(
+                os.fspath(child_dir_6 / f".anchor_ok.json.tmp.{pid}")
+            )
+            parent_tmp_6_abs = os.path.abspath(
+                os.fspath(parent_dir_6 / f".anchor_ok.json.tmp.{pid}")
+            )
+            child_perm_6 = PermissionError(
+                errno.EACCES,
+                "deny child temp open for anchor routing",
+                child_tmp_6_abs,
+            )
+            parent_perm_6 = PermissionError(
+                errno.EPERM,
+                "deny parent temp open for anchor routing",
+                parent_tmp_6_abs,
+            )
+            real_os_open_6 = os.open
+            real_fstat_6 = os.fstat
+            real_unlink_6 = os.unlink
+            fd_to_dir_6_anchor: dict[int, str] = {}
+            opened_fds_6_ok: list[int] = []
+            unlink_calls_6_ok: list[str] = []
+
+            def _os_open_deny_child_parent_6(
+                path_arg: str | os.PathLike[str],
+                flags: int,
+                mode: int = 0o777,
+                *args: Any,
+                **kwargs: Any,
+            ) -> int:
+                raw_str = os.fspath(path_arg)
+                dir_fd_arg = kwargs.get("dir_fd")
+                if (
+                    not os.path.isabs(raw_str)
+                    and isinstance(dir_fd_arg, int)
+                    and dir_fd_arg in fd_to_dir_6_anchor
+                ):
+                    abs_p = os.path.abspath(
+                        os.path.join(fd_to_dir_6_anchor[dir_fd_arg], raw_str)
+                    )
+                else:
+                    abs_p = os.path.abspath(raw_str)
+                if abs_p == child_tmp_6_abs:
+                    raise child_perm_6
+                if abs_p == parent_tmp_6_abs:
+                    raise parent_perm_6
+                opened_fd = real_os_open_6(
+                    path_arg, flags, mode, *args, **kwargs
+                )
+                fd_to_dir_6_anchor[opened_fd] = abs_p
+                opened_fds_6_ok.append(opened_fd)
+                return opened_fd
+
+            def _unlink_track_6_ok(
+                path_arg: Any, *, dir_fd: int | None = None
+            ) -> None:
+                unlink_calls_6_ok.append(os.fspath(path_arg))
+                return real_unlink_6(path_arg, dir_fd=dir_fd)
+
+            caught_6_ok: list[Exception] = []
+            fallback_state_6: dict[str, Any] = {}
+            with (
+                patch.object(
+                    onesar_refmac.os, "open", _os_open_deny_child_parent_6
+                ),
+                patch.object(onesar_refmac.os, "unlink", _unlink_track_6_ok),
+            ):
+                art_6_ok = onesar_refmac._persist_collector_json_with_fallback(
+                    {"anchor": "healthy", "paths": {"k": "v"}},
+                    child_target_6,
+                    root=child_dir_6,
+                    parent_retention_dir=parent_dir_6,
+                    parent_retention_dir_baseline=parent_baseline_6,
+                    parent_retention_dir_status=parent_status_6,
+                    verified_root_fallback_state=fallback_state_6,
+                    allow_unpersisted_on_no_verified_anchor=False,
+                    refmac_dir_status=child_status_6,
+                    caught_persistence_exceptions=caught_6_ok,
+                )
+
+            anchor_path_6_ok = Path(str(art_6_ok["path"]))
+            anchor_dir_6 = anchor_path_6_ok.parent
+            anchor_tmp_6_ok = (
+                anchor_dir_6 / f".{anchor_path_6_ok.name}.tmp.{pid}"
+            )
+            self.assertEqual(unlink_calls_6_ok, [])
+            self.assertEqual(
+                art_6_ok["actual_retention_anchor_kind"],
+                "verified_evidence_root_exclusive_dir",
+            )
+            self.assertIs(art_6_ok["temp_cleanup_succeeded"], False)
+            self.assertEqual(
+                art_6_ok["temp_handling_policy"],
+                onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+            )
+            self.assertIs(art_6_ok["temp_handling_succeeded"], True)
+            self.assertEqual(
+                art_6_ok["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+            )
+            self.assertTrue(anchor_tmp_6_ok.is_file())
+            self.assertEqual(
+                (
+                    int(os.lstat(anchor_tmp_6_ok).st_dev),
+                    int(os.lstat(anchor_tmp_6_ok).st_ino),
+                ),
+                (
+                    int(os.lstat(anchor_path_6_ok).st_dev),
+                    int(os.lstat(anchor_path_6_ok).st_ino),
+                ),
+            )
+            self.assertGreaterEqual(
+                int(os.lstat(anchor_path_6_ok).st_nlink), 2
+            )
+            self.assertEqual(
+                anchor_tmp_6_ok.read_bytes(), anchor_path_6_ok.read_bytes()
+            )
+            self.assertEqual(caught_6_ok, [child_perm_6, parent_perm_6])
+            for fd_6_ok in set(opened_fds_6_ok):
+                with self.assertRaises(OSError) as fd6_ok_cm:
+                    real_fstat_6(fd_6_ok)
+                self.assertEqual(fd6_ok_cm.exception.errno, errno.EBADF)
+
+            # Actual anchor temp stat error propagates to caught_persistence_exceptions
+            child_target_6_err = child_dir_6 / "anchor_stat_err.json"
+            anchor_tmp_6_err_name = f".anchor_stat_err.json.tmp.{pid}"
+            expected_anchor_payload_6_err = {"anchor": "stat_err"}
+            expected_anchor_bytes_6_err = (
+                json.dumps(
+                    expected_anchor_payload_6_err,
+                    indent=2,
+                    sort_keys=True,
+                    allow_nan=False,
+                )
+                + "\n"
+            ).encode("utf-8")
+            anchor_stat_errs_6: list[PermissionError] = []
+            opened_fds_6_err: list[int] = []
+            unlink_calls_6_err: list[str] = []
+            captured_original_anchor_6_err: list[dict[str, Any]] = []
+            real_lstat_6 = os.lstat
+            real_stat_6 = os.stat
+            real_link_6 = os.link
+            real_read_6 = os.read
+            real_close_6 = os.close
+            anchor_dir_6_st = real_lstat_6(anchor_dir_6)
+            anchor_dir_6_dev_ino = (
+                int(anchor_dir_6_st.st_dev),
+                int(anchor_dir_6_st.st_ino),
+            )
+
+            def _open_track_6_err(
+                path_arg: str | os.PathLike[str],
+                flags: int,
+                mode: int = 0o777,
+                *args: Any,
+                **kwargs: Any,
+            ) -> int:
+                fd_err = real_os_open_6(
+                    path_arg, flags, mode, *args, **kwargs
+                )
+                opened_fds_6_err.append(fd_err)
+                return fd_err
+
+            def _unlink_track_6_err(
+                path_arg: Any, *, dir_fd: int | None = None
+            ) -> None:
+                unlink_calls_6_err.append(os.fspath(path_arg))
+                return real_unlink_6(path_arg, dir_fd=dir_fd)
+
+            def _link_capture_anchor_6_err(
+                src_arg: Any,
+                dst_arg: Any,
+                *,
+                src_dir_fd: int | None = None,
+                dst_dir_fd: int | None = None,
+                follow_symlinks: bool = True,
+            ) -> None:
+                src_name = os.fspath(src_arg)
+                dst_name = os.fspath(dst_arg)
+                matched_anchor_link = False
+                if (
+                    src_name == anchor_tmp_6_err_name
+                    and dst_name == "anchor_stat_err.json"
+                    and isinstance(src_dir_fd, int)
+                    and isinstance(dst_dir_fd, int)
+                ):
+                    src_dir_st = real_fstat_6(src_dir_fd)
+                    dst_dir_st = real_fstat_6(dst_dir_fd)
+                    if (
+                        (int(src_dir_st.st_dev), int(src_dir_st.st_ino))
+                        == anchor_dir_6_dev_ino
+                        and (int(dst_dir_st.st_dev), int(dst_dir_st.st_ino))
+                        == anchor_dir_6_dev_ino
+                    ):
+                        matched_anchor_link = True
+                real_link_6(
+                    src_arg,
+                    dst_arg,
+                    src_dir_fd=src_dir_fd,
+                    dst_dir_fd=dst_dir_fd,
+                    follow_symlinks=follow_symlinks,
+                )
+                if matched_anchor_link:
+                    assert isinstance(dst_dir_fd, int)
+                    orig_st = real_stat_6(
+                        dst_name,
+                        dir_fd=dst_dir_fd,
+                        follow_symlinks=False,
+                    )
+                    self.assertTrue(stat.S_ISREG(orig_st.st_mode))
+                    orig_fd = real_os_open_6(
+                        dst_name,
+                        os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+                        dir_fd=dst_dir_fd,
+                    )
+                    try:
+                        orig_fd_st = real_fstat_6(orig_fd)
+                        self.assertTrue(stat.S_ISREG(orig_fd_st.st_mode))
+                        self.assertEqual(
+                            (int(orig_fd_st.st_dev), int(orig_fd_st.st_ino)),
+                            (int(orig_st.st_dev), int(orig_st.st_ino)),
+                        )
+                        orig_chunks: list[bytes] = []
+                        while True:
+                            chunk = real_read_6(orig_fd, 65536)
+                            if not chunk:
+                                break
+                            orig_chunks.append(chunk)
+                        orig_bytes = b"".join(orig_chunks)
+                    finally:
+                        real_close_6(orig_fd)
+                    captured_original_anchor_6_err.append(
+                        {
+                            "dev_ino": (
+                                int(orig_st.st_dev),
+                                int(orig_st.st_ino),
+                            ),
+                            "bytes": orig_bytes,
+                        }
+                    )
+
+            def _stat_deny_anchor_tmp_6(
+                path_arg: Any,
+                *,
+                dir_fd: int | None = None,
+                follow_symlinks: bool = True,
+            ) -> os.stat_result:
+                if (
+                    os.fspath(path_arg) == anchor_tmp_6_err_name
+                    and isinstance(dir_fd, int)
+                    and len(captured_original_anchor_6_err) == 1
+                ):
+                    dir_st = real_fstat_6(dir_fd)
+                    if (
+                        int(dir_st.st_dev),
+                        int(dir_st.st_ino),
+                    ) == anchor_dir_6_dev_ino:
+                        st_err = PermissionError(
+                            errno.EACCES,
+                            f"anchor temp stat EACCES #{len(anchor_stat_errs_6) + 1}",
+                            anchor_tmp_6_err_name,
+                        )
+                        anchor_stat_errs_6.append(st_err)
+                        raise st_err
+                return real_stat_6(
+                    path_arg, dir_fd=dir_fd, follow_symlinks=follow_symlinks
+                )
+
+            caught_6_err: list[Exception] = []
+            with (
+                patch.object(onesar_refmac.os, "open", _open_track_6_err),
+                patch.object(onesar_refmac.os, "unlink", _unlink_track_6_err),
+                patch.object(
+                    onesar_refmac.os, "link", _link_capture_anchor_6_err
+                ),
+                patch.object(
+                    onesar_refmac.os, "stat", _stat_deny_anchor_tmp_6
+                ),
+            ):
+                art_6_err = (
+                    onesar_refmac._persist_collector_json_with_fallback(
+                        expected_anchor_payload_6_err,
+                        child_target_6_err,
+                        root=child_dir_6,
+                        parent_retention_dir=parent_dir_6,
+                        parent_retention_dir_baseline=parent_baseline_6,
+                        parent_retention_dir_status=parent_status_6,
+                        verified_root_fallback_state=fallback_state_6,
+                        allow_unpersisted_on_no_verified_anchor=False,
+                        refmac_dir_status=child_status_6,
+                        caught_persistence_exceptions=caught_6_err,
+                    )
+                )
+            self.assertEqual(unlink_calls_6_err, [])
+            self.assertEqual(len(captured_original_anchor_6_err), 1)
+            orig_capture_6 = captured_original_anchor_6_err[0]
+            self.assertGreater(len(orig_capture_6["bytes"]), 0)
+            self.assertEqual(
+                orig_capture_6["bytes"], expected_anchor_bytes_6_err
+            )
+            self.assertEqual(
+                json.loads(orig_capture_6["bytes"].decode("utf-8")),
+                expected_anchor_payload_6_err,
+            )
+            self.assertEqual(len(anchor_stat_errs_6), 2)
+            self.assertIsNot(anchor_stat_errs_6[0], anchor_stat_errs_6[1])
+            self.assertEqual(
+                art_6_err["actual_retention_anchor_kind"],
+                "verified_evidence_root_exclusive_dir",
+            )
+            self.assertIs(art_6_err["temp_cleanup_succeeded"], False)
+            self.assertIs(art_6_err["temp_handling_succeeded"], False)
+            self.assertEqual(
+                art_6_err["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_STAT_ERROR,
+            )
+            self.assertEqual(caught_6_err, anchor_stat_errs_6)
+            self.assertIs(caught_6_err[0], anchor_stat_errs_6[0])
+            self.assertIs(caught_6_err[1], anchor_stat_errs_6[1])
+            anchor_path_6_err = Path(str(art_6_err["path"]))
+            self.assertEqual(
+                anchor_path_6_err, anchor_dir_6 / "anchor_stat_err.json"
+            )
+            anchor_tmp_6_err = anchor_dir_6 / anchor_tmp_6_err_name
+            self.assertTrue(anchor_path_6_err.is_file())
+            self.assertTrue(anchor_tmp_6_err.is_file())
+            anchor_st_6_err = os.lstat(anchor_path_6_err)
+            anchor_tmp_st_6_err = os.lstat(anchor_tmp_6_err)
+            self.assertEqual(
+                (int(anchor_st_6_err.st_dev), int(anchor_st_6_err.st_ino)),
+                orig_capture_6["dev_ino"],
+            )
+            self.assertEqual(
+                (
+                    int(anchor_tmp_st_6_err.st_dev),
+                    int(anchor_tmp_st_6_err.st_ino),
+                ),
+                orig_capture_6["dev_ino"],
+            )
+            self.assertEqual(
+                (
+                    int(anchor_tmp_st_6_err.st_dev),
+                    int(anchor_tmp_st_6_err.st_ino),
+                ),
+                (int(anchor_st_6_err.st_dev), int(anchor_st_6_err.st_ino)),
+            )
+            self.assertGreaterEqual(int(anchor_st_6_err.st_nlink), 2)
+            self.assertEqual(
+                anchor_path_6_err.read_bytes(), orig_capture_6["bytes"]
+            )
+            self.assertEqual(
+                anchor_tmp_6_err.read_bytes(), orig_capture_6["bytes"]
+            )
+            self.assertEqual(
+                anchor_path_6_err.read_bytes(), expected_anchor_bytes_6_err
+            )
+            self.assertEqual(
+                anchor_tmp_6_err.read_bytes(), expected_anchor_bytes_6_err
+            )
+            reopened_anchor_6_err = json.loads(
+                anchor_path_6_err.read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                reopened_anchor_6_err, expected_anchor_payload_6_err
+            )
+            self.assertEqual(
+                json.loads(anchor_tmp_6_err.read_text(encoding="utf-8")),
+                expected_anchor_payload_6_err,
+            )
+            self.assertGreater(len(opened_fds_6_err), 0)
+            for fd_6_err in set(opened_fds_6_err):
+                with self.assertRaises(OSError) as fd6_err_cm:
+                    real_fstat_6(fd_6_err)
+                self.assertEqual(fd6_err_cm.exception.errno, errno.EBADF)
+
     def test_run_refmac_rfactor_operation_final_diagnostics_collision_e2e(
         self,
     ) -> None:
@@ -9323,7 +10095,14 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
         marker_stat_holder: list[os.stat_result] = []
         pre_ckpt_before_holder: list[bytes] = []
         post_ckpt_before_holder: list[bytes] = []
+        losing_diag_tmp_baseline_holder: list[dict[str, Any]] = []
         real_os_open = os.open
+        real_link = os.link
+        real_lstat = os.lstat
+        real_stat = os.stat
+        real_fstat = os.fstat
+        real_read = os.read
+        real_close = os.close
         fd_to_dir_6: dict[int, str] = {}
 
         def _os_open_create_canonical_diag_marker(
@@ -9354,10 +10133,81 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                     os.write(m_fd, marker_bytes)
                 finally:
                     os.close(m_fd)
-                marker_stat_holder.append(os.lstat(diag_canonical))
+                marker_stat_holder.append(real_lstat(diag_canonical))
             opened_fd = real_os_open(path_arg, flags, mode, *args, **kwargs)
             fd_to_dir_6[opened_fd] = abs_p
             return opened_fd
+
+        def _link_capture_losing_diag_tmp(
+            src_arg: str | os.PathLike[str],
+            dst_arg: str | os.PathLike[str],
+            *,
+            src_dir_fd: int | None = None,
+            dst_dir_fd: int | None = None,
+            follow_symlinks: bool = True,
+        ) -> None:
+            if (
+                not losing_diag_tmp_baseline_holder
+                and os.fspath(src_arg) == diag_tmp.name
+                and os.fspath(dst_arg) == diag_canonical.name
+                and isinstance(src_dir_fd, int)
+                and isinstance(dst_dir_fd, int)
+            ):
+                refmac_dir_st = real_lstat(refmac_dir)
+                src_dir_st = real_fstat(src_dir_fd)
+                dst_dir_st = real_fstat(dst_dir_fd)
+                refmac_dir_dev_ino = (
+                    int(refmac_dir_st.st_dev),
+                    int(refmac_dir_st.st_ino),
+                )
+                if (
+                    (int(src_dir_st.st_dev), int(src_dir_st.st_ino))
+                    == refmac_dir_dev_ino
+                    and (int(dst_dir_st.st_dev), int(dst_dir_st.st_ino))
+                    == refmac_dir_dev_ino
+                ):
+                    pre_tmp_st = real_stat(
+                        diag_tmp.name,
+                        dir_fd=src_dir_fd,
+                        follow_symlinks=False,
+                    )
+                    self.assertTrue(stat.S_ISREG(pre_tmp_st.st_mode))
+                    obs_flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+                    obs_fd = real_os_open(
+                        diag_tmp.name, obs_flags, dir_fd=src_dir_fd
+                    )
+                    try:
+                        obs_fstat = real_fstat(obs_fd)
+                        self.assertTrue(stat.S_ISREG(obs_fstat.st_mode))
+                        self.assertEqual(
+                            (int(obs_fstat.st_dev), int(obs_fstat.st_ino)),
+                            (int(pre_tmp_st.st_dev), int(pre_tmp_st.st_ino)),
+                        )
+                        chunks: list[bytes] = []
+                        while True:
+                            chunk = real_read(obs_fd, 65536)
+                            if not chunk:
+                                break
+                            chunks.append(chunk)
+                        captured_bytes = b"".join(chunks)
+                    finally:
+                        real_close(obs_fd)
+                    losing_diag_tmp_baseline_holder.append(
+                        {
+                            "dev_ino": (
+                                int(pre_tmp_st.st_dev),
+                                int(pre_tmp_st.st_ino),
+                            ),
+                            "bytes": captured_bytes,
+                        }
+                    )
+            return real_link(
+                src_arg,
+                dst_arg,
+                src_dir_fd=src_dir_fd,
+                dst_dir_fd=dst_dir_fd,
+                follow_symlinks=follow_symlinks,
+            )
 
         def runner(
             xyzin: Path,
@@ -9397,14 +10247,25 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 stderr="",
             )
 
-        with patch.object(
-            onesar_refmac.os, "open", _os_open_create_canonical_diag_marker
+        with (
+            patch.object(
+                onesar_refmac.os, "open", _os_open_create_canonical_diag_marker
+            ),
+            patch.object(
+                onesar_refmac.os, "link", _link_capture_losing_diag_tmp
+            ),
         ):
             with self.assertRaises(onesar_refmac.RefmacCollectorError) as cm:
                 self._run_with_fake_ccp4(case_name, runner)
 
         err = cm.exception
         self.assertEqual(len(marker_stat_holder), 1)
+        self.assertEqual(len(losing_diag_tmp_baseline_holder), 1)
+        losing_tmp_baseline = losing_diag_tmp_baseline_holder[0]
+        self.assertGreater(len(losing_tmp_baseline["bytes"]), 0)
+        losing_tmp_doc = json.loads(losing_tmp_baseline["bytes"].decode("utf-8"))
+        self.assertIsInstance(losing_tmp_doc, Mapping)
+        self.assertGreater(len(losing_tmp_doc), 0)
         self.assertEqual(err.failed_stage, "refmac_raw_outputs")
         self.assertIsInstance(err.primary_cause, FileExistsError)
         self.assertIs(err.__cause__, err.primary_cause)
@@ -9416,8 +10277,16 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
         self.assertEqual(err.diagnostics_path, diag_sib)
         self.assertEqual(err.manifest_path, manifest_canonical)
 
-        # Verify canonical marker survived byte-for-byte with unchanged inode, and canonical temp was removed.
-        self.assertFalse(os.path.lexists(diag_tmp))
+        # Verify canonical marker survived byte-for-byte with unchanged inode, and losing canonical temp was retained.
+        self.assertTrue(diag_tmp.is_file())
+        diag_tmp_st = os.lstat(diag_tmp)
+        self.assertTrue(stat.S_ISREG(diag_tmp_st.st_mode))
+        self.assertEqual(int(diag_tmp_st.st_nlink), 1)
+        self.assertEqual(
+            (int(diag_tmp_st.st_dev), int(diag_tmp_st.st_ino)),
+            losing_tmp_baseline["dev_ino"],
+        )
+        self.assertEqual(diag_tmp.read_bytes(), losing_tmp_baseline["bytes"])
         after_marker_st = os.lstat(diag_canonical)
         self.assertTrue(stat.S_ISREG(after_marker_st.st_mode))
         self.assertEqual(
@@ -9426,6 +10295,10 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 int(marker_stat_holder[0].st_dev),
                 int(marker_stat_holder[0].st_ino),
             ),
+        )
+        self.assertNotEqual(
+            (int(diag_tmp_st.st_dev), int(diag_tmp_st.st_ino)),
+            (int(after_marker_st.st_dev), int(after_marker_st.st_ino)),
         )
         self.assertEqual(diag_canonical.read_bytes(), marker_bytes)
         self.assertEqual(
@@ -9446,6 +10319,68 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
         self.assertEqual(
             diag_ref["fallback_for_preexisting_path"], str(diag_canonical)
         )
+        self.assertIs(diag_ref["temp_cleanup_succeeded"], False)
+        self.assertEqual(
+            diag_ref["temp_handling_policy"],
+            onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+        )
+        self.assertIs(diag_ref["temp_handling_succeeded"], True)
+        self.assertEqual(
+            diag_ref["temp_handling_disposition"],
+            onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+        )
+        self.assertIs(diag_ref["sibling_temp_cleanup_succeeded"], False)
+        self.assertIs(diag_ref["sibling_temp_handling_succeeded"], True)
+        self.assertNotIn("prior_collision_temp_cleanup_failures", diag_ref)
+        self.assertEqual(
+            len(diag_ref["prior_collision_temp_cleanup_statuses"]), 1
+        )
+        self.assertEqual(
+            len(diag_ref["prior_collision_retained_temporaries"]), 1
+        )
+        prior_collision_status = diag_ref[
+            "prior_collision_temp_cleanup_statuses"
+        ][0]
+        prior_collision_retained = diag_ref[
+            "prior_collision_retained_temporaries"
+        ][0]
+        self.assertEqual(prior_collision_retained["temp_name"], diag_tmp.name)
+        for prior_entry in (prior_collision_status, prior_collision_retained):
+            self.assertEqual(
+                (
+                    prior_entry["expected_temp_dev"],
+                    prior_entry["expected_temp_ino"],
+                ),
+                losing_tmp_baseline["dev_ino"],
+            )
+            self.assertEqual(
+                (
+                    prior_entry["observed_temp_dev"],
+                    prior_entry["observed_temp_ino"],
+                ),
+                losing_tmp_baseline["dev_ino"],
+            )
+            self.assertEqual(
+                (
+                    prior_entry["observed_temp_dev"],
+                    prior_entry["observed_temp_ino"],
+                ),
+                (int(diag_tmp_st.st_dev), int(diag_tmp_st.st_ino)),
+            )
+        diag_sib_tmp = refmac_dir / f".{diag_sib.name}.tmp.{pid}"
+        self.assertTrue(diag_sib_tmp.is_file())
+        diag_sib_st = os.lstat(diag_sib)
+        diag_sib_tmp_st = os.lstat(diag_sib_tmp)
+        self.assertEqual(
+            (int(diag_sib_tmp_st.st_dev), int(diag_sib_tmp_st.st_ino)),
+            (int(diag_sib_st.st_dev), int(diag_sib_st.st_ino)),
+        )
+        self.assertNotEqual(
+            (int(diag_tmp_st.st_dev), int(diag_tmp_st.st_ino)),
+            (int(diag_sib_st.st_dev), int(diag_sib_st.st_ino)),
+        )
+        self.assertGreaterEqual(int(diag_sib_st.st_nlink), 2)
+        self.assertEqual(diag_sib_tmp.read_bytes(), diag_sib.read_bytes())
         diag_disk = self._reopen_and_verify_json_artifact(diag_ref)
         manifest_raw = manifest_canonical.read_bytes()
         manifest_disk = json.loads(manifest_raw.decode("utf-8"))
@@ -12546,8 +13481,9 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
             self.assertTrue((orig_sub_post / "receipt_post.json").is_file())
 
             # 5. Directory replacement inside callable payload(destination_path) factory refuses publication
-            # before os.link, cleans up original temp in parked directory, leaves replacement canonical and
-            # temp markers untouched, closes all owned open/dup fds, and preserves unrelated sentinel fd.
+            # before os.link, retains its owned unpublished temp in the parked original directory without invented
+            # publication, leaves replacement canonical and temp markers untouched, closes all owned open/dup fds,
+            # and preserves unrelated sentinel fd.
             fac_root = root / "factory_swap_root"
             fac_root.mkdir()
             fac_parked = root / "factory_swap_parked"
@@ -12635,7 +13571,58 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 self.assertIsNone(getattr(fac_err, "published_receipt", None))
                 self.assertEqual(len(fac_causes), 1)
                 self.assertFalse((fac_parked / fac_target.name).exists())
-                self.assertFalse((fac_parked / fac_tmp_name).exists())
+                self.assertTrue((fac_parked / fac_tmp_name).is_file())
+                expected_fac_tmp_bytes = (
+                    json.dumps(
+                        {"dest": str(fac_target), "status": "from_factory"},
+                        indent=2,
+                        sort_keys=True,
+                        allow_nan=False,
+                    )
+                    + "\n"
+                ).encode("utf-8")
+                self.assertEqual(
+                    (fac_parked / fac_tmp_name).read_bytes(),
+                    expected_fac_tmp_bytes,
+                )
+                parked_tmp_st = os.lstat(fac_parked / fac_tmp_name)
+                self.assertNotEqual(
+                    (int(parked_tmp_st.st_dev), int(parked_tmp_st.st_ino)),
+                    repl_identities["tmp"],
+                )
+                fac_cleanup_st = getattr(fac_err, "temp_cleanup_status", None)
+                self.assertIsInstance(fac_cleanup_st, Mapping)
+                assert isinstance(fac_cleanup_st, Mapping)
+                self.assertEqual(
+                    fac_cleanup_st["temp_handling_policy"],
+                    onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+                )
+                self.assertIs(fac_cleanup_st["temp_handling_succeeded"], True)
+                self.assertEqual(
+                    fac_cleanup_st["temp_handling_disposition"],
+                    onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+                )
+                self.assertEqual(
+                    fac_cleanup_st["temp_observation_phase"],
+                    "final_cleanup_stat",
+                )
+                self.assertIs(fac_cleanup_st["post_link_temp_observed"], False)
+                self.assertIs(
+                    fac_cleanup_st["final_cleanup_temp_observed"], True
+                )
+                self.assertIs(fac_cleanup_st["published_link_created"], False)
+                self.assertIs(fac_cleanup_st["readback_verified"], False)
+                self.assertIs(fac_cleanup_st["unlinked"], False)
+                self.assertIs(fac_cleanup_st["unlink_attempted"], False)
+                self.assertEqual(fac_cleanup_st["unlink_attempt_count"], 0)
+                self.assertEqual(
+                    fac_cleanup_st["expected_temp_ino"],
+                    int(parked_tmp_st.st_ino),
+                )
+                self.assertEqual(
+                    fac_cleanup_st["observed_temp_ino"],
+                    int(parked_tmp_st.st_ino),
+                )
                 self.assertEqual(
                     (fac_root / fac_target.name).read_bytes(), repl_target_bytes
                 )
@@ -12660,7 +13647,7 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 self.assertEqual(real_read(sentinel_fd, 64), b"sentinel\n")
 
                 # 6. Healthy os.link descriptor control: src_dir_fd == dst_dir_fd matches admitted directory
-                # (dev, ino), relative leaf names are used, follow_symlinks is False, and temp file is absent.
+                # (dev, ino), relative leaf names are used, follow_symlinks is False, and temp hardlink alias is retained.
                 healthy_root = root / "healthy_link_control_root"
                 healthy_root.mkdir()
                 healthy_target = healthy_root / "healthy_receipt.json"
@@ -12744,8 +13731,18 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 self.assertEqual(link_rec["src"], healthy_tmp_name)
                 self.assertEqual(link_rec["dst"], healthy_target.name)
                 self.assertIs(link_rec["follow_symlinks"], False)
-                self.assertFalse((healthy_root / healthy_tmp_name).exists())
+                self.assertTrue((healthy_root / healthy_tmp_name).is_file())
                 disk_bytes = healthy_target.read_bytes()
+                healthy_target_st = os.lstat(healthy_target)
+                healthy_tmp_st = os.lstat(healthy_root / healthy_tmp_name)
+                self.assertEqual(
+                    (int(healthy_target_st.st_dev), int(healthy_target_st.st_ino)),
+                    (int(healthy_tmp_st.st_dev), int(healthy_tmp_st.st_ino)),
+                )
+                self.assertGreaterEqual(int(healthy_target_st.st_nlink), 2)
+                self.assertEqual(
+                    (healthy_root / healthy_tmp_name).read_bytes(), disk_bytes
+                )
                 self.assertEqual(
                     json.loads(disk_bytes.decode("utf-8")),
                     {"self_path": str(healthy_target), "ok": True},
@@ -12755,6 +13752,16 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                     healthy_rec["sha256"], _sha256_bytes(disk_bytes)
                 )
                 self.assertEqual(healthy_rec["size_bytes"], len(disk_bytes))
+                self.assertIs(healthy_rec["temp_cleanup_succeeded"], False)
+                self.assertEqual(
+                    healthy_rec["temp_handling_policy"],
+                    onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+                )
+                self.assertIs(healthy_rec["temp_handling_succeeded"], True)
+                self.assertEqual(
+                    healthy_rec["temp_handling_disposition"],
+                    onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+                )
                 for fd_h in set(healthy_opened_fds):
                     with self.assertRaises(OSError) as fd_h_ebadf:
                         real_fstat(fd_h)
@@ -12766,17 +13773,30 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp).resolve(strict=True)
+            base_root = Path(tmp).resolve(strict=True)
+            real_open = os.open
+            real_fstat = os.fstat
+            real_stat = os.stat
+            real_unlink = os.unlink
+            real_fsync = os.fsync
+            real_close = os.close
+
+            # 1. Initial temp fstat EIO (unknown initial temp identity): foreign marker survives, zero writer unlinks
+            root = base_root / "unknown_initial_fstat"
+            root.mkdir()
             target = root / "receipt.json"
             tmp_name = f".{target.name}.tmp.{os.getpid()}"
             tmp_path = root / tmp_name
             foreign_bytes = b'{"foreign": "marker-must-survive"}\n'
             foreign_st_holder: list[os.stat_result] = []
-
-            real_open = os.open
-            real_fstat = os.fstat
             created_tmp_fds: set[int] = set()
             opened_fds: list[int] = []
+            writer_unlinks: list[str] = []
+            initial_fstat_err = OSError(
+                errno.EIO, "simulated initial temp fstat EIO"
+            )
+            causes_init: list[Exception] = []
+            dir_status_init: dict[str, Any] = {}
 
             def open_track_tmp(
                 path: Any,
@@ -12789,7 +13809,7 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 opened_fds.append(fd)
                 if os.fspath(path) == tmp_name and (flags & os.O_CREAT):
                     created_tmp_fds.add(fd)
-                    os.unlink(tmp_name, dir_fd=dir_fd)
+                    real_unlink(tmp_name, dir_fd=dir_fd)
                     tmp_path.write_bytes(foreign_bytes)
                     foreign_st_holder.append(os.lstat(tmp_path))
                 return fd
@@ -12797,20 +13817,35 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
             def fstat_fail_on_tmp(fd: int) -> os.stat_result:
                 if fd in created_tmp_fds:
                     created_tmp_fds.discard(fd)
-                    raise OSError(errno.EIO, "simulated initial temp fstat EIO")
+                    raise initial_fstat_err
                 return real_fstat(fd)
+
+            def unlink_track_init(
+                path: Any, *, dir_fd: int | None = None
+            ) -> None:
+                writer_unlinks.append(os.fspath(path))
+                return real_unlink(path, dir_fd=dir_fd)
 
             with (
                 patch.object(onesar_refmac.os, "open", open_track_tmp),
                 patch.object(onesar_refmac.os, "fstat", fstat_fail_on_tmp),
+                patch.object(onesar_refmac.os, "unlink", unlink_track_init),
             ):
                 with self.assertRaises(OSError) as cm:
                     onesar_refmac._atomic_write_new_json_file(
-                        {"hello": "world"}, target, root=root
+                        {"hello": "world"},
+                        target,
+                        root=root,
+                        dir_status_out=dir_status_init,
+                        caught_exceptions=causes_init,
                     )
 
             err = cm.exception
+            self.assertIs(err, initial_fstat_err)
             self.assertEqual(err.errno, errno.EIO)
+            self.assertEqual(writer_unlinks, [])
+            self.assertEqual(causes_init, [initial_fstat_err])
+            self.assertIsNone(getattr(err, "published_receipt", None))
             self.assertTrue(len(opened_fds) > 0)
             for fd in set(opened_fds):
                 with self.assertRaises(OSError) as fd_cm:
@@ -12829,12 +13864,457 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
             cleanup_status = getattr(err, "temp_cleanup_status", None)
             self.assertIsInstance(cleanup_status, Mapping)
             assert isinstance(cleanup_status, Mapping)
-            self.assertIs(cleanup_status["unlinked"], False)
             self.assertEqual(
-                cleanup_status["reason"], "initial_temp_fstat_identity_unknown"
+                cleanup_status["temp_handling_policy"],
+                onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+            )
+            self.assertIs(cleanup_status["temp_handling_succeeded"], False)
+            self.assertEqual(
+                cleanup_status["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_IDENTITY_UNKNOWN,
+            )
+            self.assertIsNone(cleanup_status["temp_observation_phase"])
+            self.assertIs(cleanup_status["post_link_temp_observed"], False)
+            self.assertIs(cleanup_status["final_cleanup_temp_observed"], False)
+            self.assertIs(cleanup_status["published_link_created"], False)
+            self.assertIs(cleanup_status["readback_verified"], False)
+            self.assertIs(cleanup_status["unlinked"], False)
+            self.assertIs(cleanup_status["unlink_attempted"], False)
+            self.assertEqual(cleanup_status["unlink_attempt_count"], 0)
+            self.assertIs(cleanup_status["cleanup_verified"], False)
+            self.assertIs(cleanup_status["temp_identity_known"], False)
+            self.assertIsNone(cleanup_status["observed_temp_present"])
+            self.assertIsNone(cleanup_status["temp_present_after_cleanup"])
+            self.assertEqual(
+                cleanup_status["reason"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_IDENTITY_UNKNOWN,
             )
             self.assertIsNone(cleanup_status["expected_temp_dev"])
             self.assertIsNone(cleanup_status["expected_temp_ino"])
+            self.assertIsNone(cleanup_status["observed_temp_dev"])
+            self.assertIsNone(cleanup_status["observed_temp_ino"])
+            self.assertIs(
+                onesar_refmac._is_json_temp_status_handling_satisfied(
+                    cleanup_status, legacy_missing_unlinked_default=False
+                ),
+                False,
+            )
+            self.assertEqual(
+                dir_status_init.get("temp_cleanup_status"),
+                dict(cleanup_status),
+            )
+
+            # 2. Pre-link failures after initial fstat succeeds (serialization/write/fsync) + exact after-stat
+            # competitor swap at final_cleanup_stat (after real matching stat result is obtained, before os.stat returns),
+            # plus before-stat foreign/nonregular/absence observations and compound fsync+final_stat+dir_close errors.
+            for submode in (
+                "after_stat_swap_on_serialize_nan",
+                "after_stat_swap_on_write_enospc",
+                "after_stat_swap_on_fsync_eio",
+                "before_stat_foreign_regular_on_fsync_eio",
+                "before_stat_nonregular_symlink_on_fsync_eio",
+                "before_stat_absent_on_fsync_eio",
+                "compound_fsync_eio_plus_final_stat_eio_plus_dir_close_eacces",
+            ):
+                with self.subTest(prelink_finalization_submode=submode):
+                    sub_root = base_root / submode
+                    sub_root.mkdir()
+                    sub_target = sub_root / "receipt.json"
+                    sub_tmp_name = f".{sub_target.name}.tmp.{os.getpid()}"
+                    sub_tmp_path = sub_root / sub_tmp_name
+                    sym_dest = base_root / f"{submode}_symlink_target.txt"
+                    sym_dest.write_bytes(b"symlink-target-survives\n")
+                    sub_opened_fds: list[int] = []
+                    sub_unlinks: list[str] = []
+                    sub_causes: list[Exception] = []
+                    sub_dir_status: dict[str, Any] = {}
+                    sub_marker_st: list[os.stat_result] = []
+                    orig_tmp_id: list[tuple[int, int]] = []
+                    root_dir_fds: set[int] = set()
+                    tmp_file_fds: set[int] = set()
+                    injected_write_err = OSError(
+                        errno.ENOSPC, "owned pre-link write ENOSPC"
+                    )
+                    injected_fsync_err = OSError(
+                        errno.EIO, "owned pre-link fsync EIO"
+                    )
+                    injected_final_stat_err = OSError(
+                        errno.EIO, "owned final_cleanup_stat EIO"
+                    )
+                    injected_dir_close_err = OSError(
+                        errno.EACCES, "owned root dir close EACCES"
+                    )
+                    real_fdopen = os.fdopen
+
+                    def sub_open(
+                        path: Any,
+                        flags: int,
+                        mode: int = 0o777,
+                        *,
+                        dir_fd: int | None = None,
+                    ) -> int:
+                        fd = real_open(path, flags, mode, dir_fd=dir_fd)
+                        sub_opened_fds.append(fd)
+                        if os.fspath(path) == str(sub_root):
+                            root_dir_fds.add(fd)
+                        elif os.fspath(path) == sub_tmp_name and (
+                            flags & os.O_CREAT
+                        ):
+                            tmp_file_fds.add(fd)
+                            st_orig = real_fstat(fd)
+                            orig_tmp_id.append(
+                                (int(st_orig.st_dev), int(st_orig.st_ino))
+                            )
+                        return fd
+
+                    def sub_fdopen(fd: int, *a: Any, **kw: Any) -> Any:
+                        fh = real_fdopen(fd, *a, **kw)
+                        if submode == "after_stat_swap_on_write_enospc":
+                            real_fh_write = fh.write
+
+                            def fail_write(data: bytes) -> int:
+                                real_fh_write(data[:4])
+                                fh.flush()
+                                raise injected_write_err
+
+                            fh.write = fail_write  # type: ignore[method-assign]
+                        return fh
+
+                    def sub_fsync(fd: int) -> None:
+                        if fd in tmp_file_fds and submode not in (
+                            "after_stat_swap_on_serialize_nan",
+                            "after_stat_swap_on_write_enospc",
+                        ):
+                            if (
+                                submode
+                                == "before_stat_foreign_regular_on_fsync_eio"
+                            ):
+                                real_unlink(sub_tmp_path)
+                                sub_tmp_path.write_bytes(foreign_bytes)
+                                sub_marker_st.append(os.lstat(sub_tmp_path))
+                            elif (
+                                submode
+                                == "before_stat_nonregular_symlink_on_fsync_eio"
+                            ):
+                                real_unlink(sub_tmp_path)
+                                sub_tmp_path.symlink_to(sym_dest)
+                                sub_marker_st.append(os.lstat(sub_tmp_path))
+                            elif submode == "before_stat_absent_on_fsync_eio":
+                                real_unlink(sub_tmp_path)
+                            raise injected_fsync_err
+                        return real_fsync(fd)
+
+                    def sub_stat(
+                        path: Any,
+                        *,
+                        dir_fd: int | None = None,
+                        follow_symlinks: bool = True,
+                    ) -> os.stat_result:
+                        if (
+                            os.fspath(path) == sub_tmp_name
+                            and dir_fd is not None
+                        ):
+                            if (
+                                submode
+                                == "compound_fsync_eio_plus_final_stat_eio_plus_dir_close_eacces"
+                            ):
+                                real_unlink(sub_tmp_name, dir_fd=dir_fd)
+                                sub_tmp_path.write_bytes(foreign_bytes)
+                                sub_marker_st.append(os.lstat(sub_tmp_path))
+                                raise injected_final_stat_err
+                            st = real_stat(
+                                path,
+                                dir_fd=dir_fd,
+                                follow_symlinks=follow_symlinks,
+                            )
+                            if submode.startswith("after_stat_swap_"):
+                                # Exact after-stat competitor swap: real matching stat obtained, swap before return
+                                real_unlink(sub_tmp_name, dir_fd=dir_fd)
+                                sub_tmp_path.write_bytes(foreign_bytes)
+                                sub_marker_st.append(os.lstat(sub_tmp_path))
+                            return st
+                        return real_stat(
+                            path,
+                            dir_fd=dir_fd,
+                            follow_symlinks=follow_symlinks,
+                        )
+
+                    def sub_close(fd: int) -> None:
+                        real_close(fd)
+                        if (
+                            submode
+                            == "compound_fsync_eio_plus_final_stat_eio_plus_dir_close_eacces"
+                            and fd in root_dir_fds
+                        ):
+                            root_dir_fds.discard(fd)
+                            raise injected_dir_close_err
+
+                    def sub_unlink(
+                        path: Any, *, dir_fd: int | None = None
+                    ) -> None:
+                        sub_unlinks.append(os.fspath(path))
+                        return real_unlink(path, dir_fd=dir_fd)
+
+                    sub_payload: dict[str, Any] = (
+                        {"bad": float("nan")}
+                        if submode == "after_stat_swap_on_serialize_nan"
+                        else {"hello": "world"}
+                    )
+                    expected_exc_type = (
+                        ValueError
+                        if submode == "after_stat_swap_on_serialize_nan"
+                        else OSError
+                    )
+                    with (
+                        patch.object(onesar_refmac.os, "open", sub_open),
+                        patch.object(onesar_refmac.os, "fdopen", sub_fdopen),
+                        patch.object(onesar_refmac.os, "fsync", sub_fsync),
+                        patch.object(onesar_refmac.os, "stat", sub_stat),
+                        patch.object(onesar_refmac.os, "close", sub_close),
+                        patch.object(onesar_refmac.os, "unlink", sub_unlink),
+                    ):
+                        with self.assertRaises(expected_exc_type) as sub_cm:
+                            onesar_refmac._atomic_write_new_json_file(
+                                sub_payload,
+                                sub_target,
+                                root=sub_root,
+                                dir_status_out=sub_dir_status,
+                                caught_exceptions=sub_causes,
+                            )
+
+                    sub_err = sub_cm.exception
+                    self.assertEqual(sub_unlinks, [])
+                    self.assertFalse(sub_target.exists())
+                    self.assertIsNone(
+                        getattr(sub_err, "published_receipt", None)
+                    )
+                    for fd_s in set(sub_opened_fds):
+                        with self.assertRaises(OSError) as fd_s_cm:
+                            real_fstat(fd_s)
+                        self.assertEqual(fd_s_cm.exception.errno, errno.EBADF)
+
+                    sub_cleanup = getattr(sub_err, "temp_cleanup_status", None)
+                    self.assertIsInstance(sub_cleanup, Mapping)
+                    assert isinstance(sub_cleanup, Mapping)
+                    self.assertEqual(
+                        sub_cleanup["temp_handling_policy"],
+                        onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+                    )
+                    self.assertEqual(
+                        sub_cleanup["temp_observation_phase"],
+                        "final_cleanup_stat",
+                    )
+                    self.assertIs(sub_cleanup["post_link_temp_observed"], False)
+                    self.assertIs(sub_cleanup["published_link_created"], False)
+                    self.assertIs(sub_cleanup["readback_verified"], False)
+                    self.assertIs(sub_cleanup["unlinked"], False)
+                    self.assertIs(sub_cleanup["unlink_attempted"], False)
+                    self.assertEqual(sub_cleanup["unlink_attempt_count"], 0)
+                    self.assertIs(sub_cleanup["cleanup_verified"], False)
+                    self.assertEqual(
+                        (
+                            sub_cleanup["expected_temp_dev"],
+                            sub_cleanup["expected_temp_ino"],
+                        ),
+                        orig_tmp_id[0],
+                    )
+
+                    if submode.startswith("after_stat_swap_"):
+                        if submode == "after_stat_swap_on_write_enospc":
+                            self.assertIs(sub_err, injected_write_err)
+                        elif submode == "after_stat_swap_on_fsync_eio":
+                            self.assertIs(sub_err, injected_fsync_err)
+                        self.assertEqual(sub_causes, [sub_err])
+                        self.assertTrue(sub_tmp_path.is_file())
+                        self.assertEqual(
+                            sub_tmp_path.read_bytes(), foreign_bytes
+                        )
+                        cur_m_st = os.lstat(sub_tmp_path)
+                        self.assertEqual(
+                            (int(cur_m_st.st_dev), int(cur_m_st.st_ino)),
+                            (
+                                int(sub_marker_st[0].st_dev),
+                                int(sub_marker_st[0].st_ino),
+                            ),
+                        )
+                        self.assertIs(
+                            sub_cleanup["temp_handling_succeeded"], True
+                        )
+                        self.assertEqual(
+                            sub_cleanup["temp_handling_disposition"],
+                            onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+                        )
+                        self.assertIs(
+                            sub_cleanup["final_cleanup_temp_observed"], True
+                        )
+                        self.assertEqual(
+                            (
+                                sub_cleanup["observed_temp_dev"],
+                                sub_cleanup["observed_temp_ino"],
+                            ),
+                            orig_tmp_id[0],
+                        )
+                        self.assertIs(
+                            onesar_refmac._is_json_temp_status_handling_satisfied(
+                                sub_cleanup,
+                                legacy_missing_unlinked_default=False,
+                            ),
+                            True,
+                        )
+                    elif (
+                        submode
+                        == "before_stat_foreign_regular_on_fsync_eio"
+                    ):
+                        self.assertIs(sub_err, injected_fsync_err)
+                        self.assertEqual(sub_causes, [injected_fsync_err])
+                        self.assertTrue(sub_tmp_path.is_file())
+                        self.assertEqual(
+                            sub_tmp_path.read_bytes(), foreign_bytes
+                        )
+                        self.assertIs(
+                            sub_cleanup["temp_handling_succeeded"], False
+                        )
+                        self.assertEqual(
+                            sub_cleanup["temp_handling_disposition"],
+                            onesar_refmac.JSON_TEMP_DISPOSITION_IDENTITY_MISMATCH,
+                        )
+                        self.assertIs(
+                            sub_cleanup["final_cleanup_temp_observed"], True
+                        )
+                        self.assertIs(
+                            sub_cleanup["observed_temp_is_regular_file"], True
+                        )
+                        self.assertIs(
+                            sub_cleanup["observed_temp_is_symlink"], False
+                        )
+                        self.assertEqual(
+                            (
+                                sub_cleanup["observed_temp_dev"],
+                                sub_cleanup["observed_temp_ino"],
+                            ),
+                            (
+                                int(sub_marker_st[0].st_dev),
+                                int(sub_marker_st[0].st_ino),
+                            ),
+                        )
+                        self.assertIs(
+                            onesar_refmac._is_json_temp_status_handling_satisfied(
+                                sub_cleanup,
+                                legacy_missing_unlinked_default=False,
+                            ),
+                            False,
+                        )
+                    elif (
+                        submode
+                        == "before_stat_nonregular_symlink_on_fsync_eio"
+                    ):
+                        self.assertIs(sub_err, injected_fsync_err)
+                        self.assertEqual(sub_causes, [injected_fsync_err])
+                        self.assertTrue(sub_tmp_path.is_symlink())
+                        self.assertEqual(
+                            sym_dest.read_bytes(), b"symlink-target-survives\n"
+                        )
+                        self.assertIs(
+                            sub_cleanup["temp_handling_succeeded"], False
+                        )
+                        self.assertEqual(
+                            sub_cleanup["temp_handling_disposition"],
+                            onesar_refmac.JSON_TEMP_DISPOSITION_IDENTITY_MISMATCH,
+                        )
+                        self.assertIs(
+                            sub_cleanup["final_cleanup_temp_observed"], True
+                        )
+                        self.assertIs(
+                            sub_cleanup["observed_temp_is_regular_file"], False
+                        )
+                        self.assertIs(
+                            sub_cleanup["observed_temp_is_symlink"], True
+                        )
+                        self.assertIs(
+                            onesar_refmac._is_json_temp_status_handling_satisfied(
+                                sub_cleanup,
+                                legacy_missing_unlinked_default=False,
+                            ),
+                            False,
+                        )
+                    elif submode == "before_stat_absent_on_fsync_eio":
+                        self.assertIs(sub_err, injected_fsync_err)
+                        self.assertEqual(sub_causes, [injected_fsync_err])
+                        self.assertFalse(sub_tmp_path.exists())
+                        self.assertIs(
+                            sub_cleanup["temp_handling_succeeded"], False
+                        )
+                        self.assertEqual(
+                            sub_cleanup["temp_handling_disposition"],
+                            onesar_refmac.JSON_TEMP_DISPOSITION_ALREADY_ABSENT,
+                        )
+                        self.assertIs(
+                            sub_cleanup["final_cleanup_temp_observed"], True
+                        )
+                        self.assertIs(
+                            sub_cleanup["observed_temp_present"], False
+                        )
+                        self.assertIs(
+                            sub_cleanup["temp_present_after_cleanup"], False
+                        )
+                        self.assertIs(
+                            onesar_refmac._is_json_temp_status_handling_satisfied(
+                                sub_cleanup,
+                                legacy_missing_unlinked_default=False,
+                            ),
+                            False,
+                        )
+                    else:
+                        self.assertIs(sub_err, injected_fsync_err)
+                        self.assertEqual(
+                            sub_causes,
+                            [
+                                injected_fsync_err,
+                                injected_final_stat_err,
+                                injected_dir_close_err,
+                            ],
+                        )
+                        self.assertIs(
+                            getattr(sub_err, "temp_cleanup_error", None),
+                            injected_final_stat_err,
+                        )
+                        self.assertEqual(
+                            getattr(sub_err, "temp_cleanup_errors", None),
+                            [injected_final_stat_err],
+                        )
+                        self.assertIs(
+                            getattr(sub_err, "directory_close_error", None),
+                            injected_dir_close_err,
+                        )
+                        self.assertIs(
+                            getattr(sub_err, "cleanup_close_error", None),
+                            injected_dir_close_err,
+                        )
+                        self.assertTrue(sub_tmp_path.is_file())
+                        self.assertEqual(
+                            sub_tmp_path.read_bytes(), foreign_bytes
+                        )
+                        self.assertIs(
+                            sub_cleanup["temp_handling_succeeded"], False
+                        )
+                        self.assertEqual(
+                            sub_cleanup["temp_handling_disposition"],
+                            onesar_refmac.JSON_TEMP_DISPOSITION_STAT_ERROR,
+                        )
+                        self.assertIs(
+                            sub_cleanup["final_cleanup_temp_observed"], False
+                        )
+                        self.assertIsNone(sub_cleanup["observed_temp_present"])
+                        self.assertIsNone(
+                            sub_cleanup["temp_present_after_cleanup"]
+                        )
+                        self.assertIs(
+                            onesar_refmac._is_json_temp_status_handling_satisfied(
+                                sub_cleanup,
+                                legacy_missing_unlinked_default=False,
+                            ),
+                            False,
+                        )
 
     def test_atomic_write_new_json_file_temp_cleanup_retention_and_late_link_collision(
         self,
@@ -12842,7 +14322,7 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp).resolve(strict=True)
 
-            # 1. Otherwise-valid publication with both os.unlink attempts denied (EACCES)
+            # 1. Otherwise-valid publication with both post-link and final-cleanup retained-temp os.stat observations denied (EACCES)
             root_1 = base / "case1_ok_pub_unlink_denied"
             root_1.mkdir()
             target_1 = root_1 / "receipt.json"
@@ -12852,9 +14332,11 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
 
             real_open = os.open
             real_fstat = os.fstat
+            real_stat_1 = os.stat
             real_unlink = os.unlink
             opened_fds_1: list[int] = []
             unlink_calls_1: list[str] = []
+            stat_err_calls_1: list[str] = []
 
             def open_track_1(
                 path: Any,
@@ -12867,23 +14349,39 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 opened_fds_1.append(fd)
                 return fd
 
-            def unlink_deny_1(
-                path: Any, *, dir_fd: int | None = None
-            ) -> None:
-                if os.fspath(path) == tmp_name_1:
-                    unlink_calls_1.append(os.fspath(path))
+            def stat_deny_retained_1(
+                path: Any,
+                *,
+                dir_fd: int | None = None,
+                follow_symlinks: bool = True,
+            ) -> os.stat_result:
+                if (
+                    os.fspath(path) == tmp_name_1
+                    and dir_fd is not None
+                    and target_1.exists()
+                ):
+                    stat_err_calls_1.append(os.fspath(path))
                     raise PermissionError(
                         errno.EACCES,
-                        f"simulated unlink EACCES #{len(unlink_calls_1)}",
+                        f"simulated retained-temp stat EACCES #{len(stat_err_calls_1)}",
                         os.fspath(path),
                     )
+                return real_stat_1(
+                    path, dir_fd=dir_fd, follow_symlinks=follow_symlinks
+                )
+
+            def unlink_track_1(
+                path: Any, *, dir_fd: int | None = None
+            ) -> None:
+                unlink_calls_1.append(os.fspath(path))
                 return real_unlink(path, dir_fd=dir_fd)
 
             causes_1: list[Exception] = []
             dir_status_1: dict[str, Any] = {}
             with (
                 patch.object(onesar_refmac.os, "open", open_track_1),
-                patch.object(onesar_refmac.os, "unlink", unlink_deny_1),
+                patch.object(onesar_refmac.os, "stat", stat_deny_retained_1),
+                patch.object(onesar_refmac.os, "unlink", unlink_track_1),
             ):
                 receipt_1 = onesar_refmac._atomic_write_new_json_file(
                     payload_1,
@@ -12896,23 +14394,53 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
             self.assertEqual(receipt_1["path"], str(target_1))
             self.assertTrue(target_1.is_file())
             self.assertTrue(tmp_path_1.is_file())
+            self.assertEqual(unlink_calls_1, [])
+            self.assertEqual(len(stat_err_calls_1), 2)
             self.assertIs(receipt_1["temp_cleanup_succeeded"], False)
+            self.assertEqual(
+                receipt_1["temp_handling_policy"],
+                onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+            )
+            self.assertIs(receipt_1["temp_handling_succeeded"], False)
+            self.assertEqual(
+                receipt_1["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_STAT_ERROR,
+            )
+            self.assertIs(
+                onesar_refmac._is_json_temp_handling_satisfied(receipt_1),
+                False,
+            )
             status_1 = receipt_1["temp_cleanup_status"]
             self.assertIsInstance(status_1, Mapping)
             self.assertEqual(status_1["temp_name"], tmp_name_1)
             self.assertIs(status_1["temp_identity_known"], True)
-            self.assertIs(status_1["unlink_attempted"], True)
-            self.assertEqual(status_1["unlink_attempt_count"], 2)
+            self.assertEqual(
+                status_1["temp_handling_policy"],
+                onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+            )
+            self.assertIs(status_1["temp_handling_succeeded"], False)
+            self.assertEqual(
+                status_1["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_STAT_ERROR,
+            )
+            self.assertEqual(
+                status_1["temp_observation_phase"], "final_cleanup_stat"
+            )
+            self.assertIs(status_1["post_link_temp_observed"], False)
+            self.assertIs(status_1["final_cleanup_temp_observed"], False)
+            self.assertIsNone(status_1["observed_temp_present"])
+            self.assertIsNone(status_1["temp_present_after_cleanup"])
+            self.assertIs(status_1["unlink_attempted"], False)
+            self.assertEqual(status_1["unlink_attempt_count"], 0)
             self.assertIs(status_1["unlinked"], False)
             self.assertIs(status_1["cleanup_verified"], False)
-            self.assertIs(status_1["temp_present_after_cleanup"], True)
             self.assertEqual(status_1["errno"], errno.EACCES)
             self.assertEqual(len(status_1["errors"]), 2)
             self.assertEqual(
-                status_1["errors"][0]["phase"], "post_link_unlink"
+                status_1["errors"][0]["phase"], "post_link_stat"
             )
             self.assertEqual(
-                status_1["errors"][1]["phase"], "final_cleanup_unlink"
+                status_1["errors"][1]["phase"], "final_cleanup_stat"
             )
             self.assertEqual(len(causes_1), 2)
             self.assertEqual(
@@ -12923,8 +14451,8 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                     real_fstat(fd_1)
                 self.assertEqual(fd1_cm.exception.errno, errno.EBADF)
 
-            # 1b. Ordinary successful child publication with both os.unlink attempts denied (EACCES)
-            # routed through _persist_collector_json_with_fallback
+            # 1b. Ordinary child publication routed through _persist_collector_json_with_fallback:
+            # healthy retain_entries_v1 control plus both retained-temp os.stat observations denied (EACCES)
             root_1b = base / "case1b_fallback_caller_ok_pub_unlink_denied"
             child_1b = root_1b / "refmac_work"
             parent_1b = root_1b / "refmac_parent_retention"
@@ -12948,11 +14476,67 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                     parent_1b, refmac_dir_baseline=parent_base_1b
                 )
             )
+
+            target_1b_ok = child_1b / "audit_1b_ok.json"
+            tmp_path_1b_ok = (
+                child_1b / f".{target_1b_ok.name}.tmp.{os.getpid()}"
+            )
+            failures_1b_ok: list[dict[str, Any]] = []
+            causes_1b_ok: list[Exception | None] = []
+            caught_1b_ok: list[Exception] = []
+            retained_1b_ok: list[dict[str, Any]] = []
+            art_1b_ok = onesar_refmac._persist_collector_json_with_fallback(
+                {"case": "1b_ok", "status": "ok"},
+                target_1b_ok,
+                root=child_1b,
+                parent_retention_dir=parent_1b,
+                parent_retention_dir_baseline=parent_base_1b,
+                parent_retention_dir_status=parent_status_1b,
+                verified_root_fallback_state={},
+                refmac_dir_baseline=child_base_1b,
+                refmac_dir_status=child_status_1b,
+                child_dir_persistence_failures=failures_1b_ok,
+                caught_persistence_exceptions=caught_1b_ok,
+                retained_payload_sink=retained_1b_ok,
+                child_dir_persistence_causes=causes_1b_ok,
+            )
+            self.assertEqual(art_1b_ok["path"], str(target_1b_ok))
+            self.assertTrue(target_1b_ok.is_file())
+            self.assertTrue(tmp_path_1b_ok.is_file())
+            self.assertEqual(
+                (
+                    int(os.lstat(target_1b_ok).st_dev),
+                    int(os.lstat(target_1b_ok).st_ino),
+                ),
+                (
+                    int(os.lstat(tmp_path_1b_ok).st_dev),
+                    int(os.lstat(tmp_path_1b_ok).st_ino),
+                ),
+            )
+            self.assertEqual(
+                target_1b_ok.read_bytes(), tmp_path_1b_ok.read_bytes()
+            )
+            self.assertIs(art_1b_ok["temp_cleanup_succeeded"], False)
+            self.assertEqual(
+                art_1b_ok["temp_handling_policy"],
+                onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+            )
+            self.assertIs(art_1b_ok["temp_handling_succeeded"], True)
+            self.assertEqual(
+                art_1b_ok["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+            )
+            self.assertEqual(failures_1b_ok, [])
+            self.assertEqual(causes_1b_ok, [])
+            self.assertEqual(caught_1b_ok, [])
+            self.assertNotIn("temp_cleanup_status", child_status_1b)
+
             target_1b = child_1b / "audit_1b.json"
             tmp_name_1b = f".{target_1b.name}.tmp.{os.getpid()}"
             tmp_path_1b = child_1b / tmp_name_1b
             opened_fds_1b: list[int] = []
-            unlink_errs_1b: list[PermissionError] = []
+            unlink_calls_1b: list[str] = []
+            stat_errs_1b: list[PermissionError] = []
 
             def open_track_1b(
                 path: Any,
@@ -12965,17 +14549,32 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 opened_fds_1b.append(fd)
                 return fd
 
-            def unlink_deny_1b(
-                path: Any, *, dir_fd: int | None = None
-            ) -> None:
-                if os.fspath(path) == tmp_name_1b:
+            def stat_deny_1b(
+                path: Any,
+                *,
+                dir_fd: int | None = None,
+                follow_symlinks: bool = True,
+            ) -> os.stat_result:
+                if (
+                    os.fspath(path) == tmp_name_1b
+                    and dir_fd is not None
+                    and target_1b.exists()
+                ):
                     err_1b = PermissionError(
                         errno.EACCES,
-                        f"simulated child 1b unlink EACCES #{len(unlink_errs_1b) + 1}",
+                        f"simulated child 1b retained-temp stat EACCES #{len(stat_errs_1b) + 1}",
                         os.fspath(path),
                     )
-                    unlink_errs_1b.append(err_1b)
+                    stat_errs_1b.append(err_1b)
                     raise err_1b
+                return real_stat_1(
+                    path, dir_fd=dir_fd, follow_symlinks=follow_symlinks
+                )
+
+            def unlink_track_1b(
+                path: Any, *, dir_fd: int | None = None
+            ) -> None:
+                unlink_calls_1b.append(os.fspath(path))
                 return real_unlink(path, dir_fd=dir_fd)
 
             failures_1b: list[dict[str, Any]] = []
@@ -12986,7 +14585,8 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
 
             with (
                 patch.object(onesar_refmac.os, "open", open_track_1b),
-                patch.object(onesar_refmac.os, "unlink", unlink_deny_1b),
+                patch.object(onesar_refmac.os, "stat", stat_deny_1b),
+                patch.object(onesar_refmac.os, "unlink", unlink_track_1b),
             ):
                 art_1b = onesar_refmac._persist_collector_json_with_fallback(
                     {"case": "1b", "status": "ok"},
@@ -13007,30 +14607,61 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
             self.assertEqual(art_1b["path"], str(target_1b))
             self.assertTrue(target_1b.is_file())
             self.assertTrue(tmp_path_1b.is_file())
+            self.assertEqual(unlink_calls_1b, [])
             self.assertIs(art_1b["temp_cleanup_succeeded"], False)
+            self.assertEqual(
+                art_1b["temp_handling_policy"],
+                onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+            )
+            self.assertIs(art_1b["temp_handling_succeeded"], False)
+            self.assertEqual(
+                art_1b["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_STAT_ERROR,
+            )
             status_1b = art_1b["temp_cleanup_status"]
             self.assertIs(status_1b["unlinked"], False)
-            self.assertEqual(status_1b["unlink_attempt_count"], 2)
+            self.assertIs(status_1b["unlink_attempted"], False)
+            self.assertEqual(status_1b["unlink_attempt_count"], 0)
+            self.assertIs(status_1b["temp_handling_succeeded"], False)
+            self.assertEqual(
+                status_1b["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_STAT_ERROR,
+            )
+            self.assertEqual(
+                status_1b["errors"][0]["phase"], "post_link_stat"
+            )
+            self.assertEqual(
+                status_1b["errors"][1]["phase"], "final_cleanup_stat"
+            )
             self.assertEqual(
                 child_status_1b.get("temp_cleanup_status"), dict(status_1b)
             )
-            self.assertEqual(len(unlink_errs_1b), 2)
-            self.assertEqual(caught_1b, unlink_errs_1b)
+            self.assertEqual(len(stat_errs_1b), 2)
+            self.assertEqual(caught_1b, stat_errs_1b)
             self.assertEqual(len(failures_1b), 1)
             self.assertEqual(failures_1b[0]["failure_phase"], "temp_cleanup")
             self.assertIs(failures_1b[0]["published_in_child_dir"], True)
             self.assertEqual(
+                failures_1b[0]["temp_handling_policy"],
+                onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+            )
+            self.assertIs(failures_1b[0]["temp_handling_succeeded"], False)
+            self.assertEqual(
+                failures_1b[0]["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_STAT_ERROR,
+            )
+            self.assertEqual(
                 failures_1b[0]["temp_cleanup_status"], dict(status_1b)
             )
             self.assertEqual(len(causes_1b), 1)
-            self.assertIs(causes_1b[0], unlink_errs_1b[0])
+            self.assertIs(causes_1b[0], stat_errs_1b[0])
             for fd_1b in set(opened_fds_1b):
                 with self.assertRaises(OSError) as fd1b_cm:
                     real_fstat(fd_1b)
                 self.assertEqual(fd1b_cm.exception.errno, errno.EBADF)
 
-            # 2. Post-publication directory replacement plus both owned-temp os.unlink
-            # attempts denied (EACCES) through _persist_collector_json_with_fallback
+            # 2. Post-publication directory replacement plus both owned-temp os.stat
+            # observations denied (EACCES) through _persist_collector_json_with_fallback
             root_2 = base / "case2_post_pub_replace_unlink_denied"
             child_2 = root_2 / "refmac_work"
             parent_2 = root_2 / "refmac_parent_retention"
@@ -13055,9 +14686,63 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
             replacement_marker_bytes_2 = b'{"replacement_marker": true}\n'
 
             real_read = os.read
-            verify_fd_2: dict[str, int | None] = {"fd": None}
+            real_link_2 = os.link
+            child_dev_2 = int(child_base_2["dev"])
+            child_ino_2 = int(child_base_2["ino"])
+            phase_events_2: list[str] = []
+            child_link_published_2: dict[str, Any] = {
+                "published": False,
+                "count": 0,
+            }
+            pre_link_stat_count_2 = {"n": 0}
+            verify_fd_2: dict[str, Any] = {
+                "fd": None,
+                "target_dev": None,
+                "target_ino": None,
+                "bytes_read": 0,
+                "swapped": False,
+                "replacement_marker_dev": None,
+                "replacement_marker_ino": None,
+            }
             opened_fds_2: list[int] = []
-            unlink_count_2 = {"n": 0}
+            unlink_calls_2: list[str] = []
+            stat_errs_2: list[PermissionError] = []
+
+            def link_track_2(
+                src: Any,
+                dst: Any,
+                *,
+                src_dir_fd: int | None = None,
+                dst_dir_fd: int | None = None,
+                follow_symlinks: bool = True,
+            ) -> None:
+                real_link_2(
+                    src,
+                    dst,
+                    src_dir_fd=src_dir_fd,
+                    dst_dir_fd=dst_dir_fd,
+                    follow_symlinks=follow_symlinks,
+                )
+                if (
+                    src_dir_fd is not None
+                    and dst_dir_fd is not None
+                    and not follow_symlinks
+                    and os.fspath(src) == tmp_name_2
+                    and os.fspath(dst) == target_2.name
+                ):
+                    src_dir_st = real_fstat(src_dir_fd)
+                    dst_dir_st = real_fstat(dst_dir_fd)
+                    if (
+                        (int(src_dir_st.st_dev), int(src_dir_st.st_ino))
+                        == (child_dev_2, child_ino_2)
+                        and (int(dst_dir_st.st_dev), int(dst_dir_st.st_ino))
+                        == (child_dev_2, child_ino_2)
+                    ):
+                        child_link_published_2["published"] = True
+                        child_link_published_2["count"] = (
+                            int(child_link_published_2["count"]) + 1
+                        )
+                        phase_events_2.append("child_link_published")
 
             def open_track_2(
                 path: Any,
@@ -13070,41 +14755,101 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 opened_fds_2.append(fd)
                 if (
                     dir_fd is not None
-                    and os.fspath(path) == "audit.json"
+                    and os.fspath(path) == target_2.name
                     and not (flags & os.O_CREAT)
+                    and child_link_published_2["published"]
+                    and not verify_fd_2["swapped"]
                 ):
-                    verify_fd_2["fd"] = fd
+                    dir_st = real_fstat(dir_fd)
+                    if (int(dir_st.st_dev), int(dir_st.st_ino)) == (
+                        child_dev_2,
+                        child_ino_2,
+                    ):
+                        fd_st = real_fstat(fd)
+                        verify_fd_2["fd"] = fd
+                        verify_fd_2["target_dev"] = int(fd_st.st_dev)
+                        verify_fd_2["target_ino"] = int(fd_st.st_ino)
+                        phase_events_2.append("child_readback_opened")
                 return fd
 
             def read_swap_after_readback_2(fd: int, n: int) -> bytes:
                 chunk = real_read(fd, n)
                 if (
-                    fd == verify_fd_2["fd"]
-                    and chunk == b""
-                    and not detached_2.exists()
+                    verify_fd_2["fd"] is not None
+                    and fd == verify_fd_2["fd"]
+                    and not verify_fd_2["swapped"]
                 ):
-                    child_2.rename(detached_2)
-                    child_2.mkdir()
-                    (child_2 / replacement_marker_name_2).write_bytes(
-                        replacement_marker_bytes_2
-                    )
+                    fd_st = real_fstat(fd)
+                    if (int(fd_st.st_dev), int(fd_st.st_ino)) == (
+                        verify_fd_2["target_dev"],
+                        verify_fd_2["target_ino"],
+                    ):
+                        if chunk:
+                            verify_fd_2["bytes_read"] = (
+                                int(verify_fd_2["bytes_read"]) + len(chunk)
+                            )
+                        elif not detached_2.exists():
+                            verify_fd_2["swapped"] = True
+                            verify_fd_2["fd"] = None
+                            child_2.rename(detached_2)
+                            child_2.mkdir()
+                            marker_path_2 = child_2 / replacement_marker_name_2
+                            marker_path_2.write_bytes(replacement_marker_bytes_2)
+                            marker_st_2 = os.lstat(marker_path_2)
+                            verify_fd_2["replacement_marker_dev"] = int(
+                                marker_st_2.st_dev
+                            )
+                            verify_fd_2["replacement_marker_ino"] = int(
+                                marker_st_2.st_ino
+                            )
+                            phase_events_2.append("child_readback_eof_swapped")
                 return chunk
 
-            def unlink_deny_child_tmp_2(
-                path: Any, *, dir_fd: int | None = None
-            ) -> None:
-                if os.fspath(path) == tmp_name_2 and dir_fd is not None:
+            def stat_deny_child_tmp_2(
+                path: Any,
+                *,
+                dir_fd: int | None = None,
+                follow_symlinks: bool = True,
+            ) -> os.stat_result:
+                if (
+                    os.fspath(path) == tmp_name_2
+                    and dir_fd is not None
+                    and not follow_symlinks
+                ):
                     fd_st = real_fstat(dir_fd)
                     if (int(fd_st.st_dev), int(fd_st.st_ino)) == (
-                        int(child_base_2["dev"]),
-                        int(child_base_2["ino"]),
+                        child_dev_2,
+                        child_ino_2,
                     ):
-                        unlink_count_2["n"] += 1
-                        raise PermissionError(
+                        if not child_link_published_2["published"]:
+                            pre_link_stat_count_2["n"] += 1
+                            phase_events_2.append("child_pre_link_tmp_stat")
+                            return real_stat_1(
+                                path,
+                                dir_fd=dir_fd,
+                                follow_symlinks=follow_symlinks,
+                            )
+                        err_idx_2 = len(stat_errs_2) + 1
+                        phase_events_2.append(
+                            "child_post_link_tmp_stat_denied"
+                            if err_idx_2 == 1
+                            else f"child_final_cleanup_tmp_stat_denied_{err_idx_2}"
+                        )
+                        err_2 = PermissionError(
                             errno.EACCES,
-                            f"simulated child tmp unlink EACCES #{unlink_count_2['n']}",
+                            f"simulated child tmp stat EACCES #{err_idx_2}",
                             os.fspath(path),
                         )
+                        stat_errs_2.append(err_2)
+                        raise err_2
+                return real_stat_1(
+                    path, dir_fd=dir_fd, follow_symlinks=follow_symlinks
+                )
+
+            def unlink_track_2(
+                path: Any, *, dir_fd: int | None = None
+            ) -> None:
+                unlink_calls_2.append(os.fspath(path))
                 return real_unlink(path, dir_fd=dir_fd)
 
             failures_2: list[dict[str, Any]] = []
@@ -13114,13 +14859,15 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
             fallback_state_2: dict[str, Any] = {}
 
             with (
+                patch.object(onesar_refmac.os, "link", link_track_2),
                 patch.object(onesar_refmac.os, "open", open_track_2),
                 patch.object(
                     onesar_refmac.os, "read", read_swap_after_readback_2
                 ),
                 patch.object(
-                    onesar_refmac.os, "unlink", unlink_deny_child_tmp_2
+                    onesar_refmac.os, "stat", stat_deny_child_tmp_2
                 ),
+                patch.object(onesar_refmac.os, "unlink", unlink_track_2),
             ):
                 art_2 = onesar_refmac._persist_collector_json_with_fallback(
                     {"case": 2, "audit": "fallback_after_replace"},
@@ -13138,32 +14885,141 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                     child_dir_persistence_causes=causes_2,
                 )
 
-            self.assertEqual(unlink_count_2["n"], 2)
+            self.assertEqual(unlink_calls_2, [])
+            self.assertIs(child_link_published_2["published"], True)
+            self.assertEqual(child_link_published_2["count"], 1)
+            self.assertEqual(pre_link_stat_count_2["n"], 1)
+            self.assertIs(verify_fd_2["swapped"], True)
+            self.assertIsNone(verify_fd_2["fd"])
+            self.assertGreater(int(verify_fd_2["bytes_read"]), 0)
+            self.assertEqual(
+                phase_events_2,
+                [
+                    "child_pre_link_tmp_stat",
+                    "child_link_published",
+                    "child_post_link_tmp_stat_denied",
+                    "child_readback_opened",
+                    "child_readback_eof_swapped",
+                    "child_final_cleanup_tmp_stat_denied_2",
+                ],
+            )
+            self.assertEqual(len(stat_errs_2), 2)
             # Replacement directory marker must never be unlinked
             self.assertTrue((child_2 / replacement_marker_name_2).is_file())
             self.assertEqual(
                 (child_2 / replacement_marker_name_2).read_bytes(),
                 replacement_marker_bytes_2,
             )
-            # Detached directory still has both published audit.json and residual tmp_name_2
+            replacement_marker_after_st_2 = os.lstat(
+                child_2 / replacement_marker_name_2
+            )
+            self.assertEqual(
+                (
+                    int(replacement_marker_after_st_2.st_dev),
+                    int(replacement_marker_after_st_2.st_ino),
+                ),
+                (
+                    verify_fd_2["replacement_marker_dev"],
+                    verify_fd_2["replacement_marker_ino"],
+                ),
+            )
+            # Detached directory still has both published audit.json and retained tmp_name_2 alias
             self.assertTrue((detached_2 / "audit.json").is_file())
             self.assertTrue((detached_2 / tmp_name_2).is_file())
+            detached_pub_st_2 = os.lstat(detached_2 / "audit.json")
+            detached_tmp_st_2 = os.lstat(detached_2 / tmp_name_2)
+            self.assertEqual(
+                (
+                    int(detached_pub_st_2.st_dev),
+                    int(detached_pub_st_2.st_ino),
+                ),
+                (
+                    int(detached_tmp_st_2.st_dev),
+                    int(detached_tmp_st_2.st_ino),
+                ),
+            )
+            self.assertEqual(
+                (
+                    int(detached_pub_st_2.st_dev),
+                    int(detached_pub_st_2.st_ino),
+                ),
+                (
+                    verify_fd_2["target_dev"],
+                    verify_fd_2["target_ino"],
+                ),
+            )
+            self.assertNotEqual(
+                (
+                    int(replacement_marker_after_st_2.st_dev),
+                    int(replacement_marker_after_st_2.st_ino),
+                ),
+                (
+                    int(detached_tmp_st_2.st_dev),
+                    int(detached_tmp_st_2.st_ino),
+                ),
+            )
 
-            # Reopen and parse the fallback JSON artifact from disk
+            # Reopen and parse the fallback JSON artifact from disk (and verify its retained parent temp alias)
             fallback_disk_path_2 = Path(str(art_2["path"]))
             self.assertTrue(fallback_disk_path_2.is_file())
+            fallback_tmp_path_2 = (
+                fallback_disk_path_2.parent
+                / f".{fallback_disk_path_2.name}.tmp.{os.getpid()}"
+            )
+            self.assertTrue(fallback_tmp_path_2.is_file())
+            self.assertEqual(
+                (
+                    int(os.lstat(fallback_disk_path_2).st_dev),
+                    int(os.lstat(fallback_disk_path_2).st_ino),
+                ),
+                (
+                    int(os.lstat(fallback_tmp_path_2).st_dev),
+                    int(os.lstat(fallback_tmp_path_2).st_ino),
+                ),
+            )
             fallback_json_2 = json.loads(
                 fallback_disk_path_2.read_text(encoding="utf-8")
             )
             pub_rec_2 = fallback_json_2["published_receipt"]
+            self.assertEqual(pub_rec_2["failure_phase"], "after_publication")
+            self.assertIs(pub_rec_2["published_link_created"], True)
+            self.assertIs(pub_rec_2["readback_verified"], True)
+            self.assertIs(
+                pub_rec_2["post_publication_namespace_verified"], False
+            )
             self.assertIs(pub_rec_2["detached_from_lexical_path"], True)
             self.assertIs(pub_rec_2["available_at_lexical_path"], False)
+            self.assertIs(pub_rec_2["temp_cleanup_succeeded"], False)
+            self.assertEqual(
+                pub_rec_2["temp_handling_policy"],
+                onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+            )
+            self.assertIs(pub_rec_2["temp_handling_succeeded"], False)
+            self.assertEqual(
+                pub_rec_2["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_STAT_ERROR,
+            )
             cleanup_2 = pub_rec_2["temp_cleanup_status"]
+            self.assertIs(cleanup_2["published_link_created"], True)
+            self.assertIs(cleanup_2["readback_verified"], True)
             self.assertIs(cleanup_2["unlinked"], False)
-            self.assertEqual(cleanup_2["unlink_attempt_count"], 2)
-            self.assertIs(cleanup_2["temp_present_after_cleanup"], True)
+            self.assertIs(cleanup_2["unlink_attempted"], False)
+            self.assertEqual(cleanup_2["unlink_attempt_count"], 0)
+            self.assertIs(cleanup_2["temp_handling_succeeded"], False)
+            self.assertEqual(
+                cleanup_2["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_STAT_ERROR,
+            )
+            self.assertIsNone(cleanup_2["observed_temp_present"])
+            self.assertIsNone(cleanup_2["temp_present_after_cleanup"])
             self.assertEqual(cleanup_2["errno"], errno.EACCES)
             self.assertEqual(len(cleanup_2["errors"]), 2)
+            self.assertEqual(
+                cleanup_2["errors"][0]["phase"], "post_link_stat"
+            )
+            self.assertEqual(
+                cleanup_2["errors"][1]["phase"], "final_cleanup_stat"
+            )
             self.assertEqual(
                 fallback_json_2["child_dir_temp_cleanup_status"], cleanup_2
             )
@@ -13181,42 +15037,567 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
             cleanup_errs_2 = getattr(causes_2[0], "temp_cleanup_errors", None)
             self.assertIsInstance(cleanup_errs_2, list)
             assert isinstance(cleanup_errs_2, list)
-            self.assertEqual(len(cleanup_errs_2), 2)
+            self.assertEqual(cleanup_errs_2, stat_errs_2)
+            self.assertIs(cleanup_errs_2[0], stat_errs_2[0])
+            self.assertIs(cleanup_errs_2[1], stat_errs_2[1])
+            self.assertEqual(caught_2, [causes_2[0], *stat_errs_2])
+            self.assertIs(caught_2[0], causes_2[0])
+            self.assertIs(caught_2[1], stat_errs_2[0])
+            self.assertIs(caught_2[2], stat_errs_2[1])
             for fd_2 in set(opened_fds_2):
                 with self.assertRaises(OSError) as fd2_cm:
                     real_fstat(fd_2)
                 self.assertEqual(fd2_cm.exception.errno, errno.EBADF)
 
-            # 3. Healthy cleanup control
+            # 3. Healthy retention control
             root_3 = base / "case3_healthy"
             root_3.mkdir()
             target_3 = root_3 / "healthy.json"
             tmp_name_3 = f".{target_3.name}.tmp.{os.getpid()}"
-            receipt_3 = onesar_refmac._atomic_write_new_json_file(
-                {"case": 3, "healthy": True}, target_3, root=root_3
-            )
-            self.assertIs(receipt_3["temp_cleanup_succeeded"], True)
-            status_3 = receipt_3["temp_cleanup_status"]
-            self.assertIs(status_3["unlinked"], True)
-            self.assertIs(status_3["cleanup_verified"], True)
-            self.assertIs(status_3["temp_present_after_cleanup"], False)
-            self.assertEqual(status_3["unlink_attempt_count"], 1)
+            tmp_path_3 = root_3 / tmp_name_3
+            opened_fds_3: list[int] = []
+            unlink_calls_3: list[str] = []
+            causes_3: list[Exception] = []
+            dir_status_3: dict[str, Any] = {}
+
+            def open_track_3(
+                path: Any,
+                flags: int,
+                mode: int = 0o777,
+                *,
+                dir_fd: int | None = None,
+            ) -> int:
+                fd = real_open(path, flags, mode, dir_fd=dir_fd)
+                opened_fds_3.append(fd)
+                return fd
+
+            def unlink_track_3(
+                path: Any, *, dir_fd: int | None = None
+            ) -> None:
+                unlink_calls_3.append(os.fspath(path))
+                return real_unlink(path, dir_fd=dir_fd)
+
+            with (
+                patch.object(onesar_refmac.os, "open", open_track_3),
+                patch.object(onesar_refmac.os, "unlink", unlink_track_3),
+            ):
+                receipt_3 = onesar_refmac._atomic_write_new_json_file(
+                    {"case": 3, "healthy": True},
+                    target_3,
+                    root=root_3,
+                    dir_status_out=dir_status_3,
+                    caught_exceptions=causes_3,
+                )
+            self.assertEqual(unlink_calls_3, [])
+            self.assertEqual(causes_3, [])
+            self.assertNotIn("temp_cleanup_status", dir_status_3)
+            self.assertEqual(receipt_3["path"], str(target_3))
+            self.assertIs(receipt_3["temp_cleanup_succeeded"], False)
             self.assertEqual(
-                status_3["reason"], "unlinked_immediately_after_link"
+                receipt_3["temp_handling_policy"],
+                onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+            )
+            self.assertIs(receipt_3["temp_handling_succeeded"], True)
+            self.assertEqual(
+                receipt_3["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+            )
+            self.assertIs(
+                onesar_refmac._is_json_temp_handling_satisfied(receipt_3),
+                True,
+            )
+            status_3 = receipt_3["temp_cleanup_status"]
+            self.assertEqual(
+                status_3["temp_handling_policy"],
+                onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+            )
+            self.assertIs(status_3["temp_handling_succeeded"], True)
+            self.assertEqual(
+                status_3["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+            )
+            self.assertEqual(
+                status_3["temp_observation_phase"], "post_link_stat"
+            )
+            self.assertIs(status_3["post_link_temp_observed"], True)
+            self.assertIs(status_3["final_cleanup_temp_observed"], False)
+            self.assertIs(status_3["published_link_created"], True)
+            self.assertIs(status_3["readback_verified"], True)
+            self.assertIs(status_3["observed_temp_present"], True)
+            self.assertIs(status_3["observed_temp_is_regular_file"], True)
+            self.assertIs(status_3["observed_temp_is_symlink"], False)
+            self.assertIs(status_3["unlinked"], False)
+            self.assertIs(status_3["unlink_attempted"], False)
+            self.assertEqual(status_3["unlink_attempt_count"], 0)
+            self.assertIs(status_3["cleanup_verified"], False)
+            self.assertIs(status_3["temp_present_after_cleanup"], True)
+            self.assertEqual(
+                status_3["reason"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
             )
             self.assertEqual(status_3["errors"], [])
-            self.assertFalse((root_3 / tmp_name_3).exists())
+            self.assertIsNone(status_3["error"])
+            self.assertIsNone(status_3["exception_type"])
+            self.assertIsNone(status_3["exception_message"])
+            self.assertIsNone(status_3["errno"])
+            self.assertTrue(target_3.is_file())
+            self.assertTrue(tmp_path_3.is_file())
+            target_3_st = os.lstat(target_3)
+            tmp_3_st = os.lstat(tmp_path_3)
+            self.assertEqual(
+                (int(target_3_st.st_dev), int(target_3_st.st_ino)),
+                (int(tmp_3_st.st_dev), int(tmp_3_st.st_ino)),
+            )
+            self.assertEqual(
+                (status_3["expected_temp_dev"], status_3["expected_temp_ino"]),
+                (int(tmp_3_st.st_dev), int(tmp_3_st.st_ino)),
+            )
+            self.assertEqual(
+                (status_3["observed_temp_dev"], status_3["observed_temp_ino"]),
+                (int(tmp_3_st.st_dev), int(tmp_3_st.st_ino)),
+            )
+            self.assertGreaterEqual(int(target_3_st.st_nlink), 2)
+            self.assertEqual(target_3.read_bytes(), tmp_path_3.read_bytes())
+            self.assertEqual(
+                receipt_3["sha256"], _sha256_bytes(target_3.read_bytes())
+            )
+            self.assertEqual(
+                receipt_3["size_bytes"], len(target_3.read_bytes())
+            )
+            for fd_3 in set(opened_fds_3):
+                with self.assertRaises(OSError) as fd3_cm:
+                    real_fstat(fd_3)
+                self.assertEqual(fd3_cm.exception.errno, errno.EBADF)
+
+            # 3b. Policy compatibility, payload-spoofing immunity, and #1268/#1269 classifier/interruption controls
+            root_3b = base / "case3b_policy_and_classifier_controls"
+            root_3b.mkdir()
+            target_3b_spoof = root_3b / "spoofed_payload.json"
+            tmp_name_3b_spoof = f".{target_3b_spoof.name}.tmp.{os.getpid()}"
+            spoofed_payload = {
+                "case": "3b_spoof",
+                "temp_handling_policy": "unlink_temporaries:v0",
+                "temp_handling_succeeded": False,
+                "temp_handling_disposition": "temp_stat_error",
+                "temp_cleanup_succeeded": True,
+                "unlinked": True,
+            }
+            unlink_calls_3b: list[str] = []
+
+            def unlink_track_3b(
+                path: Any, *, dir_fd: int | None = None
+            ) -> None:
+                unlink_calls_3b.append(os.fspath(path))
+                return real_unlink(path, dir_fd=dir_fd)
+
+            with patch.object(onesar_refmac.os, "unlink", unlink_track_3b):
+                receipt_3b_spoof = onesar_refmac._atomic_write_new_json_file(
+                    spoofed_payload,
+                    target_3b_spoof,
+                    root=root_3b,
+                )
+            self.assertEqual(unlink_calls_3b, [])
+            self.assertEqual(
+                json.loads(target_3b_spoof.read_text(encoding="utf-8")),
+                spoofed_payload,
+            )
+            self.assertTrue((root_3b / tmp_name_3b_spoof).is_file())
+            self.assertIs(receipt_3b_spoof["temp_cleanup_succeeded"], False)
+            self.assertEqual(
+                receipt_3b_spoof["temp_handling_policy"],
+                onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+            )
+            self.assertIs(receipt_3b_spoof["temp_handling_succeeded"], True)
+            self.assertEqual(
+                receipt_3b_spoof["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+            )
+            self.assertIs(
+                receipt_3b_spoof["temp_cleanup_status"]["unlinked"], False
+            )
+            self.assertIs(
+                onesar_refmac._is_json_temp_handling_satisfied(
+                    receipt_3b_spoof
+                ),
+                True,
+            )
+
+            # Real interrupted producer state after os.link before post_link_stat finishes
+            # (published_link_created=True, post_link_temp_observed=False, final_cleanup_temp_observed=True, readback_verified=False)
+            target_3b_ki_pre = root_3b / "interrupted_pre_post_stat.json"
+            tmp_name_3b_ki_pre = f".{target_3b_ki_pre.name}.tmp.{os.getpid()}"
+            ki_pre_fired = {"done": False}
+
+            def stat_interrupt_post_link_3b(
+                path: Any,
+                *,
+                dir_fd: int | None = None,
+                follow_symlinks: bool = True,
+            ) -> os.stat_result:
+                if (
+                    not ki_pre_fired["done"]
+                    and os.fspath(path) == tmp_name_3b_ki_pre
+                    and dir_fd is not None
+                    and target_3b_ki_pre.exists()
+                ):
+                    ki_pre_fired["done"] = True
+                    raise KeyboardInterrupt("simulated interrupt at post_link_stat")
+                return real_stat_1(
+                    path, dir_fd=dir_fd, follow_symlinks=follow_symlinks
+                )
+
+            with patch.object(
+                onesar_refmac.os, "stat", stat_interrupt_post_link_3b
+            ):
+                with self.assertRaises(KeyboardInterrupt) as cm_ki_pre:
+                    onesar_refmac._atomic_write_new_json_file(
+                        {"case": "3b_ki_pre"},
+                        target_3b_ki_pre,
+                        root=root_3b,
+                    )
+            ki_pre_exc = cm_ki_pre.exception
+            self.assertIsNone(getattr(ki_pre_exc, "published_receipt", None))
+            ki_pre_st = getattr(ki_pre_exc, "temp_cleanup_status", None)
+            self.assertIsInstance(ki_pre_st, Mapping)
+            assert isinstance(ki_pre_st, Mapping)
+            self.assertEqual(
+                ki_pre_st["temp_observation_phase"], "final_cleanup_stat"
+            )
+            self.assertIs(ki_pre_st["published_link_created"], True)
+            self.assertIs(ki_pre_st["post_link_temp_observed"], False)
+            self.assertIs(ki_pre_st["final_cleanup_temp_observed"], True)
+            self.assertIs(ki_pre_st["readback_verified"], False)
+            self.assertIs(ki_pre_st["temp_handling_succeeded"], True)
+            self.assertIs(
+                onesar_refmac._is_json_temp_status_handling_satisfied(
+                    ki_pre_st, legacy_missing_unlinked_default=False
+                ),
+                True,
+            )
+            # Also valid when post_link_temp_observed is True on a final_cleanup_stat status
+            # with published_link_created=True and readback_verified=False (#1269 / Task 1094)
+            ki_post_obs_true_st = dict(
+                ki_pre_st, post_link_temp_observed=True
+            )
+            self.assertIs(
+                onesar_refmac._is_json_temp_status_handling_satisfied(
+                    ki_post_obs_true_st, legacy_missing_unlinked_default=False
+                ),
+                True,
+            )
+            # Real interrupted producer state during readback after post_link_stat succeeded
+            # (published_link_created=True, post_link_temp_observed=True, final_cleanup_temp_observed=False, readback_verified=False)
+            target_3b_ki_read = root_3b / "interrupted_during_readback.json"
+            ki_read_fired = {"done": False}
+            real_read_3b = os.read
+
+            def read_interrupt_3b(fd: int, n: int) -> bytes:
+                if not ki_read_fired["done"]:
+                    ki_read_fired["done"] = True
+                    raise KeyboardInterrupt("simulated interrupt during readback")
+                return real_read_3b(fd, n)
+
+            with patch.object(onesar_refmac.os, "read", read_interrupt_3b):
+                with self.assertRaises(KeyboardInterrupt) as cm_ki_read:
+                    onesar_refmac._atomic_write_new_json_file(
+                        {"case": "3b_ki_read"},
+                        target_3b_ki_read,
+                        root=root_3b,
+                    )
+            ki_read_exc = cm_ki_read.exception
+            self.assertIsNone(getattr(ki_read_exc, "published_receipt", None))
+            ki_read_st = getattr(ki_read_exc, "temp_cleanup_status", None)
+            self.assertIsInstance(ki_read_st, Mapping)
+            assert isinstance(ki_read_st, Mapping)
+            self.assertEqual(
+                ki_read_st["temp_observation_phase"], "post_link_stat"
+            )
+            self.assertIs(ki_read_st["published_link_created"], True)
+            self.assertIs(ki_read_st["post_link_temp_observed"], True)
+            self.assertIs(ki_read_st["final_cleanup_temp_observed"], False)
+            self.assertIs(ki_read_st["readback_verified"], False)
+            self.assertIs(ki_read_st["temp_handling_succeeded"], True)
+            self.assertIs(
+                onesar_refmac._is_json_temp_status_handling_satisfied(
+                    ki_read_st, legacy_missing_unlinked_default=False
+                ),
+                True,
+            )
+            # Reject post_link_temp_observed=True when published_link_created=False
+            self.assertIs(
+                onesar_refmac._is_json_temp_status_handling_satisfied(
+                    dict(
+                        ki_pre_st,
+                        published_link_created=False,
+                        post_link_temp_observed=True,
+                    ),
+                    legacy_missing_unlinked_default=False,
+                ),
+                False,
+            )
+            # Reject final_cleanup_stat when readback_verified=True or final_cleanup_temp_observed=False
+            self.assertIs(
+                onesar_refmac._is_json_temp_status_handling_satisfied(
+                    dict(ki_pre_st, readback_verified=True),
+                    legacy_missing_unlinked_default=False,
+                ),
+                False,
+            )
+            self.assertIs(
+                onesar_refmac._is_json_temp_status_handling_satisfied(
+                    dict(ki_pre_st, final_cleanup_temp_observed=False),
+                    legacy_missing_unlinked_default=False,
+                ),
+                False,
+            )
+
+            # #1268 / #1269 direct classifier regressions starting from valid status_3 / receipt_3
+            legacy_unlinked_status_no_version = {
+                "temp_name": tmp_name_3,
+                "unlinked": True,
+                "unlink_attempted": True,
+                "unlink_attempt_count": 1,
+                "cleanup_verified": True,
+                "temp_present_after_cleanup": False,
+                "temp_identity_known": True,
+                "reason": "unlinked_immediately_after_link",
+                "errors": [],
+            }
+            # Reject top new-policy marker paired with nested legacy unlinked=True missing version
+            # (both with top temp_cleanup_succeeded=True and with top temp_cleanup_succeeded=False)
+            for top_cleanup_flag in (True, False):
+                for top_marker_patch in (
+                    {"temp_handling_succeeded": True},
+                    {
+                        "temp_handling_policy": (
+                            onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1
+                        ),
+                        "temp_handling_succeeded": True,
+                    },
+                    {
+                        "temp_handling_disposition": (
+                            onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED
+                        ),
+                        "temp_handling_succeeded": True,
+                    },
+                ):
+                    mixed_rec = {
+                        "path": str(target_3),
+                        "temp_cleanup_succeeded": top_cleanup_flag,
+                        "temp_cleanup_status": dict(
+                            legacy_unlinked_status_no_version
+                        ),
+                        **top_marker_patch,
+                    }
+                    self.assertIs(
+                        onesar_refmac._is_json_temp_handling_satisfied(
+                            mixed_rec
+                        ),
+                        False,
+                    )
+
+            # Reject post_link_stat status claiming both post/final observations or no published link
+            self.assertIs(
+                onesar_refmac._is_json_temp_status_handling_satisfied(
+                    dict(status_3, final_cleanup_temp_observed=True),
+                    legacy_missing_unlinked_default=False,
+                ),
+                False,
+            )
+            self.assertIs(
+                onesar_refmac._is_json_temp_status_handling_satisfied(
+                    dict(status_3, published_link_created=False),
+                    legacy_missing_unlinked_default=False,
+                ),
+                False,
+            )
+            self.assertIs(
+                onesar_refmac._is_json_temp_status_handling_satisfied(
+                    dict(status_3, post_link_temp_observed=False),
+                    legacy_missing_unlinked_default=False,
+                ),
+                False,
+            )
+
+            # Reject unknown/malformed/contradictory policy/disposition/boolean/int mutations on status_3 and receipt_3
+            for bad_status_patch in (
+                {"temp_handling_policy": "retain_temporaries:v999"},
+                {"temp_handling_policy": "unlink_temporaries:v1"},
+                {"temp_handling_policy": ""},
+                {"temp_handling_policy": None},
+                {"temp_handling_policy": 1},
+                {"temp_handling_succeeded": False},
+                {"temp_handling_succeeded": 1},
+                {"temp_handling_succeeded": "true"},
+                {"temp_handling_disposition": "unlinked"},
+                {"temp_handling_disposition": None},
+                {"unlinked": True},
+                {"unlinked": 0},
+                {"unlink_attempted": True},
+                {"unlink_attempted": 0},
+                {"unlink_attempt_count": 1},
+                {"unlink_attempt_count": False},
+                {"cleanup_verified": True},
+                {"cleanup_verified": 0},
+                {"temp_present_after_cleanup": False},
+                {"temp_present_after_cleanup": None},
+                {"temp_present_after_cleanup": 1},
+                {"observed_temp_present": False},
+                {"observed_temp_present": None},
+                {"observed_temp_present": 1},
+                {"observed_temp_is_regular_file": False},
+                {"observed_temp_is_regular_file": 1},
+                {"observed_temp_is_symlink": True},
+                {"observed_temp_is_symlink": 0},
+                {"observed_temp_mode": stat.S_IFLNK | 0o777},
+                {"observed_temp_mode": True},
+                {"published_link_created": 1},
+                {"published_link_created": None},
+                {"readback_verified": 1},
+                {"readback_verified": None},
+                {"post_link_temp_observed": 1},
+                {"final_cleanup_temp_observed": 0},
+                {"temp_observation_phase": "unknown_phase"},
+                {"temp_observation_phase": None},
+                {"reason": "unlinked_immediately_after_link"},
+                {"observed_temp_ino": int(status_3["expected_temp_ino"]) + 1},
+                {"expected_temp_dev": True},
+                {"error": "OSError: unexpected"},
+                {"errno": errno.EACCES},
+                {"errors": [{"phase": "post_link_stat"}]},
+                {"prior_collision_temp_cleanup_failures": [{"unlinked": False}]},
+            ):
+                bad_st = dict(status_3, **bad_status_patch)
+                self.assertIs(
+                    onesar_refmac._is_json_temp_status_handling_satisfied(
+                        bad_st, legacy_missing_unlinked_default=False
+                    ),
+                    False,
+                )
+                bad_rec = dict(receipt_3, temp_cleanup_status=bad_st)
+                self.assertIs(
+                    onesar_refmac._is_json_temp_handling_satisfied(bad_rec),
+                    False,
+                )
+
+            # Reject top-level contradictions on receipt_3 even when nested status_3 is valid
+            for bad_rec_patch in (
+                {"temp_cleanup_succeeded": True},
+                {"temp_cleanup_succeeded": 0},
+                {"temp_handling_policy": "retain_temporaries:v999"},
+                {"temp_handling_succeeded": False},
+                {"temp_handling_succeeded": 1},
+                {"temp_handling_disposition": "unlinked"},
+                {"published_link_created": False},
+                {"published_link_created": 1},
+                {"readback_verified": False},
+                {"readback_verified": 1},
+                {"prior_collision_temp_cleanup_failures": [{"unlinked": False}]},
+            ):
+                self.assertIs(
+                    onesar_refmac._is_json_temp_handling_satisfied(
+                        dict(receipt_3, **bad_rec_patch)
+                    ),
+                    False,
+                )
+
+            # Preserve absent-policy legacy defaults and explicit legacy success/failure controls
+            self.assertIs(
+                onesar_refmac._is_json_temp_status_handling_satisfied(
+                    {}, legacy_missing_unlinked_default=False
+                ),
+                False,
+            )
+            self.assertIs(
+                onesar_refmac._is_json_temp_status_handling_satisfied(
+                    {}, legacy_missing_unlinked_default=True
+                ),
+                True,
+            )
+            self.assertIs(
+                onesar_refmac._is_json_temp_handling_satisfied(
+                    {"path": str(target_3)},
+                    legacy_missing_receipt_default=True,
+                ),
+                True,
+            )
+            self.assertIs(
+                onesar_refmac._is_json_temp_handling_satisfied(
+                    {"path": str(target_3)},
+                    legacy_missing_receipt_default=False,
+                ),
+                False,
+            )
+            self.assertIs(
+                onesar_refmac._is_json_temp_status_handling_satisfied(
+                    legacy_unlinked_status_no_version,
+                    legacy_missing_unlinked_default=False,
+                ),
+                True,
+            )
+            self.assertIs(
+                onesar_refmac._is_json_temp_handling_satisfied(
+                    {
+                        "path": str(target_3),
+                        "temp_cleanup_succeeded": True,
+                        "temp_cleanup_status": dict(
+                            legacy_unlinked_status_no_version
+                        ),
+                    }
+                ),
+                True,
+            )
+            for bad_legacy_patch in (
+                {"unlinked": False},
+                {"unlinked": 1},
+                {"cleanup_verified": False},
+                {"temp_present_after_cleanup": True},
+                {"temp_identity_known": False},
+                {"reason": "retained"},
+                {"error": "PermissionError: denied"},
+            ):
+                bad_legacy_st = dict(
+                    legacy_unlinked_status_no_version, **bad_legacy_patch
+                )
+                self.assertIs(
+                    onesar_refmac._is_json_temp_status_handling_satisfied(
+                        bad_legacy_st, legacy_missing_unlinked_default=True
+                    ),
+                    False,
+                )
+                self.assertIs(
+                    onesar_refmac._is_json_temp_handling_satisfied(
+                        {
+                            "path": str(target_3),
+                            "temp_cleanup_succeeded": True,
+                            "temp_cleanup_status": bad_legacy_st,
+                        }
+                    ),
+                    False,
+                )
+            self.assertIs(
+                onesar_refmac._is_json_temp_handling_satisfied(
+                    {
+                        "path": str(target_3),
+                        "temp_cleanup_succeeded": False,
+                    }
+                ),
+                False,
+            )
 
             # 4. Late os.link destination collision regression:
             # destination appears after the initial absence check, is never overwritten or deleted,
-            # temp file is cleaned up, all fds close, and FileExistsError is raised without returning a success receipt.
+            # losing temp file is retained with its unpublished payload bytes, all fds close,
+            # and FileExistsError is raised without returning a success receipt.
             root_4 = base / "case4_late_link_collision"
             root_4.mkdir()
             target_4 = root_4 / "collision.json"
             tmp_name_4 = f".{target_4.name}.tmp.{os.getpid()}"
+            tmp_path_4 = root_4 / tmp_name_4
             preexisting_late_bytes = b'{"concurrent": "winner-must-survive"}\n'
             real_link = os.link
             opened_fds_4: list[int] = []
+            unlink_calls_4: list[str] = []
             late_winner_st_holder_4: list[os.stat_result] = []
 
             def open_track_4(
@@ -13229,6 +15610,12 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 fd = real_open(path, flags, mode, dir_fd=dir_fd)
                 opened_fds_4.append(fd)
                 return fd
+
+            def unlink_track_4(
+                path: Any, *, dir_fd: int | None = None
+            ) -> None:
+                unlink_calls_4.append(os.fspath(path))
+                return real_unlink(path, dir_fd=dir_fd)
 
             def link_inject_late_collision_4(
                 src: Any,
@@ -13251,6 +15638,7 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
 
             with (
                 patch.object(onesar_refmac.os, "open", open_track_4),
+                patch.object(onesar_refmac.os, "unlink", unlink_track_4),
                 patch.object(
                     onesar_refmac.os, "link", link_inject_late_collision_4
                 ),
@@ -13261,6 +15649,7 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                     )
 
             err_4 = cm_4.exception
+            self.assertEqual(unlink_calls_4, [])
             self.assertIn(
                 "Destination appeared before atomic publication", str(err_4)
             )
@@ -13280,22 +15669,70 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                     int(late_winner_st_before.st_ino),
                 ),
             )
-            self.assertFalse((root_4 / tmp_name_4).exists())
+            self.assertTrue(tmp_path_4.is_file())
+            self.assertEqual(
+                json.loads(tmp_path_4.read_text(encoding="utf-8")),
+                {"case": 4, "loser": True},
+            )
+            tmp_4_st = os.lstat(tmp_path_4)
+            self.assertNotEqual(
+                (int(tmp_4_st.st_dev), int(tmp_4_st.st_ino)),
+                (
+                    int(late_winner_st_after.st_dev),
+                    int(late_winner_st_after.st_ino),
+                ),
+            )
             cleanup_4 = getattr(err_4, "temp_cleanup_status", None)
             self.assertIsInstance(cleanup_4, Mapping)
             assert isinstance(cleanup_4, Mapping)
-            self.assertIs(cleanup_4["unlinked"], True)
-            self.assertIs(cleanup_4["temp_present_after_cleanup"], False)
             self.assertEqual(
-                cleanup_4["reason"], "verified_temp_identity_unlinked"
+                cleanup_4["temp_handling_policy"],
+                onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+            )
+            self.assertIs(cleanup_4["temp_handling_succeeded"], True)
+            self.assertEqual(
+                cleanup_4["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+            )
+            self.assertEqual(
+                cleanup_4["temp_observation_phase"], "final_cleanup_stat"
+            )
+            self.assertIs(cleanup_4["post_link_temp_observed"], False)
+            self.assertIs(cleanup_4["final_cleanup_temp_observed"], True)
+            self.assertIs(cleanup_4["published_link_created"], False)
+            self.assertIs(cleanup_4["readback_verified"], False)
+            self.assertIs(cleanup_4["unlinked"], False)
+            self.assertIs(cleanup_4["unlink_attempted"], False)
+            self.assertEqual(cleanup_4["unlink_attempt_count"], 0)
+            self.assertIs(cleanup_4["cleanup_verified"], False)
+            self.assertIs(cleanup_4["observed_temp_present"], True)
+            self.assertIs(cleanup_4["temp_present_after_cleanup"], True)
+            self.assertEqual(
+                cleanup_4["reason"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+            )
+            self.assertEqual(
+                (cleanup_4["expected_temp_dev"], cleanup_4["expected_temp_ino"]),
+                (int(tmp_4_st.st_dev), int(tmp_4_st.st_ino)),
+            )
+            self.assertEqual(
+                (cleanup_4["observed_temp_dev"], cleanup_4["observed_temp_ino"]),
+                (int(tmp_4_st.st_dev), int(tmp_4_st.st_ino)),
+            )
+            self.assertIs(
+                onesar_refmac._is_json_temp_status_handling_satisfied(
+                    cleanup_4, legacy_missing_unlinked_default=False
+                ),
+                True,
             )
             for fd_4 in set(opened_fds_4):
                 with self.assertRaises(OSError) as fd4_cm:
                     real_fstat(fd_4)
                 self.assertEqual(fd4_cm.exception.errno, errno.EBADF)
 
-            # 5. Late os.link destination collision + first-attempt temp unlink EACCES
-            # + successful sibling fallback through _persist_collector_json_with_fallback
+            # 5. Late os.link destination collision + sibling fallback through
+            # _persist_collector_json_with_fallback (5a healthy retention + later independent
+            # collision reuse check; 5 first-attempt temp final_cleanup_stat EACCES)
             root_5 = base / "case5_collision_temp_cleanup_sibling_fallback"
             child_5 = root_5 / "refmac_work"
             parent_5 = root_5 / "refmac_parent_retention"
@@ -13313,17 +15750,328 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
             parent_status_5 = onesar_refmac._verify_refmac_directory_post_run(
                 parent_5, refmac_dir_baseline=parent_base_5
             )
+
+            # 5a. Healthy late-link collision + healthy sibling fallback retains both losing
+            # and winning temps, records prior_collision_temp_cleanup_statuses and
+            # prior_collision_retained_temporaries without cleanup failures or payload pollution,
+            # and later independent calls preserve all markers without extra factory calls.
+            target_5a = child_5 / "audit_case5a.json"
+            tmp_name_5a = f".{target_5a.name}.tmp.{os.getpid()}"
+            preexisting_bytes_5a = b'{"competitor": "canonical-winner-5a"}\n'
+            competitor_st_holder_5a: list[os.stat_result] = []
+            opened_fds_5a: list[int] = []
+            unlink_calls_5a: list[str] = []
+            factory_calls_5a: list[str] = []
+
+            def open_track_5a(
+                path: Any,
+                flags: int,
+                mode: int = 0o777,
+                *,
+                dir_fd: int | None = None,
+            ) -> int:
+                fd = real_open(path, flags, mode, dir_fd=dir_fd)
+                opened_fds_5a.append(fd)
+                return fd
+
+            def unlink_track_5a(
+                path: Any, *, dir_fd: int | None = None
+            ) -> None:
+                unlink_calls_5a.append(os.fspath(path))
+                return real_unlink(path, dir_fd=dir_fd)
+
+            def link_inject_late_collision_5a(
+                src: Any,
+                dst: Any,
+                *,
+                src_dir_fd: int | None = None,
+                dst_dir_fd: int | None = None,
+                follow_symlinks: bool = True,
+            ) -> None:
+                if (
+                    os.fspath(dst) == "audit_case5a.json"
+                    and not target_5a.exists()
+                ):
+                    target_5a.write_bytes(preexisting_bytes_5a)
+                    competitor_st_holder_5a.append(os.lstat(target_5a))
+                return real_link(
+                    src,
+                    dst,
+                    src_dir_fd=src_dir_fd,
+                    dst_dir_fd=dst_dir_fd,
+                    follow_symlinks=follow_symlinks,
+                )
+
+            failures_5a: list[dict[str, Any]] = []
+            causes_5a: list[Exception | None] = []
+            caught_5a: list[Exception] = []
+            retained_5a: list[dict[str, Any]] = []
+            fallback_state_5a: dict[str, Any] = {}
+            child_status_5a = copy.deepcopy(child_status_5)
+            parent_status_5a = copy.deepcopy(parent_status_5)
+
+            with (
+                patch.object(onesar_refmac.os, "open", open_track_5a),
+                patch.object(
+                    onesar_refmac.os, "link", link_inject_late_collision_5a
+                ),
+                patch.object(onesar_refmac.os, "unlink", unlink_track_5a),
+            ):
+                art_5a = onesar_refmac._persist_collector_json_with_fallback(
+                    lambda dest: (
+                        factory_calls_5a.append(str(dest))
+                        or {
+                            "case": "5a",
+                            "artifact_path": str(dest),
+                            "owned": True,
+                        }
+                    ),
+                    target_5a,
+                    root=child_5,
+                    parent_retention_dir=parent_5,
+                    parent_retention_dir_baseline=parent_base_5,
+                    parent_retention_dir_status=parent_status_5a,
+                    verified_root_fallback_state=fallback_state_5a,
+                    refmac_dir_baseline=child_base_5,
+                    refmac_dir_status=child_status_5a,
+                    child_dir_persistence_failures=failures_5a,
+                    caught_persistence_exceptions=caught_5a,
+                    retained_payload_sink=retained_5a,
+                    child_dir_persistence_causes=causes_5a,
+                )
+
+            assert art_5a is not None
+            self.assertEqual(unlink_calls_5a, [])
+            self.assertEqual(len(competitor_st_holder_5a), 1)
+            competitor_st_after_5a = os.lstat(target_5a)
+            self.assertEqual(target_5a.read_bytes(), preexisting_bytes_5a)
+            self.assertEqual(
+                (
+                    int(competitor_st_after_5a.st_dev),
+                    int(competitor_st_after_5a.st_ino),
+                ),
+                (
+                    int(competitor_st_holder_5a[0].st_dev),
+                    int(competitor_st_holder_5a[0].st_ino),
+                ),
+            )
+            sib_path_5a = Path(str(art_5a["path"]))
+            self.assertNotEqual(sib_path_5a, target_5a)
+            self.assertEqual(
+                factory_calls_5a, [str(target_5a), str(sib_path_5a)]
+            )
+            self.assertEqual(failures_5a, [])
+            self.assertEqual(causes_5a, [])
+            self.assertEqual(caught_5a, [])
+            losing_tmp_5a = child_5 / tmp_name_5a
+            self.assertTrue(losing_tmp_5a.is_file())
+            losing_tmp_bytes_5a = losing_tmp_5a.read_bytes()
+            self.assertEqual(
+                json.loads(losing_tmp_5a.read_text(encoding="utf-8")),
+                {
+                    "case": "5a",
+                    "artifact_path": str(target_5a),
+                    "owned": True,
+                },
+            )
+            sib_tmp_5a = child_5 / f".{sib_path_5a.name}.tmp.{os.getpid()}"
+            self.assertTrue(sib_tmp_5a.is_file())
+            sib_bytes_5a = sib_path_5a.read_bytes()
+            sib_tmp_bytes_5a = sib_tmp_5a.read_bytes()
+            self.assertEqual(sib_tmp_bytes_5a, sib_bytes_5a)
+            sib_st_5a = os.lstat(sib_path_5a)
+            sib_tmp_st_5a = os.lstat(sib_tmp_5a)
+            losing_tmp_st_5a = os.lstat(losing_tmp_5a)
+            self.assertEqual(
+                (int(sib_st_5a.st_dev), int(sib_st_5a.st_ino)),
+                (int(sib_tmp_st_5a.st_dev), int(sib_tmp_st_5a.st_ino)),
+            )
+            self.assertGreaterEqual(int(sib_st_5a.st_nlink), 2)
+            self.assertNotEqual(
+                (int(losing_tmp_st_5a.st_dev), int(losing_tmp_st_5a.st_ino)),
+                (int(sib_st_5a.st_dev), int(sib_st_5a.st_ino)),
+            )
+            reopened_sib_5a = json.loads(
+                sib_path_5a.read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                reopened_sib_5a,
+                {
+                    "case": "5a",
+                    "artifact_path": str(sib_path_5a),
+                    "owned": True,
+                },
+            )
+            self.assertEqual(retained_5a, [reopened_sib_5a])
+            self.assertEqual(
+                art_5a["fallback_for_preexisting_path"], str(target_5a)
+            )
+            self.assertIs(art_5a["temp_cleanup_succeeded"], False)
+            self.assertEqual(
+                art_5a["temp_handling_policy"],
+                onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+            )
+            self.assertIs(art_5a["temp_handling_succeeded"], True)
+            self.assertEqual(
+                art_5a["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+            )
+            self.assertIs(art_5a["sibling_temp_cleanup_succeeded"], False)
+            self.assertIs(art_5a["sibling_temp_handling_succeeded"], True)
+            self.assertNotIn("prior_collision_temp_cleanup_failures", art_5a)
+            self.assertEqual(
+                len(art_5a["prior_collision_temp_cleanup_statuses"]), 1
+            )
+            self.assertEqual(
+                len(art_5a["prior_collision_retained_temporaries"]), 1
+            )
+            self.assertEqual(
+                art_5a["prior_collision_retained_temporaries"][0]["temp_name"],
+                tmp_name_5a,
+            )
+            self.assertIs(
+                art_5a["prior_collision_retained_temporaries"][0][
+                    "temp_handling_succeeded"
+                ],
+                True,
+            )
+            for fd_5a in set(opened_fds_5a):
+                with self.assertRaises(OSError) as fd5a_cm:
+                    real_fstat(fd_5a)
+                self.assertEqual(fd5a_cm.exception.errno, errno.EBADF)
+
+            # Later independent call on target_5a skips preexisting canonical and first sibling
+            # without calling factory for them, and a preexisting .tmp.<pid> on a fresh candidate
+            # is refused at O_CREAT|O_EXCL without adopting/deleting it or calling the factory.
+            later_calls_5a: list[str] = []
+            art_5a_later = (
+                onesar_refmac._write_json_with_sibling_collision_fallback(
+                    lambda dest: (
+                        later_calls_5a.append(str(dest))
+                        or {"case": "5a_later", "dest": str(dest)}
+                    ),
+                    target_5a,
+                    root=child_5,
+                )
+            )
+            sib_path_5a_2 = Path(str(art_5a_later["path"]))
+            self.assertEqual(
+                sib_path_5a_2,
+                child_5 / f"audit_case5a.parent.{os.getpid()}.1.json",
+            )
+            self.assertEqual(later_calls_5a, [str(sib_path_5a_2)])
+            competitor_st_later_5a = os.lstat(target_5a)
+            self.assertEqual(target_5a.read_bytes(), preexisting_bytes_5a)
+            self.assertEqual(
+                (
+                    int(competitor_st_later_5a.st_dev),
+                    int(competitor_st_later_5a.st_ino),
+                ),
+                (
+                    int(competitor_st_holder_5a[0].st_dev),
+                    int(competitor_st_holder_5a[0].st_ino),
+                ),
+            )
+            self.assertEqual(
+                (
+                    int(os.lstat(losing_tmp_5a).st_dev),
+                    int(os.lstat(losing_tmp_5a).st_ino),
+                ),
+                (int(losing_tmp_st_5a.st_dev), int(losing_tmp_st_5a.st_ino)),
+            )
+            self.assertEqual(losing_tmp_5a.read_bytes(), losing_tmp_bytes_5a)
+            self.assertEqual(
+                json.loads(losing_tmp_5a.read_text(encoding="utf-8")),
+                {
+                    "case": "5a",
+                    "artifact_path": str(target_5a),
+                    "owned": True,
+                },
+            )
+            sib_st_later_5a = os.lstat(sib_path_5a)
+            sib_tmp_st_later_5a = os.lstat(sib_tmp_5a)
+            self.assertEqual(
+                (int(sib_st_later_5a.st_dev), int(sib_st_later_5a.st_ino)),
+                (int(sib_st_5a.st_dev), int(sib_st_5a.st_ino)),
+            )
+            self.assertEqual(
+                (
+                    int(sib_tmp_st_later_5a.st_dev),
+                    int(sib_tmp_st_later_5a.st_ino),
+                ),
+                (int(sib_tmp_st_5a.st_dev), int(sib_tmp_st_5a.st_ino)),
+            )
+            self.assertEqual(sib_path_5a.read_bytes(), sib_bytes_5a)
+            self.assertEqual(sib_tmp_5a.read_bytes(), sib_tmp_bytes_5a)
+            self.assertEqual(
+                json.loads(sib_path_5a.read_text(encoding="utf-8")),
+                reopened_sib_5a,
+            )
+            self.assertEqual(
+                json.loads(sib_tmp_5a.read_text(encoding="utf-8")),
+                reopened_sib_5a,
+            )
+
+            target_5a_pretmp = child_5 / "audit_case5a_pretmp.json"
+            pretmp_5a_path = (
+                child_5 / f".{target_5a_pretmp.name}.tmp.{os.getpid()}"
+            )
+            pretmp_5a_bytes = b'{"retained_prior_temp": "must-not-adopt"}\n'
+            pretmp_5a_path.write_bytes(pretmp_5a_bytes)
+            pretmp_5a_st_before = os.lstat(pretmp_5a_path)
+            pretmp_calls_5a: list[str] = []
+            art_5a_pretmp = (
+                onesar_refmac._write_json_with_sibling_collision_fallback(
+                    lambda dest: (
+                        pretmp_calls_5a.append(str(dest))
+                        or {"case": "5a_pretmp", "dest": str(dest)}
+                    ),
+                    target_5a_pretmp,
+                    root=child_5,
+                )
+            )
+            sib_pretmp_5a = Path(str(art_5a_pretmp["path"]))
+            self.assertEqual(
+                sib_pretmp_5a,
+                child_5 / f"audit_case5a_pretmp.parent.{os.getpid()}.json",
+            )
+            self.assertEqual(pretmp_calls_5a, [str(sib_pretmp_5a)])
+            self.assertFalse(target_5a_pretmp.exists())
+            self.assertEqual(pretmp_5a_path.read_bytes(), pretmp_5a_bytes)
+            pretmp_5a_st_after = os.lstat(pretmp_5a_path)
+            self.assertEqual(
+                (
+                    int(pretmp_5a_st_after.st_dev),
+                    int(pretmp_5a_st_after.st_ino),
+                ),
+                (
+                    int(pretmp_5a_st_before.st_dev),
+                    int(pretmp_5a_st_before.st_ino),
+                ),
+            )
+
+            # 5. Late os.link destination collision + first-attempt temp final_cleanup_stat EACCES
+            # + successful sibling fallback through _persist_collector_json_with_fallback
             target_5 = child_5 / "audit_case5.json"
             tmp_name_5 = f".{target_5.name}.tmp.{os.getpid()}"
+            child_dev_5 = int(child_base_5["dev"])
+            child_ino_5 = int(child_base_5["ino"])
             preexisting_bytes_5 = b'{"competitor": "canonical-winner-5"}\n'
             competitor_st_holder_5: list[os.stat_result] = []
             opened_fds_5: list[int] = []
-            initial_unlink_err_5 = PermissionError(
+            unlink_calls_5: list[str] = []
+            initial_stat_err_5 = PermissionError(
                 errno.EACCES,
-                "simulated first collision attempt temp unlink EACCES",
+                "simulated first collision attempt temp final_cleanup_stat EACCES",
                 tmp_name_5,
             )
-            unlink_count_5 = {"n": 0}
+            phase_events_5: list[str] = []
+            canonical_collision_5: dict[str, Any] = {
+                "injected": False,
+                "count": 0,
+            }
+            pre_link_stat_count_5 = {"n": 0}
+            stat_count_5 = {"n": 0}
 
             def open_track_5(
                 path: Any,
@@ -13336,6 +16084,12 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 opened_fds_5.append(fd)
                 return fd
 
+            def unlink_track_5(
+                path: Any, *, dir_fd: int | None = None
+            ) -> None:
+                unlink_calls_5.append(os.fspath(path))
+                return real_unlink(path, dir_fd=dir_fd)
+
             def link_inject_late_collision_5(
                 src: Any,
                 dst: Any,
@@ -13344,27 +16098,84 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 dst_dir_fd: int | None = None,
                 follow_symlinks: bool = True,
             ) -> None:
+                in_child_5 = False
                 if (
-                    os.fspath(dst) == "audit_case5.json"
-                    and not target_5.exists()
+                    src_dir_fd is not None
+                    and dst_dir_fd is not None
+                    and not follow_symlinks
+                ):
+                    src_st_5 = real_fstat(src_dir_fd)
+                    dst_st_5 = real_fstat(dst_dir_fd)
+                    in_child_5 = (
+                        (int(src_st_5.st_dev), int(src_st_5.st_ino))
+                        == (child_dev_5, child_ino_5)
+                        and (int(dst_st_5.st_dev), int(dst_st_5.st_ino))
+                        == (child_dev_5, child_ino_5)
+                    )
+                if (
+                    in_child_5
+                    and os.fspath(src) == tmp_name_5
+                    and os.fspath(dst) == target_5.name
+                    and not canonical_collision_5["injected"]
                 ):
                     target_5.write_bytes(preexisting_bytes_5)
                     competitor_st_holder_5.append(os.lstat(target_5))
-                return real_link(
+                    canonical_collision_5["injected"] = True
+                    canonical_collision_5["count"] = (
+                        int(canonical_collision_5["count"]) + 1
+                    )
+                    phase_events_5.append("canonical_late_link_collision")
+                real_link(
                     src,
                     dst,
                     src_dir_fd=src_dir_fd,
                     dst_dir_fd=dst_dir_fd,
                     follow_symlinks=follow_symlinks,
                 )
+                if in_child_5 and str(os.fspath(dst)).startswith(
+                    "audit_case5.parent."
+                ):
+                    phase_events_5.append("sibling_link_published")
 
-            def unlink_deny_first_tmp_5(
-                path: Any, *, dir_fd: int | None = None
-            ) -> None:
-                if os.fspath(path) == tmp_name_5:
-                    unlink_count_5["n"] += 1
-                    raise initial_unlink_err_5
-                return real_unlink(path, dir_fd=dir_fd)
+            def stat_deny_first_tmp_5(
+                path: Any,
+                *,
+                dir_fd: int | None = None,
+                follow_symlinks: bool = True,
+            ) -> os.stat_result:
+                if dir_fd is not None and not follow_symlinks:
+                    dir_st_5 = real_fstat(dir_fd)
+                    if (int(dir_st_5.st_dev), int(dir_st_5.st_ino)) == (
+                        child_dev_5,
+                        child_ino_5,
+                    ):
+                        if os.fspath(path) == tmp_name_5:
+                            if not canonical_collision_5["injected"]:
+                                pre_link_stat_count_5["n"] += 1
+                                phase_events_5.append(
+                                    "canonical_pre_link_tmp_stat"
+                                )
+                                return real_stat_1(
+                                    path,
+                                    dir_fd=dir_fd,
+                                    follow_symlinks=follow_symlinks,
+                                )
+                            stat_count_5["n"] += 1
+                            phase_events_5.append(
+                                "canonical_final_cleanup_tmp_stat_denied"
+                            )
+                            raise initial_stat_err_5
+                        if str(os.fspath(path)).startswith(
+                            ".audit_case5.parent."
+                        ):
+                            phase_events_5.append(
+                                "sibling_post_link_tmp_stat"
+                                if "sibling_link_published" in phase_events_5
+                                else "sibling_pre_link_tmp_stat"
+                            )
+                return real_stat_1(
+                    path, dir_fd=dir_fd, follow_symlinks=follow_symlinks
+                )
 
             failures_5: list[dict[str, Any]] = []
             causes_5: list[Exception | None] = []
@@ -13378,8 +16189,9 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                     onesar_refmac.os, "link", link_inject_late_collision_5
                 ),
                 patch.object(
-                    onesar_refmac.os, "unlink", unlink_deny_first_tmp_5
+                    onesar_refmac.os, "stat", stat_deny_first_tmp_5
                 ),
+                patch.object(onesar_refmac.os, "unlink", unlink_track_5),
             ):
                 art_5 = onesar_refmac._persist_collector_json_with_fallback(
                     lambda dest: {
@@ -13401,7 +16213,23 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                     child_dir_persistence_causes=causes_5,
                 )
 
-            self.assertEqual(unlink_count_5["n"], 1)
+            assert art_5 is not None
+            self.assertEqual(unlink_calls_5, [])
+            self.assertIs(canonical_collision_5["injected"], True)
+            self.assertEqual(canonical_collision_5["count"], 1)
+            self.assertEqual(pre_link_stat_count_5["n"], 1)
+            self.assertEqual(stat_count_5["n"], 1)
+            self.assertEqual(
+                phase_events_5,
+                [
+                    "canonical_pre_link_tmp_stat",
+                    "canonical_late_link_collision",
+                    "canonical_final_cleanup_tmp_stat_denied",
+                    "sibling_pre_link_tmp_stat",
+                    "sibling_link_published",
+                    "sibling_post_link_tmp_stat",
+                ],
+            )
             self.assertEqual(len(competitor_st_holder_5), 1)
             competitor_st_after_5 = os.lstat(target_5)
             self.assertEqual(target_5.read_bytes(), preexisting_bytes_5)
@@ -13420,7 +16248,15 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
             self.assertNotEqual(sib_path_5, target_5)
             self.assertTrue(sib_path_5.is_file())
             sib_tmp_name_5 = f".{sib_path_5.name}.tmp.{os.getpid()}"
-            self.assertFalse((child_5 / sib_tmp_name_5).exists())
+            sib_tmp_path_5 = child_5 / sib_tmp_name_5
+            self.assertTrue(sib_tmp_path_5.is_file())
+            sib_st_5 = os.lstat(sib_path_5)
+            sib_tmp_st_5 = os.lstat(sib_tmp_path_5)
+            self.assertEqual(
+                (int(sib_st_5.st_dev), int(sib_st_5.st_ino)),
+                (int(sib_tmp_st_5.st_dev), int(sib_tmp_st_5.st_ino)),
+            )
+            self.assertGreaterEqual(int(sib_st_5.st_nlink), 2)
             reopened_sib_5 = json.loads(
                 sib_path_5.read_text(encoding="utf-8")
             )
@@ -13442,28 +16278,57 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 reopened_prior_5[0]["published_link_created"], False
             )
             self.assertIs(reopened_prior_5[0]["unlinked"], False)
+            self.assertIs(
+                reopened_prior_5[0]["temp_handling_succeeded"], False
+            )
+            self.assertEqual(
+                reopened_prior_5[0]["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_STAT_ERROR,
+            )
             self.assertEqual(reopened_prior_5[0]["temp_name"], tmp_name_5)
             self.assertEqual(
                 reopened_prior_5[0]["errors"][0]["errno"], errno.EACCES
             )
             self.assertIs(art_5["temp_cleanup_succeeded"], False)
-            self.assertIs(art_5["sibling_temp_cleanup_succeeded"], True)
+            self.assertIs(art_5["temp_handling_succeeded"], False)
+            self.assertIs(art_5["sibling_temp_cleanup_succeeded"], False)
+            self.assertIs(art_5["sibling_temp_handling_succeeded"], True)
             status_5 = art_5["temp_cleanup_status"]
             self.assertIs(status_5["unlinked"], False)
+            self.assertIs(status_5["temp_handling_succeeded"], False)
+            self.assertEqual(
+                status_5["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_STAT_ERROR,
+            )
             self.assertEqual(status_5["temp_name"], tmp_name_5)
             self.assertEqual(status_5["attempted_path"], str(target_5))
             self.assertEqual(
                 status_5["actual_published_path"], str(sib_path_5)
             )
             self.assertIs(
-                status_5["sibling_temp_cleanup_status"]["unlinked"], True
+                status_5["sibling_temp_cleanup_status"]["unlinked"], False
+            )
+            self.assertIs(
+                status_5["sibling_temp_cleanup_status"][
+                    "temp_handling_succeeded"
+                ],
+                True,
+            )
+            self.assertEqual(
+                status_5["sibling_temp_cleanup_status"][
+                    "temp_handling_disposition"
+                ],
+                onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
             )
             prior_failures_5 = art_5["prior_collision_temp_cleanup_failures"]
             self.assertIsInstance(prior_failures_5, list)
             self.assertEqual(len(prior_failures_5), 1)
             self.assertEqual(prior_failures_5[0]["temp_name"], tmp_name_5)
             self.assertIs(prior_failures_5[0]["unlinked"], False)
-            self.assertTrue(any(e is initial_unlink_err_5 for e in caught_5))
+            self.assertIs(
+                prior_failures_5[0]["temp_handling_succeeded"], False
+            )
+            self.assertTrue(any(e is initial_stat_err_5 for e in caught_5))
             self.assertEqual(len(failures_5), 1)
             self.assertEqual(failures_5[0]["failure_phase"], "temp_cleanup")
             self.assertIs(failures_5[0]["published_in_child_dir"], True)
@@ -13475,26 +16340,40 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 prior_failures_5,
             )
             self.assertEqual(len(causes_5), 1)
-            self.assertIs(causes_5[0], initial_unlink_err_5)
+            self.assertIs(causes_5[0], initial_stat_err_5)
             for fd_5 in set(opened_fds_5):
                 with self.assertRaises(OSError) as fd5_cm:
                     real_fstat(fd_5)
                 self.assertEqual(fd5_cm.exception.errno, errno.EBADF)
 
-            # 5b. Plain Mapping payload with canonical late-link collision + first temp unlink EACCES
-            # durably records prior collision cleanup failure in the published sibling JSON
+            # 5b. Plain Mapping payload with canonical late-link collision + first temp
+            # final_cleanup_stat EACCES or temp_identity_mismatch durably records prior
+            # collision cleanup failure in the published sibling JSON and cannot be washed
             root_5b = base / "case5b_mapping_collision_temp_cleanup"
             root_5b.mkdir()
+            dir_base_5b = onesar_refmac._capture_directory_identity_baseline(
+                root_5b, evidence_root=root_5b
+            )
+            root_dev_5b = int(dir_base_5b["dev"])
+            root_ino_5b = int(dir_base_5b["ino"])
             target_5b = root_5b / "audit_case5b.json"
             tmp_name_5b = f".{target_5b.name}.tmp.{os.getpid()}"
             preexisting_bytes_5b = b'{"competitor": "canonical-winner-5b"}\n'
             competitor_st_holder_5b: list[os.stat_result] = []
             opened_fds_5b: list[int] = []
-            initial_unlink_err_5b = PermissionError(
+            unlink_calls_5b: list[str] = []
+            initial_stat_err_5b = PermissionError(
                 errno.EACCES,
-                "simulated case5b first collision temp unlink EACCES",
+                "simulated case5b first collision temp final_cleanup_stat EACCES",
                 tmp_name_5b,
             )
+            phase_events_5b: list[str] = []
+            canonical_collision_5b: dict[str, Any] = {
+                "injected": False,
+                "count": 0,
+            }
+            pre_link_stat_count_5b = {"n": 0}
+            stat_count_5b = {"n": 0}
 
             def open_track_5b(
                 path: Any,
@@ -13507,6 +16386,12 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 opened_fds_5b.append(fd)
                 return fd
 
+            def unlink_track_5b(
+                path: Any, *, dir_fd: int | None = None
+            ) -> None:
+                unlink_calls_5b.append(os.fspath(path))
+                return real_unlink(path, dir_fd=dir_fd)
+
             def link_inject_late_collision_5b(
                 src: Any,
                 dst: Any,
@@ -13515,30 +16400,85 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 dst_dir_fd: int | None = None,
                 follow_symlinks: bool = True,
             ) -> None:
+                in_root_5b = False
                 if (
-                    os.fspath(dst) == "audit_case5b.json"
-                    and not target_5b.exists()
+                    src_dir_fd is not None
+                    and dst_dir_fd is not None
+                    and not follow_symlinks
+                ):
+                    src_st_5b = real_fstat(src_dir_fd)
+                    dst_st_5b = real_fstat(dst_dir_fd)
+                    in_root_5b = (
+                        (int(src_st_5b.st_dev), int(src_st_5b.st_ino))
+                        == (root_dev_5b, root_ino_5b)
+                        and (int(dst_st_5b.st_dev), int(dst_st_5b.st_ino))
+                        == (root_dev_5b, root_ino_5b)
+                    )
+                if (
+                    in_root_5b
+                    and os.fspath(src) == tmp_name_5b
+                    and os.fspath(dst) == target_5b.name
+                    and not canonical_collision_5b["injected"]
                 ):
                     target_5b.write_bytes(preexisting_bytes_5b)
                     competitor_st_holder_5b.append(os.lstat(target_5b))
-                return real_link(
+                    canonical_collision_5b["injected"] = True
+                    canonical_collision_5b["count"] = (
+                        int(canonical_collision_5b["count"]) + 1
+                    )
+                    phase_events_5b.append("canonical_late_link_collision")
+                real_link(
                     src,
                     dst,
                     src_dir_fd=src_dir_fd,
                     dst_dir_fd=dst_dir_fd,
                     follow_symlinks=follow_symlinks,
                 )
+                if in_root_5b and str(os.fspath(dst)).startswith(
+                    "audit_case5b.parent."
+                ):
+                    phase_events_5b.append("sibling_link_published")
 
-            def unlink_deny_first_tmp_5b(
-                path: Any, *, dir_fd: int | None = None
-            ) -> None:
-                if os.fspath(path) == tmp_name_5b:
-                    raise initial_unlink_err_5b
-                return real_unlink(path, dir_fd=dir_fd)
+            def stat_deny_first_tmp_5b(
+                path: Any,
+                *,
+                dir_fd: int | None = None,
+                follow_symlinks: bool = True,
+            ) -> os.stat_result:
+                if dir_fd is not None and not follow_symlinks:
+                    dir_st_5b = real_fstat(dir_fd)
+                    if (int(dir_st_5b.st_dev), int(dir_st_5b.st_ino)) == (
+                        root_dev_5b,
+                        root_ino_5b,
+                    ):
+                        if os.fspath(path) == tmp_name_5b:
+                            if not canonical_collision_5b["injected"]:
+                                pre_link_stat_count_5b["n"] += 1
+                                phase_events_5b.append(
+                                    "canonical_pre_link_tmp_stat"
+                                )
+                                return real_stat_1(
+                                    path,
+                                    dir_fd=dir_fd,
+                                    follow_symlinks=follow_symlinks,
+                                )
+                            stat_count_5b["n"] += 1
+                            phase_events_5b.append(
+                                "canonical_final_cleanup_tmp_stat_denied"
+                            )
+                            raise initial_stat_err_5b
+                        if str(os.fspath(path)).startswith(
+                            ".audit_case5b.parent."
+                        ):
+                            phase_events_5b.append(
+                                "sibling_post_link_tmp_stat"
+                                if "sibling_link_published" in phase_events_5b
+                                else "sibling_pre_link_tmp_stat"
+                            )
+                return real_stat_1(
+                    path, dir_fd=dir_fd, follow_symlinks=follow_symlinks
+                )
 
-            dir_base_5b = onesar_refmac._capture_directory_identity_baseline(
-                root_5b, evidence_root=root_5b
-            )
             dir_status_5b: dict[str, Any] = {}
             caught_5b: list[Exception] = []
             with (
@@ -13547,8 +16487,9 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                     onesar_refmac.os, "link", link_inject_late_collision_5b
                 ),
                 patch.object(
-                    onesar_refmac.os, "unlink", unlink_deny_first_tmp_5b
+                    onesar_refmac.os, "stat", stat_deny_first_tmp_5b
                 ),
+                patch.object(onesar_refmac.os, "unlink", unlink_track_5b),
             ):
                 with onesar_refmac._admitted_directory_context(
                     root_5b,
@@ -13562,6 +16503,22 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                         root=root_5b,
                     )
 
+            self.assertEqual(unlink_calls_5b, [])
+            self.assertIs(canonical_collision_5b["injected"], True)
+            self.assertEqual(canonical_collision_5b["count"], 1)
+            self.assertEqual(pre_link_stat_count_5b["n"], 1)
+            self.assertEqual(stat_count_5b["n"], 1)
+            self.assertEqual(
+                phase_events_5b,
+                [
+                    "canonical_pre_link_tmp_stat",
+                    "canonical_late_link_collision",
+                    "canonical_final_cleanup_tmp_stat_denied",
+                    "sibling_pre_link_tmp_stat",
+                    "sibling_link_published",
+                    "sibling_post_link_tmp_stat",
+                ],
+            )
             self.assertEqual(len(competitor_st_holder_5b), 1)
             competitor_st_after_5b = os.lstat(target_5b)
             self.assertEqual(target_5b.read_bytes(), preexisting_bytes_5b)
@@ -13575,8 +16532,13 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                     int(competitor_st_holder_5b[0].st_ino),
                 ),
             )
+            self.assertTrue((root_5b / tmp_name_5b).is_file())
             sib_path_5b = Path(str(art_5b["path"]))
             self.assertNotEqual(sib_path_5b, target_5b)
+            sib_tmp_5b = root_5b / f".{sib_path_5b.name}.tmp.{os.getpid()}"
+            self.assertTrue(sib_tmp_5b.is_file())
+            self.assertIs(art_5b["temp_handling_succeeded"], False)
+            self.assertIs(art_5b["sibling_temp_handling_succeeded"], True)
             reopened_sib_5b = json.loads(
                 sib_path_5b.read_text(encoding="utf-8")
             )
@@ -13591,27 +16553,303 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
             self.assertIs(
                 reopened_prior_5b[0]["published_link_created"], False
             )
+            self.assertIs(
+                reopened_prior_5b[0]["temp_handling_succeeded"], False
+            )
+            self.assertEqual(
+                reopened_prior_5b[0]["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_STAT_ERROR,
+            )
             self.assertEqual(
                 reopened_prior_5b[0]["errors"][0]["errno"], errno.EACCES
             )
-            self.assertTrue(any(e is initial_unlink_err_5b for e in caught_5b))
+            self.assertTrue(any(e is initial_stat_err_5b for e in caught_5b))
+
+            # Prior temp_identity_mismatch on losing canonical temp also cannot be washed by
+            # a healthy sibling fallback write
+            target_5b_mis = root_5b / "audit_case5b_mismatch.json"
+            tmp_name_5b_mis = f".{target_5b_mis.name}.tmp.{os.getpid()}"
+            tmp_path_5b_mis = root_5b / tmp_name_5b_mis
+            detached_tmp_5b_mis = root_5b / "detached_losing_tmp_5b_mis.json"
+            foreign_tmp_5b_mis = root_5b / "foreign_replacement_tmp_5b_mis.json"
+            foreign_tmp_bytes_5b_mis = b'{"foreign": "tmp-replacement"}\n'
+            foreign_tmp_5b_mis.write_bytes(foreign_tmp_bytes_5b_mis)
+            foreign_st_before_5b_mis = os.lstat(foreign_tmp_5b_mis)
+            foreign_recorded_bytes_5b_mis = foreign_tmp_5b_mis.read_bytes()
+            preexisting_bytes_5b_mis = (
+                b'{"competitor": "canonical-winner-5b-mis"}\n'
+            )
+            competitor_holder_5b_mis: list[tuple[int, int, bytes]] = []
+            orig_tmp_holder_5b_mis: list[tuple[int, int, bytes]] = []
+
+            def link_inject_collision_and_swap_tmp_5b_mis(
+                src: Any,
+                dst: Any,
+                *,
+                src_dir_fd: int | None = None,
+                dst_dir_fd: int | None = None,
+                follow_symlinks: bool = True,
+            ) -> None:
+                if (
+                    os.fspath(dst) == "audit_case5b_mismatch.json"
+                    and not target_5b_mis.exists()
+                ):
+                    target_5b_mis.write_bytes(preexisting_bytes_5b_mis)
+                    comp_st_5b_mis = os.lstat(target_5b_mis)
+                    competitor_holder_5b_mis.append(
+                        (
+                            int(comp_st_5b_mis.st_dev),
+                            int(comp_st_5b_mis.st_ino),
+                            target_5b_mis.read_bytes(),
+                        )
+                    )
+                    orig_st_5b_mis = os.lstat(tmp_path_5b_mis)
+                    orig_tmp_holder_5b_mis.append(
+                        (
+                            int(orig_st_5b_mis.st_dev),
+                            int(orig_st_5b_mis.st_ino),
+                            tmp_path_5b_mis.read_bytes(),
+                        )
+                    )
+                    real_link(tmp_path_5b_mis, detached_tmp_5b_mis)
+                    os.replace(foreign_tmp_5b_mis, tmp_path_5b_mis)
+                return real_link(
+                    src,
+                    dst,
+                    src_dir_fd=src_dir_fd,
+                    dst_dir_fd=dst_dir_fd,
+                    follow_symlinks=follow_symlinks,
+                )
+
+            dir_status_5b_mis: dict[str, Any] = {}
+            caught_5b_mis: list[Exception] = []
+            with (
+                patch.object(onesar_refmac.os, "open", open_track_5b),
+                patch.object(
+                    onesar_refmac.os,
+                    "link",
+                    link_inject_collision_and_swap_tmp_5b_mis,
+                ),
+                patch.object(onesar_refmac.os, "unlink", unlink_track_5b),
+            ):
+                with onesar_refmac._admitted_directory_context(
+                    root_5b,
+                    dir_base_5b,
+                    dir_status_out=dir_status_5b_mis,
+                    caught_exceptions=caught_5b_mis,
+                ):
+                    art_5b_mis = onesar_refmac._write_json_with_sibling_collision_fallback(
+                        {"case": "5b_mis", "owned": True},
+                        target_5b_mis,
+                        root=root_5b,
+                    )
+
+            self.assertEqual(unlink_calls_5b, [])
+            self.assertEqual(len(competitor_holder_5b_mis), 1)
+            comp_st_after_5b_mis = os.lstat(target_5b_mis)
+            self.assertEqual(
+                (
+                    int(comp_st_after_5b_mis.st_dev),
+                    int(comp_st_after_5b_mis.st_ino),
+                    target_5b_mis.read_bytes(),
+                ),
+                competitor_holder_5b_mis[0],
+            )
+            self.assertEqual(len(orig_tmp_holder_5b_mis), 1)
+            (
+                orig_tmp_dev_5b_mis,
+                orig_tmp_ino_5b_mis,
+                orig_tmp_raw_5b_mis,
+            ) = orig_tmp_holder_5b_mis[0]
+            detached_st_5b_mis = os.lstat(detached_tmp_5b_mis)
+            replaced_tmp_st_5b_mis = os.lstat(tmp_path_5b_mis)
+            self.assertFalse(foreign_tmp_5b_mis.exists())
+            self.assertEqual(
+                (
+                    int(detached_st_5b_mis.st_dev),
+                    int(detached_st_5b_mis.st_ino),
+                ),
+                (orig_tmp_dev_5b_mis, orig_tmp_ino_5b_mis),
+            )
+            self.assertEqual(
+                detached_tmp_5b_mis.read_bytes(), orig_tmp_raw_5b_mis
+            )
+            self.assertEqual(
+                (
+                    int(replaced_tmp_st_5b_mis.st_dev),
+                    int(replaced_tmp_st_5b_mis.st_ino),
+                ),
+                (
+                    int(foreign_st_before_5b_mis.st_dev),
+                    int(foreign_st_before_5b_mis.st_ino),
+                ),
+            )
+            self.assertNotEqual(
+                (
+                    int(detached_st_5b_mis.st_dev),
+                    int(detached_st_5b_mis.st_ino),
+                ),
+                (
+                    int(replaced_tmp_st_5b_mis.st_dev),
+                    int(replaced_tmp_st_5b_mis.st_ino),
+                ),
+            )
+            self.assertEqual(
+                target_5b_mis.read_bytes(), preexisting_bytes_5b_mis
+            )
+            self.assertEqual(
+                tmp_path_5b_mis.read_bytes(), foreign_recorded_bytes_5b_mis
+            )
+            self.assertEqual(
+                tmp_path_5b_mis.read_bytes(), foreign_tmp_bytes_5b_mis
+            )
+            self.assertEqual(
+                json.loads(detached_tmp_5b_mis.read_text(encoding="utf-8")),
+                {"case": "5b_mis", "owned": True},
+            )
+            self.assertIs(art_5b_mis["temp_cleanup_succeeded"], False)
+            self.assertIs(art_5b_mis["temp_handling_succeeded"], False)
+            self.assertIs(art_5b_mis["sibling_temp_handling_succeeded"], True)
+            self.assertIs(
+                onesar_refmac._is_json_temp_handling_satisfied(art_5b_mis),
+                False,
+            )
+            prior_mis_5b = art_5b_mis["prior_collision_temp_cleanup_failures"]
+            self.assertEqual(len(prior_mis_5b), 1)
+            self.assertEqual(
+                prior_mis_5b[0]["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_IDENTITY_MISMATCH,
+            )
+            self.assertEqual(
+                prior_mis_5b[0]["reason"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_IDENTITY_MISMATCH,
+            )
+            self.assertIs(prior_mis_5b[0]["temp_handling_succeeded"], False)
+            self.assertIs(prior_mis_5b[0]["temp_identity_known"], True)
+            self.assertIs(prior_mis_5b[0]["observed_temp_present"], True)
+            self.assertIs(prior_mis_5b[0]["temp_present_after_cleanup"], True)
+            self.assertEqual(
+                (
+                    prior_mis_5b[0]["expected_temp_dev"],
+                    prior_mis_5b[0]["expected_temp_ino"],
+                ),
+                (orig_tmp_dev_5b_mis, orig_tmp_ino_5b_mis),
+            )
+            self.assertEqual(
+                (
+                    prior_mis_5b[0]["observed_temp_dev"],
+                    prior_mis_5b[0]["observed_temp_ino"],
+                ),
+                (
+                    int(foreign_st_before_5b_mis.st_dev),
+                    int(foreign_st_before_5b_mis.st_ino),
+                ),
+            )
+            self.assertIs(
+                onesar_refmac._is_json_temp_status_handling_satisfied(
+                    prior_mis_5b[0], legacy_missing_unlinked_default=False
+                ),
+                False,
+            )
+            sib_path_5b_mis = Path(str(art_5b_mis["path"]))
+            sib_tmp_path_5b_mis = (
+                root_5b / f".{sib_path_5b_mis.name}.tmp.{os.getpid()}"
+            )
+            self.assertTrue(sib_path_5b_mis.is_file())
+            self.assertTrue(sib_tmp_path_5b_mis.is_file())
+            sib_st_5b_mis = os.lstat(sib_path_5b_mis)
+            sib_tmp_st_5b_mis = os.lstat(sib_tmp_path_5b_mis)
+            self.assertEqual(
+                (int(sib_st_5b_mis.st_dev), int(sib_st_5b_mis.st_ino)),
+                (int(sib_tmp_st_5b_mis.st_dev), int(sib_tmp_st_5b_mis.st_ino)),
+            )
+            self.assertGreaterEqual(int(sib_st_5b_mis.st_nlink), 2)
+            self.assertEqual(
+                sib_tmp_path_5b_mis.read_bytes(), sib_path_5b_mis.read_bytes()
+            )
+            reopened_sib_5b_mis = json.loads(
+                sib_path_5b_mis.read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                reopened_sib_5b_mis["prior_collision_temp_cleanup_failures"][0][
+                    "temp_handling_disposition"
+                ],
+                onesar_refmac.JSON_TEMP_DISPOSITION_IDENTITY_MISMATCH,
+            )
+            self.assertEqual(
+                (
+                    reopened_sib_5b_mis[
+                        "prior_collision_temp_cleanup_failures"
+                    ][0]["expected_temp_dev"],
+                    reopened_sib_5b_mis[
+                        "prior_collision_temp_cleanup_failures"
+                    ][0]["expected_temp_ino"],
+                ),
+                (orig_tmp_dev_5b_mis, orig_tmp_ino_5b_mis),
+            )
+            self.assertEqual(
+                (
+                    reopened_sib_5b_mis[
+                        "prior_collision_temp_cleanup_failures"
+                    ][0]["observed_temp_dev"],
+                    reopened_sib_5b_mis[
+                        "prior_collision_temp_cleanup_failures"
+                    ][0]["observed_temp_ino"],
+                ),
+                (
+                    int(foreign_st_before_5b_mis.st_dev),
+                    int(foreign_st_before_5b_mis.st_ino),
+                ),
+            )
+            self.assertEqual(caught_5b_mis, [])
+            self.assertEqual(
+                dir_status_5b_mis["prior_collision_temp_cleanup_failures"],
+                prior_mis_5b,
+            )
+            self.assertIs(
+                dir_status_5b_mis["temp_cleanup_status"][
+                    "temp_handling_succeeded"
+                ],
+                False,
+            )
+            self.assertEqual(
+                dir_status_5b_mis["temp_cleanup_status"][
+                    "temp_handling_disposition"
+                ],
+                onesar_refmac.JSON_TEMP_DISPOSITION_IDENTITY_MISMATCH,
+            )
             for fd_5b in set(opened_fds_5b):
                 with self.assertRaises(OSError) as fd5b_cm:
                     real_fstat(fd_5b)
                 self.assertEqual(fd5b_cm.exception.errno, errno.EBADF)
 
             # 6. Bounded sibling collision exhaustion across all actual .parent.<pid>[.<attempt>]
-            # candidates after initial late-link competitor + first-attempt temp unlink EACCES
+            # candidates after initial late-link competitor + first-attempt temp final_cleanup_stat EACCES
             root_6 = base / "case6_collision_exhaustion_temp_cleanup"
             root_6.mkdir()
+            dir_base_6 = onesar_refmac._capture_directory_identity_baseline(
+                root_6, evidence_root=root_6
+            )
+            root_dev_6 = int(dir_base_6["dev"])
+            root_ino_6 = int(dir_base_6["ino"])
             target_6 = root_6 / "audit_case6.json"
             tmp_name_6 = f".{target_6.name}.tmp.{os.getpid()}"
             preexisting_bytes_6 = b'{"competitor": "canonical-winner-6"}\n'
             competitors_6: list[tuple[Path, int, int, bytes]] = []
             opened_fds_6: list[int] = []
-            initial_unlink_err_6 = PermissionError(
+            unlink_calls_6: list[str] = []
+            factory_calls_6: list[str] = []
+            canonical_collision_6 = {"injected": False, "count": 0}
+            collided_names_6: set[str] = set()
+            pre_link_stat_count_6 = {"canonical": 0, "siblings": 0}
+            final_cleanup_stat_count_6 = {
+                "canonical_denied": 0,
+                "siblings_ok": 0,
+            }
+            phase_events_6: list[str] = []
+            initial_stat_err_6 = PermissionError(
                 errno.EACCES,
-                "simulated case6 first collision temp unlink EACCES",
+                "simulated case6 first collision temp final_cleanup_stat EACCES",
                 tmp_name_6,
             )
 
@@ -13626,6 +16864,12 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 opened_fds_6.append(fd)
                 return fd
 
+            def unlink_track_6(
+                path: Any, *, dir_fd: int | None = None
+            ) -> None:
+                unlink_calls_6.append(os.fspath(path))
+                return real_unlink(path, dir_fd=dir_fd)
+
             def link_inject_late_collision_6(
                 src: Any,
                 dst: Any,
@@ -13634,18 +16878,42 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 dst_dir_fd: int | None = None,
                 follow_symlinks: bool = True,
             ) -> None:
-                comp_path_6 = root_6 / os.fspath(dst)
-                if not comp_path_6.exists():
-                    comp_path_6.write_bytes(preexisting_bytes_6)
-                    comp_st_6 = os.lstat(comp_path_6)
-                    competitors_6.append(
-                        (
-                            comp_path_6,
-                            int(comp_st_6.st_dev),
-                            int(comp_st_6.st_ino),
-                            comp_path_6.read_bytes(),
+                dst_name_6 = os.fspath(dst)
+                if (
+                    src_dir_fd is not None
+                    and dst_dir_fd is not None
+                    and not follow_symlinks
+                ):
+                    src_dir_st_6 = real_fstat(src_dir_fd)
+                    dst_dir_st_6 = real_fstat(dst_dir_fd)
+                    if (
+                        (int(src_dir_st_6.st_dev), int(src_dir_st_6.st_ino))
+                        == (root_dev_6, root_ino_6)
+                        and (
+                            int(dst_dir_st_6.st_dev),
+                            int(dst_dir_st_6.st_ino),
                         )
-                    )
+                        == (root_dev_6, root_ino_6)
+                    ):
+                        comp_path_6 = root_6 / dst_name_6
+                        if not comp_path_6.exists():
+                            comp_path_6.write_bytes(preexisting_bytes_6)
+                            comp_st_6 = os.lstat(comp_path_6)
+                            competitors_6.append(
+                                (
+                                    comp_path_6,
+                                    int(comp_st_6.st_dev),
+                                    int(comp_st_6.st_ino),
+                                    comp_path_6.read_bytes(),
+                                )
+                            )
+                            collided_names_6.add(dst_name_6)
+                            if dst_name_6 == target_6.name:
+                                canonical_collision_6["injected"] = True
+                                canonical_collision_6["count"] += 1
+                                phase_events_6.append(
+                                    "canonical_late_link_collision"
+                                )
                 return real_link(
                     src,
                     dst,
@@ -13654,16 +16922,49 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                     follow_symlinks=follow_symlinks,
                 )
 
-            def unlink_deny_first_tmp_6(
-                path: Any, *, dir_fd: int | None = None
-            ) -> None:
-                if os.fspath(path) == tmp_name_6 and dir_fd is not None:
-                    raise initial_unlink_err_6
-                return real_unlink(path, dir_fd=dir_fd)
+            def stat_deny_first_tmp_6(
+                path: Any,
+                *,
+                dir_fd: int | None = None,
+                follow_symlinks: bool = True,
+            ) -> os.stat_result:
+                p_str_6 = os.fspath(path)
+                if dir_fd is not None and not follow_symlinks:
+                    dir_st_6 = real_fstat(dir_fd)
+                    if (int(dir_st_6.st_dev), int(dir_st_6.st_ino)) == (
+                        root_dev_6,
+                        root_ino_6,
+                    ):
+                        if p_str_6 == tmp_name_6:
+                            if not canonical_collision_6["injected"]:
+                                pre_link_stat_count_6["canonical"] += 1
+                                phase_events_6.append(
+                                    "canonical_pre_link_tmp_stat"
+                                )
+                                return real_stat_1(
+                                    path,
+                                    dir_fd=dir_fd,
+                                    follow_symlinks=follow_symlinks,
+                                )
+                            final_cleanup_stat_count_6["canonical_denied"] += 1
+                            phase_events_6.append(
+                                "canonical_final_cleanup_tmp_stat_denied"
+                            )
+                            raise initial_stat_err_6
+                        if p_str_6.startswith(
+                            ".audit_case6.parent."
+                        ) and p_str_6.endswith(f".tmp.{os.getpid()}"):
+                            cand_name_6 = p_str_6[
+                                1 : -len(f".tmp.{os.getpid()}")
+                            ]
+                            if cand_name_6 not in collided_names_6:
+                                pre_link_stat_count_6["siblings"] += 1
+                            else:
+                                final_cleanup_stat_count_6["siblings_ok"] += 1
+                return real_stat_1(
+                    path, dir_fd=dir_fd, follow_symlinks=follow_symlinks
+                )
 
-            dir_base_6 = onesar_refmac._capture_directory_identity_baseline(
-                root_6, evidence_root=root_6
-            )
             dir_status_6: dict[str, Any] = {}
             caught_6: list[Exception] = []
             with (
@@ -13672,8 +16973,9 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                     onesar_refmac.os, "link", link_inject_late_collision_6
                 ),
                 patch.object(
-                    onesar_refmac.os, "unlink", unlink_deny_first_tmp_6
+                    onesar_refmac.os, "stat", stat_deny_first_tmp_6
                 ),
+                patch.object(onesar_refmac.os, "unlink", unlink_track_6),
             ):
                 with onesar_refmac._admitted_directory_context(
                     root_6,
@@ -13683,12 +16985,36 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 ):
                     with self.assertRaises(FileExistsError) as cm_6:
                         onesar_refmac._write_json_with_sibling_collision_fallback(
-                            {"case": 6, "owned": True},
+                            lambda dest: (
+                                factory_calls_6.append(str(dest))
+                                or {"case": 6, "dest": str(dest), "owned": True}
+                            ),
                             target_6,
                             root=root_6,
                         )
 
             err_6 = cm_6.exception
+            self.assertEqual(unlink_calls_6, [])
+            self.assertIs(canonical_collision_6["injected"], True)
+            self.assertEqual(canonical_collision_6["count"], 1)
+            self.assertEqual(pre_link_stat_count_6["canonical"], 1)
+            self.assertEqual(final_cleanup_stat_count_6["canonical_denied"], 1)
+            self.assertEqual(
+                pre_link_stat_count_6["siblings"],
+                onesar_refmac.MAX_SIBLING_COLLISION_ATTEMPTS,
+            )
+            self.assertEqual(
+                final_cleanup_stat_count_6["siblings_ok"],
+                onesar_refmac.MAX_SIBLING_COLLISION_ATTEMPTS,
+            )
+            self.assertEqual(
+                phase_events_6,
+                [
+                    "canonical_pre_link_tmp_stat",
+                    "canonical_late_link_collision",
+                    "canonical_final_cleanup_tmp_stat_denied",
+                ],
+            )
             self.assertIn(
                 f"Exhausted {onesar_refmac.MAX_SIBLING_COLLISION_ATTEMPTS} sibling collision fallback candidates",
                 str(err_6),
@@ -13697,7 +17023,54 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 len(competitors_6),
                 1 + onesar_refmac.MAX_SIBLING_COLLISION_ATTEMPTS,
             )
-            for comp_p, comp_dev, comp_ino, comp_raw in competitors_6:
+            self.assertEqual(
+                len(factory_calls_6),
+                1 + onesar_refmac.MAX_SIBLING_COLLISION_ATTEMPTS,
+            )
+            cleanup_6 = getattr(err_6, "temp_cleanup_status", None)
+            self.assertIsInstance(cleanup_6, Mapping)
+            assert isinstance(cleanup_6, Mapping)
+            self.assertIs(cleanup_6["unlinked"], False)
+            self.assertIs(cleanup_6["temp_handling_succeeded"], False)
+            self.assertEqual(
+                cleanup_6["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_STAT_ERROR,
+            )
+            self.assertEqual(cleanup_6["temp_name"], tmp_name_6)
+            prior_failures_6 = getattr(
+                err_6, "prior_collision_temp_cleanup_failures", None
+            )
+            self.assertIsInstance(prior_failures_6, list)
+            assert isinstance(prior_failures_6, list)
+            self.assertEqual(len(prior_failures_6), 1)
+            self.assertEqual(
+                prior_failures_6[0]["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_STAT_ERROR,
+            )
+            prior_statuses_6 = getattr(
+                err_6, "prior_collision_temp_cleanup_statuses", None
+            )
+            self.assertIsInstance(prior_statuses_6, list)
+            assert isinstance(prior_statuses_6, list)
+            self.assertEqual(
+                len(prior_statuses_6),
+                1 + onesar_refmac.MAX_SIBLING_COLLISION_ATTEMPTS,
+            )
+            prior_retained_6 = getattr(
+                err_6, "prior_collision_retained_temporaries", None
+            )
+            self.assertIsInstance(prior_retained_6, list)
+            assert isinstance(prior_retained_6, list)
+            self.assertEqual(
+                len(prior_retained_6),
+                onesar_refmac.MAX_SIBLING_COLLISION_ATTEMPTS,
+            )
+            for comp_idx_6, (
+                comp_p,
+                comp_dev,
+                comp_ino,
+                comp_raw,
+            ) in enumerate(competitors_6):
                 comp_st_after = os.lstat(comp_p)
                 self.assertEqual(
                     (
@@ -13707,48 +17080,91 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                     ),
                     (comp_dev, comp_ino, comp_raw),
                 )
+                comp_tmp_p = root_6 / f".{comp_p.name}.tmp.{os.getpid()}"
+                self.assertTrue(comp_tmp_p.is_file())
+                comp_tmp_json_6 = json.loads(
+                    comp_tmp_p.read_text(encoding="utf-8")
+                )
+                if comp_idx_6 == 0:
+                    self.assertEqual(
+                        comp_tmp_json_6,
+                        {"case": 6, "dest": str(comp_p), "owned": True},
+                    )
+                else:
+                    expected_prior_st_6 = copy.deepcopy(prior_failures_6[-1])
+                    expected_prior_st_6["actual_published_path"] = str(comp_p)
+                    expected_prior_st_6[
+                        "prior_collision_temp_cleanup_failures"
+                    ] = copy.deepcopy(prior_failures_6)
+                    expected_prior_st_6[
+                        "prior_collision_temp_cleanup_statuses"
+                    ] = copy.deepcopy(prior_statuses_6[:comp_idx_6])
+                    if comp_idx_6 > 1:
+                        expected_prior_st_6[
+                            "prior_collision_retained_temporaries"
+                        ] = copy.deepcopy(prior_retained_6[: comp_idx_6 - 1])
+                    self.assertEqual(
+                        comp_tmp_json_6,
+                        {
+                            "case": 6,
+                            "dest": str(comp_p),
+                            "owned": True,
+                            "fallback_for_preexisting_path": str(target_6),
+                            "prior_collision_temp_cleanup_failures": prior_failures_6,
+                            "prior_collision_temp_cleanup_status": expected_prior_st_6,
+                            "temp_cleanup_succeeded": False,
+                        },
+                    )
             self.assertTrue((root_6 / tmp_name_6).is_file())
-            cleanup_6 = getattr(err_6, "temp_cleanup_status", None)
-            self.assertIsInstance(cleanup_6, Mapping)
-            assert isinstance(cleanup_6, Mapping)
-            self.assertIs(cleanup_6["unlinked"], False)
-            self.assertEqual(cleanup_6["temp_name"], tmp_name_6)
-            prior_failures_6 = getattr(
-                err_6, "prior_collision_temp_cleanup_failures", None
-            )
-            self.assertIsInstance(prior_failures_6, list)
-            assert isinstance(prior_failures_6, list)
-            self.assertEqual(len(prior_failures_6), 1)
             cleanup_errs_6 = getattr(err_6, "temp_cleanup_errors", None)
             self.assertIsInstance(cleanup_errs_6, list)
             assert isinstance(cleanup_errs_6, list)
             self.assertTrue(
-                any(e is initial_unlink_err_6 for e in cleanup_errs_6)
+                any(e is initial_stat_err_6 for e in cleanup_errs_6)
             )
             self.assertIs(
                 getattr(err_6, "temp_cleanup_error", None),
-                initial_unlink_err_6,
+                initial_stat_err_6,
             )
-            self.assertTrue(any(e is initial_unlink_err_6 for e in caught_6))
+            self.assertTrue(any(e is initial_stat_err_6 for e in caught_6))
             self.assertIs(
                 dir_status_6["temp_cleanup_status"]["unlinked"], False
+            )
+            self.assertIs(
+                dir_status_6["temp_cleanup_status"]["temp_handling_succeeded"],
+                False,
             )
             for fd_6 in set(opened_fds_6):
                 with self.assertRaises(OSError) as fd6_cm:
                     real_fstat(fd_6)
                 self.assertEqual(fd6_cm.exception.errno, errno.EBADF)
 
-            # 7. Canonical late-link collision + first temp unlink EACCES followed by
-            # sibling publication + post-link readback-open EIO + two sibling unlink EACCES
-            # retains all 3 actual cleanup error objects in chronological order plus published receipt
+            # 7. Canonical late-link collision + first temp final_cleanup_stat EACCES followed by
+            # sibling publication + post_link_stat EACCES + post-link readback-open EIO +
+            # sibling final_cleanup_stat EACCES retains all 3 actual cleanup error objects in
+            # chronological order plus published receipt
             root_7 = base / "case7_collision_then_sibling_readback_eio_and_unlinks"
             root_7.mkdir()
+            dir_base_7 = onesar_refmac._capture_directory_identity_baseline(
+                root_7, evidence_root=root_7
+            )
+            root_dev_7 = int(dir_base_7["dev"])
+            root_ino_7 = int(dir_base_7["ino"])
             target_7 = root_7 / "receipt.json"
+            tmp_name_7 = f".{target_7.name}.tmp.{os.getpid()}"
+            sib_name_7 = f"receipt.parent.{os.getpid()}.json"
+            sib_tmp_name_7 = f".{sib_name_7}.tmp.{os.getpid()}"
             preexisting_bytes_7 = b"owned competitor 7\n"
             competitor_7: list[tuple[int, int, bytes]] = []
             published_7: list[str] = []
             cleanup_errs_7: list[PermissionError] = []
             opened_fds_7: list[int] = []
+            unlink_calls_7: list[str] = []
+            canonical_collision_7 = {"injected": False, "count": 0}
+            sibling_published_7 = {"published": False, "count": 0}
+            sibling_readback_failed_7 = {"raised": False, "count": 0}
+            pre_link_stat_count_7 = {"canonical": 0, "sibling": 0}
+            phase_events_7: list[str] = []
             verify_error_7 = OSError(
                 errno.EIO, "simulated sibling readback open EIO"
             )
@@ -13761,15 +17177,30 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 dir_fd: int | None = None,
             ) -> int:
                 if (
-                    published_7
+                    sibling_published_7["published"]
+                    and published_7
                     and os.fspath(path) == published_7[-1]
                     and dir_fd is not None
                     and not (flags & os.O_CREAT)
                 ):
-                    raise verify_error_7
+                    dir_st_7 = real_fstat(dir_fd)
+                    if (int(dir_st_7.st_dev), int(dir_st_7.st_ino)) == (
+                        root_dev_7,
+                        root_ino_7,
+                    ):
+                        sibling_readback_failed_7["raised"] = True
+                        sibling_readback_failed_7["count"] += 1
+                        phase_events_7.append("sibling_readback_open_eio")
+                        raise verify_error_7
                 fd = real_open(path, flags, mode, dir_fd=dir_fd)
                 opened_fds_7.append(fd)
                 return fd
+
+            def unlink_track_7(
+                path: Any, *, dir_fd: int | None = None
+            ) -> None:
+                unlink_calls_7.append(os.fspath(path))
+                return real_unlink(path, dir_fd=dir_fd)
 
             def link_inject_7(
                 src: Any,
@@ -13779,16 +17210,42 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 dst_dir_fd: int | None = None,
                 follow_symlinks: bool = True,
             ) -> None:
-                if os.fspath(dst) == target_7.name and not target_7.exists():
-                    target_7.write_bytes(preexisting_bytes_7)
-                    st_7 = os.lstat(target_7)
-                    competitor_7.append(
-                        (
-                            int(st_7.st_dev),
-                            int(st_7.st_ino),
-                            target_7.read_bytes(),
+                dst_name_7 = os.fspath(dst)
+                if (
+                    src_dir_fd is not None
+                    and dst_dir_fd is not None
+                    and not follow_symlinks
+                ):
+                    src_dir_st_7 = real_fstat(src_dir_fd)
+                    dst_dir_st_7 = real_fstat(dst_dir_fd)
+                    if (
+                        (int(src_dir_st_7.st_dev), int(src_dir_st_7.st_ino))
+                        == (root_dev_7, root_ino_7)
+                        and (
+                            int(dst_dir_st_7.st_dev),
+                            int(dst_dir_st_7.st_ino),
                         )
-                    )
+                        == (root_dev_7, root_ino_7)
+                    ):
+                        if (
+                            dst_name_7 == target_7.name
+                            and os.fspath(src) == tmp_name_7
+                            and not target_7.exists()
+                        ):
+                            target_7.write_bytes(preexisting_bytes_7)
+                            st_7 = os.lstat(target_7)
+                            competitor_7.append(
+                                (
+                                    int(st_7.st_dev),
+                                    int(st_7.st_ino),
+                                    target_7.read_bytes(),
+                                )
+                            )
+                            canonical_collision_7["injected"] = True
+                            canonical_collision_7["count"] += 1
+                            phase_events_7.append(
+                                "canonical_late_link_collision"
+                            )
                 real_link(
                     src,
                     dst,
@@ -13796,33 +17253,80 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                     dst_dir_fd=dst_dir_fd,
                     follow_symlinks=follow_symlinks,
                 )
-                published_7.append(os.fspath(dst))
+                published_7.append(dst_name_7)
+                if dst_name_7 == sib_name_7:
+                    sibling_published_7["published"] = True
+                    sibling_published_7["count"] += 1
+                    phase_events_7.append("sibling_link_published")
 
-            def unlink_deny_all_7(
-                path: Any, *, dir_fd: int | None = None
-            ) -> None:
-                if (
-                    str(os.fspath(path)).startswith(".receipt")
-                    and dir_fd is not None
-                ):
-                    exc_7 = PermissionError(
-                        errno.EACCES,
-                        f"owned cleanup denial {len(cleanup_errs_7)}",
-                        os.fspath(path),
-                    )
-                    cleanup_errs_7.append(exc_7)
-                    raise exc_7
-                return real_unlink(path, dir_fd=dir_fd)
+            def stat_deny_all_7(
+                path: Any,
+                *,
+                dir_fd: int | None = None,
+                follow_symlinks: bool = True,
+            ) -> os.stat_result:
+                p_str_7 = os.fspath(path)
+                if dir_fd is not None and not follow_symlinks:
+                    dir_st_7 = real_fstat(dir_fd)
+                    if (int(dir_st_7.st_dev), int(dir_st_7.st_ino)) == (
+                        root_dev_7,
+                        root_ino_7,
+                    ):
+                        if p_str_7 == tmp_name_7:
+                            if not canonical_collision_7["injected"]:
+                                pre_link_stat_count_7["canonical"] += 1
+                                phase_events_7.append(
+                                    "canonical_pre_link_tmp_stat"
+                                )
+                                return real_stat_1(
+                                    path,
+                                    dir_fd=dir_fd,
+                                    follow_symlinks=follow_symlinks,
+                                )
+                            phase_events_7.append(
+                                "canonical_final_cleanup_tmp_stat_denied"
+                            )
+                            exc_7 = PermissionError(
+                                errno.EACCES,
+                                f"owned temp stat denial {len(cleanup_errs_7)}",
+                                p_str_7,
+                            )
+                            cleanup_errs_7.append(exc_7)
+                            raise exc_7
+                        if p_str_7 == sib_tmp_name_7:
+                            if not sibling_published_7["published"]:
+                                pre_link_stat_count_7["sibling"] += 1
+                                phase_events_7.append(
+                                    "sibling_pre_link_tmp_stat"
+                                )
+                                return real_stat_1(
+                                    path,
+                                    dir_fd=dir_fd,
+                                    follow_symlinks=follow_symlinks,
+                                )
+                            phase_events_7.append(
+                                "sibling_final_cleanup_tmp_stat_denied"
+                                if sibling_readback_failed_7["raised"]
+                                else "sibling_post_link_tmp_stat_denied"
+                            )
+                            exc_7 = PermissionError(
+                                errno.EACCES,
+                                f"owned temp stat denial {len(cleanup_errs_7)}",
+                                p_str_7,
+                            )
+                            cleanup_errs_7.append(exc_7)
+                            raise exc_7
+                return real_stat_1(
+                    path, dir_fd=dir_fd, follow_symlinks=follow_symlinks
+                )
 
-            dir_base_7 = onesar_refmac._capture_directory_identity_baseline(
-                root_7, evidence_root=root_7
-            )
             dir_status_7: dict[str, Any] = {}
             caught_7: list[Exception] = []
             with (
                 patch.object(onesar_refmac.os, "open", open_track_7),
                 patch.object(onesar_refmac.os, "link", link_inject_7),
-                patch.object(onesar_refmac.os, "unlink", unlink_deny_all_7),
+                patch.object(onesar_refmac.os, "stat", stat_deny_all_7),
+                patch.object(onesar_refmac.os, "unlink", unlink_track_7),
             ):
                 with onesar_refmac._admitted_directory_context(
                     root_7,
@@ -13839,6 +17343,29 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
 
             err_7 = cm_7.exception
             self.assertIs(err_7, verify_error_7)
+            self.assertEqual(unlink_calls_7, [])
+            self.assertIs(canonical_collision_7["injected"], True)
+            self.assertEqual(canonical_collision_7["count"], 1)
+            self.assertIs(sibling_published_7["published"], True)
+            self.assertEqual(sibling_published_7["count"], 1)
+            self.assertIs(sibling_readback_failed_7["raised"], True)
+            self.assertEqual(sibling_readback_failed_7["count"], 1)
+            self.assertEqual(
+                pre_link_stat_count_7, {"canonical": 1, "sibling": 1}
+            )
+            self.assertEqual(
+                phase_events_7,
+                [
+                    "canonical_pre_link_tmp_stat",
+                    "canonical_late_link_collision",
+                    "canonical_final_cleanup_tmp_stat_denied",
+                    "sibling_pre_link_tmp_stat",
+                    "sibling_link_published",
+                    "sibling_post_link_tmp_stat_denied",
+                    "sibling_readback_open_eio",
+                    "sibling_final_cleanup_tmp_stat_denied",
+                ],
+            )
             self.assertEqual(len(cleanup_errs_7), 3)
             self.assertEqual(len(published_7), 1)
             st_after_7 = os.lstat(target_7)
@@ -13849,6 +17376,12 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                     target_7.read_bytes(),
                 ),
                 competitor_7[0],
+            )
+            self.assertTrue(
+                (root_7 / f".{target_7.name}.tmp.{os.getpid()}").is_file()
+            )
+            self.assertTrue(
+                (root_7 / f".{published_7[0]}.tmp.{os.getpid()}").is_file()
             )
             published_sib_7 = json.loads(
                 (root_7 / published_7[0]).read_text(encoding="utf-8")
@@ -13875,17 +17408,37 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
             self.assertIsInstance(status_7, Mapping)
             assert isinstance(status_7, Mapping)
             self.assertIs(status_7["unlinked"], False)
-            self.assertEqual(status_7["unlink_attempt_count"], 2)
+            self.assertEqual(status_7["unlink_attempt_count"], 0)
+            self.assertIs(status_7["temp_handling_succeeded"], False)
+            self.assertEqual(
+                status_7["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_STAT_ERROR,
+            )
+            self.assertEqual(len(status_7["errors"]), 2)
             self.assertEqual(
                 len(status_7["prior_collision_temp_cleanup_failures"]), 1
+            )
+            self.assertEqual(
+                status_7["prior_collision_temp_cleanup_failures"][0][
+                    "temp_handling_disposition"
+                ],
+                onesar_refmac.JSON_TEMP_DISPOSITION_STAT_ERROR,
+            )
+            self.assertEqual(
+                len(status_7["prior_collision_temp_cleanup_statuses"]), 1
             )
             pub_rec_7 = getattr(err_7, "published_receipt", None)
             self.assertIsInstance(pub_rec_7, Mapping)
             assert isinstance(pub_rec_7, Mapping)
             self.assertEqual(pub_rec_7["failure_phase"], "post_link_readback")
+            self.assertIs(pub_rec_7["temp_handling_succeeded"], False)
             self.assertEqual(
                 len(pub_rec_7["prior_collision_temp_cleanup_failures"]), 1
             )
+            self.assertEqual(
+                len(pub_rec_7["prior_collision_temp_cleanup_statuses"]), 1
+            )
+            self.assertEqual(dir_status_7.get("published_receipt"), pub_rec_7)
             self.assertTrue(
                 all(any(e is c for c in caught_7) for e in cleanup_errs_7)
             )
@@ -13893,6 +17446,761 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 with self.assertRaises(OSError) as fd7_cm:
                     real_fstat(fd_7)
                 self.assertEqual(fd7_cm.exception.errno, errno.EBADF)
+
+            # 7b. Paired regression for #1271: benign late-link collision (healthy retained
+            # losing temp) followed by sibling post-link readback EIO or post-readback
+            # namespace failure preserves prior_collision_temp_cleanup_statuses and
+            # prior_collision_retained_temporaries in BOTH exception published_receipt and
+            # matching shared context published_receipt without inventing cleanup failures.
+            root_7b = base / "case7b_paired_1271_shared_and_exc_published_receipt"
+            root_7b.mkdir()
+            real_read_7b = os.read
+            real_close_7b = os.close
+
+            # 7b-1: Benign late-link collision + sibling readback EIO after partial 6-byte read
+            dir_7b1 = root_7b / "sub1_readback_eio"
+            dir_7b1.mkdir()
+            target_7b1 = dir_7b1 / "receipt_7b1.json"
+            tmp_name_7b1 = f".{target_7b1.name}.tmp.{os.getpid()}"
+            tmp_path_7b1 = dir_7b1 / tmp_name_7b1
+            sib_7b1 = dir_7b1 / f"receipt_7b1.parent.{os.getpid()}.json"
+            sib_tmp_name_7b1 = f".{sib_7b1.name}.tmp.{os.getpid()}"
+            sib_tmp_path_7b1 = dir_7b1 / sib_tmp_name_7b1
+            preexisting_bytes_7b1 = b'{"competitor": "canonical-7b1"}\n'
+            competitor_7b1: list[tuple[int, int, bytes]] = []
+            opened_fds_7b1: list[int] = []
+            unlink_calls_7b1: list[str] = []
+            readback_fd_7b1: dict[str, int | None] = {"fd": None, "calls": 0}
+            sib_read_eio_7b1 = OSError(
+                errno.EIO, "simulated 7b1 sibling partial readback EIO"
+            )
+
+            def open_track_7b1(
+                path: Any,
+                flags: int,
+                mode: int = 0o777,
+                *,
+                dir_fd: int | None = None,
+            ) -> int:
+                fd = real_open(path, flags, mode, dir_fd=dir_fd)
+                opened_fds_7b1.append(fd)
+                if (
+                    os.fspath(path) == sib_7b1.name
+                    and dir_fd is not None
+                    and not (flags & os.O_CREAT)
+                ):
+                    readback_fd_7b1["fd"] = fd
+                return fd
+
+            def read_partial_then_eio_7b1(fd: int, n: int) -> bytes:
+                if fd == readback_fd_7b1["fd"]:
+                    readback_fd_7b1["calls"] = (
+                        int(readback_fd_7b1["calls"] or 0) + 1
+                    )
+                    if readback_fd_7b1["calls"] == 1:
+                        return real_read_7b(fd, 6)
+                    raise sib_read_eio_7b1
+                return real_read_7b(fd, n)
+
+            def unlink_track_7b1(
+                path: Any, *, dir_fd: int | None = None
+            ) -> None:
+                unlink_calls_7b1.append(os.fspath(path))
+                return real_unlink(path, dir_fd=dir_fd)
+
+            def link_inject_7b1(
+                src: Any,
+                dst: Any,
+                *,
+                src_dir_fd: int | None = None,
+                dst_dir_fd: int | None = None,
+                follow_symlinks: bool = True,
+            ) -> None:
+                if (
+                    os.fspath(dst) == target_7b1.name
+                    and not target_7b1.exists()
+                ):
+                    target_7b1.write_bytes(preexisting_bytes_7b1)
+                    st_c = os.lstat(target_7b1)
+                    competitor_7b1.append(
+                        (
+                            int(st_c.st_dev),
+                            int(st_c.st_ino),
+                            target_7b1.read_bytes(),
+                        )
+                    )
+                return real_link(
+                    src,
+                    dst,
+                    src_dir_fd=src_dir_fd,
+                    dst_dir_fd=dst_dir_fd,
+                    follow_symlinks=follow_symlinks,
+                )
+
+            dir_base_7b1 = onesar_refmac._capture_directory_identity_baseline(
+                dir_7b1, evidence_root=root_7b
+            )
+            dir_status_7b1: dict[str, Any] = {}
+            caught_7b1: list[Exception] = []
+            with (
+                patch.object(onesar_refmac.os, "open", open_track_7b1),
+                patch.object(
+                    onesar_refmac.os, "read", read_partial_then_eio_7b1
+                ),
+                patch.object(onesar_refmac.os, "link", link_inject_7b1),
+                patch.object(onesar_refmac.os, "unlink", unlink_track_7b1),
+            ):
+                with onesar_refmac._admitted_directory_context(
+                    dir_7b1,
+                    dir_base_7b1,
+                    dir_status_out=dir_status_7b1,
+                    caught_exceptions=caught_7b1,
+                ):
+                    with self.assertRaises(OSError) as cm_7b1:
+                        onesar_refmac._write_json_with_sibling_collision_fallback(
+                            lambda dest: {
+                                "case": "7b1",
+                                "dest": str(dest),
+                                "owned": True,
+                            },
+                            target_7b1,
+                            root=dir_7b1,
+                        )
+
+            err_7b1 = cm_7b1.exception
+            self.assertIs(err_7b1, sib_read_eio_7b1)
+            self.assertEqual(unlink_calls_7b1, [])
+            self.assertEqual(caught_7b1, [sib_read_eio_7b1])
+            self.assertIs(caught_7b1[0], sib_read_eio_7b1)
+            self.assertEqual(getattr(err_7b1, "temp_cleanup_errors", None), [])
+            self.assertIsNone(getattr(err_7b1, "temp_cleanup_error", None))
+            self.assertIsNone(
+                getattr(
+                    err_7b1, "prior_collision_temp_cleanup_failures", None
+                )
+            )
+            self.assertIn("temp_cleanup_status", dir_status_7b1)
+            self.assertIs(
+                dir_status_7b1["temp_cleanup_status"][
+                    "temp_handling_succeeded"
+                ],
+                True,
+            )
+            self.assertEqual(
+                dir_status_7b1["temp_cleanup_status"][
+                    "temp_handling_disposition"
+                ],
+                onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+            )
+            self.assertNotIn(
+                "prior_collision_temp_cleanup_failures",
+                dir_status_7b1["temp_cleanup_status"],
+            )
+            self.assertNotIn(
+                "prior_collision_temp_cleanup_failures", dir_status_7b1
+            )
+            self.assertTrue(sib_7b1.is_file())
+            self.assertTrue(sib_tmp_path_7b1.is_file())
+            sib_raw_7b1 = sib_7b1.read_bytes()
+            sib_st_7b1 = os.lstat(sib_7b1)
+            sib_tmp_st_7b1 = os.lstat(sib_tmp_path_7b1)
+            self.assertEqual(
+                (int(sib_st_7b1.st_dev), int(sib_st_7b1.st_ino)),
+                (int(sib_tmp_st_7b1.st_dev), int(sib_tmp_st_7b1.st_ino)),
+            )
+            self.assertGreaterEqual(int(sib_st_7b1.st_nlink), 2)
+            exc_pub_7b1 = getattr(err_7b1, "published_receipt", None)
+            shared_pub_7b1 = dir_status_7b1.get("published_receipt")
+            self.assertIsInstance(exc_pub_7b1, Mapping)
+            self.assertIsInstance(shared_pub_7b1, Mapping)
+            assert isinstance(exc_pub_7b1, Mapping)
+            assert isinstance(shared_pub_7b1, Mapping)
+            self.assertEqual(shared_pub_7b1, exc_pub_7b1)
+            for rec_7b1 in (exc_pub_7b1, shared_pub_7b1):
+                self.assertEqual(
+                    rec_7b1["failure_phase"], "post_link_readback"
+                )
+                self.assertEqual(
+                    rec_7b1["intended_lexical_path"], str(sib_7b1)
+                )
+                self.assertEqual(rec_7b1["target_name"], sib_7b1.name)
+                self.assertIs(rec_7b1["published_link_created"], True)
+                self.assertNotIn("dir_fsync_succeeded", rec_7b1)
+                self.assertIs(rec_7b1["readback_verified"], False)
+                self.assertIs(
+                    rec_7b1["post_publication_namespace_verified"], False
+                )
+                self.assertEqual(rec_7b1["observed_readback_size_bytes"], 6)
+                self.assertEqual(
+                    rec_7b1["observed_readback_sha256"],
+                    _sha256_bytes(sib_raw_7b1[:6]),
+                )
+                self.assertEqual(
+                    rec_7b1["expected_size_bytes"], len(sib_raw_7b1)
+                )
+                self.assertEqual(
+                    rec_7b1["expected_sha256"], _sha256_bytes(sib_raw_7b1)
+                )
+                self.assertIs(rec_7b1["observed_readback_eof"], False)
+                self.assertIsNone(rec_7b1["path"])
+                self.assertIsNone(rec_7b1["sha256"])
+                self.assertIsNone(rec_7b1["size_bytes"])
+                self.assertIsNone(rec_7b1["dev"])
+                self.assertIsNone(rec_7b1["ino"])
+                self.assertEqual(
+                    (rec_7b1["source_tmp_dev"], rec_7b1["source_tmp_ino"]),
+                    (int(sib_tmp_st_7b1.st_dev), int(sib_tmp_st_7b1.st_ino)),
+                )
+                self.assertEqual(
+                    (
+                        rec_7b1["observed_target_dev"],
+                        rec_7b1["observed_target_ino"],
+                    ),
+                    (int(sib_st_7b1.st_dev), int(sib_st_7b1.st_ino)),
+                )
+                self.assertIsNone(rec_7b1["available_at_lexical_path"])
+                self.assertIsNone(rec_7b1["lexical_path_currently_bound"])
+                self.assertIsNone(rec_7b1["detached_from_lexical_path"])
+                self.assertIs(rec_7b1["temp_cleanup_succeeded"], False)
+                self.assertEqual(
+                    rec_7b1["temp_handling_policy"],
+                    onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+                )
+                self.assertIs(rec_7b1["temp_handling_succeeded"], True)
+                self.assertEqual(
+                    rec_7b1["temp_handling_disposition"],
+                    onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+                )
+                self.assertNotIn(
+                    "prior_collision_temp_cleanup_failures", rec_7b1
+                )
+                self.assertEqual(
+                    len(rec_7b1["prior_collision_temp_cleanup_statuses"]), 1
+                )
+                self.assertEqual(
+                    len(rec_7b1["prior_collision_retained_temporaries"]), 1
+                )
+                ret_entry_7b1 = rec_7b1[
+                    "prior_collision_retained_temporaries"
+                ][0]
+                self.assertEqual(ret_entry_7b1["temp_name"], tmp_name_7b1)
+                self.assertEqual(
+                    ret_entry_7b1["attempted_path"], str(target_7b1)
+                )
+                self.assertIs(ret_entry_7b1["temp_handling_succeeded"], True)
+                self.assertEqual(
+                    ret_entry_7b1["temp_handling_disposition"],
+                    onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+                )
+                self.assertEqual(
+                    rec_7b1["temp_cleanup_status"][
+                        "prior_collision_temp_cleanup_statuses"
+                    ],
+                    rec_7b1["prior_collision_temp_cleanup_statuses"],
+                )
+                self.assertEqual(
+                    rec_7b1["temp_cleanup_status"][
+                        "prior_collision_retained_temporaries"
+                    ],
+                    rec_7b1["prior_collision_retained_temporaries"],
+                )
+            st_c_after_7b1 = os.lstat(target_7b1)
+            self.assertEqual(
+                (
+                    int(st_c_after_7b1.st_dev),
+                    int(st_c_after_7b1.st_ino),
+                    target_7b1.read_bytes(),
+                ),
+                competitor_7b1[0],
+            )
+            self.assertTrue(tmp_path_7b1.is_file())
+            self.assertEqual(
+                json.loads(tmp_path_7b1.read_text(encoding="utf-8")),
+                {"case": "7b1", "dest": str(target_7b1), "owned": True},
+            )
+            for fd_7b1 in set(opened_fds_7b1):
+                with self.assertRaises(OSError) as fd7b1_cm:
+                    real_fstat(fd_7b1)
+                self.assertEqual(fd7b1_cm.exception.errno, errno.EBADF)
+
+            # 7b-2: Benign late-link collision + sibling post-readback namespace failure
+            dir_7b2 = root_7b / "sub2_post_readback_namespace_failure"
+            dir_7b2.mkdir()
+            target_7b2 = dir_7b2 / "receipt_7b2.json"
+            tmp_name_7b2 = f".{target_7b2.name}.tmp.{os.getpid()}"
+            tmp_path_7b2 = dir_7b2 / tmp_name_7b2
+            sib_7b2 = dir_7b2 / f"receipt_7b2.parent.{os.getpid()}.json"
+            sib_tmp_name_7b2 = f".{sib_7b2.name}.tmp.{os.getpid()}"
+            sib_tmp_path_7b2 = dir_7b2 / sib_tmp_name_7b2
+            detached_sib_7b2 = dir_7b2 / "detached_sib_7b2.json"
+            replacement_src_7b2 = dir_7b2 / "replacement_src_7b2.json"
+            replacement_bytes_7b2 = b'{"competitor": "sib-replacement-7b2"}\n'
+            replacement_src_7b2.write_bytes(replacement_bytes_7b2)
+            replacement_src_st_before_7b2 = os.lstat(replacement_src_7b2)
+            replacement_src_recorded_bytes_7b2 = (
+                replacement_src_7b2.read_bytes()
+            )
+            preexisting_bytes_7b2 = b'{"competitor": "canonical-7b2"}\n'
+            competitor_7b2: list[tuple[int, int, bytes]] = []
+            losing_tmp_holder_7b2: list[tuple[int, int, bytes]] = []
+            orig_sib_holder_7b2: list[tuple[int, int, bytes]] = []
+            opened_fds_7b2: list[int] = []
+            unlink_calls_7b2: list[str] = []
+            readback_fd_7b2: dict[str, int | None] = {
+                "fd": None,
+                "swapped": 0,
+            }
+
+            def open_track_7b2(
+                path: Any,
+                flags: int,
+                mode: int = 0o777,
+                *,
+                dir_fd: int | None = None,
+            ) -> int:
+                fd = real_open(path, flags, mode, dir_fd=dir_fd)
+                opened_fds_7b2.append(fd)
+                if (
+                    os.fspath(path) == sib_7b2.name
+                    and dir_fd is not None
+                    and not (flags & os.O_CREAT)
+                ):
+                    readback_fd_7b2["fd"] = fd
+                return fd
+
+            def read_swap_sibling_leaf_7b2(fd: int, n: int) -> bytes:
+                chunk = real_read_7b(fd, n)
+                if (
+                    fd == readback_fd_7b2["fd"]
+                    and not readback_fd_7b2["swapped"]
+                ):
+                    readback_fd_7b2["swapped"] = 1
+                    orig_sib_st_7b2 = os.lstat(sib_7b2)
+                    orig_sib_holder_7b2.append(
+                        (
+                            int(orig_sib_st_7b2.st_dev),
+                            int(orig_sib_st_7b2.st_ino),
+                            sib_7b2.read_bytes(),
+                        )
+                    )
+                    real_link(sib_7b2, detached_sib_7b2)
+                    os.replace(replacement_src_7b2, sib_7b2)
+                return chunk
+
+            def unlink_track_7b2(
+                path: Any, *, dir_fd: int | None = None
+            ) -> None:
+                unlink_calls_7b2.append(os.fspath(path))
+                return real_unlink(path, dir_fd=dir_fd)
+
+            def link_inject_7b2(
+                src: Any,
+                dst: Any,
+                *,
+                src_dir_fd: int | None = None,
+                dst_dir_fd: int | None = None,
+                follow_symlinks: bool = True,
+            ) -> None:
+                if (
+                    os.fspath(dst) == target_7b2.name
+                    and not target_7b2.exists()
+                ):
+                    target_7b2.write_bytes(preexisting_bytes_7b2)
+                    st_c2 = os.lstat(target_7b2)
+                    competitor_7b2.append(
+                        (
+                            int(st_c2.st_dev),
+                            int(st_c2.st_ino),
+                            target_7b2.read_bytes(),
+                        )
+                    )
+                    losing_st_c2 = os.lstat(tmp_path_7b2)
+                    losing_tmp_holder_7b2.append(
+                        (
+                            int(losing_st_c2.st_dev),
+                            int(losing_st_c2.st_ino),
+                            tmp_path_7b2.read_bytes(),
+                        )
+                    )
+                return real_link(
+                    src,
+                    dst,
+                    src_dir_fd=src_dir_fd,
+                    dst_dir_fd=dst_dir_fd,
+                    follow_symlinks=follow_symlinks,
+                )
+
+            dir_base_7b2 = onesar_refmac._capture_directory_identity_baseline(
+                dir_7b2, evidence_root=root_7b
+            )
+            dir_status_7b2: dict[str, Any] = {}
+            caught_7b2: list[Exception] = []
+            with (
+                patch.object(onesar_refmac.os, "open", open_track_7b2),
+                patch.object(
+                    onesar_refmac.os, "read", read_swap_sibling_leaf_7b2
+                ),
+                patch.object(onesar_refmac.os, "link", link_inject_7b2),
+                patch.object(onesar_refmac.os, "unlink", unlink_track_7b2),
+            ):
+                with onesar_refmac._admitted_directory_context(
+                    dir_7b2,
+                    dir_base_7b2,
+                    dir_status_out=dir_status_7b2,
+                    caught_exceptions=caught_7b2,
+                ):
+                    with self.assertRaises(
+                        onesar_refmac._PostPublicationBindingError
+                    ) as cm_7b2:
+                        onesar_refmac._write_json_with_sibling_collision_fallback(
+                            lambda dest: {
+                                "case": "7b2",
+                                "dest": str(dest),
+                                "owned": True,
+                            },
+                            target_7b2,
+                            root=dir_7b2,
+                        )
+
+            err_7b2 = cm_7b2.exception
+            self.assertEqual(unlink_calls_7b2, [])
+            self.assertIsInstance(err_7b2.cause, ValueError)
+            self.assertIn(
+                "Published JSON artifact final leaf rebound or replaced after readback",
+                str(err_7b2.cause),
+            )
+            self.assertEqual(caught_7b2, [err_7b2.cause])
+            self.assertIs(caught_7b2[0], err_7b2.cause)
+            self.assertEqual(getattr(err_7b2, "temp_cleanup_errors", None), [])
+            self.assertIsNone(getattr(err_7b2, "temp_cleanup_error", None))
+            self.assertEqual(
+                getattr(err_7b2.cause, "temp_cleanup_errors", None), []
+            )
+            self.assertIsNone(
+                getattr(err_7b2.cause, "temp_cleanup_error", None)
+            )
+            self.assertIsNone(
+                getattr(
+                    err_7b2, "prior_collision_temp_cleanup_failures", None
+                )
+            )
+            self.assertIn("temp_cleanup_status", dir_status_7b2)
+            self.assertIs(
+                dir_status_7b2["temp_cleanup_status"][
+                    "temp_handling_succeeded"
+                ],
+                True,
+            )
+            self.assertEqual(
+                dir_status_7b2["temp_cleanup_status"][
+                    "temp_handling_disposition"
+                ],
+                onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+            )
+            self.assertNotIn(
+                "prior_collision_temp_cleanup_failures",
+                dir_status_7b2["temp_cleanup_status"],
+            )
+            self.assertNotIn(
+                "prior_collision_temp_cleanup_failures", dir_status_7b2
+            )
+            exc_pub_7b2 = getattr(err_7b2, "published_receipt", None)
+            cause_pub_7b2 = getattr(err_7b2.cause, "published_receipt", None)
+            shared_pub_7b2 = dir_status_7b2.get("published_receipt")
+            self.assertIsInstance(exc_pub_7b2, Mapping)
+            self.assertEqual(cause_pub_7b2, exc_pub_7b2)
+            self.assertEqual(shared_pub_7b2, exc_pub_7b2)
+            assert isinstance(exc_pub_7b2, Mapping)
+            self.assertEqual(len(competitor_7b2), 1)
+            st_c2_after_7b2 = os.lstat(target_7b2)
+            self.assertEqual(
+                (
+                    int(st_c2_after_7b2.st_dev),
+                    int(st_c2_after_7b2.st_ino),
+                    target_7b2.read_bytes(),
+                ),
+                competitor_7b2[0],
+            )
+            self.assertEqual(len(losing_tmp_holder_7b2), 1)
+            losing_tmp_st_after_7b2 = os.lstat(tmp_path_7b2)
+            self.assertEqual(
+                (
+                    int(losing_tmp_st_after_7b2.st_dev),
+                    int(losing_tmp_st_after_7b2.st_ino),
+                    tmp_path_7b2.read_bytes(),
+                ),
+                losing_tmp_holder_7b2[0],
+            )
+            self.assertEqual(
+                json.loads(tmp_path_7b2.read_text(encoding="utf-8")),
+                {"case": "7b2", "dest": str(target_7b2), "owned": True},
+            )
+            self.assertEqual(len(orig_sib_holder_7b2), 1)
+            orig_sib_dev_7b2, orig_sib_ino_7b2, orig_sib_raw_7b2 = (
+                orig_sib_holder_7b2[0]
+            )
+            detached_st_7b2 = os.lstat(detached_sib_7b2)
+            sib_tmp_st_7b2 = os.lstat(sib_tmp_path_7b2)
+            replaced_leaf_st_7b2 = os.lstat(sib_7b2)
+            self.assertFalse(replacement_src_7b2.exists())
+            self.assertEqual(
+                (int(detached_st_7b2.st_dev), int(detached_st_7b2.st_ino)),
+                (orig_sib_dev_7b2, orig_sib_ino_7b2),
+            )
+            self.assertEqual(
+                (int(sib_tmp_st_7b2.st_dev), int(sib_tmp_st_7b2.st_ino)),
+                (orig_sib_dev_7b2, orig_sib_ino_7b2),
+            )
+            self.assertGreaterEqual(int(detached_st_7b2.st_nlink), 2)
+            self.assertEqual(detached_sib_7b2.read_bytes(), orig_sib_raw_7b2)
+            self.assertEqual(sib_tmp_path_7b2.read_bytes(), orig_sib_raw_7b2)
+            self.assertEqual(
+                json.loads(detached_sib_7b2.read_text(encoding="utf-8")),
+                {"case": "7b2", "dest": str(sib_7b2), "owned": True},
+            )
+            self.assertEqual(
+                json.loads(sib_tmp_path_7b2.read_text(encoding="utf-8")),
+                {"case": "7b2", "dest": str(sib_7b2), "owned": True},
+            )
+            self.assertEqual(
+                (
+                    int(replaced_leaf_st_7b2.st_dev),
+                    int(replaced_leaf_st_7b2.st_ino),
+                ),
+                (
+                    int(replacement_src_st_before_7b2.st_dev),
+                    int(replacement_src_st_before_7b2.st_ino),
+                ),
+            )
+            self.assertEqual(exc_pub_7b2["failure_phase"], "after_publication")
+            self.assertIs(exc_pub_7b2["readback_verified"], True)
+            self.assertIs(
+                exc_pub_7b2["post_publication_namespace_verified"], False
+            )
+            self.assertIs(exc_pub_7b2["available_at_lexical_path"], False)
+            self.assertIs(exc_pub_7b2["detached_from_lexical_path"], True)
+            self.assertIsNone(exc_pub_7b2["path"])
+            self.assertEqual(exc_pub_7b2["dev"], orig_sib_dev_7b2)
+            self.assertEqual(exc_pub_7b2["ino"], orig_sib_ino_7b2)
+            self.assertEqual(
+                (
+                    exc_pub_7b2["observed_target_dev"],
+                    exc_pub_7b2["observed_target_ino"],
+                ),
+                (orig_sib_dev_7b2, orig_sib_ino_7b2),
+            )
+            self.assertEqual(
+                (
+                    exc_pub_7b2["post_readback_leaf_dev"],
+                    exc_pub_7b2["post_readback_leaf_ino"],
+                ),
+                (
+                    int(replacement_src_st_before_7b2.st_dev),
+                    int(replacement_src_st_before_7b2.st_ino),
+                ),
+            )
+            self.assertIs(exc_pub_7b2["temp_handling_succeeded"], True)
+            self.assertEqual(
+                exc_pub_7b2["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+            )
+            self.assertNotIn(
+                "prior_collision_temp_cleanup_failures", exc_pub_7b2
+            )
+            self.assertEqual(
+                len(exc_pub_7b2["prior_collision_temp_cleanup_statuses"]), 1
+            )
+            self.assertEqual(
+                len(exc_pub_7b2["prior_collision_retained_temporaries"]), 1
+            )
+            self.assertEqual(
+                sib_7b2.read_bytes(), replacement_src_recorded_bytes_7b2
+            )
+            self.assertEqual(sib_7b2.read_bytes(), replacement_bytes_7b2)
+            self.assertTrue(tmp_path_7b2.is_file())
+            for fd_7b2 in set(opened_fds_7b2):
+                with self.assertRaises(OSError) as fd7b2_cm:
+                    real_fstat(fd_7b2)
+                self.assertEqual(fd7b2_cm.exception.errno, errno.EBADF)
+
+            # 7b-3: Healthy paired control + nonmatching/stale shared-receipt association guard control
+            dir_7b3 = root_7b / "sub3_healthy_and_nonmatching_controls"
+            dir_7b3.mkdir()
+            target_7b3_ok = dir_7b3 / "receipt_7b3_ok.json"
+            preexisting_7b3_ok = b'{"competitor": "canonical-7b3-ok"}\n'
+
+            def link_inject_7b3_ok(
+                src: Any,
+                dst: Any,
+                *,
+                src_dir_fd: int | None = None,
+                dst_dir_fd: int | None = None,
+                follow_symlinks: bool = True,
+            ) -> None:
+                if (
+                    os.fspath(dst) == target_7b3_ok.name
+                    and not target_7b3_ok.exists()
+                ):
+                    target_7b3_ok.write_bytes(preexisting_7b3_ok)
+                return real_link(
+                    src,
+                    dst,
+                    src_dir_fd=src_dir_fd,
+                    dst_dir_fd=dst_dir_fd,
+                    follow_symlinks=follow_symlinks,
+                )
+
+            dir_base_7b3 = onesar_refmac._capture_directory_identity_baseline(
+                dir_7b3, evidence_root=root_7b
+            )
+            dir_status_7b3_ok: dict[str, Any] = {}
+            caught_7b3_ok: list[Exception] = []
+            with patch.object(onesar_refmac.os, "link", link_inject_7b3_ok):
+                with onesar_refmac._admitted_directory_context(
+                    dir_7b3,
+                    dir_base_7b3,
+                    dir_status_out=dir_status_7b3_ok,
+                    caught_exceptions=caught_7b3_ok,
+                ):
+                    art_7b3_ok = onesar_refmac._write_json_with_sibling_collision_fallback(
+                        {"case": "7b3_ok", "owned": True},
+                        target_7b3_ok,
+                        root=dir_7b3,
+                    )
+            self.assertEqual(caught_7b3_ok, [])
+            self.assertNotIn("published_receipt", dir_status_7b3_ok)
+            self.assertNotIn("temp_cleanup_status", dir_status_7b3_ok)
+            self.assertNotIn(
+                "prior_collision_temp_cleanup_failures", dir_status_7b3_ok
+            )
+            self.assertIs(art_7b3_ok["temp_handling_succeeded"], True)
+            self.assertEqual(
+                len(art_7b3_ok["prior_collision_retained_temporaries"]), 1
+            )
+
+            # Nonmatching/stale shared-receipt control: if dir_status_out["published_receipt"]
+            # holds a receipt for an unrelated artifact when a sibling attempt fails during
+            # post-link readback, _shared_published_receipt_matches_exception_receipt must NOT
+            # overwrite that unrelated shared receipt with the sibling exception's published_receipt.
+            target_7b3_stale = dir_7b3 / "receipt_7b3_stale.json"
+            sib_7b3_stale = (
+                dir_7b3 / f"receipt_7b3_stale.parent.{os.getpid()}.json"
+            )
+            stale_unrelated_receipt = {
+                "intended_lexical_path": str(dir_7b3 / "unrelated_other.json"),
+                "path": None,
+                "target_name": "unrelated_other.json",
+                "failure_phase": "post_link_readback",
+                "source_tmp_ino": 999999999,
+            }
+            dir_status_7b3_stale: dict[str, Any] = {
+                "published_receipt": copy.deepcopy(stale_unrelated_receipt)
+            }
+            caught_7b3_stale: list[Exception] = []
+            opened_fds_7b3_stale: list[int] = []
+            sib_open_eio_7b3 = OSError(
+                errno.EIO, "simulated 7b3 stale control readback open EIO"
+            )
+            sib_failed_7b3 = {"raised": False}
+
+            def open_inject_7b3_stale(
+                path: Any,
+                flags: int,
+                mode: int = 0o777,
+                *,
+                dir_fd: int | None = None,
+            ) -> int:
+                if (
+                    os.fspath(path) == sib_7b3_stale.name
+                    and dir_fd is not None
+                    and not (flags & os.O_CREAT)
+                ):
+                    sib_failed_7b3["raised"] = True
+                    raise sib_open_eio_7b3
+                fd_7b3 = real_open(path, flags, mode, dir_fd=dir_fd)
+                opened_fds_7b3_stale.append(fd_7b3)
+                return fd_7b3
+
+            def link_inject_7b3_stale(
+                src: Any,
+                dst: Any,
+                *,
+                src_dir_fd: int | None = None,
+                dst_dir_fd: int | None = None,
+                follow_symlinks: bool = True,
+            ) -> None:
+                if (
+                    os.fspath(dst) == target_7b3_stale.name
+                    and not target_7b3_stale.exists()
+                ):
+                    target_7b3_stale.write_bytes(b'{"competitor": "stale"}\n')
+                return real_link(
+                    src,
+                    dst,
+                    src_dir_fd=src_dir_fd,
+                    dst_dir_fd=dst_dir_fd,
+                    follow_symlinks=follow_symlinks,
+                )
+
+            def close_swap_shared_receipt_7b3_stale(fd: int) -> None:
+                real_close_7b(fd)
+                if sib_failed_7b3["raised"]:
+                    dir_status_7b3_stale["published_receipt"] = copy.deepcopy(
+                        stale_unrelated_receipt
+                    )
+
+            with (
+                patch.object(
+                    onesar_refmac.os, "open", open_inject_7b3_stale
+                ),
+                patch.object(
+                    onesar_refmac.os, "link", link_inject_7b3_stale
+                ),
+                patch.object(
+                    onesar_refmac.os,
+                    "close",
+                    close_swap_shared_receipt_7b3_stale,
+                ),
+            ):
+                with onesar_refmac._admitted_directory_context(
+                    dir_7b3,
+                    dir_base_7b3,
+                    dir_status_out=dir_status_7b3_stale,
+                    caught_exceptions=caught_7b3_stale,
+                ):
+                    with self.assertRaises(OSError) as cm_7b3_stale:
+                        onesar_refmac._write_json_with_sibling_collision_fallback(
+                            {"case": "7b3_stale", "owned": True},
+                            target_7b3_stale,
+                            root=dir_7b3,
+                        )
+
+            self.assertIs(cm_7b3_stale.exception, sib_open_eio_7b3)
+            exc_pub_7b3_stale = getattr(
+                sib_open_eio_7b3, "published_receipt", None
+            )
+            self.assertIsInstance(exc_pub_7b3_stale, Mapping)
+            assert isinstance(exc_pub_7b3_stale, Mapping)
+            self.assertNotIn(
+                "prior_collision_temp_cleanup_failures", exc_pub_7b3_stale
+            )
+            self.assertEqual(
+                len(exc_pub_7b3_stale["prior_collision_temp_cleanup_statuses"]),
+                1,
+            )
+            self.assertEqual(
+                len(exc_pub_7b3_stale["prior_collision_retained_temporaries"]),
+                1,
+            )
+            self.assertEqual(
+                dir_status_7b3_stale["published_receipt"],
+                stale_unrelated_receipt,
+            )
+            self.assertGreater(len(opened_fds_7b3_stale), 0)
+            for fd_7b3 in set(opened_fds_7b3_stale):
+                with self.assertRaises(OSError) as fd7b3_cm:
+                    real_fstat(fd_7b3)
+                self.assertEqual(fd7b3_cm.exception.errno, errno.EBADF)
 
             # 8. Retained payload sink equality and authoritative writer-owned cleanup fields
             # overriding stale incoming fields across collision + temp-cleanup failure and healthy counterpart
@@ -13904,6 +18212,8 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
             child_base_8 = onesar_refmac._capture_directory_identity_baseline(
                 child_8, evidence_root=root_8
             )
+            child_dev_8 = int(child_base_8["dev"])
+            child_ino_8 = int(child_base_8["ino"])
             parent_base_8 = onesar_refmac._capture_directory_identity_baseline(
                 parent_8, evidence_root=root_8
             )
@@ -13915,10 +18225,15 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
             parent_causes_8: list[Exception | None] = []
             retained_sink_8: list[dict[str, Any]] = []
             target_8 = child_8 / "refmac_diagnostics.json"
+            tmp_name_8 = f".{target_8.name}.tmp.{os.getpid()}"
             competitor_bytes_8 = b'{"competitor": "canonical-d0-case8"}\n'
             competitor_8_info: list[tuple[int, int, bytes]] = []
             cleanup_errs_8: list[PermissionError] = []
             factory_calls_8: list[str] = []
+            unlink_calls_8: list[str] = []
+            canonical_collision_8 = {"injected": False, "count": 0}
+            pre_link_stat_count_8 = {"n": 0}
+            phase_events_8: list[str] = []
 
             def payload_factory_8(dest: Path) -> Mapping[str, Any]:
                 factory_calls_8.append(str(dest))
@@ -13932,6 +18247,12 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                     },
                 }
 
+            def unlink_track_8(
+                path: Any, *, dir_fd: int | None = None
+            ) -> None:
+                unlink_calls_8.append(os.fspath(path))
+                return real_unlink(path, dir_fd=dir_fd)
+
             def link_create_competitor_8(
                 src: Any,
                 dst: Any,
@@ -13940,37 +18261,101 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 dst_dir_fd: int | None = None,
                 follow_symlinks: bool = True,
             ) -> None:
-                if os.fspath(dst) == "refmac_diagnostics.json" and not competitor_8_info:
+                in_child_8 = False
+                if (
+                    src_dir_fd is not None
+                    and dst_dir_fd is not None
+                    and not follow_symlinks
+                ):
+                    src_dir_st_8 = real_fstat(src_dir_fd)
+                    dst_dir_st_8 = real_fstat(dst_dir_fd)
+                    in_child_8 = (
+                        (int(src_dir_st_8.st_dev), int(src_dir_st_8.st_ino))
+                        == (child_dev_8, child_ino_8)
+                        and (
+                            int(dst_dir_st_8.st_dev),
+                            int(dst_dir_st_8.st_ino),
+                        )
+                        == (child_dev_8, child_ino_8)
+                    )
+                if (
+                    in_child_8
+                    and os.fspath(dst) == target_8.name
+                    and os.fspath(src) == tmp_name_8
+                    and not competitor_8_info
+                ):
                     target_8.write_bytes(competitor_bytes_8)
                     st_c8 = os.lstat(target_8)
                     competitor_8_info.append(
-                        (int(st_c8.st_dev), int(st_c8.st_ino), target_8.read_bytes())
+                        (
+                            int(st_c8.st_dev),
+                            int(st_c8.st_ino),
+                            target_8.read_bytes(),
+                        )
                     )
-                return real_link(
+                    canonical_collision_8["injected"] = True
+                    canonical_collision_8["count"] += 1
+                    phase_events_8.append("canonical_late_link_collision")
+                real_link(
                     src,
                     dst,
                     src_dir_fd=src_dir_fd,
                     dst_dir_fd=dst_dir_fd,
                     follow_symlinks=follow_symlinks,
                 )
+                if in_child_8 and str(os.fspath(dst)).startswith(
+                    "refmac_diagnostics.parent."
+                ):
+                    phase_events_8.append("sibling_link_published")
 
-            def unlink_fail_canonical_8(
-                path: Any, *, dir_fd: int | None = None
-            ) -> None:
+            def stat_fail_canonical_8(
+                path: Any,
+                *,
+                dir_fd: int | None = None,
+                follow_symlinks: bool = True,
+            ) -> os.stat_result:
                 p_str = os.fspath(path)
-                if p_str.startswith(".refmac_diagnostics.json.tmp."):
-                    err8 = PermissionError(
-                        errno.EACCES,
-                        "simulated canonical collision temp unlink failure",
-                        p_str,
-                    )
-                    cleanup_errs_8.append(err8)
-                    raise err8
-                return real_unlink(path, dir_fd=dir_fd)
+                if dir_fd is not None and not follow_symlinks:
+                    dir_st_8 = real_fstat(dir_fd)
+                    if (int(dir_st_8.st_dev), int(dir_st_8.st_ino)) == (
+                        child_dev_8,
+                        child_ino_8,
+                    ):
+                        if p_str == tmp_name_8:
+                            if not canonical_collision_8["injected"]:
+                                pre_link_stat_count_8["n"] += 1
+                                phase_events_8.append(
+                                    "canonical_pre_link_tmp_stat"
+                                )
+                                return real_stat_1(
+                                    path,
+                                    dir_fd=dir_fd,
+                                    follow_symlinks=follow_symlinks,
+                                )
+                            phase_events_8.append(
+                                "canonical_final_cleanup_tmp_stat_denied"
+                            )
+                            err8 = PermissionError(
+                                errno.EACCES,
+                                "simulated canonical collision temp final_cleanup_stat failure",
+                                p_str,
+                            )
+                            cleanup_errs_8.append(err8)
+                            raise err8
+                        if p_str.startswith(".refmac_diagnostics.parent."):
+                            phase_events_8.append(
+                                "sibling_post_link_tmp_stat"
+                                if "sibling_link_published" in phase_events_8
+                                else "sibling_pre_link_tmp_stat"
+                            )
+                return real_stat_1(
+                    path, dir_fd=dir_fd, follow_symlinks=follow_symlinks
+                )
 
             with (
                 patch.object(onesar_refmac.os, "link", link_create_competitor_8),
-                patch.object(onesar_refmac.os, "unlink", unlink_fail_canonical_8),
+                patch.object(onesar_refmac.os, "stat", stat_fail_canonical_8),
+                patch.object(onesar_refmac.os, "unlink", unlink_track_8),
             ):
                 receipt_8 = onesar_refmac._persist_collector_json_with_fallback(
                     payload_factory_8,
@@ -13991,10 +18376,41 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 )
 
             assert receipt_8 is not None
+            self.assertEqual(unlink_calls_8, [])
+            self.assertIs(canonical_collision_8["injected"], True)
+            self.assertEqual(canonical_collision_8["count"], 1)
+            self.assertEqual(pre_link_stat_count_8["n"], 1)
+            self.assertEqual(len(competitor_8_info), 1)
+            st_c8_after = os.lstat(target_8)
+            self.assertEqual(
+                (
+                    int(st_c8_after.st_dev),
+                    int(st_c8_after.st_ino),
+                    target_8.read_bytes(),
+                ),
+                competitor_8_info[0],
+            )
+            self.assertEqual(
+                phase_events_8,
+                [
+                    "canonical_pre_link_tmp_stat",
+                    "canonical_late_link_collision",
+                    "canonical_final_cleanup_tmp_stat_denied",
+                    "sibling_pre_link_tmp_stat",
+                    "sibling_link_published",
+                    "sibling_post_link_tmp_stat",
+                ],
+            )
             sib_path_8 = Path(str(receipt_8["path"]))
             self.assertNotEqual(sib_path_8, target_8)
             self.assertEqual(
                 factory_calls_8, [str(target_8), str(sib_path_8)]
+            )
+            self.assertTrue(
+                (child_8 / f".{target_8.name}.tmp.{os.getpid()}").is_file()
+            )
+            self.assertTrue(
+                (child_8 / f".{sib_path_8.name}.tmp.{os.getpid()}").is_file()
             )
             self.assertEqual(len(retained_sink_8), 1)
             disk_json_8 = json.loads(sib_path_8.read_text(encoding="utf-8"))
@@ -14013,10 +18429,17 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
             prior_st_8 = disk_json_8["prior_collision_temp_cleanup_status"]
             self.assertIsInstance(prior_st_8, Mapping)
             self.assertIs(prior_st_8["unlinked"], False)
+            self.assertIs(prior_st_8["temp_handling_succeeded"], False)
+            self.assertEqual(
+                prior_st_8["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_STAT_ERROR,
+            )
             self.assertEqual(
                 prior_st_8["actual_published_path"], str(sib_path_8)
             )
             self.assertIs(receipt_8["temp_cleanup_succeeded"], False)
+            self.assertIs(receipt_8["temp_handling_succeeded"], False)
+            self.assertIs(receipt_8["sibling_temp_handling_succeeded"], True)
             self.assertEqual(len(cleanup_errs_8), 1)
             self.assertEqual(len(child_causes_8), 1)
             self.assertIs(child_causes_8[0], cleanup_errs_8[0])
@@ -14051,8 +18474,28 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 parent_retention_dir_cause_sink=[],
             )
             assert healthy_receipt_8 is not None
-            self.assertIs(healthy_receipt_8["temp_cleanup_succeeded"], True)
+            self.assertIs(healthy_receipt_8["temp_cleanup_succeeded"], False)
+            self.assertEqual(
+                healthy_receipt_8["temp_handling_policy"],
+                onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+            )
+            self.assertIs(healthy_receipt_8["temp_handling_succeeded"], True)
+            self.assertEqual(
+                healthy_receipt_8["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+            )
             self.assertEqual(healthy_calls_8, [str(healthy_target_8)])
+            healthy_tmp_8 = (
+                child_8 / f".{healthy_target_8.name}.tmp.{os.getpid()}"
+            )
+            self.assertTrue(healthy_tmp_8.is_file())
+            healthy_st_8 = os.lstat(healthy_target_8)
+            healthy_tmp_st_8 = os.lstat(healthy_tmp_8)
+            self.assertEqual(
+                (int(healthy_st_8.st_dev), int(healthy_st_8.st_ino)),
+                (int(healthy_tmp_st_8.st_dev), int(healthy_tmp_st_8.st_ino)),
+            )
+            self.assertGreaterEqual(int(healthy_st_8.st_nlink), 2)
             healthy_disk_8 = json.loads(
                 healthy_target_8.read_text(encoding="utf-8")
             )
@@ -14064,50 +18507,144 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve(strict=True)
-            target = root / "receipt.json"
+            pid = os.getpid()
+
+            # Admission failure before temp creation leaves directory empty and makes zero factory calls
+            admit_root = root / "admit_before_create"
+            admit_real_dir = admit_root / "real_dir"
+            admit_real_dir.mkdir(parents=True)
+            admit_symlink_dir = admit_root / "symlink_dir"
+            admit_symlink_dir.symlink_to(admit_real_dir)
+            admit_factory_calls: list[str] = []
+            with self.assertRaises(ValueError) as cm_admit:
+                onesar_refmac._write_json_with_sibling_collision_fallback(
+                    lambda dest: (
+                        admit_factory_calls.append(str(dest))
+                        or {"admit": str(dest)}
+                    ),
+                    admit_symlink_dir / "receipt.json",
+                    root=admit_root,
+                )
+            self.assertIn(
+                f"Symlink component rejected under evidence root: {admit_symlink_dir}",
+                str(cm_admit.exception),
+            )
+            self.assertEqual(admit_factory_calls, [])
+            self.assertEqual(list(admit_real_dir.iterdir()), [])
+
+            # Factory failure after O_CREAT|O_EXCL temp creation propagates FileExistsError
+            # without sibling retries and retains the owned 0-byte partial temp under retain_entries_v1
+            fac_root = root / "factory_error_case"
+            fac_root.mkdir()
+            target = fac_root / "receipt.json"
+            tmp_path = fac_root / f".{target.name}.tmp.{pid}"
             factory_calls: list[str] = []
+            fac_err = FileExistsError(
+                errno.EEXIST,
+                "unrelated inner factory FileExistsError",
+                str(fac_root / "other.json"),
+            )
 
             def bad_factory(dest: Path) -> Mapping[str, Any]:
                 factory_calls.append(str(dest))
-                raise FileExistsError(
-                    errno.EEXIST,
-                    "unrelated inner factory FileExistsError",
-                    str(root / "other.json"),
-                )
+                raise fac_err
 
             with self.assertRaises(FileExistsError) as cm_fac:
                 onesar_refmac._write_json_with_sibling_collision_fallback(
-                    bad_factory, target, root=root
+                    bad_factory, target, root=fac_root
                 )
+            self.assertIs(cm_fac.exception, fac_err)
             self.assertIn(
                 "unrelated inner factory FileExistsError",
                 str(cm_fac.exception),
             )
             self.assertEqual(factory_calls, [str(target)])
-            self.assertEqual(list(root.iterdir()), [])
+            self.assertFalse(target.exists())
+            self.assertEqual(list(fac_root.iterdir()), [tmp_path])
+            self.assertEqual(tmp_path.read_bytes(), b"")
+            tmp_lstat = os.lstat(tmp_path)
+            self.assertEqual(int(tmp_lstat.st_size), 0)
+            self.assertTrue(stat.S_ISREG(tmp_lstat.st_mode))
+            fac_cleanup_st = getattr(
+                cm_fac.exception, "temp_cleanup_status", None
+            )
+            self.assertIsInstance(fac_cleanup_st, Mapping)
+            assert isinstance(fac_cleanup_st, Mapping)
+            self.assertEqual(
+                fac_cleanup_st["temp_handling_policy"],
+                onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+            )
+            self.assertIs(fac_cleanup_st["temp_handling_succeeded"], True)
+            self.assertEqual(
+                fac_cleanup_st["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+            )
+            self.assertIs(fac_cleanup_st["unlinked"], False)
+            self.assertEqual(fac_cleanup_st["unlink_attempt_count"], 0)
+            self.assertIs(
+                fac_cleanup_st["observed_temp_is_regular_file"], True
+            )
+            self.assertIs(fac_cleanup_st["observed_temp_is_symlink"], False)
+            self.assertEqual(
+                (
+                    fac_cleanup_st["expected_temp_dev"],
+                    fac_cleanup_st["expected_temp_ino"],
+                ),
+                (int(tmp_lstat.st_dev), int(tmp_lstat.st_ino)),
+            )
+            self.assertEqual(
+                (
+                    fac_cleanup_st["observed_temp_dev"],
+                    fac_cleanup_st["observed_temp_ino"],
+                ),
+                (int(tmp_lstat.st_dev), int(tmp_lstat.st_ino)),
+            )
 
-            # Bounded retry exhaustion on sibling collisions
-            pid = os.getpid()
-            target.write_text('{"preexisting": 0}\n', encoding="utf-8")
+            # Bounded retry exhaustion on sibling collisions preserves all preexisting markers
+            # without creating temp files or invoking the payload factory
+            bound_root = root / "bounded_exhaust_case"
+            bound_root.mkdir()
+            bound_target = bound_root / "receipt.json"
+            bound_target.write_text('{"preexisting": 0}\n', encoding="utf-8")
+            expected_bound_markers: dict[Path, str] = {
+                bound_target: '{"preexisting": 0}\n'
+            }
             for attempt in range(onesar_refmac.MAX_SIBLING_COLLISION_ATTEMPTS):
                 suffix_tag = (
                     f".parent.{pid}"
                     if attempt == 0
                     else f".parent.{pid}.{attempt}"
                 )
-                sib = target.parent / f"{target.stem}{suffix_tag}{target.suffix}"
-                sib.write_text(
-                    f'{{"preexisting": {attempt + 1}}}\n', encoding="utf-8"
+                sib = (
+                    bound_target.parent
+                    / f"{bound_target.stem}{suffix_tag}{bound_target.suffix}"
                 )
+                marker_text = f'{{"preexisting": {attempt + 1}}}\n'
+                sib.write_text(marker_text, encoding="utf-8")
+                expected_bound_markers[sib] = marker_text
 
+            bound_factory_calls: list[str] = []
             with self.assertRaises(FileExistsError) as cm_bound:
                 onesar_refmac._write_json_with_sibling_collision_fallback(
-                    {"ok": True}, target, root=root
+                    lambda dest: (
+                        bound_factory_calls.append(str(dest))
+                        or {"ok": True, "dest": str(dest)}
+                    ),
+                    bound_target,
+                    root=bound_root,
                 )
             self.assertIn(
                 f"Exhausted {onesar_refmac.MAX_SIBLING_COLLISION_ATTEMPTS} sibling collision fallback candidates",
                 str(cm_bound.exception),
             )
+            self.assertEqual(bound_factory_calls, [])
+            self.assertEqual(
+                set(bound_root.iterdir()), set(expected_bound_markers.keys())
+            )
+            for marker_p, marker_txt in expected_bound_markers.items():
+                self.assertEqual(
+                    marker_p.read_text(encoding="utf-8"), marker_txt
+                )
 
             # Bounded retry exhaustion on _ensure_verified_root_exclusive_fallback_dir
             ev_root = root / "ev_exhaust"
@@ -14385,7 +18922,7 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
             )
 
         real_link = os.link
-        real_unlink = os.unlink
+        real_stat = os.stat
 
         def _chain_contains_exc(
             root_exc: BaseException | None, target_exc: BaseException
@@ -14417,12 +18954,35 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
             self._assert_all_scientific_admission_flags_false(res_healthy)
             m0_ref_h = res_healthy["manifest_json"]
             d0_ref_h = res_healthy["diagnostics_json"]
-            self.assertIs(m0_ref_h["temp_cleanup_succeeded"], True)
-            self.assertIs(d0_ref_h["temp_cleanup_succeeded"], True)
+            for ref_h in (m0_ref_h, d0_ref_h):
+                self.assertIs(ref_h["temp_cleanup_succeeded"], False)
+                self.assertEqual(
+                    ref_h["temp_handling_policy"],
+                    onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+                )
+                self.assertIs(ref_h["temp_handling_succeeded"], True)
+                self.assertEqual(
+                    ref_h["temp_handling_disposition"],
+                    onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+                )
+                ref_h_path = Path(ref_h["path"])
+                ref_h_tmp = (
+                    ref_h_path.parent
+                    / str(ref_h["temp_cleanup_status"]["temp_name"])
+                )
+                self.assertTrue(ref_h_tmp.is_file())
+                st_h = os.lstat(ref_h_path)
+                st_h_tmp = os.lstat(ref_h_tmp)
+                self.assertEqual(
+                    (int(st_h_tmp.st_dev), int(st_h_tmp.st_ino)),
+                    (int(st_h.st_dev), int(st_h.st_ino)),
+                )
+                self.assertGreaterEqual(int(st_h.st_nlink), 2)
+                self.assertEqual(ref_h_tmp.read_bytes(), ref_h_path.read_bytes())
             self._reopen_and_verify_json_artifact(m0_ref_h)
             self._reopen_and_verify_json_artifact(d0_ref_h)
 
-        # 2. M0-only persistent temp unlink EACCES
+        # 2. M0-only persistent temp stat EACCES
         with self.subTest(case="m0_cleanup_failure"):
             case_m0_clean = f"case41_m0_cleanup_failure_{pid}"
             ev_m0_clean = self.repo_root / "runs" / case_m0_clean
@@ -14436,24 +18996,32 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
             )
             m0_cleanup_errors: list[PermissionError] = []
 
-            def unlink_fail_m0(
-                path: Any, *, dir_fd: int | None = None
-            ) -> None:
+            def stat_fail_m0(
+                path: Any,
+                *,
+                dir_fd: int | None = None,
+                follow_symlinks: bool = True,
+            ) -> os.stat_result:
                 p_str = os.fspath(path)
-                if p_str.startswith(".refmac_operation_manifest.json.tmp."):
+                if (
+                    p_str.startswith(".refmac_operation_manifest.json.tmp.")
+                    and m0_m0_clean.exists()
+                ):
                     phase_label = (
                         "post-link" if not m0_cleanup_errors else "finally"
                     )
                     err_m0 = PermissionError(
                         errno.EACCES,
-                        f"simulated M0 {phase_label} temp unlink failure",
+                        f"simulated M0 {phase_label} temp stat failure",
                         p_str,
                     )
                     m0_cleanup_errors.append(err_m0)
                     raise err_m0
-                return real_unlink(path, dir_fd=dir_fd)
+                return real_stat(
+                    path, dir_fd=dir_fd, follow_symlinks=follow_symlinks
+                )
 
-            with patch.object(onesar_refmac.os, "unlink", unlink_fail_m0):
+            with patch.object(onesar_refmac.os, "stat", stat_fail_m0):
                 with self.assertRaises(
                     onesar_refmac.RefmacCollectorError
                 ) as cm_m0_clean:
@@ -14492,9 +19060,32 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
             self.assertIs(
                 term_m0_c["published_receipt"]["temp_cleanup_succeeded"], False
             )
+            self.assertEqual(
+                term_m0_c["published_receipt"]["temp_handling_policy"],
+                onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+            )
+            self.assertIs(
+                term_m0_c["published_receipt"]["temp_handling_succeeded"], False
+            )
+            self.assertEqual(
+                term_m0_c["published_receipt"]["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_STAT_ERROR,
+            )
             self.assertIs(term_m0_c["temp_cleanup_status"]["unlinked"], False)
             self.assertEqual(
-                term_m0_c["temp_cleanup_status"]["unlink_attempt_count"], 2
+                term_m0_c["temp_cleanup_status"]["unlink_attempt_count"], 0
+            )
+            self.assertEqual(
+                term_m0_c["temp_cleanup_status"]["temp_handling_policy"],
+                onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+            )
+            self.assertIs(
+                term_m0_c["temp_cleanup_status"]["temp_handling_succeeded"],
+                False,
+            )
+            self.assertEqual(
+                term_m0_c["temp_cleanup_status"]["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_STAT_ERROR,
             )
 
             self.assertEqual(
@@ -14505,7 +19096,18 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 err_m0_c.publication_history[0]["verified_on_disk"], True
             )
             self.assertIs(
-                err_m0_c.publication_history[0]["temp_cleanup_succeeded"], True
+                err_m0_c.publication_history[0]["temp_cleanup_succeeded"], False
+            )
+            self.assertEqual(
+                err_m0_c.publication_history[0]["temp_handling_policy"],
+                onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+            )
+            self.assertIs(
+                err_m0_c.publication_history[0]["temp_handling_succeeded"], True
+            )
+            self.assertEqual(
+                err_m0_c.publication_history[0]["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
             )
             self.assertIs(
                 err_m0_c.publication_history[1]["verified_on_disk"], True
@@ -14513,6 +19115,18 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
             self.assertIs(
                 err_m0_c.publication_history[1]["temp_cleanup_succeeded"],
                 False,
+            )
+            self.assertEqual(
+                err_m0_c.publication_history[1]["temp_handling_policy"],
+                onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+            )
+            self.assertIs(
+                err_m0_c.publication_history[1]["temp_handling_succeeded"],
+                False,
+            )
+            self.assertEqual(
+                err_m0_c.publication_history[1]["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_STAT_ERROR,
             )
             self._reopen_and_verify_json_artifact(
                 err_m0_c.publication_history[0]
@@ -14525,9 +19139,9 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 for p in refmac_m0_clean.iterdir()
                 if ".tmp." in p.name
             ]
-            self.assertEqual(len(dangling_m0), 1)
-            self.assertEqual(
-                dangling_m0[0], term_m0_c["temp_cleanup_status"]["temp_name"]
+            self.assertEqual(len(dangling_m0), 9)
+            self.assertIn(
+                term_m0_c["temp_cleanup_status"]["temp_name"], dangling_m0
             )
             assert isinstance(err_m0_c.manifest_payload, Mapping)
             assert isinstance(err_m0_c.diagnostics_payload, Mapping)
@@ -14658,11 +19272,60 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 [h["snapshot_id"] for h in err_coll.publication_history],
                 ["D0", "M0"],
             )
+            self.assertIs(
+                err_coll.publication_history[0]["temp_cleanup_succeeded"], False
+            )
+            self.assertEqual(
+                err_coll.publication_history[0]["temp_handling_policy"],
+                onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+            )
+            self.assertIs(
+                err_coll.publication_history[0]["temp_handling_succeeded"], True
+            )
+            self.assertEqual(
+                err_coll.publication_history[0]["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+            )
             self.assertEqual(
                 err_coll.publication_history[1]["path"], str(m0_sib_coll)
             )
             self.assertIs(
-                err_coll.publication_history[1]["temp_cleanup_succeeded"], True
+                err_coll.publication_history[1]["temp_cleanup_succeeded"], False
+            )
+            self.assertEqual(
+                err_coll.publication_history[1]["temp_handling_policy"],
+                onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+            )
+            self.assertIs(
+                err_coll.publication_history[1]["temp_handling_succeeded"], True
+            )
+            self.assertEqual(
+                err_coll.publication_history[1]["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+            )
+            self.assertIs(
+                err_coll.publication_history[1]["sibling_temp_cleanup_succeeded"],
+                False,
+            )
+            self.assertIs(
+                err_coll.publication_history[1]["sibling_temp_handling_succeeded"],
+                True,
+            )
+            self.assertEqual(
+                len(
+                    err_coll.publication_history[1][
+                        "prior_collision_temp_cleanup_statuses"
+                    ]
+                ),
+                1,
+            )
+            self.assertEqual(
+                len(
+                    err_coll.publication_history[1][
+                        "prior_collision_retained_temporaries"
+                    ]
+                ),
+                1,
             )
             st_after_coll = os.lstat(m0_m0_coll)
             self.assertEqual(
@@ -14674,7 +19337,7 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 competitor_info_coll[0],
             )
 
-        # 4. Real M0 collision triggering bounded correction + M1-only persistent temp unlink EACCES
+        # 4. Real M0 collision triggering bounded correction + M1-only persistent temp stat EACCES
         with self.subTest(case="m1_cleanup_failure"):
             case_m1_clean = f"case41_m1_cleanup_failure_{pid}"
             ev_m1_clean = self.repo_root / "runs" / case_m1_clean
@@ -14731,28 +19394,36 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                     recorded_link_collisions_m1.append(exc)
                     raise
 
-            def unlink_fail_m1(
-                path: Any, *, dir_fd: int | None = None
-            ) -> None:
+            def stat_fail_m1(
+                path: Any,
+                *,
+                dir_fd: int | None = None,
+                follow_symlinks: bool = True,
+            ) -> os.stat_result:
                 p_str = os.fspath(path)
-                if p_str.startswith(
-                    ".refmac_operation_manifest.corrected.json.tmp."
+                if (
+                    p_str.startswith(
+                        ".refmac_operation_manifest.corrected.json.tmp."
+                    )
+                    and m1_m1_clean.exists()
                 ):
                     phase_label = (
                         "post-link" if not m1_cleanup_errors else "finally"
                     )
                     err_m1 = PermissionError(
                         errno.EACCES,
-                        f"simulated M1 {phase_label} temp unlink failure",
+                        f"simulated M1 {phase_label} temp stat failure",
                         p_str,
                     )
                     m1_cleanup_errors.append(err_m1)
                     raise err_m1
-                return real_unlink(path, dir_fd=dir_fd)
+                return real_stat(
+                    path, dir_fd=dir_fd, follow_symlinks=follow_symlinks
+                )
 
             with (
                 patch.object(onesar_refmac.os, "link", link_m1_case),
-                patch.object(onesar_refmac.os, "unlink", unlink_fail_m1),
+                patch.object(onesar_refmac.os, "stat", stat_fail_m1),
             ):
                 with self.assertRaises(
                     onesar_refmac.RefmacCollectorError
@@ -14798,9 +19469,32 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
             self.assertIs(
                 term_m1_c["published_receipt"]["temp_cleanup_succeeded"], False
             )
+            self.assertEqual(
+                term_m1_c["published_receipt"]["temp_handling_policy"],
+                onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+            )
+            self.assertIs(
+                term_m1_c["published_receipt"]["temp_handling_succeeded"], False
+            )
+            self.assertEqual(
+                term_m1_c["published_receipt"]["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_STAT_ERROR,
+            )
             self.assertIs(term_m1_c["temp_cleanup_status"]["unlinked"], False)
             self.assertEqual(
-                term_m1_c["temp_cleanup_status"]["unlink_attempt_count"], 2
+                term_m1_c["temp_cleanup_status"]["unlink_attempt_count"], 0
+            )
+            self.assertEqual(
+                term_m1_c["temp_cleanup_status"]["temp_handling_policy"],
+                onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+            )
+            self.assertIs(
+                term_m1_c["temp_cleanup_status"]["temp_handling_succeeded"],
+                False,
+            )
+            self.assertEqual(
+                term_m1_c["temp_cleanup_status"]["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_STAT_ERROR,
             )
 
             self.assertEqual(
@@ -14813,15 +19507,30 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 d1_m1_clean,
                 m1_m1_clean,
             ]
-            expected_cleanup_flags_m1 = [True, True, True, False]
-            for h_row, exp_p, exp_clean in zip(
+            expected_handling_flags_m1 = [True, True, True, False]
+            expected_dispositions_m1 = [
+                onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+                onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+                onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+                onesar_refmac.JSON_TEMP_DISPOSITION_STAT_ERROR,
+            ]
+            for h_row, exp_p, exp_handled, exp_disp in zip(
                 err_m1_c.publication_history,
                 expected_paths_m1,
-                expected_cleanup_flags_m1,
+                expected_handling_flags_m1,
+                expected_dispositions_m1,
             ):
                 self.assertEqual(h_row["path"], str(exp_p))
                 self.assertIs(h_row["verified_on_disk"], True)
-                self.assertIs(h_row["temp_cleanup_succeeded"], exp_clean)
+                self.assertIs(h_row["temp_cleanup_succeeded"], False)
+                self.assertEqual(
+                    h_row["temp_handling_policy"],
+                    onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+                )
+                self.assertIs(h_row["temp_handling_succeeded"], exp_handled)
+                self.assertEqual(
+                    h_row["temp_handling_disposition"], exp_disp
+                )
                 self._reopen_and_verify_json_artifact(h_row)
 
             st_after_m1 = os.lstat(m0_m1_clean)
@@ -14838,9 +19547,9 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 for p in refmac_m1_clean.iterdir()
                 if ".tmp." in p.name
             ]
-            self.assertEqual(len(dangling_m1), 1)
-            self.assertEqual(
-                dangling_m1[0], term_m1_c["temp_cleanup_status"]["temp_name"]
+            self.assertEqual(len(dangling_m1), 12)
+            self.assertIn(
+                term_m1_c["temp_cleanup_status"]["temp_name"], dangling_m1
             )
 
             assert isinstance(err_m1_c.manifest_payload, Mapping)
@@ -14869,7 +19578,7 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
 
         # 5. D0 and D1 post-write cleanup failure controls
         with self.subTest(case="d0_and_d1_cleanup_failure_controls"):
-            # 5a. D0 temp cleanup failure skips M0/D1/M1 and terminates at persist_diagnostics_d0
+            # 5a. D0 temp stat failure skips M0/D1/M1 and terminates at persist_diagnostics_d0
             case_d0_clean = f"case41_d0_cleanup_failure_{pid}"
             ev_d0_clean = self.repo_root / "runs" / case_d0_clean
             refmac_d0_clean = ev_d0_clean / "refmac"
@@ -14877,21 +19586,29 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
             m0_d0_clean = refmac_d0_clean / "refmac_operation_manifest.json"
             d0_cleanup_errors: list[PermissionError] = []
 
-            def unlink_fail_d0(
-                path: Any, *, dir_fd: int | None = None
-            ) -> None:
+            def stat_fail_d0(
+                path: Any,
+                *,
+                dir_fd: int | None = None,
+                follow_symlinks: bool = True,
+            ) -> os.stat_result:
                 p_str = os.fspath(path)
-                if p_str.startswith(".refmac_diagnostics.json.tmp."):
+                if (
+                    p_str.startswith(".refmac_diagnostics.json.tmp.")
+                    and d0_d0_clean.exists()
+                ):
                     err_d0 = PermissionError(
                         errno.EACCES,
-                        "simulated D0 temp unlink failure",
+                        "simulated D0 temp stat failure",
                         p_str,
                     )
                     d0_cleanup_errors.append(err_d0)
                     raise err_d0
-                return real_unlink(path, dir_fd=dir_fd)
+                return real_stat(
+                    path, dir_fd=dir_fd, follow_symlinks=follow_symlinks
+                )
 
-            with patch.object(onesar_refmac.os, "unlink", unlink_fail_d0):
+            with patch.object(onesar_refmac.os, "stat", stat_fail_d0):
                 with self.assertRaises(
                     onesar_refmac.RefmacCollectorError
                 ) as cm_d0_clean:
@@ -14922,6 +19639,18 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
             self.assertIs(
                 err_d0_c.publication_history[0]["temp_cleanup_succeeded"],
                 False,
+            )
+            self.assertEqual(
+                err_d0_c.publication_history[0]["temp_handling_policy"],
+                onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+            )
+            self.assertIs(
+                err_d0_c.publication_history[0]["temp_handling_succeeded"],
+                False,
+            )
+            self.assertEqual(
+                err_d0_c.publication_history[0]["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_STAT_ERROR,
             )
             assert isinstance(err_d0_c.manifest_payload, Mapping)
             assert isinstance(err_d0_c.diagnostics_payload, Mapping)
@@ -14959,7 +19688,7 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                     persist_msg_d0,
                 )
 
-            # 5b. D1 temp cleanup failure after M0 collision skips M1 and terminates at persist_corrected_diagnostics_d1
+            # 5b. D1 temp stat failure after M0 collision skips M1 and terminates at persist_corrected_diagnostics_d1
             case_d1_clean = f"case41_d1_cleanup_failure_{pid}"
             ev_d1_clean = self.repo_root / "runs" / case_d1_clean
             refmac_d1_clean = ev_d1_clean / "refmac"
@@ -14995,25 +19724,33 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                     follow_symlinks=follow_symlinks,
                 )
 
-            def unlink_fail_d1(
-                path: Any, *, dir_fd: int | None = None
-            ) -> None:
+            def stat_fail_d1(
+                path: Any,
+                *,
+                dir_fd: int | None = None,
+                follow_symlinks: bool = True,
+            ) -> os.stat_result:
                 p_str = os.fspath(path)
-                if p_str.startswith(
-                    ".refmac_r_factor_diagnostics.corrected.json.tmp."
+                if (
+                    p_str.startswith(
+                        ".refmac_r_factor_diagnostics.corrected.json.tmp."
+                    )
+                    and d1_d1_clean.exists()
                 ):
                     err_d1 = PermissionError(
                         errno.EACCES,
-                        "simulated D1 temp unlink failure",
+                        "simulated D1 temp stat failure",
                         p_str,
                     )
                     d1_cleanup_errors.append(err_d1)
                     raise err_d1
-                return real_unlink(path, dir_fd=dir_fd)
+                return real_stat(
+                    path, dir_fd=dir_fd, follow_symlinks=follow_symlinks
+                )
 
             with (
                 patch.object(onesar_refmac.os, "link", link_d1_case),
-                patch.object(onesar_refmac.os, "unlink", unlink_fail_d1),
+                patch.object(onesar_refmac.os, "stat", stat_fail_d1),
             ):
                 with self.assertRaises(
                     onesar_refmac.RefmacCollectorError
@@ -15040,6 +19777,25 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 [h["snapshot_id"] for h in err_d1_c.publication_history],
                 ["D0", "M0", "D1"],
             )
+            for idx_d1 in (0, 1):
+                self.assertIs(
+                    err_d1_c.publication_history[idx_d1][
+                        "temp_cleanup_succeeded"
+                    ],
+                    False,
+                )
+                self.assertIs(
+                    err_d1_c.publication_history[idx_d1][
+                        "temp_handling_succeeded"
+                    ],
+                    True,
+                )
+                self.assertEqual(
+                    err_d1_c.publication_history[idx_d1][
+                        "temp_handling_disposition"
+                    ],
+                    onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+                )
             self.assertEqual(
                 err_d1_c.publication_history[2]["path"], str(d1_d1_clean)
             )
@@ -15047,23 +19803,161 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 err_d1_c.publication_history[2]["temp_cleanup_succeeded"],
                 False,
             )
+            self.assertIs(
+                err_d1_c.publication_history[2]["temp_handling_succeeded"],
+                False,
+            )
+            self.assertEqual(
+                err_d1_c.publication_history[2]["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_STAT_ERROR,
+            )
 
-            # 5c. Compound child D0 readback EIO (cleanup succeeded) + parent D0 persistent temp unlink EACCES
+            # 5c. Compound child D0 readback EIO (temp handling succeeded) + parent D0 persistent temp stat EACCES
             case_comp = f"case41_compound_child_eio_parent_cleanup_{pid}"
             ev_comp = self.repo_root / "runs" / case_comp
             refmac_comp = ev_comp / "refmac"
             parent_comp = ev_comp / "refmac_parent_retention"
             d0_child_comp = refmac_comp / "refmac_diagnostics.json"
+            d0_tmp_name_comp = f".refmac_diagnostics.json.tmp.{pid}"
+            d0_child_tmp_comp = refmac_comp / d0_tmp_name_comp
             d0_parent_comp = parent_comp / "refmac_diagnostics.json"
             m0_parent_comp = parent_comp / "refmac_operation_manifest.json"
 
             real_open = os.open
             real_read = os.read
+            real_close = os.close
+            real_link = os.link
+            real_lstat = os.lstat
+            real_stat = os.stat
+            real_fstat = os.fstat
             orig_atomic_comp = onesar_refmac._atomic_write_new_json_file
             d0_verify_fds_comp: set[int] = set()
+            child_d0_pre_eio_baseline: list[dict[str, Any]] = []
+            parent_d0_linked_comp: list[dict[str, Any]] = []
             child_read_eio_comp: list[OSError] = []
             child_receipt_before_parent_comp: list[dict[str, Any]] = []
             parent_cleanup_errors_comp: list[PermissionError] = []
+
+            def _read_fd_bytes_comp(
+                name_str: str,
+                dir_fd_int: int,
+                expected_dev_ino: tuple[int, int],
+            ) -> bytes:
+                obs_flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+                obs_fd = real_open(name_str, obs_flags, dir_fd=dir_fd_int)
+                try:
+                    obs_st = real_fstat(obs_fd)
+                    self.assertTrue(stat.S_ISREG(obs_st.st_mode))
+                    self.assertEqual(
+                        (int(obs_st.st_dev), int(obs_st.st_ino)),
+                        expected_dev_ino,
+                    )
+                    chunks: list[bytes] = []
+                    while True:
+                        chunk = real_read(obs_fd, 65536)
+                        if not chunk:
+                            break
+                        chunks.append(chunk)
+                    return b"".join(chunks)
+                finally:
+                    real_close(obs_fd)
+
+            def link_comp(
+                src: Any,
+                dst: Any,
+                *,
+                src_dir_fd: int | None = None,
+                dst_dir_fd: int | None = None,
+                follow_symlinks: bool = True,
+            ) -> None:
+                real_link(
+                    src,
+                    dst,
+                    src_dir_fd=src_dir_fd,
+                    dst_dir_fd=dst_dir_fd,
+                    follow_symlinks=follow_symlinks,
+                )
+                if (
+                    os.fspath(src) == d0_tmp_name_comp
+                    and os.fspath(dst) == "refmac_diagnostics.json"
+                    and isinstance(src_dir_fd, int)
+                    and isinstance(dst_dir_fd, int)
+                ):
+                    src_dir_st = real_fstat(src_dir_fd)
+                    dst_dir_st = real_fstat(dst_dir_fd)
+                    src_dir_dev_ino = (
+                        int(src_dir_st.st_dev),
+                        int(src_dir_st.st_ino),
+                    )
+                    dst_dir_dev_ino = (
+                        int(dst_dir_st.st_dev),
+                        int(dst_dir_st.st_ino),
+                    )
+                    if not child_d0_pre_eio_baseline and refmac_comp.exists():
+                        child_dir_st = real_lstat(refmac_comp)
+                        child_dir_dev_ino = (
+                            int(child_dir_st.st_dev),
+                            int(child_dir_st.st_ino),
+                        )
+                        if (
+                            src_dir_dev_ino == child_dir_dev_ino
+                            and dst_dir_dev_ino == child_dir_dev_ino
+                        ):
+                            final_st = real_stat(
+                                "refmac_diagnostics.json",
+                                dir_fd=dst_dir_fd,
+                                follow_symlinks=False,
+                            )
+                            tmp_st = real_stat(
+                                d0_tmp_name_comp,
+                                dir_fd=src_dir_fd,
+                                follow_symlinks=False,
+                            )
+                            self.assertTrue(stat.S_ISREG(final_st.st_mode))
+                            self.assertTrue(stat.S_ISREG(tmp_st.st_mode))
+                            self.assertGreaterEqual(int(final_st.st_nlink), 2)
+                            self.assertGreaterEqual(int(tmp_st.st_nlink), 2)
+                            child_dev_ino = (
+                                int(final_st.st_dev),
+                                int(final_st.st_ino),
+                            )
+                            self.assertEqual(
+                                (int(tmp_st.st_dev), int(tmp_st.st_ino)),
+                                child_dev_ino,
+                            )
+                            final_bytes = _read_fd_bytes_comp(
+                                "refmac_diagnostics.json",
+                                dst_dir_fd,
+                                child_dev_ino,
+                            )
+                            tmp_bytes = _read_fd_bytes_comp(
+                                d0_tmp_name_comp,
+                                src_dir_fd,
+                                child_dev_ino,
+                            )
+                            self.assertGreater(len(final_bytes), 0)
+                            self.assertEqual(final_bytes, tmp_bytes)
+                            child_d0_pre_eio_baseline.append(
+                                {
+                                    "dir_dev_ino": child_dir_dev_ino,
+                                    "dev_ino": child_dev_ino,
+                                    "bytes": final_bytes,
+                                    "tmp_bytes": tmp_bytes,
+                                }
+                            )
+                    if not parent_d0_linked_comp and parent_comp.exists():
+                        parent_dir_st = real_lstat(parent_comp)
+                        parent_dir_dev_ino = (
+                            int(parent_dir_st.st_dev),
+                            int(parent_dir_st.st_ino),
+                        )
+                        if (
+                            src_dir_dev_ino == parent_dir_dev_ino
+                            and dst_dir_dev_ino == parent_dir_dev_ino
+                        ):
+                            parent_d0_linked_comp.append(
+                                {"dir_dev_ino": parent_dir_dev_ino}
+                            )
 
             def open_comp(
                 path: Any,
@@ -15075,9 +19969,19 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 fd_val = real_open(path, flags, mode, dir_fd=dir_fd)
                 if (
                     os.fspath(path) == "refmac_diagnostics.json"
+                    and isinstance(dir_fd, int)
+                    and len(child_d0_pre_eio_baseline) == 1
                     and not child_read_eio_comp
                 ):
-                    d0_verify_fds_comp.add(fd_val)
+                    dir_st = real_fstat(dir_fd)
+                    fd_st = real_fstat(fd_val)
+                    if (
+                        (int(dir_st.st_dev), int(dir_st.st_ino))
+                        == child_d0_pre_eio_baseline[0]["dir_dev_ino"]
+                        and (int(fd_st.st_dev), int(fd_st.st_ino))
+                        == child_d0_pre_eio_baseline[0]["dev_ino"]
+                    ):
+                        d0_verify_fds_comp.add(fd_val)
                 return fd_val
 
             def read_comp(fd_val: int, n: int) -> bytes:
@@ -15092,27 +19996,38 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                     raise eio_exc
                 return real_read(fd_val, n)
 
-            def unlink_comp(
-                path: Any, *, dir_fd: int | None = None
-            ) -> None:
+            def stat_comp(
+                path: Any,
+                *,
+                dir_fd: int | None = None,
+                follow_symlinks: bool = True,
+            ) -> os.stat_result:
                 p_str = os.fspath(path)
                 if (
-                    p_str.startswith(".refmac_diagnostics.json.tmp.")
-                    and child_read_eio_comp
+                    p_str == d0_tmp_name_comp
+                    and isinstance(dir_fd, int)
+                    and len(parent_d0_linked_comp) == 1
                 ):
-                    phase_label = (
-                        "post-link"
-                        if not parent_cleanup_errors_comp
-                        else "finally"
-                    )
-                    err_p = PermissionError(
-                        errno.EACCES,
-                        f"simulated parent D0 {phase_label} temp unlink failure",
-                        p_str,
-                    )
-                    parent_cleanup_errors_comp.append(err_p)
-                    raise err_p
-                return real_unlink(path, dir_fd=dir_fd)
+                    dir_st = real_fstat(dir_fd)
+                    if (
+                        (int(dir_st.st_dev), int(dir_st.st_ino))
+                        == parent_d0_linked_comp[0]["dir_dev_ino"]
+                    ):
+                        phase_label = (
+                            "post-link"
+                            if not parent_cleanup_errors_comp
+                            else "finally"
+                        )
+                        err_p = PermissionError(
+                            errno.EACCES,
+                            f"simulated parent D0 {phase_label} temp stat failure",
+                            p_str,
+                        )
+                        parent_cleanup_errors_comp.append(err_p)
+                        raise err_p
+                return real_stat(
+                    path, dir_fd=dir_fd, follow_symlinks=follow_symlinks
+                )
 
             def wrapped_atomic_comp(
                 payload: Any,
@@ -15130,17 +20045,82 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                             getattr(exc, "published_receipt", None), Mapping
                         )
                     ):
+                        self.assertEqual(len(child_d0_pre_eio_baseline), 1)
+                        child_base = child_d0_pre_eio_baseline[0]
+                        child_pre_rec = dict(getattr(exc, "published_receipt"))
+                        self.assertIsNone(child_pre_rec["path"])
+                        self.assertIs(child_pre_rec["readback_verified"], False)
+                        self.assertEqual(
+                            child_pre_rec["failure_phase"],
+                            "post_link_readback",
+                        )
+                        self.assertIs(
+                            child_pre_rec["temp_cleanup_succeeded"], False
+                        )
+                        self.assertEqual(
+                            child_pre_rec["temp_handling_policy"],
+                            onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+                        )
+                        self.assertIs(
+                            child_pre_rec["temp_handling_succeeded"], True
+                        )
+                        self.assertEqual(
+                            child_pre_rec["temp_handling_disposition"],
+                            onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+                        )
+                        self.assertEqual(
+                            (
+                                child_pre_rec["source_tmp_dev"],
+                                child_pre_rec["source_tmp_ino"],
+                            ),
+                            child_base["dev_ino"],
+                        )
+                        child_pre_status = child_pre_rec["temp_cleanup_status"]
+                        self.assertIsInstance(child_pre_status, Mapping)
+                        self.assertEqual(
+                            child_pre_status["temp_handling_policy"],
+                            onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+                        )
+                        self.assertIs(
+                            child_pre_status["temp_handling_succeeded"], True
+                        )
+                        self.assertEqual(
+                            child_pre_status["temp_handling_disposition"],
+                            onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+                        )
+                        self.assertIs(
+                            child_pre_status["unlink_attempted"], False
+                        )
+                        self.assertEqual(
+                            child_pre_status["unlink_attempt_count"], 0
+                        )
+                        self.assertIs(child_pre_status["unlinked"], False)
+                        self.assertEqual(child_pre_status["errors"], [])
+                        self.assertIsNone(child_pre_status["error"])
+                        self.assertEqual(
+                            (
+                                child_pre_status["expected_temp_dev"],
+                                child_pre_status["expected_temp_ino"],
+                            ),
+                            child_base["dev_ino"],
+                        )
+                        self.assertEqual(
+                            (
+                                child_pre_status["observed_temp_dev"],
+                                child_pre_status["observed_temp_ino"],
+                            ),
+                            child_base["dev_ino"],
+                        )
                         child_receipt_before_parent_comp.append(
-                            copy.deepcopy(
-                                dict(getattr(exc, "published_receipt"))
-                            )
+                            copy.deepcopy(child_pre_rec)
                         )
                     raise
 
             with (
+                patch.object(onesar_refmac.os, "link", link_comp),
                 patch.object(onesar_refmac.os, "open", open_comp),
                 patch.object(onesar_refmac.os, "read", read_comp),
-                patch.object(onesar_refmac.os, "unlink", unlink_comp),
+                patch.object(onesar_refmac.os, "stat", stat_comp),
                 patch.object(
                     onesar_refmac,
                     "_atomic_write_new_json_file",
@@ -15155,6 +20135,8 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                     )
 
             err_comp = cm_comp.exception
+            self.assertEqual(len(child_d0_pre_eio_baseline), 1)
+            self.assertEqual(len(parent_d0_linked_comp), 1)
             self.assertEqual(len(child_read_eio_comp), 1)
             self.assertEqual(len(child_receipt_before_parent_comp), 1)
             self.assertEqual(len(parent_cleanup_errors_comp), 2)
@@ -15192,6 +20174,35 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
             self.assertEqual(
                 child_after_rec["failure_phase"], "post_link_readback"
             )
+            child_base_after = child_d0_pre_eio_baseline[0]
+            self.assertTrue(d0_child_comp.is_file())
+            self.assertTrue(d0_child_tmp_comp.is_file())
+            d0_child_after_st = real_lstat(d0_child_comp)
+            d0_child_tmp_after_st = real_lstat(d0_child_tmp_comp)
+            self.assertTrue(stat.S_ISREG(d0_child_after_st.st_mode))
+            self.assertTrue(stat.S_ISREG(d0_child_tmp_after_st.st_mode))
+            self.assertGreaterEqual(int(d0_child_after_st.st_nlink), 2)
+            self.assertGreaterEqual(int(d0_child_tmp_after_st.st_nlink), 2)
+            self.assertEqual(
+                (int(d0_child_after_st.st_dev), int(d0_child_after_st.st_ino)),
+                child_base_after["dev_ino"],
+            )
+            self.assertEqual(
+                (
+                    int(d0_child_tmp_after_st.st_dev),
+                    int(d0_child_tmp_after_st.st_ino),
+                ),
+                child_base_after["dev_ino"],
+            )
+            self.assertEqual(
+                d0_child_comp.read_bytes(), child_base_after["bytes"]
+            )
+            self.assertEqual(
+                d0_child_tmp_comp.read_bytes(), child_base_after["tmp_bytes"]
+            )
+            self.assertEqual(
+                d0_child_tmp_comp.read_bytes(), child_base_after["bytes"]
+            )
             term_rec_comp = getattr(
                 err_comp.terminal_cause, "published_receipt", None
             )
@@ -15214,6 +20225,18 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
             self.assertIs(
                 err_comp.publication_history[0]["temp_cleanup_succeeded"],
                 False,
+            )
+            self.assertEqual(
+                err_comp.publication_history[0]["temp_handling_policy"],
+                onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+            )
+            self.assertIs(
+                err_comp.publication_history[0]["temp_handling_succeeded"],
+                False,
+            )
+            self.assertEqual(
+                err_comp.publication_history[0]["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_STAT_ERROR,
             )
             assert isinstance(err_comp.manifest_payload, Mapping)
             assert isinstance(err_comp.diagnostics_payload, Mapping)
@@ -18490,7 +23513,26 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                     _sha256_bytes(parked_d0.read_bytes()),
                     rec["published_sha256"],
                 )
-                self.assertFalse(os.path.lexists(parked_tmp))
+                self.assertTrue(parked_tmp.is_file())
+                p_tmp_st = real_lstat(parked_tmp)
+                self.assertEqual(
+                    (int(p_tmp_st.st_dev), int(p_tmp_st.st_ino)),
+                    rec["published_dev_ino"],
+                )
+                self.assertGreaterEqual(int(p_st.st_nlink), 2)
+                self.assertEqual(
+                    parked_tmp.read_bytes(), parked_d0.read_bytes()
+                )
+                self.assertIs(partial["temp_cleanup_succeeded"], False)
+                self.assertEqual(
+                    partial["temp_handling_policy"],
+                    onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+                )
+                self.assertIs(partial["temp_handling_succeeded"], True)
+                self.assertEqual(
+                    partial["temp_handling_disposition"],
+                    onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+                )
                 self.assertEqual(
                     repl_target.read_bytes(), b"replacement canonical d0\n"
                 )
@@ -19298,6 +24340,23 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
         real_unlink = os.unlink
         real_stat = os.stat
         real_fstat = os.fstat
+        real_fsync = os.fsync
+
+        class _InterruptOnStDevStatProxy:
+            def __init__(
+                self,
+                wrapped: os.stat_result,
+                exc: BaseException,
+            ) -> None:
+                self._wrapped = wrapped
+                self._exc = exc
+
+            @property
+            def st_dev(self) -> int:
+                raise self._exc
+
+            def __getattr__(self, name: str) -> Any:
+                return getattr(self._wrapped, name)
 
         with tempfile.TemporaryDirectory() as outer_tmp:
             outer_dir = Path(outer_tmp).resolve()
@@ -19314,7 +24373,19 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                         "read_then_close_error",
                     ]
                     if boundary == "writer":
-                        cases.append("replace_temp_after_link")
+                        cases.extend(
+                            [
+                                "replace_temp_after_link",
+                                "replace_temp_after_post_link_stat_returns_match",
+                                "replace_temp_after_final_cleanup_stat_returns_match",
+                                "post_link_stat_eio_then_matching_final_cleanup_stat",
+                                "post_link_stat_eio_plus_read_then_close_error",
+                                "post_link_stat_eio_plus_post_readback_leaf_stat_eio",
+                                "post_link_stat_eio_plus_post_readback_leaf_stat_eio_then_final_cleanup_stat_interrupt",
+                                "interrupt_at_post_link_stat",
+                                "interrupt_after_post_link_observed_before_verified",
+                            ]
+                        )
                     else:
                         cases.extend(
                             [
@@ -19332,6 +24403,8 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                             ) as case_tmp:
                                 root = Path(case_tmp).resolve()
                                 target = root / "receipt.json"
+                                tmp_name = f".{target.name}.tmp.{os.getpid()}"
+                                tmp_path = root / tmp_name
                                 parked = root / "parked-original.json"
                                 marker = b"owned competing entry\n"
                                 raw_hist = b'{"owned":"history"}\n'
@@ -19363,13 +24436,20 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                                 events: list[str] = []
                                 chunks: list[bytes] = []
                                 markers: list[tuple[Path, int, int]] = []
+                                writer_unlinks: list[str] = []
                                 writer_causes: list[Exception] = []
+                                writer_dir_status: dict[str, Any] = {}
+                                writer_cleanup_errors_sink: list[OSError] = []
                                 injected_read = OSError(
                                     errno.EIO, "owned primary read failure"
                                 )
                                 injected_close = OSError(
                                     errno.EACCES,
                                     "owned secondary close failure",
+                                )
+                                injected_parent_close = OSError(
+                                    errno.EIO,
+                                    "owned parent directory close failure",
                                 )
                                 injected_leaf_stat_eio = OSError(
                                     errno.EIO,
@@ -19378,6 +24458,17 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                                 injected_parent_fstat = OSError(
                                     errno.EIO,
                                     "owned history parent fstat failure",
+                                )
+                                injected_fsync = OSError(
+                                    errno.EIO,
+                                    "owned pre-link fsync failure",
+                                )
+                                injected_post_link_stat = OSError(
+                                    errno.EIO,
+                                    "owned post-link temp stat EIO",
+                                )
+                                injected_ki = KeyboardInterrupt(
+                                    f"owned interrupt ({case})"
                                 )
 
                                 def op(
@@ -19394,6 +24485,12 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                                         and not (flags & os.O_CREAT)
                                     ):
                                         role = "leaf"
+                                    elif (
+                                        path_str == tmp_name
+                                        and kwargs.get("dir_fd") is not None
+                                        and (flags & os.O_CREAT)
+                                    ):
+                                        role = "tmp"
                                     elif path_str == str(root):
                                         role = "parent"
                                     else:
@@ -19413,6 +24510,18 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                                         raise injected_parent_fstat
                                     return real_fstat(fd)
 
+                                def fsync_hook(fd: int) -> None:
+                                    if (
+                                        boundary == "writer"
+                                        and case
+                                        == "replace_temp_after_final_cleanup_stat_returns_match"
+                                        and roles.get(fd) == "tmp"
+                                        and "fsync_failed" not in events
+                                    ):
+                                        events.append("fsync_failed")
+                                        raise injected_fsync
+                                    return real_fsync(fd)
+
                                 def rd(fd: int, count: int) -> bytes:
                                     if (
                                         roles.get(fd) == "leaf"
@@ -19431,6 +24540,22 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                                                 target.write_bytes(marker)
                                         elif case == "read_then_close_error":
                                             raise injected_read
+                                        elif (
+                                            case
+                                            == "post_link_stat_eio_plus_read_then_close_error"
+                                        ):
+                                            partial_chunk = real_read(fd, 6)
+                                            chunks.append(partial_chunk)
+                                            return partial_chunk
+                                    if (
+                                        roles.get(fd) == "leaf"
+                                        and case
+                                        == "post_link_stat_eio_plus_read_then_close_error"
+                                        and "read_hook" in events
+                                        and "compound_read_eio" not in events
+                                    ):
+                                        events.append("compound_read_eio")
+                                        raise injected_read
                                     data = real_read(fd, count)
                                     if roles.get(fd) == "leaf":
                                         chunks.append(data)
@@ -19441,7 +24566,11 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                                     real_close(fd)
                                     if (
                                         (
-                                            case == "read_then_close_error"
+                                            case
+                                            in {
+                                                "read_then_close_error",
+                                                "post_link_stat_eio_plus_read_then_close_error",
+                                            }
                                             and role == "leaf"
                                         )
                                         or (
@@ -19456,6 +24585,18 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                                     ) and "close_hook" not in events:
                                         events.append("close_hook")
                                         raise injected_close
+                                    if (
+                                        boundary == "writer"
+                                        and case
+                                        in {
+                                            "post_link_stat_eio_plus_read_then_close_error",
+                                            "post_link_stat_eio_plus_post_readback_leaf_stat_eio",
+                                        }
+                                        and role == "parent"
+                                        and "parent_dir_close_hook" not in events
+                                    ):
+                                        events.append("parent_dir_close_hook")
+                                        raise injected_parent_close
 
                                 def lnk(
                                     src: Any,
@@ -19464,6 +24605,7 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                                     **kwargs: Any,
                                 ) -> None:
                                     res = real_link(src, dst, *args, **kwargs)
+                                    events.append("linked")
                                     if (
                                         case == "replace_temp_after_link"
                                         and "temp_swap" not in events
@@ -19484,13 +24626,41 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                                         )
                                     return res
 
+                                def unl_track(
+                                    path: Any,
+                                    *args: Any,
+                                    **kwargs: Any,
+                                ) -> None:
+                                    writer_unlinks.append(os.fsdecode(path))
+                                    return real_unlink(path, *args, **kwargs)
+
+                                def _swap_temp_after_matching_stat(
+                                    path: Any, dir_fd: int | None
+                                ) -> None:
+                                    real_unlink(path, dir_fd=dir_fd)
+                                    p_tmp = root / os.fsdecode(path)
+                                    p_tmp.write_bytes(marker)
+                                    st_m = p_tmp.stat()
+                                    markers.append(
+                                        (
+                                            p_tmp,
+                                            int(st_m.st_dev),
+                                            int(st_m.st_ino),
+                                        )
+                                    )
+
                                 def st_hook(
                                     path: Any,
                                     *args: Any,
                                     **kwargs: Any,
-                                ) -> os.stat_result:
+                                ) -> Any:
                                     if (
-                                        case == "post_readback_leaf_stat_eio"
+                                        case
+                                        in {
+                                            "post_readback_leaf_stat_eio",
+                                            "post_link_stat_eio_plus_post_readback_leaf_stat_eio",
+                                            "post_link_stat_eio_plus_post_readback_leaf_stat_eio_then_final_cleanup_stat_interrupt",
+                                        }
                                         and "read_hook" in events
                                         and kwargs.get("dir_fd") is not None
                                         and os.fsdecode(path) == target.name
@@ -19498,9 +24668,108 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                                     ):
                                         events.append("leaf_stat_eio")
                                         raise injected_leaf_stat_eio
+
+                                    if (
+                                        boundary == "writer"
+                                        and kwargs.get("dir_fd") is not None
+                                        and os.fsdecode(path) == tmp_name
+                                    ):
+                                        if (
+                                            case
+                                            == "replace_temp_after_post_link_stat_returns_match"
+                                            and "linked" in events
+                                            and "after_post_stat_swap"
+                                            not in events
+                                        ):
+                                            st = real_stat(
+                                                path, *args, **kwargs
+                                            )
+                                            events.append(
+                                                "after_post_stat_swap"
+                                            )
+                                            _swap_temp_after_matching_stat(
+                                                path, kwargs.get("dir_fd")
+                                            )
+                                            return st
+                                        if (
+                                            case
+                                            == "replace_temp_after_final_cleanup_stat_returns_match"
+                                            and "fsync_failed" in events
+                                            and "after_final_stat_swap"
+                                            not in events
+                                        ):
+                                            st = real_stat(
+                                                path, *args, **kwargs
+                                            )
+                                            events.append(
+                                                "after_final_stat_swap"
+                                            )
+                                            _swap_temp_after_matching_stat(
+                                                path, kwargs.get("dir_fd")
+                                            )
+                                            return st
+                                        if (
+                                            case
+                                            in {
+                                                "post_link_stat_eio_then_matching_final_cleanup_stat",
+                                                "post_link_stat_eio_plus_read_then_close_error",
+                                                "post_link_stat_eio_plus_post_readback_leaf_stat_eio",
+                                                "post_link_stat_eio_plus_post_readback_leaf_stat_eio_then_final_cleanup_stat_interrupt",
+                                            }
+                                            and "linked" in events
+                                        ):
+                                            if (
+                                                "post_link_stat_eio_fired"
+                                                not in events
+                                            ):
+                                                events.append(
+                                                    "post_link_stat_eio_fired"
+                                                )
+                                                raise injected_post_link_stat
+                                            if (
+                                                case
+                                                == "post_link_stat_eio_plus_post_readback_leaf_stat_eio_then_final_cleanup_stat_interrupt"
+                                                and "ki_fired" not in events
+                                            ):
+                                                events.append("ki_fired")
+                                                raise injected_ki
+                                            if (
+                                                "after_final_stat_swap"
+                                                not in events
+                                            ):
+                                                st = real_stat(
+                                                    path, *args, **kwargs
+                                                )
+                                                events.append(
+                                                    "after_final_stat_swap"
+                                                )
+                                                _swap_temp_after_matching_stat(
+                                                    path, kwargs.get("dir_fd")
+                                                )
+                                                return st
+                                        if (
+                                            case == "interrupt_at_post_link_stat"
+                                            and "linked" in events
+                                            and "ki_fired" not in events
+                                        ):
+                                            events.append("ki_fired")
+                                            raise injected_ki
+                                        if (
+                                            case
+                                            == "interrupt_after_post_link_observed_before_verified"
+                                            and "linked" in events
+                                            and "ki_fired" not in events
+                                        ):
+                                            events.append("ki_fired")
+                                            st = real_stat(
+                                                path, *args, **kwargs
+                                            )
+                                            return _InterruptOnStDevStatProxy(
+                                                st, injected_ki
+                                            )
                                     return real_stat(path, *args, **kwargs)
 
-                                caught: Exception | None = None
+                                caught: BaseException | None = None
                                 result: dict[str, Any] | None = None
                                 with (
                                     patch.object(
@@ -19525,6 +24794,11 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                                     ),
                                     patch.object(
                                         onesar_refmac.os,
+                                        "unlink",
+                                        side_effect=unl_track,
+                                    ),
+                                    patch.object(
+                                        onesar_refmac.os,
                                         "stat",
                                         side_effect=st_hook,
                                     ),
@@ -19533,15 +24807,29 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                                         "fstat",
                                         side_effect=fst_hook,
                                     ),
+                                    patch.object(
+                                        onesar_refmac.os,
+                                        "fsync",
+                                        side_effect=fsync_hook,
+                                    ),
                                 ):
                                     try:
                                         if boundary == "writer":
-                                            result = onesar_refmac._atomic_write_new_json_file(
-                                                {"owned": "publication"},
-                                                target,
-                                                root=root,
-                                                caught_exceptions=writer_causes,
+                                            sink_token = onesar_refmac._ACTIVE_WRITE_CLEANUP_ERRORS_SINK_CTX.set(
+                                                writer_cleanup_errors_sink
                                             )
+                                            try:
+                                                result = onesar_refmac._atomic_write_new_json_file(
+                                                    {"owned": "publication"},
+                                                    target,
+                                                    root=root,
+                                                    dir_status_out=writer_dir_status,
+                                                    caught_exceptions=writer_causes,
+                                                )
+                                            finally:
+                                                onesar_refmac._ACTIVE_WRITE_CLEANUP_ERRORS_SINK_CTX.reset(
+                                                    sink_token
+                                                )
                                         else:
                                             result = ns[
                                                 "_verify_saved_snapshot_on_disk"
@@ -19558,7 +24846,7 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                                                 admitted_roots=(root,),
                                                 superseded_reason="owned probe",
                                             )
-                                    except Exception as exc:
+                                    except (Exception, KeyboardInterrupt) as exc:
                                         caught = exc
 
                                 # Unrelated sentinel descriptor remains open; all owned fds are closed
@@ -19576,15 +24864,98 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                                     b"".join(chunks)
                                 ).hexdigest()
                                 if boundary == "writer":
+                                    self.assertEqual(writer_unlinks, [])
+                                    self.assertIsNone(
+                                        onesar_refmac._ACTIVE_WRITE_CLEANUP_ERRORS_SINK_CTX.get()
+                                    )
                                     if case == "healthy":
                                         self.assertIsNone(caught)
                                         assert result is not None
+                                        self.assertEqual(writer_causes, [])
+                                        self.assertEqual(
+                                            writer_cleanup_errors_sink, []
+                                        )
+                                        self.assertNotIn(
+                                            "temp_cleanup_status",
+                                            writer_dir_status,
+                                        )
                                         self.assertEqual(
                                             result["path"], str(target)
                                         )
                                         self.assertIs(
                                             result["temp_cleanup_succeeded"],
+                                            False,
+                                        )
+                                        self.assertEqual(
+                                            result["temp_handling_policy"],
+                                            onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+                                        )
+                                        self.assertIs(
+                                            result["temp_handling_succeeded"],
                                             True,
+                                        )
+                                        self.assertEqual(
+                                            result["temp_handling_disposition"],
+                                            onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+                                        )
+                                        self.assertIs(
+                                            onesar_refmac._is_json_temp_handling_satisfied(
+                                                result
+                                            ),
+                                            True,
+                                        )
+                                        cleanup_st = result[
+                                            "temp_cleanup_status"
+                                        ]
+                                        self.assertEqual(
+                                            cleanup_st[
+                                                "temp_observation_phase"
+                                            ],
+                                            "post_link_stat",
+                                        )
+                                        self.assertIs(
+                                            cleanup_st[
+                                                "post_link_temp_observed"
+                                            ],
+                                            True,
+                                        )
+                                        self.assertIs(
+                                            cleanup_st[
+                                                "final_cleanup_temp_observed"
+                                            ],
+                                            False,
+                                        )
+                                        self.assertIs(
+                                            cleanup_st["unlinked"], False
+                                        )
+                                        self.assertIs(
+                                            cleanup_st["unlink_attempted"],
+                                            False,
+                                        )
+                                        self.assertEqual(
+                                            cleanup_st["unlink_attempt_count"],
+                                            0,
+                                        )
+                                        self.assertIs(
+                                            cleanup_st["cleanup_verified"],
+                                            False,
+                                        )
+                                        self.assertTrue(tmp_path.is_file())
+                                        t_st = target.stat()
+                                        tmp_st = tmp_path.stat()
+                                        self.assertEqual(
+                                            (int(t_st.st_dev), int(t_st.st_ino)),
+                                            (
+                                                int(tmp_st.st_dev),
+                                                int(tmp_st.st_ino),
+                                            ),
+                                        )
+                                        self.assertGreaterEqual(
+                                            int(t_st.st_nlink), 2
+                                        )
+                                        self.assertEqual(
+                                            target.read_bytes(),
+                                            tmp_path.read_bytes(),
                                         )
                                         self.assertEqual(
                                             result["sha256"], read_sha
@@ -19597,6 +24968,24 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                                         )
                                         self.assertIs(
                                             result["temp_cleanup_succeeded"],
+                                            False,
+                                        )
+                                        self.assertEqual(
+                                            result["temp_handling_policy"],
+                                            onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+                                        )
+                                        self.assertIs(
+                                            result["temp_handling_succeeded"],
+                                            False,
+                                        )
+                                        self.assertEqual(
+                                            result["temp_handling_disposition"],
+                                            onesar_refmac.JSON_TEMP_DISPOSITION_IDENTITY_MISMATCH,
+                                        )
+                                        self.assertIs(
+                                            onesar_refmac._is_json_temp_handling_satisfied(
+                                                result
+                                            ),
                                             False,
                                         )
                                         cleanup_st = result[
@@ -19616,6 +25005,24 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                                         self.assertEqual(
                                             cleanup_st["reason"],
                                             "temp_path_identity_mismatch",
+                                        )
+                                        self.assertEqual(
+                                            cleanup_st[
+                                                "temp_observation_phase"
+                                            ],
+                                            "post_link_stat",
+                                        )
+                                        self.assertIs(
+                                            cleanup_st[
+                                                "post_link_temp_observed"
+                                            ],
+                                            True,
+                                        )
+                                        self.assertIs(
+                                            cleanup_st[
+                                                "final_cleanup_temp_observed"
+                                            ],
+                                            False,
                                         )
                                         self.assertEqual(len(markers), 1)
                                         m_path, m_dev, m_ino = markers[0]
@@ -19640,6 +25047,927 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                                                 ],
                                             ),
                                             (m_dev, m_ino),
+                                        )
+                                    elif (
+                                        case
+                                        == "replace_temp_after_post_link_stat_returns_match"
+                                    ):
+                                        self.assertIsNone(caught)
+                                        assert result is not None
+                                        self.assertEqual(
+                                            events,
+                                            [
+                                                "linked",
+                                                "after_post_stat_swap",
+                                                "read_hook",
+                                            ],
+                                        )
+                                        self.assertEqual(writer_causes, [])
+                                        self.assertNotIn(
+                                            "temp_cleanup_status",
+                                            writer_dir_status,
+                                        )
+                                        self.assertEqual(
+                                            result["path"], str(target)
+                                        )
+                                        self.assertEqual(
+                                            result["sha256"], read_sha
+                                        )
+                                        self.assertIs(
+                                            result["temp_cleanup_succeeded"],
+                                            False,
+                                        )
+                                        self.assertEqual(
+                                            result["temp_handling_policy"],
+                                            onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+                                        )
+                                        self.assertIs(
+                                            result["temp_handling_succeeded"],
+                                            True,
+                                        )
+                                        self.assertEqual(
+                                            result["temp_handling_disposition"],
+                                            onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+                                        )
+                                        self.assertIs(
+                                            onesar_refmac._is_json_temp_handling_satisfied(
+                                                result
+                                            ),
+                                            True,
+                                        )
+                                        cleanup_st = result[
+                                            "temp_cleanup_status"
+                                        ]
+                                        self.assertEqual(
+                                            cleanup_st[
+                                                "temp_observation_phase"
+                                            ],
+                                            "post_link_stat",
+                                        )
+                                        self.assertIs(
+                                            cleanup_st[
+                                                "post_link_temp_observed"
+                                            ],
+                                            True,
+                                        )
+                                        self.assertIs(
+                                            cleanup_st[
+                                                "final_cleanup_temp_observed"
+                                            ],
+                                            False,
+                                        )
+                                        self.assertIs(
+                                            cleanup_st["unlinked"], False
+                                        )
+                                        self.assertEqual(len(markers), 1)
+                                        m_path, m_dev, m_ino = markers[0]
+                                        self.assertTrue(m_path.is_file())
+                                        self.assertEqual(
+                                            m_path.read_bytes(), marker
+                                        )
+                                        self.assertEqual(
+                                            (
+                                                int(m_path.stat().st_dev),
+                                                int(m_path.stat().st_ino),
+                                            ),
+                                            (m_dev, m_ino),
+                                        )
+                                        self.assertNotEqual(
+                                            (
+                                                int(target.stat().st_dev),
+                                                int(target.stat().st_ino),
+                                            ),
+                                            (m_dev, m_ino),
+                                        )
+                                    elif (
+                                        case
+                                        == "replace_temp_after_final_cleanup_stat_returns_match"
+                                    ):
+                                        self.assertIsNone(result)
+                                        self.assertIs(caught, injected_fsync)
+                                        self.assertEqual(
+                                            events,
+                                            [
+                                                "fsync_failed",
+                                                "after_final_stat_swap",
+                                            ],
+                                        )
+                                        self.assertEqual(
+                                            writer_causes, [injected_fsync]
+                                        )
+                                        self.assertFalse(target.exists())
+                                        self.assertIsNone(
+                                            getattr(
+                                                injected_fsync,
+                                                "published_receipt",
+                                                None,
+                                            )
+                                        )
+                                        self.assertEqual(len(markers), 1)
+                                        m_path, m_dev, m_ino = markers[0]
+                                        self.assertTrue(m_path.is_file())
+                                        self.assertEqual(
+                                            m_path.read_bytes(), marker
+                                        )
+                                        self.assertEqual(
+                                            (
+                                                int(m_path.stat().st_dev),
+                                                int(m_path.stat().st_ino),
+                                            ),
+                                            (m_dev, m_ino),
+                                        )
+                                        cleanup_st = getattr(
+                                            injected_fsync,
+                                            "temp_cleanup_status",
+                                            None,
+                                        )
+                                        self.assertIsInstance(
+                                            cleanup_st, Mapping
+                                        )
+                                        assert isinstance(cleanup_st, Mapping)
+                                        self.assertEqual(
+                                            cleanup_st["temp_handling_policy"],
+                                            onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+                                        )
+                                        self.assertIs(
+                                            cleanup_st[
+                                                "temp_handling_succeeded"
+                                            ],
+                                            True,
+                                        )
+                                        self.assertEqual(
+                                            cleanup_st[
+                                                "temp_handling_disposition"
+                                            ],
+                                            onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+                                        )
+                                        self.assertEqual(
+                                            cleanup_st[
+                                                "temp_observation_phase"
+                                            ],
+                                            "final_cleanup_stat",
+                                        )
+                                        self.assertIs(
+                                            cleanup_st[
+                                                "post_link_temp_observed"
+                                            ],
+                                            False,
+                                        )
+                                        self.assertIs(
+                                            cleanup_st[
+                                                "final_cleanup_temp_observed"
+                                            ],
+                                            True,
+                                        )
+                                        self.assertIs(
+                                            cleanup_st[
+                                                "published_link_created"
+                                            ],
+                                            False,
+                                        )
+                                        self.assertIs(
+                                            cleanup_st["readback_verified"],
+                                            False,
+                                        )
+                                        self.assertIs(
+                                            cleanup_st["unlinked"], False
+                                        )
+                                        self.assertIs(
+                                            onesar_refmac._is_json_temp_status_handling_satisfied(
+                                                cleanup_st,
+                                                legacy_missing_unlinked_default=False,
+                                            ),
+                                            True,
+                                        )
+                                    elif (
+                                        case
+                                        == "post_link_stat_eio_then_matching_final_cleanup_stat"
+                                    ):
+                                        self.assertIsNone(caught)
+                                        assert result is not None
+                                        self.assertEqual(
+                                            events,
+                                            [
+                                                "linked",
+                                                "post_link_stat_eio_fired",
+                                                "read_hook",
+                                                "after_final_stat_swap",
+                                            ],
+                                        )
+                                        self.assertEqual(
+                                            writer_causes,
+                                            [injected_post_link_stat],
+                                        )
+                                        self.assertEqual(
+                                            writer_cleanup_errors_sink,
+                                            [injected_post_link_stat],
+                                        )
+                                        self.assertIs(
+                                            writer_cleanup_errors_sink[0],
+                                            injected_post_link_stat,
+                                        )
+                                        self.assertEqual(
+                                            result["path"], str(target)
+                                        )
+                                        self.assertEqual(
+                                            result["sha256"], read_sha
+                                        )
+                                        self.assertIs(
+                                            result["temp_cleanup_succeeded"],
+                                            False,
+                                        )
+                                        self.assertEqual(
+                                            result["temp_handling_policy"],
+                                            onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+                                        )
+                                        self.assertIs(
+                                            result["temp_handling_succeeded"],
+                                            False,
+                                        )
+                                        self.assertEqual(
+                                            result["temp_handling_disposition"],
+                                            onesar_refmac.JSON_TEMP_DISPOSITION_STAT_ERROR,
+                                        )
+                                        self.assertIs(
+                                            onesar_refmac._is_json_temp_handling_satisfied(
+                                                result
+                                            ),
+                                            False,
+                                        )
+                                        cleanup_st = result[
+                                            "temp_cleanup_status"
+                                        ]
+                                        self.assertEqual(
+                                            cleanup_st[
+                                                "temp_observation_phase"
+                                            ],
+                                            "final_cleanup_stat",
+                                        )
+                                        self.assertIs(
+                                            cleanup_st[
+                                                "post_link_temp_observed"
+                                            ],
+                                            False,
+                                        )
+                                        self.assertIs(
+                                            cleanup_st[
+                                                "final_cleanup_temp_observed"
+                                            ],
+                                            True,
+                                        )
+                                        self.assertIs(
+                                            cleanup_st[
+                                                "temp_handling_succeeded"
+                                            ],
+                                            False,
+                                        )
+                                        self.assertEqual(
+                                            cleanup_st[
+                                                "temp_handling_disposition"
+                                            ],
+                                            onesar_refmac.JSON_TEMP_DISPOSITION_STAT_ERROR,
+                                        )
+                                        self.assertEqual(
+                                            len(cleanup_st["errors"]), 1
+                                        )
+                                        self.assertEqual(
+                                            cleanup_st["errors"][0]["phase"],
+                                            "post_link_stat",
+                                        )
+                                        self.assertEqual(
+                                            writer_dir_status.get(
+                                                "temp_cleanup_status"
+                                            ),
+                                            dict(cleanup_st),
+                                        )
+                                        self.assertEqual(len(markers), 1)
+                                        m_path, m_dev, m_ino = markers[0]
+                                        self.assertTrue(m_path.is_file())
+                                        self.assertEqual(
+                                            m_path.read_bytes(), marker
+                                        )
+                                        self.assertEqual(
+                                            (
+                                                int(m_path.stat().st_dev),
+                                                int(m_path.stat().st_ino),
+                                            ),
+                                            (m_dev, m_ino),
+                                        )
+                                    elif (
+                                        case
+                                        == "post_link_stat_eio_plus_read_then_close_error"
+                                    ):
+                                        self.assertIsNone(result)
+                                        self.assertIs(caught, injected_read)
+                                        self.assertEqual(
+                                            writer_causes,
+                                            [
+                                                injected_read,
+                                                injected_close,
+                                                injected_post_link_stat,
+                                                injected_parent_close,
+                                            ],
+                                        )
+                                        self.assertEqual(
+                                            writer_cleanup_errors_sink,
+                                            [injected_post_link_stat],
+                                        )
+                                        self.assertIs(
+                                            writer_cleanup_errors_sink[0],
+                                            injected_post_link_stat,
+                                        )
+                                        self.assertIs(
+                                            getattr(
+                                                injected_read,
+                                                "readback_close_error",
+                                                None,
+                                            ),
+                                            injected_close,
+                                        )
+                                        self.assertIs(
+                                            getattr(
+                                                injected_read,
+                                                "directory_close_error",
+                                                None,
+                                            ),
+                                            injected_parent_close,
+                                        )
+                                        self.assertIs(
+                                            getattr(
+                                                injected_read,
+                                                "temp_cleanup_error",
+                                                None,
+                                            ),
+                                            injected_post_link_stat,
+                                        )
+                                        self.assertEqual(
+                                            getattr(
+                                                injected_read,
+                                                "temp_cleanup_errors",
+                                                None,
+                                            ),
+                                            [injected_post_link_stat],
+                                        )
+                                        cleanup_st = getattr(
+                                            injected_read,
+                                            "temp_cleanup_status",
+                                            None,
+                                        )
+                                        self.assertIsInstance(
+                                            cleanup_st, Mapping
+                                        )
+                                        assert isinstance(cleanup_st, Mapping)
+                                        self.assertIs(
+                                            cleanup_st[
+                                                "temp_handling_succeeded"
+                                            ],
+                                            False,
+                                        )
+                                        self.assertEqual(
+                                            cleanup_st[
+                                                "temp_handling_disposition"
+                                            ],
+                                            onesar_refmac.JSON_TEMP_DISPOSITION_STAT_ERROR,
+                                        )
+                                        self.assertIs(
+                                            cleanup_st[
+                                                "final_cleanup_temp_observed"
+                                            ],
+                                            True,
+                                        )
+                                        pub_rec_comp = getattr(
+                                            injected_read,
+                                            "published_receipt",
+                                            None,
+                                        )
+                                        self.assertIsInstance(
+                                            pub_rec_comp, Mapping
+                                        )
+                                        assert isinstance(pub_rec_comp, Mapping)
+                                        self.assertIsNone(pub_rec_comp["path"])
+                                        self.assertIsNone(
+                                            pub_rec_comp["sha256"]
+                                        )
+                                        self.assertIsNone(
+                                            pub_rec_comp["size_bytes"]
+                                        )
+                                        self.assertIsNone(pub_rec_comp["dev"])
+                                        self.assertIsNone(pub_rec_comp["ino"])
+                                        self.assertIsNone(
+                                            pub_rec_comp[
+                                                "available_at_lexical_path"
+                                            ]
+                                        )
+                                        self.assertEqual(
+                                            pub_rec_comp[
+                                                "observed_readback_size_bytes"
+                                            ],
+                                            6,
+                                        )
+                                        self.assertIs(
+                                            pub_rec_comp[
+                                                "readback_close_succeeded"
+                                            ],
+                                            False,
+                                        )
+                                        self.assertEqual(
+                                            pub_rec_comp[
+                                                "directory_close_error"
+                                            ],
+                                            f"OSError: {injected_parent_close}",
+                                        )
+                                        self.assertEqual(
+                                            pub_rec_comp[
+                                                "directory_close_exception_type"
+                                            ],
+                                            "OSError",
+                                        )
+                                        self.assertEqual(
+                                            pub_rec_comp[
+                                                "directory_close_exception_message"
+                                            ],
+                                            str(injected_parent_close),
+                                        )
+                                        self.assertEqual(
+                                            pub_rec_comp[
+                                                "directory_close_errno"
+                                            ],
+                                            errno.EIO,
+                                        )
+                                        self.assertEqual(
+                                            len(
+                                                getattr(
+                                                    injected_read,
+                                                    "directory_close_failures",
+                                                    [],
+                                                )
+                                            ),
+                                            1,
+                                        )
+                                        self.assertEqual(
+                                            writer_dir_status.get(
+                                                "published_receipt"
+                                            ),
+                                            dict(pub_rec_comp),
+                                        )
+                                        self.assertEqual(
+                                            getattr(
+                                                injected_post_link_stat,
+                                                "published_receipt",
+                                                None,
+                                            ),
+                                            dict(pub_rec_comp),
+                                        )
+                                        self.assertEqual(len(markers), 1)
+                                        m_path, m_dev, m_ino = markers[0]
+                                        self.assertTrue(m_path.is_file())
+                                        self.assertEqual(
+                                            m_path.read_bytes(), marker
+                                        )
+                                        self.assertEqual(
+                                            (
+                                                int(m_path.stat().st_dev),
+                                                int(m_path.stat().st_ino),
+                                            ),
+                                            (m_dev, m_ino),
+                                        )
+                                    elif (
+                                        case
+                                        == "post_link_stat_eio_plus_post_readback_leaf_stat_eio"
+                                    ):
+                                        self.assertIsNone(result)
+                                        self.assertIsInstance(
+                                            caught,
+                                            onesar_refmac._PostPublicationBindingError,
+                                        )
+                                        assert caught is not None
+                                        self.assertIs(
+                                            getattr(caught, "cause", None),
+                                            injected_leaf_stat_eio,
+                                        )
+                                        self.assertIs(
+                                            caught.__cause__,
+                                            injected_leaf_stat_eio,
+                                        )
+                                        self.assertEqual(
+                                            writer_causes,
+                                            [
+                                                injected_leaf_stat_eio,
+                                                injected_post_link_stat,
+                                                injected_parent_close,
+                                            ],
+                                        )
+                                        self.assertEqual(
+                                            writer_cleanup_errors_sink,
+                                            [injected_post_link_stat],
+                                        )
+                                        self.assertIs(
+                                            writer_cleanup_errors_sink[0],
+                                            injected_post_link_stat,
+                                        )
+                                        for exc_target in (
+                                            caught,
+                                            injected_leaf_stat_eio,
+                                        ):
+                                            self.assertIs(
+                                                getattr(
+                                                    exc_target,
+                                                    "directory_close_error",
+                                                    None,
+                                                ),
+                                                injected_parent_close,
+                                            )
+                                            self.assertIs(
+                                                getattr(
+                                                    exc_target,
+                                                    "temp_cleanup_error",
+                                                    None,
+                                                ),
+                                                injected_post_link_stat,
+                                            )
+                                            self.assertEqual(
+                                                getattr(
+                                                    exc_target,
+                                                    "temp_cleanup_errors",
+                                                    None,
+                                                ),
+                                                [injected_post_link_stat],
+                                            )
+                                        cleanup_st = getattr(
+                                            caught,
+                                            "temp_cleanup_status",
+                                            None,
+                                        )
+                                        self.assertIsInstance(
+                                            cleanup_st, Mapping
+                                        )
+                                        assert isinstance(cleanup_st, Mapping)
+                                        self.assertIs(
+                                            cleanup_st[
+                                                "temp_handling_succeeded"
+                                            ],
+                                            False,
+                                        )
+                                        self.assertEqual(
+                                            cleanup_st[
+                                                "temp_handling_disposition"
+                                            ],
+                                            onesar_refmac.JSON_TEMP_DISPOSITION_STAT_ERROR,
+                                        )
+                                        self.assertIs(
+                                            cleanup_st[
+                                                "final_cleanup_temp_observed"
+                                            ],
+                                            True,
+                                        )
+                                        pub_rec_post_comp = getattr(
+                                            caught,
+                                            "published_receipt",
+                                            None,
+                                        )
+                                        self.assertIsInstance(
+                                            pub_rec_post_comp, Mapping
+                                        )
+                                        assert isinstance(
+                                            pub_rec_post_comp, Mapping
+                                        )
+                                        self.assertIsNone(
+                                            pub_rec_post_comp["path"]
+                                        )
+                                        self.assertIsNone(
+                                            pub_rec_post_comp[
+                                                "available_at_lexical_path"
+                                            ]
+                                        )
+                                        self.assertIsNone(
+                                            pub_rec_post_comp[
+                                                "lexical_path_currently_bound"
+                                            ]
+                                        )
+                                        self.assertIsNone(
+                                            pub_rec_post_comp[
+                                                "detached_from_lexical_path"
+                                            ]
+                                        )
+                                        self.assertEqual(
+                                            pub_rec_post_comp["failure_phase"],
+                                            "after_publication",
+                                        )
+                                        self.assertIs(
+                                            pub_rec_post_comp[
+                                                "readback_verified"
+                                            ],
+                                            True,
+                                        )
+                                        self.assertIs(
+                                            pub_rec_post_comp[
+                                                "post_publication_namespace_verified"
+                                            ],
+                                            False,
+                                        )
+                                        self.assertEqual(
+                                            pub_rec_post_comp["sha256"],
+                                            read_sha,
+                                        )
+                                        self.assertIs(
+                                            pub_rec_post_comp[
+                                                "temp_handling_succeeded"
+                                            ],
+                                            False,
+                                        )
+                                        self.assertEqual(
+                                            pub_rec_post_comp[
+                                                "temp_handling_disposition"
+                                            ],
+                                            onesar_refmac.JSON_TEMP_DISPOSITION_STAT_ERROR,
+                                        )
+                                        self.assertEqual(
+                                            pub_rec_post_comp[
+                                                "directory_close_error"
+                                            ],
+                                            f"OSError: {injected_parent_close}",
+                                        )
+                                        self.assertEqual(
+                                            pub_rec_post_comp[
+                                                "directory_close_exception_type"
+                                            ],
+                                            "OSError",
+                                        )
+                                        self.assertEqual(
+                                            pub_rec_post_comp[
+                                                "directory_close_exception_message"
+                                            ],
+                                            str(injected_parent_close),
+                                        )
+                                        self.assertEqual(
+                                            pub_rec_post_comp[
+                                                "directory_close_errno"
+                                            ],
+                                            errno.EIO,
+                                        )
+                                        self.assertEqual(
+                                            pub_rec_post_comp[
+                                                "cleanup_close_error"
+                                            ],
+                                            f"OSError: {injected_parent_close}",
+                                        )
+                                        self.assertEqual(
+                                            pub_rec_post_comp[
+                                                "cleanup_close_errno"
+                                            ],
+                                            errno.EIO,
+                                        )
+                                        self.assertEqual(
+                                            len(
+                                                getattr(
+                                                    caught,
+                                                    "directory_close_failures",
+                                                    [],
+                                                )
+                                            ),
+                                            1,
+                                        )
+                                        self.assertEqual(
+                                            getattr(
+                                                injected_leaf_stat_eio,
+                                                "directory_close_failures",
+                                                None,
+                                            ),
+                                            getattr(
+                                                caught,
+                                                "directory_close_failures",
+                                                None,
+                                            ),
+                                        )
+                                        self.assertEqual(
+                                            writer_dir_status.get(
+                                                "published_receipt"
+                                            ),
+                                            dict(pub_rec_post_comp),
+                                        )
+                                        self.assertEqual(
+                                            getattr(
+                                                injected_leaf_stat_eio,
+                                                "published_receipt",
+                                                None,
+                                            ),
+                                            dict(pub_rec_post_comp),
+                                        )
+                                        self.assertEqual(
+                                            getattr(
+                                                injected_post_link_stat,
+                                                "published_receipt",
+                                                None,
+                                            ),
+                                            dict(pub_rec_post_comp),
+                                        )
+                                        self.assertEqual(
+                                            writer_dir_status.get(
+                                                "temp_cleanup_status"
+                                            ),
+                                            dict(cleanup_st),
+                                        )
+                                        self.assertEqual(len(markers), 1)
+                                        m_path, m_dev, m_ino = markers[0]
+                                        self.assertTrue(m_path.is_file())
+                                        self.assertEqual(
+                                            m_path.read_bytes(), marker
+                                        )
+                                        self.assertEqual(
+                                            (
+                                                int(m_path.stat().st_dev),
+                                                int(m_path.stat().st_ino),
+                                            ),
+                                            (m_dev, m_ino),
+                                        )
+                                    elif (
+                                        case
+                                        == "post_link_stat_eio_plus_post_readback_leaf_stat_eio_then_final_cleanup_stat_interrupt"
+                                    ):
+                                        self.assertIsNone(result)
+                                        self.assertIs(caught, injected_ki)
+                                        self.assertIs(
+                                            caught.__context__,
+                                            injected_leaf_stat_eio,
+                                        )
+                                        self.assertEqual(
+                                            events,
+                                            [
+                                                "linked",
+                                                "post_link_stat_eio_fired",
+                                                "read_hook",
+                                                "leaf_stat_eio",
+                                                "ki_fired",
+                                            ],
+                                        )
+                                        self.assertEqual(
+                                            writer_causes,
+                                            [injected_leaf_stat_eio],
+                                        )
+                                        self.assertEqual(
+                                            writer_cleanup_errors_sink, []
+                                        )
+                                        self.assertNotIn(
+                                            "published_receipt",
+                                            writer_dir_status,
+                                        )
+                                        self.assertNotIn(
+                                            "temp_cleanup_status",
+                                            writer_dir_status,
+                                        )
+                                        for exc_obj in (
+                                            injected_ki,
+                                            injected_leaf_stat_eio,
+                                            injected_post_link_stat,
+                                        ):
+                                            self.assertIsNone(
+                                                getattr(
+                                                    exc_obj,
+                                                    "published_receipt",
+                                                    None,
+                                                )
+                                            )
+                                            self.assertIsNone(
+                                                getattr(
+                                                    exc_obj,
+                                                    "temp_cleanup_status",
+                                                    None,
+                                                )
+                                            )
+                                        self.assertTrue(target.is_file())
+                                        self.assertTrue(tmp_path.is_file())
+                                        t_st = target.stat()
+                                        tmp_st = tmp_path.stat()
+                                        self.assertEqual(
+                                            (int(t_st.st_dev), int(t_st.st_ino)),
+                                            (
+                                                int(tmp_st.st_dev),
+                                                int(tmp_st.st_ino),
+                                            ),
+                                        )
+                                        self.assertGreaterEqual(
+                                            int(t_st.st_nlink), 2
+                                        )
+                                        self.assertEqual(
+                                            target.read_bytes(),
+                                            tmp_path.read_bytes(),
+                                        )
+                                        self.assertEqual(
+                                            hashlib.sha256(
+                                                target.read_bytes()
+                                            ).hexdigest(),
+                                            read_sha,
+                                        )
+                                    elif case in {
+                                        "interrupt_at_post_link_stat",
+                                        "interrupt_after_post_link_observed_before_verified",
+                                    }:
+                                        self.assertIsNone(result)
+                                        self.assertIs(caught, injected_ki)
+                                        self.assertEqual(writer_causes, [])
+                                        self.assertEqual(
+                                            writer_cleanup_errors_sink, []
+                                        )
+                                        self.assertNotIn(
+                                            "temp_cleanup_status",
+                                            writer_dir_status,
+                                        )
+                                        self.assertIsNone(
+                                            getattr(
+                                                injected_ki,
+                                                "published_receipt",
+                                                None,
+                                            )
+                                        )
+                                        cleanup_st = getattr(
+                                            injected_ki,
+                                            "temp_cleanup_status",
+                                            None,
+                                        )
+                                        self.assertIsInstance(
+                                            cleanup_st, Mapping
+                                        )
+                                        assert isinstance(cleanup_st, Mapping)
+                                        self.assertEqual(
+                                            cleanup_st["temp_handling_policy"],
+                                            onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+                                        )
+                                        self.assertIs(
+                                            cleanup_st[
+                                                "temp_handling_succeeded"
+                                            ],
+                                            True,
+                                        )
+                                        self.assertEqual(
+                                            cleanup_st[
+                                                "temp_handling_disposition"
+                                            ],
+                                            onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+                                        )
+                                        self.assertEqual(
+                                            cleanup_st[
+                                                "temp_observation_phase"
+                                            ],
+                                            "final_cleanup_stat",
+                                        )
+                                        self.assertIs(
+                                            cleanup_st[
+                                                "published_link_created"
+                                            ],
+                                            True,
+                                        )
+                                        self.assertIs(
+                                            cleanup_st[
+                                                "post_link_temp_observed"
+                                            ],
+                                            case
+                                            == "interrupt_after_post_link_observed_before_verified",
+                                        )
+                                        self.assertIs(
+                                            cleanup_st[
+                                                "final_cleanup_temp_observed"
+                                            ],
+                                            True,
+                                        )
+                                        self.assertIs(
+                                            cleanup_st["readback_verified"],
+                                            False,
+                                        )
+                                        self.assertIs(
+                                            cleanup_st["unlinked"], False
+                                        )
+                                        self.assertIs(
+                                            cleanup_st["unlink_attempted"],
+                                            False,
+                                        )
+                                        self.assertEqual(
+                                            cleanup_st["unlink_attempt_count"],
+                                            0,
+                                        )
+                                        self.assertIs(
+                                            onesar_refmac._is_json_temp_status_handling_satisfied(
+                                                cleanup_st,
+                                                legacy_missing_unlinked_default=False,
+                                            ),
+                                            True,
+                                        )
+                                        self.assertTrue(target.is_file())
+                                        self.assertTrue(tmp_path.is_file())
+                                        t_st = target.stat()
+                                        tmp_st = tmp_path.stat()
+                                        self.assertEqual(
+                                            (int(t_st.st_dev), int(t_st.st_ino)),
+                                            (
+                                                int(tmp_st.st_dev),
+                                                int(tmp_st.st_ino),
+                                            ),
+                                        )
+                                        self.assertGreaterEqual(
+                                            int(t_st.st_nlink), 2
+                                        )
+                                        self.assertEqual(
+                                            target.read_bytes(),
+                                            tmp_path.read_bytes(),
                                         )
                                     elif case in {
                                         "replace_final_during_read",
@@ -19669,6 +25997,23 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                                         )
                                         self.assertEqual(
                                             pub_rec["sha256"], read_sha
+                                        )
+                                        self.assertIs(
+                                            pub_rec["temp_handling_succeeded"],
+                                            True,
+                                        )
+                                        self.assertEqual(
+                                            pub_rec[
+                                                "temp_handling_disposition"
+                                            ],
+                                            onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+                                        )
+                                        self.assertEqual(
+                                            writer_causes,
+                                            [getattr(caught, "cause", None)],
+                                        )
+                                        self.assertEqual(
+                                            writer_cleanup_errors_sink, []
                                         )
                                         if case == "replace_final_during_read":
                                             self.assertTrue(target.is_file())
@@ -19763,6 +26108,13 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                                         )
                                         self.assertIn(
                                             injected_close, writer_causes
+                                        )
+                                        self.assertEqual(
+                                            writer_causes,
+                                            [injected_read, injected_close],
+                                        )
+                                        self.assertEqual(
+                                            writer_cleanup_errors_sink, []
                                         )
                                         pub_rec_rc = getattr(
                                             injected_read,
@@ -21909,13 +28261,64 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                                         )
                                         self.assertIs(
                                             rec_2["temp_cleanup_succeeded"],
+                                            False,
+                                        )
+                                        self.assertEqual(
+                                            rec_2["temp_handling_policy"],
+                                            onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+                                        )
+                                        self.assertIs(
+                                            rec_2["temp_handling_succeeded"],
                                             True,
+                                        )
+                                        self.assertEqual(
+                                            rec_2[
+                                                "temp_handling_disposition"
+                                            ],
+                                            onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+                                        )
+                                        self.assertIs(
+                                            onesar_refmac._is_json_temp_handling_satisfied(
+                                                rec_2
+                                            ),
+                                            True,
+                                        )
+                                        self.assertIs(
+                                            rec_2["temp_cleanup_status"][
+                                                "temp_handling_succeeded"
+                                            ],
+                                            True,
+                                        )
+                                        self.assertIs(
+                                            rec_2["temp_cleanup_status"][
+                                                "unlinked"
+                                            ],
+                                            False,
                                         )
                                         self.assertIs(
                                             rec_2["temp_cleanup_status"][
                                                 "readback_verified"
                                             ],
                                             True,
+                                        )
+                                        tmp_path_2 = (
+                                            root
+                                            / f".{target.name}.tmp.{os.getpid()}"
+                                        )
+                                        self.assertTrue(tmp_path_2.is_file())
+                                        self.assertEqual(
+                                            (
+                                                int(target.stat().st_dev),
+                                                int(target.stat().st_ino),
+                                            ),
+                                            (
+                                                int(tmp_path_2.stat().st_dev),
+                                                int(tmp_path_2.stat().st_ino),
+                                            ),
+                                        )
+                                        self.assertEqual(
+                                            target.read_bytes(),
+                                            tmp_path_2.read_bytes(),
                                         )
                                         self._reopen_and_verify_json_artifact(
                                             rec_2
@@ -24972,6 +31375,2153 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                     )
 
                 # Verify unrelated sentinel descriptor and file identity/bytes remain untouched.
+                sentinel_st_after = real_lstat(sentinel_path)
+                self.assertEqual(
+                    (
+                        int(sentinel_st_after.st_dev),
+                        int(sentinel_st_after.st_ino),
+                    ),
+                    (
+                        int(sentinel_st_before.st_dev),
+                        int(sentinel_st_before.st_ino),
+                    ),
+                )
+                self.assertEqual(
+                    real_read(sentinel_fd, 256), sentinel_bytes
+                )
+            finally:
+                real_close(sentinel_fd)
+
+    def test_checkpoint_leaf_retention_nonblocking_open_and_final_binding_task989(
+        self,
+    ) -> None:
+        """Saved checkpoint leaf verification uses nonblocking open and final admitted-parent-relative stat (#1050)."""
+        real_open = os.open
+        real_stat = os.stat
+        real_fstat = os.fstat
+        real_lstat = os.lstat
+        real_read = os.read
+        real_close = os.close
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(strict=True)
+            sentinel_path = root / "unrelated_sentinel_989.txt"
+            sentinel_bytes = b"sentinel-989-untouched\n"
+            sentinel_path.write_bytes(sentinel_bytes)
+            sentinel_st_before = real_lstat(sentinel_path)
+            sentinel_fd = real_open(str(sentinel_path), os.O_RDONLY)
+            try:
+                staged_pdb = root / "1sar.pdb"
+                staged_sf = root / "1sar-sf.cif"
+                helper = root / "helper.py"
+                kw = root / "refmac_keywords.txt"
+                staged_pdb.write_text("HEADER 1SAR\n", encoding="utf-8")
+                staged_sf.write_text("data_r1sarsf\n", encoding="utf-8")
+                helper.write_text("# helper\n", encoding="utf-8")
+                kw.write_text("NCYC 10\nEND\n", encoding="utf-8")
+
+                def _entry(path: Path) -> dict[str, Any]:
+                    raw = path.read_bytes()
+                    st = real_lstat(path)
+                    anc = onesar_refmac._build_file_ancestor_chain_baseline(
+                        path, evidence_root=root
+                    )
+                    return {
+                        "path": str(path),
+                        "resolved_path": str(path.resolve(strict=True)),
+                        "sha256": hashlib.sha256(raw).hexdigest(),
+                        "size_bytes": len(raw),
+                        "dev": int(st.st_dev),
+                        "ino": int(st.st_ino),
+                        **anc,
+                    }
+
+                staged_base = {
+                    "pdb": _entry(staged_pdb),
+                    "sf_cif": _entry(staged_sf),
+                }
+                helper_base = {"onesar_refmac_py": _entry(helper)}
+                kw_base = _entry(kw)
+
+                cp_dir = root / "cp_parent_989"
+                cp_dir.mkdir()
+                cp = cp_dir / "refmac_pre_execution_checkpoint.json"
+                cp_payload = b'{"checkpoint": "task-989-valid"}\n'
+                cp_expected_sha = hashlib.sha256(cp_payload).hexdigest()
+
+                def _reset_cp(payload: bytes = cp_payload) -> dict[str, Any]:
+                    if cp.is_symlink() or cp.exists():
+                        if cp.is_dir() and not cp.is_symlink():
+                            os.rmdir(cp)
+                        else:
+                            cp.unlink()
+                    cp.write_bytes(payload)
+                    return _entry(cp)
+
+                # 1. Healthy non-empty and empty-stream controls + relative-dir_fd audit.
+                for control_label, payload in (
+                    ("non_empty", cp_payload),
+                    ("empty_stream", b""),
+                ):
+                    with self.subTest(control=control_label):
+                        cp_base = _reset_cp(payload)
+                        expected_sha = hashlib.sha256(payload).hexdigest()
+                        parent_st = real_lstat(cp_dir)
+                        parent_identity = (
+                            int(parent_st.st_dev),
+                            int(parent_st.st_ino),
+                        )
+                        cp_st_orig = real_lstat(cp)
+                        cp_identity = (
+                            int(cp_st_orig.st_dev),
+                            int(cp_st_orig.st_ino),
+                        )
+                        events: list[tuple[str, object]] = []
+                        tracked_cp_fds: set[int] = set()
+
+                        def _audit_stat(
+                            path: object,
+                            *args: object,
+                            dir_fd: int | None = None,
+                            follow_symlinks: bool = True,
+                            **kwargs: object,
+                        ) -> os.stat_result:
+                            if os.fsdecode(path) == cp.name:
+                                self.assertIsNotNone(dir_fd)
+                                self.assertFalse(follow_symlinks)
+                                assert dir_fd is not None
+                                dst = real_fstat(dir_fd)
+                                self.assertEqual(
+                                    (int(dst.st_dev), int(dst.st_ino)),
+                                    parent_identity,
+                                )
+                                events.append(("stat", dir_fd))
+                            return real_stat(
+                                path,
+                                *args,
+                                dir_fd=dir_fd,
+                                follow_symlinks=follow_symlinks,
+                                **kwargs,
+                            )
+
+                        def _audit_open(
+                            path: object,
+                            flags: int,
+                            mode: int = 0o777,
+                            *,
+                            dir_fd: int | None = None,
+                        ) -> int:
+                            if os.fsdecode(path) == cp.name:
+                                self.assertIsNotNone(dir_fd)
+                                self.assertTrue(
+                                    bool(flags & getattr(os, "O_NONBLOCK", 0)),
+                                    "Checkpoint leaf open must set O_NONBLOCK",
+                                )
+                                self.assertTrue(
+                                    bool(flags & getattr(os, "O_NOFOLLOW", 0)),
+                                    "Checkpoint leaf open must set O_NOFOLLOW",
+                                )
+                                assert dir_fd is not None
+                                dst = real_fstat(dir_fd)
+                                self.assertEqual(
+                                    (int(dst.st_dev), int(dst.st_ino)),
+                                    parent_identity,
+                                )
+                                fd = real_open(
+                                    path, flags, mode, dir_fd=dir_fd
+                                )
+                                tracked_cp_fds.add(fd)
+                                events.append(("open", fd))
+                                return fd
+                            return (
+                                real_open(path, flags, mode, dir_fd=dir_fd)
+                                if dir_fd is not None
+                                else real_open(path, flags, mode)
+                            )
+
+                        def _audit_fstat(fd: int) -> os.stat_result:
+                            if fd in tracked_cp_fds:
+                                events.append(("fstat", fd))
+                            return real_fstat(fd)
+
+                        def _audit_close(fd: int) -> None:
+                            self.assertNotEqual(fd, sentinel_fd)
+                            if fd in tracked_cp_fds:
+                                events.append(("leaf_close", fd))
+                            real_close(fd)
+
+                        with (
+                            patch(
+                                "onesar_refmac.os.stat",
+                                side_effect=_audit_stat,
+                            ),
+                            patch(
+                                "onesar_refmac.os.open",
+                                side_effect=_audit_open,
+                            ),
+                            patch(
+                                "onesar_refmac.os.fstat",
+                                side_effect=_audit_fstat,
+                            ),
+                            patch(
+                                "onesar_refmac.os.close",
+                                side_effect=_audit_close,
+                            ),
+                        ):
+                            res = onesar_refmac._verify_immutable_baselines_post_run(
+                                staged_base,
+                                helper_base,
+                                kw_base,
+                                pre_execution_checkpoint_baseline=cp_base,
+                            )
+
+                        json.dumps(res)
+                        post = res["pre_execution_checkpoint_post_run"]
+                        self.assertIs(res["verified"], True)
+                        self.assertIs(
+                            res["pre_execution_checkpoint_verified"], True
+                        )
+                        self.assertEqual(res["mutations"], [])
+                        self.assertIs(post["matches_baseline"], True)
+                        self.assertIsNone(post["failure_phase"])
+                        self.assertIs(post["exists"], True)
+                        self.assertIs(post["is_symlink"], False)
+                        self.assertIs(post["is_regular_file"], True)
+                        self.assertIs(
+                            post["initial_leaf_lookup"]["exists"], True
+                        )
+                        self.assertIs(
+                            post["initial_leaf_lookup"]["is_symlink"], False
+                        )
+                        self.assertIs(
+                            post["initial_leaf_lookup"]["is_regular_file"], True
+                        )
+                        self.assertEqual(post["sha256"], expected_sha)
+                        self.assertEqual(
+                            post["observed_read_sha256"], expected_sha
+                        )
+                        self.assertEqual(
+                            post["observed_read_bytes"], len(payload)
+                        )
+                        self.assertIs(post["observed_eof"], True)
+                        self.assertIs(post["read_complete"], True)
+                        self.assertIs(post["leaf_descriptor_opened"], True)
+                        self.assertIs(post["leaf_pre_fstat_verified"], True)
+                        self.assertIs(
+                            post["leaf_pre_fstat_is_regular_file"], True
+                        )
+                        self.assertEqual(
+                            post["leaf_pre_fstat_size_bytes"], len(payload)
+                        )
+                        self.assertIs(post["leaf_post_fstat_verified"], True)
+                        self.assertIs(
+                            post["leaf_post_fstat_is_regular_file"], True
+                        )
+                        self.assertEqual(
+                            post["leaf_post_fstat_size_bytes"], len(payload)
+                        )
+                        self.assertIs(post["leaf_final_stat_attempted"], True)
+                        self.assertIs(post["leaf_final_stat_succeeded"], True)
+                        self.assertIs(post["leaf_final_stat_verified"], True)
+                        self.assertIs(post["leaf_final_stat_exists"], True)
+                        self.assertIs(post["leaf_final_stat_is_symlink"], False)
+                        self.assertIs(
+                            post["leaf_final_stat_is_regular_file"], True
+                        )
+                        self.assertIs(
+                            post["final_leaf_lookup"]["attempted"], True
+                        )
+                        self.assertIs(
+                            post["final_leaf_lookup"]["succeeded"], True
+                        )
+                        self.assertIs(
+                            post["final_leaf_lookup"]["verified"], True
+                        )
+                        self.assertIs(post["final_leaf_lookup"]["exists"], True)
+                        self.assertIs(
+                            post["final_leaf_lookup"]["is_symlink"], False
+                        )
+                        self.assertIs(
+                            post["final_leaf_lookup"]["is_regular_file"], True
+                        )
+                        self.assertEqual(
+                            (
+                                post["initial_leaf_lookup"]["dev"],
+                                post["initial_leaf_lookup"]["ino"],
+                            ),
+                            cp_identity,
+                        )
+                        self.assertEqual(
+                            post["initial_leaf_lookup"]["size_bytes"],
+                            len(payload),
+                        )
+                        self.assertEqual(
+                            (
+                                post["leaf_post_fstat_dev"],
+                                post["leaf_post_fstat_ino"],
+                            ),
+                            cp_identity,
+                        )
+                        self.assertEqual(
+                            (
+                                post["final_leaf_lookup"]["dev"],
+                                post["final_leaf_lookup"]["ino"],
+                            ),
+                            cp_identity,
+                        )
+                        self.assertEqual(
+                            post["final_leaf_lookup"]["size_bytes"],
+                            len(payload),
+                        )
+                        self.assertEqual(
+                            [e[0] for e in events],
+                            [
+                                "stat",
+                                "open",
+                                "fstat",
+                                "fstat",
+                                "stat",
+                                "leaf_close",
+                            ],
+                        )
+
+                # 2. Initial nonregular refusal (FIFO and directory) before open.
+                has_mkfifo = hasattr(os, "mkfifo")
+                for kind in ("fifo", "dir"):
+                    if kind == "fifo" and not has_mkfifo:
+                        continue
+                    with self.subTest(initial_nonregular=kind):
+                        cp_base = _reset_cp()
+                        cp.unlink()
+                        if kind == "fifo":
+                            os.mkfifo(cp)
+                        else:
+                            cp.mkdir()
+                        open_called_for_cp = False
+
+                        def _forbid_cp_open(
+                            path: object,
+                            flags: int,
+                            mode: int = 0o777,
+                            *,
+                            dir_fd: int | None = None,
+                        ) -> int:
+                            nonlocal open_called_for_cp
+                            if os.fsdecode(path) == cp.name:
+                                open_called_for_cp = True
+                            return (
+                                real_open(path, flags, mode, dir_fd=dir_fd)
+                                if dir_fd is not None
+                                else real_open(path, flags, mode)
+                            )
+
+                        caught: list[Exception] = []
+                        cp_causes: list[Exception | None] = []
+                        mut_causes: list[Exception | None] = []
+                        with patch(
+                            "onesar_refmac.os.open",
+                            side_effect=_forbid_cp_open,
+                        ):
+                            res = onesar_refmac._verify_immutable_baselines_post_run(
+                                staged_base,
+                                helper_base,
+                                kw_base,
+                                pre_execution_checkpoint_baseline=cp_base,
+                                caught_exceptions=caught,
+                                pre_checkpoint_cause_out=cp_causes,
+                                mutation_causes_out=mut_causes,
+                            )
+                        self.assertIs(open_called_for_cp, False)
+                        post = res["pre_execution_checkpoint_post_run"]
+                        self.assertIs(res["verified"], False)
+                        self.assertIs(
+                            res["pre_execution_checkpoint_verified"], False
+                        )
+                        self.assertEqual(
+                            post["failure_phase"], "leaf_type_check"
+                        )
+                        self.assertIs(post["exists"], True)
+                        self.assertIs(post["is_symlink"], False)
+                        self.assertIs(post["is_regular_file"], False)
+                        self.assertIs(
+                            post["initial_leaf_lookup"]["exists"], True
+                        )
+                        self.assertIs(
+                            post["initial_leaf_lookup"]["is_symlink"], False
+                        )
+                        self.assertIs(
+                            post["initial_leaf_lookup"]["is_regular_file"],
+                            False,
+                        )
+                        self.assertIs(post["leaf_descriptor_opened"], False)
+                        self.assertIs(post["leaf_pre_fstat_verified"], False)
+                        self.assertIsNone(
+                            post["leaf_pre_fstat_is_regular_file"]
+                        )
+                        self.assertIs(post["leaf_final_stat_attempted"], False)
+                        self.assertIs(post["leaf_final_stat_succeeded"], False)
+                        self.assertIs(post["leaf_final_stat_verified"], False)
+                        self.assertIsNone(post["leaf_final_stat_exists"])
+                        self.assertIsNone(post["leaf_final_stat_is_symlink"])
+                        self.assertIsNone(
+                            post["leaf_final_stat_is_regular_file"]
+                        )
+                        self.assertIs(
+                            post["final_leaf_lookup"]["attempted"], False
+                        )
+                        self.assertIs(
+                            post["final_leaf_lookup"]["succeeded"], False
+                        )
+                        self.assertIs(
+                            post["final_leaf_lookup"]["verified"], False
+                        )
+                        self.assertIsNone(post["final_leaf_lookup"]["exists"])
+                        self.assertIsNone(
+                            post["final_leaf_lookup"]["is_symlink"]
+                        )
+                        self.assertIsNone(
+                            post["final_leaf_lookup"]["is_regular_file"]
+                        )
+
+                # 3. Regular-to-FIFO swap between initial stat and open:
+                # Wrap in its own subTest so missing-O_NONBLOCK failure on historical source
+                # does not prevent later final-binding/close subTests from running.
+                # Assert O_NONBLOCK before real_open so historical blocking open cannot hang.
+                if has_mkfifo:
+                    with self.subTest(open_race="regular_to_fifo_swap"):
+                        cp_base = _reset_cp()
+                        orig_dev = int(cp_base["dev"])
+                        orig_ino = int(cp_base["ino"])
+                        read_called_on_fifo = False
+                        fifo_fd_holder: list[int] = []
+
+                        def _swap_to_fifo_on_open(
+                            path: object,
+                            flags: int,
+                            mode: int = 0o777,
+                            *,
+                            dir_fd: int | None = None,
+                        ) -> int:
+                            if os.fsdecode(path) == cp.name:
+                                self.assertTrue(
+                                    bool(flags & getattr(os, "O_NONBLOCK", 0)),
+                                    "O_NONBLOCK is required before opening swapped FIFO",
+                                )
+                                cp.unlink()
+                                os.mkfifo(cp)
+                                fd = real_open(
+                                    path, flags, mode, dir_fd=dir_fd
+                                )
+                                fifo_fd_holder.append(fd)
+                                return fd
+                            return (
+                                real_open(path, flags, mode, dir_fd=dir_fd)
+                                if dir_fd is not None
+                                else real_open(path, flags, mode)
+                            )
+
+                        def _forbid_fifo_read(fd: int, n: int) -> bytes:
+                            nonlocal read_called_on_fifo
+                            if fd in fifo_fd_holder:
+                                read_called_on_fifo = True
+                            return real_read(fd, n)
+
+                        caught = []
+                        cp_causes = []
+                        mut_causes = []
+                        try:
+                            with (
+                                patch(
+                                    "onesar_refmac.os.open",
+                                    side_effect=_swap_to_fifo_on_open,
+                                ),
+                                patch(
+                                    "onesar_refmac.os.read",
+                                    side_effect=_forbid_fifo_read,
+                                ),
+                            ):
+                                res = onesar_refmac._verify_immutable_baselines_post_run(
+                                    staged_base,
+                                    helper_base,
+                                    kw_base,
+                                    pre_execution_checkpoint_baseline=cp_base,
+                                    caught_exceptions=caught,
+                                    pre_checkpoint_cause_out=cp_causes,
+                                    mutation_causes_out=mut_causes,
+                                )
+                        finally:
+                            _reset_cp()
+                        self.assertIs(read_called_on_fifo, False)
+                        post = res["pre_execution_checkpoint_post_run"]
+                        self.assertIs(res["verified"], False)
+                        self.assertIs(
+                            res["pre_execution_checkpoint_verified"], False
+                        )
+                        self.assertEqual(
+                            post["failure_phase"], "leaf_pre_read_fstat"
+                        )
+                        self.assertEqual(post["errno"], errno.ESTALE)
+                        self.assertIsNone(post["sha256"])
+                        self.assertIs(post["matches_baseline"], False)
+                        self.assertIs(post["exists"], True)
+                        self.assertIs(post["is_symlink"], False)
+                        self.assertIs(post["is_regular_file"], True)
+                        self.assertIs(
+                            post["initial_leaf_lookup"]["exists"], True
+                        )
+                        self.assertIs(
+                            post["initial_leaf_lookup"]["is_symlink"], False
+                        )
+                        self.assertIs(
+                            post["initial_leaf_lookup"]["is_regular_file"],
+                            True,
+                        )
+                        self.assertEqual(
+                            (
+                                post["initial_leaf_lookup"]["dev"],
+                                post["initial_leaf_lookup"]["ino"],
+                            ),
+                            (orig_dev, orig_ino),
+                        )
+                        self.assertIs(post["leaf_descriptor_opened"], True)
+                        self.assertIs(post["leaf_pre_fstat_verified"], False)
+                        self.assertIs(
+                            post["leaf_pre_fstat_is_regular_file"], False
+                        )
+                        self.assertIs(post["leaf_post_fstat_verified"], False)
+                        self.assertIsNone(
+                            post["leaf_post_fstat_is_regular_file"]
+                        )
+                        self.assertIs(post["leaf_final_stat_attempted"], False)
+                        self.assertIs(post["leaf_final_stat_succeeded"], False)
+                        self.assertIs(post["leaf_final_stat_verified"], False)
+                        self.assertIsNone(post["leaf_final_stat_exists"])
+                        self.assertIsNone(post["leaf_final_stat_is_symlink"])
+                        self.assertIsNone(
+                            post["leaf_final_stat_is_regular_file"]
+                        )
+                        self.assertIs(
+                            post["final_leaf_lookup"]["attempted"], False
+                        )
+                        self.assertIs(
+                            post["final_leaf_lookup"]["succeeded"], False
+                        )
+                        self.assertIs(
+                            post["final_leaf_lookup"]["verified"], False
+                        )
+                        self.assertIsNone(post["final_leaf_lookup"]["exists"])
+                        self.assertIsNone(
+                            post["final_leaf_lookup"]["is_symlink"]
+                        )
+                        self.assertIsNone(
+                            post["final_leaf_lookup"]["is_regular_file"]
+                        )
+                        self.assertIs(post["leaf_close_attempted"], True)
+                        self.assertIs(post["leaf_close_succeeded"], True)
+                        self.assertIs(post["parent_close_succeeded"], True)
+
+                # 4. Prefix read failure (leaf_read) and end-fstat failure (leaf_post_read_fstat) controls.
+                with self.subTest(phase_control="leaf_read_prefix_failure"):
+                    multi_payload = b"A" * 65536 + b"B" * 2048
+                    cp_base = _reset_cp(multi_payload)
+                    cp_fd_seen: list[int] = []
+                    read_calls = 0
+                    read_inj = OSError(
+                        errno.EIO, "synthetic checkpoint prefix read EIO"
+                    )
+
+                    def _track_open(
+                        path: object,
+                        flags: int,
+                        mode: int = 0o777,
+                        *,
+                        dir_fd: int | None = None,
+                    ) -> int:
+                        fd = (
+                            real_open(path, flags, mode, dir_fd=dir_fd)
+                            if dir_fd is not None
+                            else real_open(path, flags, mode)
+                        )
+                        if os.fsdecode(path) == cp.name:
+                            cp_fd_seen.append(fd)
+                        return fd
+
+                    def _fail_second_read(fd: int, n: int) -> bytes:
+                        nonlocal read_calls
+                        if fd in cp_fd_seen:
+                            read_calls += 1
+                            if read_calls == 1:
+                                return real_read(fd, n)
+                            raise read_inj
+                        return real_read(fd, n)
+
+                    caught = []
+                    cp_causes = []
+                    mut_causes = []
+                    with (
+                        patch(
+                            "onesar_refmac.os.open", side_effect=_track_open
+                        ),
+                        patch(
+                            "onesar_refmac.os.read",
+                            side_effect=_fail_second_read,
+                        ),
+                    ):
+                        res = onesar_refmac._verify_immutable_baselines_post_run(
+                            staged_base,
+                            helper_base,
+                            kw_base,
+                            pre_execution_checkpoint_baseline=cp_base,
+                            caught_exceptions=caught,
+                            pre_checkpoint_cause_out=cp_causes,
+                            mutation_causes_out=mut_causes,
+                        )
+                    post = res["pre_execution_checkpoint_post_run"]
+                    self.assertEqual(post["failure_phase"], "leaf_read")
+                    self.assertIs(cp_causes[0], read_inj)
+                    self.assertIsNone(post["sha256"])
+                    self.assertEqual(post["observed_read_bytes"], 65536)
+                    self.assertEqual(
+                        post["observed_read_sha256"],
+                        hashlib.sha256(b"A" * 65536).hexdigest(),
+                    )
+                    self.assertIs(post["observed_eof"], False)
+                    self.assertIs(post["read_complete"], False)
+                    self.assertIs(post["leaf_pre_fstat_verified"], True)
+                    self.assertIs(post["leaf_pre_fstat_is_regular_file"], True)
+                    self.assertIs(post["leaf_post_fstat_verified"], False)
+                    self.assertIsNone(post["leaf_post_fstat_is_regular_file"])
+                    self.assertIs(post["leaf_final_stat_attempted"], False)
+                    self.assertIsNone(post["final_leaf_lookup"]["exists"])
+
+                with self.subTest(phase_control="leaf_post_read_fstat_failure"):
+                    cp_base = _reset_cp()
+                    cp_fd_seen = []
+                    fstat_calls = 0
+
+                    def _track_open_fstat(
+                        path: object,
+                        flags: int,
+                        mode: int = 0o777,
+                        *,
+                        dir_fd: int | None = None,
+                    ) -> int:
+                        fd = (
+                            real_open(path, flags, mode, dir_fd=dir_fd)
+                            if dir_fd is not None
+                            else real_open(path, flags, mode)
+                        )
+                        if os.fsdecode(path) == cp.name:
+                            cp_fd_seen.append(fd)
+                        return fd
+
+                    def _mutate_second_fstat(fd: int) -> os.stat_result:
+                        nonlocal fstat_calls
+                        if fd in cp_fd_seen:
+                            fstat_calls += 1
+                            if fstat_calls == 2:
+                                cp.write_bytes(
+                                    cp_payload + b"post-read-same-inode-growth"
+                                )
+                                st_grown = real_fstat(fd)
+                                cp.write_bytes(cp_payload)
+                                return st_grown
+                        return real_fstat(fd)
+
+                    with (
+                        patch(
+                            "onesar_refmac.os.open",
+                            side_effect=_track_open_fstat,
+                        ),
+                        patch(
+                            "onesar_refmac.os.fstat",
+                            side_effect=_mutate_second_fstat,
+                        ),
+                    ):
+                        res = onesar_refmac._verify_immutable_baselines_post_run(
+                            staged_base,
+                            helper_base,
+                            kw_base,
+                            pre_execution_checkpoint_baseline=cp_base,
+                        )
+                    post = res["pre_execution_checkpoint_post_run"]
+                    self.assertEqual(
+                        post["failure_phase"], "leaf_post_read_fstat"
+                    )
+                    self.assertEqual(post["errno"], errno.ESTALE)
+                    self.assertIsNone(post["sha256"])
+                    self.assertEqual(
+                        post["observed_read_sha256"], cp_expected_sha
+                    )
+                    self.assertIs(post["observed_eof"], True)
+                    self.assertIs(post["read_complete"], True)
+                    self.assertIs(post["leaf_pre_fstat_verified"], True)
+                    self.assertIs(post["leaf_pre_fstat_is_regular_file"], True)
+                    self.assertIs(post["leaf_post_fstat_verified"], False)
+                    self.assertIs(post["leaf_post_fstat_is_regular_file"], True)
+                    self.assertEqual(
+                        post["leaf_post_fstat_size_bytes"],
+                        len(cp_payload) + len(b"post-read-same-inode-growth"),
+                    )
+                    self.assertIs(post["leaf_final_stat_attempted"], False)
+                    self.assertIsNone(post["final_leaf_lookup"]["exists"])
+
+                # 5. Final relative-name mutations during readback (leaf_post_read_stat):
+                # same-byte new-inode replacement, size mismatch, absent (ENOENT), symlink, FIFO, and directory.
+                for final_case in (
+                    "same_byte_new_inode",
+                    "final_size_mismatch",
+                    "absent_enoent",
+                    "symlink",
+                    "fifo",
+                    "directory",
+                ):
+                    if final_case == "fifo" and not has_mkfifo:
+                        continue
+                    with self.subTest(final_leaf_case=final_case):
+                        cp_base = _reset_cp()
+                        orig_dev = int(cp_base["dev"])
+                        orig_ino = int(cp_base["ino"])
+                        cp_fd_seen = []
+                        mutated_on_read = False
+                        replacement_ino: int | None = None
+
+                        def _open_for_final_case(
+                            path: object,
+                            flags: int,
+                            mode: int = 0o777,
+                            *,
+                            dir_fd: int | None = None,
+                        ) -> int:
+                            fd = (
+                                real_open(path, flags, mode, dir_fd=dir_fd)
+                                if dir_fd is not None
+                                else real_open(path, flags, mode)
+                            )
+                            if os.fsdecode(path) == cp.name:
+                                cp_fd_seen.append(fd)
+                            return fd
+
+                        def _read_and_mutate_entry(fd: int, n: int) -> bytes:
+                            nonlocal mutated_on_read, replacement_ino
+                            chunk = real_read(fd, n)
+                            if fd in cp_fd_seen and not mutated_on_read:
+                                mutated_on_read = True
+                                if final_case == "same_byte_new_inode":
+                                    alt = cp_dir / "alt_same_bytes.json"
+                                    alt.write_bytes(cp_payload)
+                                    alt_st = real_lstat(alt)
+                                    replacement_ino = int(alt_st.st_ino)
+                                    os.replace(alt, cp)
+                                elif final_case == "absent_enoent":
+                                    cp.unlink()
+                                elif final_case == "symlink":
+                                    target = root / "sym_target_989.json"
+                                    target.write_bytes(cp_payload)
+                                    cp.unlink()
+                                    cp.symlink_to(target)
+                                elif final_case == "fifo":
+                                    cp.unlink()
+                                    os.mkfifo(cp)
+                                elif final_case == "directory":
+                                    cp.unlink()
+                                    cp.mkdir()
+                            return chunk
+
+                        stat_calls_on_cp = 0
+
+                        def _stat_for_final_case(
+                            path: object,
+                            *args: object,
+                            dir_fd: int | None = None,
+                            follow_symlinks: bool = True,
+                            **kwargs: object,
+                        ) -> os.stat_result:
+                            nonlocal stat_calls_on_cp
+                            if os.fsdecode(path) == cp.name:
+                                stat_calls_on_cp += 1
+                                if (
+                                    final_case == "final_size_mismatch"
+                                    and stat_calls_on_cp == 2
+                                ):
+                                    cp.write_bytes(cp_payload + b"extra-17-bytes!!!")
+                            return real_stat(
+                                path,
+                                *args,
+                                dir_fd=dir_fd,
+                                follow_symlinks=follow_symlinks,
+                                **kwargs,
+                            )
+
+                        caught = []
+                        cp_causes = []
+                        mut_causes = []
+                        with (
+                            patch(
+                                "onesar_refmac.os.open",
+                                side_effect=_open_for_final_case,
+                            ),
+                            patch(
+                                "onesar_refmac.os.read",
+                                side_effect=_read_and_mutate_entry,
+                            ),
+                            patch(
+                                "onesar_refmac.os.stat",
+                                side_effect=_stat_for_final_case,
+                            ),
+                        ):
+                            res = onesar_refmac._verify_immutable_baselines_post_run(
+                                staged_base,
+                                helper_base,
+                                kw_base,
+                                pre_execution_checkpoint_baseline=cp_base,
+                                caught_exceptions=caught,
+                                pre_checkpoint_cause_out=cp_causes,
+                                mutation_causes_out=mut_causes,
+                            )
+
+                        post = res["pre_execution_checkpoint_post_run"]
+                        self.assertIs(res["verified"], False)
+                        self.assertIs(
+                            res["pre_execution_checkpoint_verified"], False
+                        )
+                        self.assertEqual(
+                            post["failure_phase"], "leaf_post_read_stat"
+                        )
+                        self.assertIsNone(post["sha256"])
+                        self.assertIs(post["matches_baseline"], False)
+                        # Initial lookup and descriptor readback remain intact and separate.
+                        self.assertIs(post["exists"], True)
+                        self.assertIs(post["is_symlink"], False)
+                        self.assertIs(post["is_regular_file"], True)
+                        self.assertIs(
+                            post["initial_leaf_lookup"]["exists"], True
+                        )
+                        self.assertIs(
+                            post["initial_leaf_lookup"]["is_symlink"], False
+                        )
+                        self.assertIs(
+                            post["initial_leaf_lookup"]["is_regular_file"],
+                            True,
+                        )
+                        self.assertEqual(
+                            (
+                                post["initial_leaf_lookup"]["dev"],
+                                post["initial_leaf_lookup"]["ino"],
+                            ),
+                            (orig_dev, orig_ino),
+                        )
+                        self.assertEqual(
+                            post["observed_read_bytes"], len(cp_payload)
+                        )
+                        self.assertEqual(
+                            post["observed_read_sha256"], cp_expected_sha
+                        )
+                        self.assertIs(post["observed_eof"], True)
+                        self.assertIs(post["read_complete"], True)
+                        self.assertIs(post["leaf_pre_fstat_verified"], True)
+                        self.assertIs(
+                            post["leaf_pre_fstat_is_regular_file"], True
+                        )
+                        self.assertIs(post["leaf_post_fstat_verified"], True)
+                        self.assertIs(
+                            post["leaf_post_fstat_is_regular_file"], True
+                        )
+                        self.assertEqual(
+                            (
+                                post["leaf_post_fstat_dev"],
+                                post["leaf_post_fstat_ino"],
+                            ),
+                            (orig_dev, orig_ino),
+                        )
+                        self.assertIs(post["leaf_final_stat_attempted"], True)
+                        self.assertIs(post["leaf_final_stat_verified"], False)
+                        self.assertIs(
+                            post["final_leaf_lookup"]["attempted"], True
+                        )
+                        self.assertIs(
+                            post["final_leaf_lookup"]["verified"], False
+                        )
+                        self.assertIs(post["leaf_close_succeeded"], True)
+                        self.assertIs(post["parent_close_succeeded"], True)
+
+                        if final_case == "absent_enoent":
+                            self.assertEqual(post["errno"], errno.ENOENT)
+                            self.assertIs(
+                                post["leaf_final_stat_succeeded"], False
+                            )
+                            self.assertIs(
+                                post["final_leaf_lookup"]["succeeded"], False
+                            )
+                            self.assertIs(
+                                post["final_leaf_lookup"]["exists"], False
+                            )
+                            self.assertIs(
+                                post["final_leaf_lookup"]["is_symlink"], False
+                            )
+                            self.assertIs(
+                                post["final_leaf_lookup"]["is_regular_file"],
+                                False,
+                            )
+                            self.assertIs(
+                                post["leaf_final_stat_exists"], False
+                            )
+                            self.assertIs(
+                                post["leaf_final_stat_is_symlink"], False
+                            )
+                            self.assertIs(
+                                post["leaf_final_stat_is_regular_file"], False
+                            )
+                            self.assertIsNone(post["final_leaf_lookup"]["dev"])
+                            self.assertIsNone(post["final_leaf_lookup"]["ino"])
+                            self.assertIsNone(
+                                post["final_leaf_lookup"]["size_bytes"]
+                            )
+                            self.assertIsNone(post["final_leaf_lookup"]["mode"])
+                            self.assertIsNone(post["leaf_final_stat_dev"])
+                            self.assertIsNone(post["leaf_final_stat_ino"])
+                            self.assertIsNone(
+                                post["leaf_final_stat_size_bytes"]
+                            )
+                            self.assertIsNone(post["leaf_final_stat_mode"])
+                        else:
+                            self.assertEqual(post["errno"], errno.ESTALE)
+                            self.assertIs(
+                                post["leaf_final_stat_succeeded"], True
+                            )
+                            self.assertIs(
+                                post["final_leaf_lookup"]["succeeded"], True
+                            )
+                            self.assertIs(
+                                post["final_leaf_lookup"]["exists"], True
+                            )
+                            self.assertIs(post["leaf_final_stat_exists"], True)
+                            if final_case == "same_byte_new_inode":
+                                self.assertNotEqual(replacement_ino, orig_ino)
+                                self.assertEqual(
+                                    post["final_leaf_lookup"]["ino"],
+                                    replacement_ino,
+                                )
+                                self.assertEqual(
+                                    post["leaf_final_stat_ino"],
+                                    replacement_ino,
+                                )
+                                self.assertIs(
+                                    post["final_leaf_lookup"]["is_symlink"],
+                                    False,
+                                )
+                                self.assertIs(
+                                    post["final_leaf_lookup"][
+                                        "is_regular_file"
+                                    ],
+                                    True,
+                                )
+                                self.assertIs(
+                                    post["leaf_final_stat_is_symlink"], False
+                                )
+                                self.assertIs(
+                                    post["leaf_final_stat_is_regular_file"],
+                                    True,
+                                )
+                            elif final_case == "final_size_mismatch":
+                                self.assertEqual(
+                                    post["final_leaf_lookup"]["ino"], orig_ino
+                                )
+                                self.assertEqual(
+                                    post["final_leaf_lookup"]["size_bytes"],
+                                    len(cp_payload) + 17,
+                                )
+                                self.assertEqual(
+                                    post["leaf_final_stat_size_bytes"],
+                                    len(cp_payload) + 17,
+                                )
+                                self.assertIs(
+                                    post["final_leaf_lookup"]["is_symlink"],
+                                    False,
+                                )
+                                self.assertIs(
+                                    post["final_leaf_lookup"][
+                                        "is_regular_file"
+                                    ],
+                                    True,
+                                )
+                                self.assertIs(
+                                    post["leaf_final_stat_is_symlink"], False
+                                )
+                                self.assertIs(
+                                    post["leaf_final_stat_is_regular_file"],
+                                    True,
+                                )
+                            elif final_case == "symlink":
+                                self.assertIs(
+                                    post["final_leaf_lookup"]["is_symlink"],
+                                    True,
+                                )
+                                self.assertIs(
+                                    post["final_leaf_lookup"][
+                                        "is_regular_file"
+                                    ],
+                                    False,
+                                )
+                                self.assertIs(
+                                    post["leaf_final_stat_is_symlink"], True
+                                )
+                                self.assertIs(
+                                    post["leaf_final_stat_is_regular_file"],
+                                    False,
+                                )
+                            elif final_case in ("fifo", "directory"):
+                                self.assertIs(
+                                    post["final_leaf_lookup"]["is_symlink"],
+                                    False,
+                                )
+                                self.assertIs(
+                                    post["final_leaf_lookup"][
+                                        "is_regular_file"
+                                    ],
+                                    False,
+                                )
+                                self.assertIs(
+                                    post["leaf_final_stat_is_symlink"], False
+                                )
+                                self.assertIs(
+                                    post["leaf_final_stat_is_regular_file"],
+                                    False,
+                                )
+
+                # 6. Final-relative-stat EIO / EACCES: unknown final fields remain None,
+                # complete stream evidence and exact OSError cause object are preserved.
+                for err_code, exc_cls in (
+                    (errno.EIO, OSError),
+                    (errno.EACCES, PermissionError),
+                ):
+                    with self.subTest(final_stat_errno=err_code):
+                        cp_base = _reset_cp()
+                        stat_count = 0
+                        stat_inj = exc_cls(
+                            err_code,
+                            f"synthetic final relative stat errno={err_code}",
+                            str(cp),
+                        )
+
+                        def _fail_final_stat(
+                            path: object,
+                            *args: object,
+                            dir_fd: int | None = None,
+                            follow_symlinks: bool = True,
+                            **kwargs: object,
+                        ) -> os.stat_result:
+                            nonlocal stat_count
+                            if os.fsdecode(path) == cp.name:
+                                stat_count += 1
+                                if stat_count == 2:
+                                    raise stat_inj
+                            return real_stat(
+                                path,
+                                *args,
+                                dir_fd=dir_fd,
+                                follow_symlinks=follow_symlinks,
+                                **kwargs,
+                            )
+
+                        caught = []
+                        cp_causes = []
+                        mut_causes = []
+                        with patch(
+                            "onesar_refmac.os.stat",
+                            side_effect=_fail_final_stat,
+                        ):
+                            res = onesar_refmac._verify_immutable_baselines_post_run(
+                                staged_base,
+                                helper_base,
+                                kw_base,
+                                pre_execution_checkpoint_baseline=cp_base,
+                                caught_exceptions=caught,
+                                pre_checkpoint_cause_out=cp_causes,
+                                mutation_causes_out=mut_causes,
+                            )
+                        post = res["pre_execution_checkpoint_post_run"]
+                        self.assertIs(res["verified"], False)
+                        self.assertIs(
+                            res["pre_execution_checkpoint_verified"], False
+                        )
+                        self.assertEqual(
+                            post["failure_phase"], "leaf_post_read_stat"
+                        )
+                        self.assertEqual(post["errno"], err_code)
+                        self.assertIs(caught[0], stat_inj)
+                        self.assertIs(cp_causes[0], stat_inj)
+                        self.assertIs(mut_causes[0], stat_inj)
+                        self.assertIsNone(post["sha256"])
+                        self.assertEqual(
+                            post["observed_read_sha256"], cp_expected_sha
+                        )
+                        self.assertEqual(
+                            post["observed_read_bytes"], len(cp_payload)
+                        )
+                        self.assertIs(post["observed_eof"], True)
+                        self.assertIs(post["read_complete"], True)
+                        self.assertIs(post["leaf_pre_fstat_verified"], True)
+                        self.assertIs(
+                            post["leaf_pre_fstat_is_regular_file"], True
+                        )
+                        self.assertIs(post["leaf_post_fstat_verified"], True)
+                        self.assertIs(
+                            post["leaf_post_fstat_is_regular_file"], True
+                        )
+                        self.assertIs(post["leaf_final_stat_attempted"], True)
+                        self.assertIs(post["leaf_final_stat_succeeded"], False)
+                        self.assertIs(post["leaf_final_stat_verified"], False)
+                        self.assertIs(
+                            post["final_leaf_lookup"]["attempted"], True
+                        )
+                        self.assertIs(
+                            post["final_leaf_lookup"]["succeeded"], False
+                        )
+                        self.assertIs(
+                            post["final_leaf_lookup"]["verified"], False
+                        )
+                        for nullable_key in (
+                            "exists",
+                            "is_symlink",
+                            "is_regular_file",
+                            "dev",
+                            "ino",
+                            "size_bytes",
+                            "mode",
+                        ):
+                            self.assertIsNone(
+                                post["final_leaf_lookup"][nullable_key],
+                                f"final_leaf_lookup[{nullable_key!r}] must be None on {err_code}",
+                            )
+                            self.assertIsNone(
+                                post[f"leaf_final_stat_{nullable_key}"],
+                                f"leaf_final_stat_{nullable_key} must be None on {err_code}",
+                            )
+
+                # 7. Combined final-name failure + owned leaf/parent close failures:
+                # preserves primary/secondary chronology and closes only owned descriptors.
+                for close_mode in ("leaf_only", "parent_only", "both"):
+                    with self.subTest(combined_close_mode=close_mode):
+                        cp_base = _reset_cp()
+                        stat_count = 0
+                        primary_inj = OSError(
+                            errno.EIO,
+                            f"primary final stat failure ({close_mode})",
+                            str(cp),
+                        )
+                        leaf_close_inj = OSError(
+                            errno.EIO,
+                            f"leaf close failure ({close_mode})",
+                        )
+                        parent_close_inj = OSError(
+                            errno.EIO,
+                            f"parent close failure ({close_mode})",
+                        )
+                        owned_leaf_fds: set[int] = set()
+                        owned_parent_fds: set[int] = set()
+                        parent_st = real_lstat(cp_dir)
+                        parent_identity = (
+                            int(parent_st.st_dev),
+                            int(parent_st.st_ino),
+                        )
+
+                        def _track_owned_open(
+                            path: object,
+                            flags: int,
+                            mode: int = 0o777,
+                            *,
+                            dir_fd: int | None = None,
+                        ) -> int:
+                            fd = (
+                                real_open(path, flags, mode, dir_fd=dir_fd)
+                                if dir_fd is not None
+                                else real_open(path, flags, mode)
+                            )
+                            if os.fsdecode(path) == cp.name:
+                                owned_leaf_fds.add(fd)
+                            else:
+                                try:
+                                    st = real_fstat(fd)
+                                except OSError:
+                                    pass
+                                else:
+                                    if (
+                                        int(st.st_dev),
+                                        int(st.st_ino),
+                                    ) == parent_identity:
+                                        owned_parent_fds.add(fd)
+                            return fd
+
+                        def _fail_second_cp_stat(
+                            path: object,
+                            *args: object,
+                            dir_fd: int | None = None,
+                            follow_symlinks: bool = True,
+                            **kwargs: object,
+                        ) -> os.stat_result:
+                            nonlocal stat_count
+                            if os.fsdecode(path) == cp.name:
+                                stat_count += 1
+                                if stat_count == 2:
+                                    raise primary_inj
+                            return real_stat(
+                                path,
+                                *args,
+                                dir_fd=dir_fd,
+                                follow_symlinks=follow_symlinks,
+                                **kwargs,
+                            )
+
+                        def _inject_owned_close(fd: int) -> None:
+                            self.assertNotEqual(fd, sentinel_fd)
+                            real_close(fd)
+                            if fd in owned_leaf_fds and close_mode in (
+                                "leaf_only",
+                                "both",
+                            ):
+                                raise leaf_close_inj
+                            if fd in owned_parent_fds and close_mode in (
+                                "parent_only",
+                                "both",
+                            ):
+                                raise parent_close_inj
+
+                        caught = []
+                        cp_causes = []
+                        mut_causes = []
+                        with (
+                            patch(
+                                "onesar_refmac.os.open",
+                                side_effect=_track_owned_open,
+                            ),
+                            patch(
+                                "onesar_refmac.os.stat",
+                                side_effect=_fail_second_cp_stat,
+                            ),
+                            patch(
+                                "onesar_refmac.os.close",
+                                side_effect=_inject_owned_close,
+                            ),
+                        ):
+                            res = onesar_refmac._verify_immutable_baselines_post_run(
+                                staged_base,
+                                helper_base,
+                                kw_base,
+                                pre_execution_checkpoint_baseline=cp_base,
+                                caught_exceptions=caught,
+                                pre_checkpoint_cause_out=cp_causes,
+                                mutation_causes_out=mut_causes,
+                            )
+
+                        post = res["pre_execution_checkpoint_post_run"]
+                        self.assertIs(res["verified"], False)
+                        self.assertIs(
+                            res["pre_execution_checkpoint_verified"], False
+                        )
+                        self.assertEqual(
+                            post["failure_phase"], "leaf_post_read_stat"
+                        )
+                        self.assertEqual(mut_causes, [primary_inj])
+                        if close_mode == "leaf_only":
+                            self.assertEqual(
+                                cp_causes, [primary_inj, leaf_close_inj]
+                            )
+                            self.assertEqual(
+                                caught, [primary_inj, leaf_close_inj]
+                            )
+                            self.assertIs(
+                                getattr(
+                                    primary_inj, "cleanup_close_error", None
+                                ),
+                                leaf_close_inj,
+                            )
+                            self.assertIs(post["leaf_close_succeeded"], False)
+                            self.assertIs(post["parent_close_succeeded"], True)
+                        elif close_mode == "parent_only":
+                            self.assertEqual(
+                                cp_causes, [primary_inj, parent_close_inj]
+                            )
+                            self.assertEqual(
+                                caught, [primary_inj, parent_close_inj]
+                            )
+                            self.assertIs(
+                                getattr(
+                                    primary_inj, "parent_close_error", None
+                                ),
+                                parent_close_inj,
+                            )
+                            self.assertIs(post["leaf_close_succeeded"], True)
+                            self.assertIs(post["parent_close_succeeded"], False)
+                        else:
+                            self.assertEqual(
+                                cp_causes,
+                                [
+                                    primary_inj,
+                                    leaf_close_inj,
+                                    parent_close_inj,
+                                ],
+                            )
+                            self.assertEqual(
+                                caught,
+                                [
+                                    primary_inj,
+                                    leaf_close_inj,
+                                    parent_close_inj,
+                                ],
+                            )
+                            self.assertIs(
+                                getattr(
+                                    primary_inj, "cleanup_close_error", None
+                                ),
+                                leaf_close_inj,
+                            )
+                            self.assertIs(
+                                getattr(
+                                    primary_inj, "parent_close_error", None
+                                ),
+                                parent_close_inj,
+                            )
+                            self.assertIs(post["leaf_close_succeeded"], False)
+                            self.assertIs(post["parent_close_succeeded"], False)
+
+                sentinel_st_after = real_lstat(sentinel_path)
+                self.assertEqual(
+                    (
+                        int(sentinel_st_after.st_dev),
+                        int(sentinel_st_after.st_ino),
+                    ),
+                    (
+                        int(sentinel_st_before.st_dev),
+                        int(sentinel_st_before.st_ino),
+                    ),
+                )
+                self.assertEqual(
+                    real_read(sentinel_fd, 256), sentinel_bytes
+                )
+            finally:
+                real_close(sentinel_fd)
+
+    def test_checkpoint_pre_read_fstat_observed_size_consistency_task996(
+        self,
+    ) -> None:
+        """Refuse pre-read fstat size contradiction on the same checkpoint inode before reading (#1050 comment 6788347943)."""
+        real_open = os.open
+        real_fstat = os.fstat
+        real_lstat = os.lstat
+        real_read = os.read
+        real_close = os.close
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(strict=True)
+            sentinel_path = root / "bystander_sentinel_996.txt"
+            sentinel_bytes = b"bystander-sentinel-996\n"
+            sentinel_path.write_bytes(sentinel_bytes)
+            sentinel_st_before = real_lstat(sentinel_path)
+            sentinel_fd = real_open(str(sentinel_path), os.O_RDONLY)
+            try:
+                parent = root / "parent"
+                parent.mkdir()
+                cp = parent / "refmac_pre_execution_checkpoint.json"
+                payload = b'{"original":"checkpoint"}\n'
+                self.assertEqual(len(payload), 26)
+                cp.write_bytes(payload)
+                kw = root / "keywords.txt"
+                kw_bytes = b"owned\n"
+                kw.write_bytes(kw_bytes)
+
+                def _baseline(p: Path) -> dict[str, Any]:
+                    st = real_lstat(p)
+                    b = onesar_refmac._build_file_ancestor_chain_baseline(
+                        p, evidence_root=root
+                    )
+                    b.update(
+                        path=str(p),
+                        resolved_path=str(p.resolve(strict=True)),
+                        sha256=hashlib.sha256(p.read_bytes()).hexdigest(),
+                        size_bytes=int(st.st_size),
+                        dev=int(st.st_dev),
+                        ino=int(st.st_ino),
+                    )
+                    return b
+
+                cb = _baseline(cp)
+                kb = _baseline(kw)
+                orig_cp_st = real_lstat(cp)
+                orig_dev = int(orig_cp_st.st_dev)
+                orig_ino = int(orig_cp_st.st_ino)
+
+                # 1. Pre-read descriptor fstat observes temporarily larger same inode (54 vs 26),
+                # then restores original 26 bytes before returning that real stat_result.
+                with self.subTest(mode="pre_read_fstat_size_contradiction"):
+                    leaf_fds: set[int] = set()
+                    opened_fds: list[int] = []
+                    leaf_read_called = False
+                    state: dict[str, Any] = {"injected": False}
+
+                    def _open_hook(
+                        path: object,
+                        flags: int,
+                        mode: int = 0o777,
+                        *,
+                        dir_fd: int | None = None,
+                    ) -> int:
+                        fd = (
+                            real_open(path, flags, mode, dir_fd=dir_fd)
+                            if dir_fd is not None
+                            else real_open(path, flags, mode)
+                        )
+                        opened_fds.append(fd)
+                        if dir_fd is not None and os.fspath(path) == cp.name:
+                            leaf_fds.add(fd)
+                        return fd
+
+                    def _fstat_hook(fd: int) -> os.stat_result:
+                        if fd in leaf_fds and not state["injected"]:
+                            cp.write_bytes(
+                                payload + b"actual-temporary-size-change"
+                            )
+                            st = real_fstat(fd)
+                            state.update(
+                                injected=True,
+                                returned_pre_read_size=int(st.st_size),
+                                original_size=len(payload),
+                                inode=int(st.st_ino),
+                            )
+                            cp.write_bytes(payload)
+                            return st
+                        return real_fstat(fd)
+
+                    def _read_hook(fd: int, n: int) -> bytes:
+                        nonlocal leaf_read_called
+                        if fd in leaf_fds:
+                            leaf_read_called = True
+                            raise AssertionError(
+                                "Checkpoint leaf os.read must not be called after pre-read fstat size mismatch"
+                            )
+                        return real_read(fd, n)
+
+                    caught: list[Exception] = []
+                    cp_causes: list[Exception | None] = []
+                    mut_causes: list[Exception | None] = []
+                    with (
+                        patch(
+                            "onesar_refmac.os.open", side_effect=_open_hook
+                        ),
+                        patch(
+                            "onesar_refmac.os.fstat", side_effect=_fstat_hook
+                        ),
+                        patch(
+                            "onesar_refmac.os.read", side_effect=_read_hook
+                        ),
+                    ):
+                        res = onesar_refmac._verify_immutable_baselines_post_run(
+                            {},
+                            {},
+                            kb,
+                            pre_execution_checkpoint_baseline=cb,
+                            caught_exceptions=caught,
+                            pre_checkpoint_cause_out=cp_causes,
+                            mutation_causes_out=mut_causes,
+                        )
+
+                    json.dumps(res)
+                    self.assertIs(state["injected"], True)
+                    self.assertEqual(state["original_size"], 26)
+                    self.assertEqual(state["returned_pre_read_size"], 54)
+                    self.assertEqual(state["inode"], orig_ino)
+                    self.assertIs(leaf_read_called, False)
+                    self.assertEqual(cp.read_bytes(), payload)
+                    self.assertEqual(kw.read_bytes(), kw_bytes)
+
+                    for fd in set(opened_fds):
+                        with self.assertRaises(OSError) as ebadf_ctx:
+                            real_fstat(fd)
+                        self.assertEqual(
+                            ebadf_ctx.exception.errno, errno.EBADF
+                        )
+
+                    post = res["pre_execution_checkpoint_post_run"]
+                    self.assertIs(res["verified"], False)
+                    self.assertIs(
+                        res["pre_execution_checkpoint_verified"], False
+                    )
+                    self.assertIs(post["matches_baseline"], False)
+                    self.assertIsNone(post["sha256"])
+                    self.assertEqual(
+                        post["failure_phase"], "leaf_pre_read_fstat"
+                    )
+                    self.assertEqual(post["errno"], errno.ESTALE)
+
+                    # Distinct actual initial lookup size (26) vs pre-read descriptor fstat size (54).
+                    self.assertIs(post["exists"], True)
+                    self.assertIs(post["is_symlink"], False)
+                    self.assertIs(post["is_regular_file"], True)
+                    self.assertIs(post["initial_leaf_lookup"]["exists"], True)
+                    self.assertIs(
+                        post["initial_leaf_lookup"]["is_symlink"], False
+                    )
+                    self.assertIs(
+                        post["initial_leaf_lookup"]["is_regular_file"], True
+                    )
+                    self.assertEqual(post["size_bytes"], 26)
+                    self.assertEqual(post["stat_size_bytes"], 26)
+                    self.assertEqual(post["initial_leaf_size_bytes"], 26)
+                    self.assertEqual(
+                        post["initial_leaf_lookup"]["size_bytes"], 26
+                    )
+                    self.assertEqual(
+                        (
+                            post["initial_leaf_lookup"]["dev"],
+                            post["initial_leaf_lookup"]["ino"],
+                        ),
+                        (orig_dev, orig_ino),
+                    )
+                    self.assertIs(post["leaf_descriptor_opened"], True)
+                    self.assertIs(post["leaf_pre_fstat_verified"], False)
+                    self.assertIs(
+                        post["leaf_pre_fstat_is_regular_file"], True
+                    )
+                    self.assertEqual(
+                        (
+                            post["leaf_pre_fstat_dev"],
+                            post["leaf_pre_fstat_ino"],
+                        ),
+                        (orig_dev, orig_ino),
+                    )
+                    self.assertEqual(post["leaf_pre_fstat_size_bytes"], 54)
+                    self.assertEqual(post["observed_read_bytes"], 0)
+                    self.assertIsNone(post["observed_read_sha256"])
+                    self.assertIs(post["observed_eof"], False)
+                    self.assertIs(post["read_complete"], False)
+                    self.assertIs(post["leaf_post_fstat_verified"], False)
+                    self.assertIsNone(post["leaf_post_fstat_is_regular_file"])
+                    self.assertIsNone(post["leaf_post_fstat_size_bytes"])
+                    self.assertIs(post["leaf_final_stat_attempted"], False)
+                    self.assertIs(post["leaf_final_stat_succeeded"], False)
+                    self.assertIs(post["leaf_final_stat_verified"], False)
+                    self.assertIsNone(post["leaf_final_stat_exists"])
+                    self.assertIsNone(post["leaf_final_stat_is_symlink"])
+                    self.assertIsNone(post["leaf_final_stat_is_regular_file"])
+                    self.assertIs(
+                        post["final_leaf_lookup"]["attempted"], False
+                    )
+                    self.assertIs(
+                        post["final_leaf_lookup"]["succeeded"], False
+                    )
+                    self.assertIs(
+                        post["final_leaf_lookup"]["verified"], False
+                    )
+                    self.assertIsNone(post["final_leaf_lookup"]["exists"])
+                    self.assertIsNone(post["final_leaf_lookup"]["is_symlink"])
+                    self.assertIsNone(
+                        post["final_leaf_lookup"]["is_regular_file"]
+                    )
+                    self.assertIs(post["leaf_close_attempted"], True)
+                    self.assertIs(post["leaf_close_succeeded"], True)
+                    self.assertIs(post["parent_close_attempted"], True)
+                    self.assertIs(post["parent_close_succeeded"], True)
+
+                    # Cause identity and one-mutation alignment.
+                    self.assertEqual(len(caught), 1)
+                    self.assertEqual(len(cp_causes), 1)
+                    self.assertEqual(len(mut_causes), 1)
+                    self.assertEqual(len(res["mutations"]), 1)
+                    primary_exc = caught[0]
+                    self.assertIs(cp_causes[0], primary_exc)
+                    self.assertIs(mut_causes[0], primary_exc)
+                    self.assertIsInstance(primary_exc, OSError)
+                    self.assertEqual(
+                        getattr(primary_exc, "errno", None), errno.ESTALE
+                    )
+                    self.assertIn("size", str(primary_exc))
+                    self.assertIn("size", post["error"])
+                    mut_entry = res["mutations"][0]
+                    self.assertEqual(
+                        mut_entry["category"], "pre_execution_checkpoint"
+                    )
+                    self.assertIsNone(mut_entry["actual_sha256"])
+                    self.assertEqual(mut_entry["actual_size_bytes"], 26)
+                    self.assertEqual(mut_entry["expected_size_bytes"], 26)
+                    self.assertEqual(mut_entry["exception_type"], "OSError")
+
+                # 2. Healthy control on the same fixture.
+                with self.subTest(mode="healthy_control"):
+                    opened_healthy: list[int] = []
+
+                    def _track_open_healthy(
+                        path: object,
+                        flags: int,
+                        mode: int = 0o777,
+                        *,
+                        dir_fd: int | None = None,
+                    ) -> int:
+                        fd = (
+                            real_open(path, flags, mode, dir_fd=dir_fd)
+                            if dir_fd is not None
+                            else real_open(path, flags, mode)
+                        )
+                        opened_healthy.append(fd)
+                        return fd
+
+                    caught_ok: list[Exception] = []
+                    cp_causes_ok: list[Exception | None] = []
+                    mut_causes_ok: list[Exception | None] = []
+                    with patch(
+                        "onesar_refmac.os.open",
+                        side_effect=_track_open_healthy,
+                    ):
+                        res_ok = onesar_refmac._verify_immutable_baselines_post_run(
+                            {},
+                            {},
+                            kb,
+                            pre_execution_checkpoint_baseline=cb,
+                            caught_exceptions=caught_ok,
+                            pre_checkpoint_cause_out=cp_causes_ok,
+                            mutation_causes_out=mut_causes_ok,
+                        )
+
+                    json.dumps(res_ok)
+                    for fd in set(opened_healthy):
+                        with self.assertRaises(OSError) as ebadf_ok:
+                            real_fstat(fd)
+                        self.assertEqual(
+                            ebadf_ok.exception.errno, errno.EBADF
+                        )
+                    post_ok = res_ok["pre_execution_checkpoint_post_run"]
+                    self.assertIs(res_ok["verified"], True)
+                    self.assertIs(
+                        res_ok["pre_execution_checkpoint_verified"], True
+                    )
+                    self.assertEqual(res_ok["mutations"], [])
+                    self.assertEqual(caught_ok, [])
+                    self.assertEqual(cp_causes_ok, [])
+                    self.assertEqual(mut_causes_ok, [])
+                    self.assertIs(post_ok["matches_baseline"], True)
+                    self.assertIsNone(post_ok["failure_phase"])
+                    self.assertEqual(
+                        post_ok["sha256"],
+                        hashlib.sha256(payload).hexdigest(),
+                    )
+                    self.assertEqual(post_ok["size_bytes"], 26)
+                    self.assertEqual(post_ok["stat_size_bytes"], 26)
+                    self.assertEqual(post_ok["initial_leaf_size_bytes"], 26)
+                    self.assertEqual(
+                        post_ok["initial_leaf_lookup"]["size_bytes"], 26
+                    )
+                    self.assertIs(post_ok["leaf_pre_fstat_verified"], True)
+                    self.assertIs(
+                        post_ok["leaf_pre_fstat_is_regular_file"], True
+                    )
+                    self.assertEqual(
+                        post_ok["leaf_pre_fstat_size_bytes"], 26
+                    )
+                    self.assertIs(post_ok["leaf_post_fstat_verified"], True)
+                    self.assertIs(
+                        post_ok["leaf_post_fstat_is_regular_file"], True
+                    )
+                    self.assertEqual(
+                        post_ok["leaf_post_fstat_size_bytes"], 26
+                    )
+                    self.assertIs(post_ok["leaf_final_stat_verified"], True)
+                    self.assertIs(
+                        post_ok["final_leaf_lookup"]["exists"], True
+                    )
+                    self.assertIs(
+                        post_ok["final_leaf_lookup"]["is_symlink"], False
+                    )
+                    self.assertIs(
+                        post_ok["final_leaf_lookup"]["is_regular_file"], True
+                    )
+                    self.assertEqual(
+                        post_ok["final_leaf_lookup"]["size_bytes"], 26
+                    )
+
+                sentinel_st_after = real_lstat(sentinel_path)
+                self.assertEqual(
+                    (
+                        int(sentinel_st_after.st_dev),
+                        int(sentinel_st_after.st_ino),
+                    ),
+                    (
+                        int(sentinel_st_before.st_dev),
+                        int(sentinel_st_before.st_ino),
+                    ),
+                )
+                self.assertEqual(
+                    real_read(sentinel_fd, 256), sentinel_bytes
+                )
+            finally:
+                real_close(sentinel_fd)
+
+    def test_checkpoint_cross_read_observed_size_consistency_task1076(
+        self,
+    ) -> None:
+        """Refuse post-read fstat size contradiction against initial/pre-read size when restored before first os.read (#1050 comment 6803064787)."""
+        real_open = os.open
+        real_stat = os.stat
+        real_fstat = os.fstat
+        real_lstat = os.lstat
+        real_read = os.read
+        real_close = os.close
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(strict=True)
+            sentinel_path = root / "bystander_sentinel_1076.txt"
+            sentinel_bytes = b"bystander-sentinel-1076\n"
+            sentinel_path.write_bytes(sentinel_bytes)
+            sentinel_st_before = real_lstat(sentinel_path)
+            sentinel_fd = real_open(str(sentinel_path), os.O_RDONLY)
+            try:
+                parent = root / "parent"
+                parent.mkdir()
+                cp = parent / "refmac_pre_execution_checkpoint.json"
+                payload = b'{"original":"checkpoint"}\n'
+                payload_sha256 = hashlib.sha256(payload).hexdigest()
+                self.assertEqual(len(payload), 26)
+                cp.write_bytes(payload)
+                kw = root / "keywords.txt"
+                kw_bytes = b"owned\n"
+                kw.write_bytes(kw_bytes)
+
+                def _baseline(p: Path) -> dict[str, Any]:
+                    st = real_lstat(p)
+                    b = onesar_refmac._build_file_ancestor_chain_baseline(
+                        p, evidence_root=root
+                    )
+                    b.update(
+                        path=str(p),
+                        resolved_path=str(p.resolve(strict=True)),
+                        sha256=hashlib.sha256(p.read_bytes()).hexdigest(),
+                        size_bytes=int(st.st_size),
+                        dev=int(st.st_dev),
+                        ino=int(st.st_ino),
+                    )
+                    return b
+
+                cb = _baseline(cp)
+                kb = _baseline(kw)
+                orig_cp_st = real_lstat(cp)
+                orig_dev = int(orig_cp_st.st_dev)
+                orig_ino = int(orig_cp_st.st_ino)
+
+                for mode, mutated_bytes, expected_initial_pre_size in (
+                    (
+                        "grow_54_to_26",
+                        payload + b"actual-temporary-size-change",
+                        54,
+                    ),
+                    ("shrink_12_to_26", b'{"shrink":1}', 12),
+                ):
+                    with self.subTest(mode=mode):
+                        self.assertEqual(
+                            len(mutated_bytes), expected_initial_pre_size
+                        )
+                        cp.write_bytes(mutated_bytes)
+                        mut_st = real_lstat(cp)
+                        self.assertEqual(
+                            (int(mut_st.st_dev), int(mut_st.st_ino)),
+                            (orig_dev, orig_ino),
+                        )
+                        self.assertEqual(
+                            int(mut_st.st_size), expected_initial_pre_size
+                        )
+
+                        leaf_fds: set[int] = set()
+                        opened_fds: list[int] = []
+                        stat_sizes: list[int] = []
+                        fstat_sizes: list[int] = []
+                        read_chunk_lengths: list[int] = []
+                        state: dict[str, Any] = {
+                            "restored": False,
+                            "restored_ino": None,
+                        }
+
+                        def _open_hook(
+                            path: object,
+                            flags: int,
+                            open_mode: int = 0o777,
+                            *,
+                            dir_fd: int | None = None,
+                        ) -> int:
+                            fd = (
+                                real_open(
+                                    path, flags, open_mode, dir_fd=dir_fd
+                                )
+                                if dir_fd is not None
+                                else real_open(path, flags, open_mode)
+                            )
+                            opened_fds.append(fd)
+                            if (
+                                dir_fd is not None
+                                and os.fspath(path) == cp.name
+                            ):
+                                leaf_fds.add(fd)
+                            return fd
+
+                        def _stat_hook(
+                            path: object,
+                            *args: object,
+                            dir_fd: int | None = None,
+                            follow_symlinks: bool = True,
+                            **kwargs: object,
+                        ) -> os.stat_result:
+                            st = real_stat(
+                                path,
+                                *args,
+                                dir_fd=dir_fd,
+                                follow_symlinks=follow_symlinks,
+                                **kwargs,
+                            )
+                            if (
+                                dir_fd is not None
+                                and os.fspath(path) == cp.name
+                            ):
+                                stat_sizes.append(int(st.st_size))
+                            return st
+
+                        def _fstat_hook(fd: int) -> os.stat_result:
+                            st = real_fstat(fd)
+                            if fd in leaf_fds:
+                                fstat_sizes.append(int(st.st_size))
+                            return st
+
+                        def _read_hook(fd: int, n: int) -> bytes:
+                            if fd in leaf_fds and not state["restored"]:
+                                cp.write_bytes(payload)
+                                restored_st = real_lstat(cp)
+                                state["restored"] = True
+                                state["restored_ino"] = int(
+                                    restored_st.st_ino
+                                )
+                            chunk = real_read(fd, n)
+                            if fd in leaf_fds:
+                                read_chunk_lengths.append(len(chunk))
+                            return chunk
+
+                        caught: list[Exception] = []
+                        cp_causes: list[Exception | None] = []
+                        mut_causes: list[Exception | None] = []
+                        try:
+                            with (
+                                patch(
+                                    "onesar_refmac.os.open",
+                                    side_effect=_open_hook,
+                                ),
+                                patch(
+                                    "onesar_refmac.os.stat",
+                                    side_effect=_stat_hook,
+                                ),
+                                patch(
+                                    "onesar_refmac.os.fstat",
+                                    side_effect=_fstat_hook,
+                                ),
+                                patch(
+                                    "onesar_refmac.os.read",
+                                    side_effect=_read_hook,
+                                ),
+                            ):
+                                res = onesar_refmac._verify_immutable_baselines_post_run(
+                                    {},
+                                    {},
+                                    kb,
+                                    pre_execution_checkpoint_baseline=cb,
+                                    caught_exceptions=caught,
+                                    pre_checkpoint_cause_out=cp_causes,
+                                    mutation_causes_out=mut_causes,
+                                )
+                        finally:
+                            cp.write_bytes(payload)
+
+                        json.dumps(res)
+                        self.assertIs(state["restored"], True)
+                        self.assertEqual(state["restored_ino"], orig_ino)
+                        self.assertEqual(
+                            stat_sizes, [expected_initial_pre_size]
+                        )
+                        self.assertEqual(
+                            fstat_sizes, [expected_initial_pre_size, 26]
+                        )
+                        self.assertEqual(read_chunk_lengths, [26, 0])
+                        self.assertEqual(cp.read_bytes(), payload)
+                        self.assertEqual(kw.read_bytes(), kw_bytes)
+
+                        for fd in set(opened_fds):
+                            with self.assertRaises(OSError) as ebadf_ctx:
+                                real_fstat(fd)
+                            self.assertEqual(
+                                ebadf_ctx.exception.errno, errno.EBADF
+                            )
+
+                        # Assert aggregate and checkpoint refusal BEFORE accessing new metadata keys
+                        # so historical old-source replay fails directly on the false pass.
+                        post = res["pre_execution_checkpoint_post_run"]
+                        self.assertIs(res["verified"], False)
+                        self.assertIs(
+                            res["pre_execution_checkpoint_verified"], False
+                        )
+                        self.assertIs(post["matches_baseline"], False)
+                        self.assertIsNone(post["sha256"])
+                        self.assertEqual(len(res["mutations"]), 1)
+                        self.assertEqual(len(caught), 1)
+                        self.assertEqual(len(cp_causes), 1)
+                        self.assertEqual(len(mut_causes), 1)
+
+                        self.assertEqual(
+                            post["failure_phase"], "leaf_post_read_fstat"
+                        )
+                        self.assertEqual(post["errno"], errno.ESTALE)
+                        primary_exc = caught[0]
+                        self.assertIs(cp_causes[0], primary_exc)
+                        self.assertIs(mut_causes[0], primary_exc)
+                        self.assertIsInstance(primary_exc, OSError)
+                        self.assertEqual(
+                            getattr(primary_exc, "errno", None), errno.ESTALE
+                        )
+                        self.assertIn(
+                            f"initial_size={expected_initial_pre_size}",
+                            str(primary_exc),
+                        )
+                        self.assertIn(
+                            f"pre_read_size={expected_initial_pre_size}",
+                            str(primary_exc),
+                        )
+                        self.assertIn("read_bytes=26", str(primary_exc))
+                        self.assertIn("size=26", str(primary_exc))
+                        self.assertIn(
+                            f"pre_read_size={expected_initial_pre_size}",
+                            post["error"],
+                        )
+
+                        # Exact initial, pre-read, stream, post-read, and unattempted-final observations.
+                        self.assertIs(post["exists"], True)
+                        self.assertIs(post["is_symlink"], False)
+                        self.assertIs(post["is_regular_file"], True)
+                        self.assertEqual(
+                            post["size_bytes"], expected_initial_pre_size
+                        )
+                        self.assertEqual(
+                            post["stat_size_bytes"], expected_initial_pre_size
+                        )
+                        self.assertEqual(
+                            post["initial_leaf_size_bytes"],
+                            expected_initial_pre_size,
+                        )
+                        self.assertIs(
+                            post["initial_leaf_lookup"]["exists"], True
+                        )
+                        self.assertIs(
+                            post["initial_leaf_lookup"]["is_symlink"], False
+                        )
+                        self.assertIs(
+                            post["initial_leaf_lookup"]["is_regular_file"],
+                            True,
+                        )
+                        self.assertEqual(
+                            post["initial_leaf_lookup"]["size_bytes"],
+                            expected_initial_pre_size,
+                        )
+                        self.assertEqual(
+                            (
+                                post["initial_leaf_lookup"]["dev"],
+                                post["initial_leaf_lookup"]["ino"],
+                            ),
+                            (orig_dev, orig_ino),
+                        )
+                        self.assertIs(post["leaf_descriptor_opened"], True)
+                        self.assertIs(post["leaf_pre_fstat_verified"], True)
+                        self.assertIs(
+                            post["leaf_pre_fstat_is_regular_file"], True
+                        )
+                        self.assertEqual(
+                            (
+                                post["leaf_pre_fstat_dev"],
+                                post["leaf_pre_fstat_ino"],
+                            ),
+                            (orig_dev, orig_ino),
+                        )
+                        self.assertEqual(
+                            post["leaf_pre_fstat_size_bytes"],
+                            expected_initial_pre_size,
+                        )
+                        self.assertEqual(post["observed_read_bytes"], 26)
+                        self.assertEqual(
+                            post["observed_read_sha256"], payload_sha256
+                        )
+                        self.assertIs(post["observed_eof"], True)
+                        self.assertIs(post["read_complete"], False)
+                        self.assertIs(post["leaf_post_fstat_verified"], False)
+                        self.assertIs(
+                            post["leaf_post_fstat_is_regular_file"], True
+                        )
+                        self.assertEqual(
+                            (
+                                post["leaf_post_fstat_dev"],
+                                post["leaf_post_fstat_ino"],
+                            ),
+                            (orig_dev, orig_ino),
+                        )
+                        self.assertEqual(
+                            post["leaf_post_fstat_size_bytes"], 26
+                        )
+                        self.assertIs(post["leaf_final_stat_attempted"], False)
+                        self.assertIs(post["leaf_final_stat_succeeded"], False)
+                        self.assertIs(post["leaf_final_stat_verified"], False)
+                        self.assertIsNone(post["leaf_final_stat_exists"])
+                        self.assertIsNone(post["leaf_final_stat_is_symlink"])
+                        self.assertIsNone(
+                            post["leaf_final_stat_is_regular_file"]
+                        )
+                        self.assertIs(
+                            post["final_leaf_lookup"]["attempted"], False
+                        )
+                        self.assertIs(
+                            post["final_leaf_lookup"]["succeeded"], False
+                        )
+                        self.assertIs(
+                            post["final_leaf_lookup"]["verified"], False
+                        )
+                        self.assertIsNone(post["final_leaf_lookup"]["exists"])
+                        self.assertIsNone(
+                            post["final_leaf_lookup"]["is_symlink"]
+                        )
+                        self.assertIsNone(
+                            post["final_leaf_lookup"]["is_regular_file"]
+                        )
+                        self.assertIs(post["leaf_close_attempted"], True)
+                        self.assertIs(post["leaf_close_succeeded"], True)
+                        self.assertIs(post["parent_close_attempted"], True)
+                        self.assertIs(post["parent_close_succeeded"], True)
+
+                        mut_entry = res["mutations"][0]
+                        self.assertEqual(
+                            mut_entry["category"], "pre_execution_checkpoint"
+                        )
+                        self.assertIsNone(mut_entry["actual_sha256"])
+                        self.assertEqual(
+                            mut_entry["actual_size_bytes"],
+                            expected_initial_pre_size,
+                        )
+                        self.assertEqual(
+                            mut_entry["expected_size_bytes"], 26
+                        )
+                        self.assertEqual(
+                            mut_entry["exception_type"], "OSError"
+                        )
+
+                # Healthy unchanged-size control on the same fixture.
+                with self.subTest(mode="healthy_unchanged_size_control"):
+                    cp.write_bytes(payload)
+                    opened_healthy: list[int] = []
+                    leaf_healthy: set[int] = set()
+                    stat_sizes_ok: list[int] = []
+                    fstat_sizes_ok: list[int] = []
+                    read_lengths_ok: list[int] = []
+
+                    def _open_ok(
+                        path: object,
+                        flags: int,
+                        open_mode: int = 0o777,
+                        *,
+                        dir_fd: int | None = None,
+                    ) -> int:
+                        fd = (
+                            real_open(path, flags, open_mode, dir_fd=dir_fd)
+                            if dir_fd is not None
+                            else real_open(path, flags, open_mode)
+                        )
+                        opened_healthy.append(fd)
+                        if dir_fd is not None and os.fspath(path) == cp.name:
+                            leaf_healthy.add(fd)
+                        return fd
+
+                    def _stat_ok(
+                        path: object,
+                        *args: object,
+                        dir_fd: int | None = None,
+                        follow_symlinks: bool = True,
+                        **kwargs: object,
+                    ) -> os.stat_result:
+                        st = real_stat(
+                            path,
+                            *args,
+                            dir_fd=dir_fd,
+                            follow_symlinks=follow_symlinks,
+                            **kwargs,
+                        )
+                        if dir_fd is not None and os.fspath(path) == cp.name:
+                            stat_sizes_ok.append(int(st.st_size))
+                        return st
+
+                    def _fstat_ok(fd: int) -> os.stat_result:
+                        st = real_fstat(fd)
+                        if fd in leaf_healthy:
+                            fstat_sizes_ok.append(int(st.st_size))
+                        return st
+
+                    def _read_ok(fd: int, n: int) -> bytes:
+                        chunk = real_read(fd, n)
+                        if fd in leaf_healthy:
+                            read_lengths_ok.append(len(chunk))
+                        return chunk
+
+                    caught_ok: list[Exception] = []
+                    cp_causes_ok: list[Exception | None] = []
+                    mut_causes_ok: list[Exception | None] = []
+                    with (
+                        patch("onesar_refmac.os.open", side_effect=_open_ok),
+                        patch("onesar_refmac.os.stat", side_effect=_stat_ok),
+                        patch("onesar_refmac.os.fstat", side_effect=_fstat_ok),
+                        patch("onesar_refmac.os.read", side_effect=_read_ok),
+                    ):
+                        res_ok = onesar_refmac._verify_immutable_baselines_post_run(
+                            {},
+                            {},
+                            kb,
+                            pre_execution_checkpoint_baseline=cb,
+                            caught_exceptions=caught_ok,
+                            pre_checkpoint_cause_out=cp_causes_ok,
+                            mutation_causes_out=mut_causes_ok,
+                        )
+
+                    json.dumps(res_ok)
+                    self.assertEqual(stat_sizes_ok, [26, 26])
+                    self.assertEqual(fstat_sizes_ok, [26, 26])
+                    self.assertEqual(read_lengths_ok, [26, 0])
+                    for fd in set(opened_healthy):
+                        with self.assertRaises(OSError) as ebadf_ok:
+                            real_fstat(fd)
+                        self.assertEqual(
+                            ebadf_ok.exception.errno, errno.EBADF
+                        )
+                    post_ok = res_ok["pre_execution_checkpoint_post_run"]
+                    self.assertIs(res_ok["verified"], True)
+                    self.assertIs(
+                        res_ok["pre_execution_checkpoint_verified"], True
+                    )
+                    self.assertEqual(res_ok["mutations"], [])
+                    self.assertEqual(caught_ok, [])
+                    self.assertEqual(cp_causes_ok, [])
+                    self.assertEqual(mut_causes_ok, [])
+                    self.assertIs(post_ok["matches_baseline"], True)
+                    self.assertIsNone(post_ok["failure_phase"])
+                    self.assertEqual(post_ok["sha256"], payload_sha256)
+                    self.assertEqual(post_ok["size_bytes"], 26)
+                    self.assertEqual(post_ok["stat_size_bytes"], 26)
+                    self.assertEqual(post_ok["initial_leaf_size_bytes"], 26)
+                    self.assertEqual(
+                        post_ok["leaf_pre_fstat_size_bytes"], 26
+                    )
+                    self.assertEqual(
+                        post_ok["leaf_post_fstat_size_bytes"], 26
+                    )
+                    self.assertEqual(
+                        post_ok["final_leaf_lookup"]["size_bytes"], 26
+                    )
+                    self.assertIs(post_ok["leaf_pre_fstat_verified"], True)
+                    self.assertIs(post_ok["leaf_post_fstat_verified"], True)
+                    self.assertIs(post_ok["leaf_final_stat_verified"], True)
+
                 sentinel_st_after = real_lstat(sentinel_path)
                 self.assertEqual(
                     (

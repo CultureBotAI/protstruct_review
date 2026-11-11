@@ -13,6 +13,7 @@ from pathlib import Path
 import stat
 import sys
 import tempfile
+from typing import Any
 import unittest
 from unittest import mock
 
@@ -8045,6 +8046,7 @@ class TestTask851Issue1168PreOpenObservations(unittest.TestCase):
         expected_target_lstat: os.stat_result,
         expected_symlinks: tuple[_SymlinkEdge, ...],
         expected_ancestors_subset: set[str],
+        expected_failure_phase: str,
     ) -> None:
         self.assertIsInstance(obs, PartialFileReadObservation)
         self.assertEqual(obs.path, expected_lexical)
@@ -8056,6 +8058,15 @@ class TestTask851Issue1168PreOpenObservations(unittest.TestCase):
         self.assertFalse(obs.read_complete)
         self.assertFalse(obs.complete)
         self.assertFalse(obs.verified)
+        self.assertFalse(obs.observed_eof)
+        self.assertIsNone(obs.observed_stream_sha256)
+        self.assertIsNone(obs.observed_eof_sha256)
+        self.assertIsNone(obs.initial_fstat)
+        self.assertIsNone(obs.end_fstat)
+        self.assertEqual(obs.failure_phase, expected_failure_phase)
+        self.assertIsNone(obs.post_read_observation)
+        self.assertIsNone(obs.final_traversal_observation)
+        self.assertIsNone(obs.final_resolution_observation)
         self.assertIsNone(obs.dev)
         self.assertIsNone(obs.ino)
         self.assertIsNone(obs.mode)
@@ -8236,6 +8247,11 @@ class TestTask851Issue1168PreOpenObservations(unittest.TestCase):
                     )
 
                 for stage_kind in ("open_fail", "initial_fstat_fail"):
+                    expected_phase = (
+                        "open"
+                        if stage_kind == "open_fail"
+                        else "initial_fstat"
+                    )
                     with self.subTest(path_case=case_name, stage=stage_kind):
                         bystander_fd = real_open(launcher_resolved, os.O_RDONLY)
                         try:
@@ -8389,6 +8405,7 @@ class TestTask851Issue1168PreOpenObservations(unittest.TestCase):
                                 expected_target_lstat=exp_target_lstat,
                                 expected_symlinks=exp_symlinks,
                                 expected_ancestors_subset=exp_anc_subset,
+                                expected_failure_phase=expected_phase,
                             )
                             if expect_symlink_lstat:
                                 assert adm_fobs.lookup_snapshot is not None
@@ -8473,6 +8490,25 @@ class TestTask851Issue1168PreOpenObservations(unittest.TestCase):
                             )
                             self.assertFalse(adm_dict["read_complete"])
                             self.assertFalse(adm_dict["verified"])
+                            self.assertFalse(adm_dict["observed_eof"])
+                            self.assertIsNone(
+                                adm_dict["observed_stream_sha256"]
+                            )
+                            self.assertIsNone(adm_dict["observed_eof_sha256"])
+                            self.assertIsNone(adm_dict["initial_fstat"])
+                            self.assertIsNone(adm_dict["end_fstat"])
+                            self.assertEqual(
+                                adm_dict["failure_phase"], expected_phase
+                            )
+                            self.assertIsNone(
+                                adm_dict["post_read_observation"]
+                            )
+                            self.assertIsNone(
+                                adm_dict["final_traversal_observation"]
+                            )
+                            self.assertIsNone(
+                                adm_dict["final_resolution_observation"]
+                            )
                             self.assertIsNotNone(adm_dict["lookup_snapshot"])
                             self.assertEqual(
                                 adm_dict["lookup_snapshot"]["lexical_path"],
@@ -8539,6 +8575,7 @@ class TestTask851Issue1168PreOpenObservations(unittest.TestCase):
                                 expected_target_lstat=exp_target_lstat,
                                 expected_symlinks=exp_symlinks,
                                 expected_ancestors_subset=exp_anc_subset,
+                                expected_failure_phase=expected_phase,
                             )
                             self.assertIs(
                                 priv_recheck.file_causes[target_fid],
@@ -8563,6 +8600,26 @@ class TestTask851Issue1168PreOpenObservations(unittest.TestCase):
                             self.assertIsNone(frow["observed"]["ino"])
                             self.assertIsNone(
                                 frow["observed"]["stat_size_bytes"]
+                            )
+                            self.assertFalse(frow["observed"]["observed_eof"])
+                            self.assertIsNone(
+                                frow["observed"]["initial_fstat"]
+                            )
+                            self.assertIsNone(frow["observed"]["end_fstat"])
+                            self.assertEqual(
+                                frow["observed"]["failure_phase"],
+                                expected_phase,
+                            )
+                            self.assertIsNone(
+                                frow["observed"]["post_read_observation"]
+                            )
+                            self.assertIsNone(
+                                frow["observed"]["final_traversal_observation"]
+                            )
+                            self.assertIsNone(
+                                frow["observed"][
+                                    "final_resolution_observation"
+                                ]
                             )
                             self.assertIsNotNone(
                                 frow["observed"]["lookup_snapshot"]
@@ -8634,6 +8691,11 @@ class TestTask851Issue1168PreOpenObservations(unittest.TestCase):
             )
 
             for stage_kind in ("open_fail", "initial_fstat_fail"):
+                expected_phase = (
+                    "open"
+                    if stage_kind == "open_fail"
+                    else "initial_fstat"
+                )
                 with self.subTest(stage=stage_kind):
                     if stage_kind == "open_fail":
                         injected_exc: OSError = PermissionError(
@@ -8744,10 +8806,20 @@ class TestTask851Issue1168PreOpenObservations(unittest.TestCase):
                         expected_target_lstat=exp_target_lstat,
                         expected_symlinks=exp_symlinks,
                         expected_ancestors_subset={str(root)},
+                        expected_failure_phase=expected_phase,
                     )
                     assert m_err.manifest_identity.lookup_snapshot is not None
                     self.assertTrue(
                         m_err.manifest_identity.lookup_snapshot.lexical_lstat.is_symlink
+                    )
+                    m_prov = m_err.to_provenance()
+                    self.assertEqual(
+                        m_prov["manifest"]["failure_phase"], expected_phase
+                    )
+                    self.assertIsNone(m_prov["manifest"]["initial_fstat"])
+                    self.assertIsNone(m_prov["manifest"]["end_fstat"])
+                    self.assertIsNone(
+                        m_prov["manifest"]["post_read_observation"]
                     )
 
                     # Also verify postflight recheck on symlink_profile
@@ -8787,6 +8859,7 @@ class TestTask851Issue1168PreOpenObservations(unittest.TestCase):
                         expected_target_lstat=exp_target_lstat,
                         expected_symlinks=exp_symlinks,
                         expected_ancestors_subset={str(root)},
+                        expected_failure_phase=expected_phase,
                     )
                     self.assertIs(priv_m.manifest_cause, injected_exc)
                     self.assertFalse(rep_m["verified"])
@@ -8794,6 +8867,22 @@ class TestTask851Issue1168PreOpenObservations(unittest.TestCase):
                     self.assertIsNone(rep_m["manifest"]["observed"]["dev"])
                     self.assertIsNone(
                         rep_m["manifest"]["observed"]["stat_size_bytes"]
+                    )
+                    self.assertFalse(
+                        rep_m["manifest"]["observed"]["observed_eof"]
+                    )
+                    self.assertIsNone(
+                        rep_m["manifest"]["observed"]["initial_fstat"]
+                    )
+                    self.assertIsNone(
+                        rep_m["manifest"]["observed"]["end_fstat"]
+                    )
+                    self.assertEqual(
+                        rep_m["manifest"]["observed"]["failure_phase"],
+                        expected_phase,
+                    )
+                    self.assertIsNone(
+                        rep_m["manifest"]["observed"]["post_read_observation"]
                     )
                     self.assertIsNotNone(
                         rep_m["manifest"]["observed"]["lookup_snapshot"]
@@ -8916,6 +9005,11 @@ class TestTask851Issue1168PreOpenObservations(unittest.TestCase):
             self.assertIsNotNone(alias_row["observed"])
             self.assertIsNone(alias_row["observed"]["dev"])
             self.assertIsNone(alias_row["observed"]["stat_size_bytes"])
+            self.assertFalse(alias_row["observed"]["observed_eof"])
+            self.assertIsNone(alias_row["observed"]["initial_fstat"])
+            self.assertIsNone(alias_row["observed"]["end_fstat"])
+            self.assertEqual(alias_row["observed"]["failure_phase"], "open")
+            self.assertIsNone(alias_row["observed"]["post_read_observation"])
             self.assertIsNotNone(alias_row["observed"]["lookup_snapshot"])
             self.assertEqual(len(alias_row["errors"]), 2)
             alias_muts = [
@@ -9009,24 +9103,43 @@ class TestTask851Issue1168PreOpenObservations(unittest.TestCase):
                     id_mismatch_ctx.exception, profile_mod._PartialFileReadError
                 )
 
-            # 4) Post-EOF fstat_after failure
+            # 4) Post-EOF fstat_after failure retains PartialFileReadObservation with observed_eof=True (#1168 Task 990)
             fstat_calls = {"count": 0}
+            fstat_after_eio = OSError(errno.EIO, "synthetic fstat_after EIO")
+            expected_alias_bytes = Path(alias_resolved).read_bytes()
+            expected_alias_sha = _sha256_bytes(expected_alias_bytes)
 
             def fstat_fail_second(fd: int):
                 fstat_calls["count"] += 1
                 if fstat_calls["count"] == 2:
-                    raise OSError(errno.EIO, "synthetic fstat_after EIO")
+                    raise fstat_after_eio
                 return real_fstat(fd)
 
             with mock.patch(
                 "refmac_diagnostic_profile.os.fstat",
                 side_effect=fstat_fail_second,
             ):
-                with self.assertRaises(ValueError) as post_eof_ctx:
+                with self.assertRaises(
+                    profile_mod._PartialFileReadError
+                ) as post_eof_ctx:
                     profile_mod._stream_observe_regular_file(str(alias_symlink))
-                self.assertNotIsInstance(
-                    post_eof_ctx.exception, profile_mod._PartialFileReadError
+                self.assertIs(post_eof_ctx.exception.__cause__, fstat_after_eio)
+                post_eof_obs = post_eof_ctx.exception.observation
+                self.assertTrue(post_eof_obs.observed_eof)
+                self.assertEqual(
+                    post_eof_obs.streamed_size_bytes, len(expected_alias_bytes)
                 )
+                self.assertEqual(
+                    post_eof_obs.observed_stream_sha256, expected_alias_sha
+                )
+                self.assertEqual(
+                    post_eof_obs.observed_eof_sha256, expected_alias_sha
+                )
+                self.assertIsNone(post_eof_obs.end_fstat)
+                self.assertEqual(post_eof_obs.failure_phase, "end_fstat")
+                self.assertIsNone(post_eof_obs.sha256)
+                self.assertIsNone(post_eof_obs.size_bytes)
+                self.assertFalse(post_eof_obs.read_complete)
 
     def test_1168_partial_owner_dependency_conflicts_across_declared_file_and_manifest_stages(
         self,
@@ -9225,6 +9338,13 @@ class TestTask851Issue1168PreOpenObservations(unittest.TestCase):
                     self.assertIsNone(fobs_second.uid)
                     self.assertIsNone(fobs_second.gid)
                     self.assertIsNone(fobs_second.identity_tuple)
+                    self.assertFalse(fobs_second.observed_eof)
+                    self.assertIsNone(fobs_second.initial_fstat)
+                    self.assertIsNone(fobs_second.end_fstat)
+                    self.assertEqual(fobs_second.failure_phase, stage)
+                    self.assertIsNone(fobs_second.post_read_observation)
+                    self.assertIsNone(fobs_second.final_traversal_observation)
+                    self.assertIsNone(fobs_second.final_resolution_observation)
                     self.assertEqual(
                         fobs_second.symlink_identities[0].ino, inodes[1]
                     )
@@ -9306,6 +9426,7 @@ class TestTask851Issue1168PreOpenObservations(unittest.TestCase):
                                     dependencies_complete=True,
                                     errors=(fobs_second.errors[0],),
                                     lookup_snapshot=fobs_second.lookup_snapshot,
+                                    failure_phase=fobs_second.failure_phase,
                                 ),
                                 observed_ancestors=partial.observed_ancestors,
                                 observed_symlinks=partial.observed_symlinks,
@@ -9321,6 +9442,7 @@ class TestTask851Issue1168PreOpenObservations(unittest.TestCase):
                                     ancestors=fobs_second.ancestors,
                                     dependencies_complete=False,
                                     errors=(fobs_second.errors[0],),
+                                    failure_phase=fobs_second.failure_phase,
                                 ),
                                 observed_ancestors=partial.observed_ancestors,
                                 observed_symlinks=partial.observed_symlinks,
@@ -9332,9 +9454,14 @@ class TestTask851Issue1168PreOpenObservations(unittest.TestCase):
                     self.assertFalse(
                         incomplete_preserved.dependencies_complete
                     )
+                    self.assertEqual(incomplete_preserved.failure_phase, stage)
                     pub_fobs = public["files"][second_fid]
                     self.assertFalse(pub_fobs["dependencies_complete"])
                     self.assertFalse(pub_fobs["verified"])
+                    self.assertEqual(pub_fobs["failure_phase"], stage)
+                    self.assertIsNone(pub_fobs["initial_fstat"])
+                    self.assertIsNone(pub_fobs["end_fstat"])
+                    self.assertIsNone(pub_fobs["post_read_observation"])
                     self.assertEqual(
                         pub_fobs["symlink_identities"][0]["ino"], inodes[1]
                     )
@@ -9511,6 +9638,14 @@ class TestTask851Issue1168PreOpenObservations(unittest.TestCase):
                     self.assertIsNone(m_obs.mode)
                     self.assertIsNone(m_obs.uid)
                     self.assertIsNone(m_obs.gid)
+                    self.assertIsNone(m_obs.identity_tuple)
+                    self.assertFalse(m_obs.observed_eof)
+                    self.assertIsNone(m_obs.initial_fstat)
+                    self.assertIsNone(m_obs.end_fstat)
+                    self.assertEqual(m_obs.failure_phase, stage)
+                    self.assertIsNone(m_obs.post_read_observation)
+                    self.assertIsNone(m_obs.final_traversal_observation)
+                    self.assertIsNone(m_obs.final_resolution_observation)
                     owned_anc_obs = next(
                         d for d in m_obs.ancestors if d.path == str(owned)
                     )
@@ -9567,6 +9702,12 @@ class TestTask851Issue1168PreOpenObservations(unittest.TestCase):
                         m_pub["manifest"]["dependencies_complete"]
                     )
                     self.assertFalse(m_pub["manifest"]["verified"])
+                    self.assertEqual(m_pub["manifest"]["failure_phase"], stage)
+                    self.assertIsNone(m_pub["manifest"]["initial_fstat"])
+                    self.assertIsNone(m_pub["manifest"]["end_fstat"])
+                    self.assertIsNone(
+                        m_pub["manifest"]["post_read_observation"]
+                    )
                     self.assertEqual(
                         m_pub["manifest"]["errors"], list(m_obs.errors)
                     )
@@ -9574,6 +9715,6568 @@ class TestTask851Issue1168PreOpenObservations(unittest.TestCase):
                     self.assertEqual(m_pub["files"], {})
                     self.assertEqual(m_pub["roots"], {})
                     self.assertFalse(m_pub["profile_files_verified"])
+
+
+class TestTask990Issue1168PostEofObservations(unittest.TestCase):
+    """Focused synthetic tests for #1168 post-EOF observation retention (Task 990)."""
+
+    def test_task990_post_eof_observation_core_matrix(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve(strict=True)
+            sub_dir = root / "sub"
+            alt_dir = root / "alt"
+            sub_dir.mkdir(parents=True)
+            alt_dir.mkdir(parents=True)
+
+            reg_file = sub_dir / "payload.txt"
+            reg_bytes = b"0123456789abcdef-post-eof-payload\n"
+            reg_sha = _sha256_bytes(reg_bytes)
+            reg_file.write_bytes(reg_bytes)
+
+            empty_file = sub_dir / "empty.txt"
+            empty_file.write_bytes(b"")
+            empty_sha = _sha256_bytes(b"")
+
+            alt_file = alt_dir / "alt_payload.txt"
+            alt_bytes = b"SameLengthReplacementForPostEof!!\n"
+            self.assertEqual(len(alt_bytes), len(reg_bytes))
+            alt_file.write_bytes(alt_bytes)
+
+            sym_alias = root / "payload-link.txt"
+            os.symlink("sub/payload.txt", sym_alias)
+
+            # 1. Healthy regular-file, symlink-alias, and empty-file positive controls
+            ok_reg, ok_reg_raw = profile_mod._stream_observe_regular_file(
+                str(reg_file), retain_bytes=True
+            )
+            self.assertIsInstance(ok_reg, _ObservedRegularFilePin)
+            self.assertEqual(ok_reg.sha256, reg_sha)
+            self.assertEqual(ok_reg.size_bytes, len(reg_bytes))
+            self.assertEqual(ok_reg_raw, reg_bytes)
+
+            ok_empty, ok_empty_raw = profile_mod._stream_observe_regular_file(
+                str(empty_file), retain_bytes=True
+            )
+            self.assertIsInstance(ok_empty, _ObservedRegularFilePin)
+            self.assertEqual(ok_empty.sha256, empty_sha)
+            self.assertEqual(ok_empty.size_bytes, 0)
+            self.assertEqual(ok_empty_raw, b"")
+
+            ok_sym, _ = profile_mod._stream_observe_regular_file(str(sym_alias))
+            self.assertIsInstance(ok_sym, _ObservedRegularFilePin)
+            self.assertEqual(ok_sym.path, str(sym_alias))
+            self.assertEqual(ok_sym.resolved_path, str(reg_file))
+            self.assertEqual(ok_sym.sha256, reg_sha)
+
+            real_open = os.open
+            real_fdopen = os.fdopen
+            real_fstat = os.fstat
+
+            # 2. True EOF (chunk == b"") followed by end_fstat EIO on both non-empty and 0-byte empty files
+            # (with a bystander fd open so global fstat call count is not assumed)
+            bystander_fd = real_open(str(reg_file), os.O_RDONLY)
+            try:
+                for case_label, target_lexical, target_resolved, exp_bytes in (
+                    ("non_empty_symlink", str(sym_alias), str(reg_file), reg_bytes),
+                    ("zero_byte_empty", str(empty_file), str(empty_file), b""),
+                ):
+                    with self.subTest(end_fstat_case=case_label):
+                        exp_st_before = os.stat(target_resolved)
+                        end_fstat_eio = OSError(
+                            errno.EIO, f"synthetic end_fstat EIO ({case_label})"
+                        )
+                        fd_state: dict[str, Any] = {
+                            "owned_fd": -1,
+                            "fstat_count_for_owned": 0,
+                        }
+
+                        def open_for_end_fstat(path, flags, *a, **kw):
+                            fd = real_open(path, flags, *a, **kw)
+                            if str(path) == target_resolved:
+                                fd_state["owned_fd"] = fd
+                            return fd
+
+                        def fstat_for_end_fstat(fd: int):
+                            _ = real_fstat(bystander_fd)
+                            if fd == fd_state["owned_fd"]:
+                                fd_state["fstat_count_for_owned"] += 1
+                                if fd_state["fstat_count_for_owned"] == 2:
+                                    raise end_fstat_eio
+                            return real_fstat(fd)
+
+                        with (
+                            mock.patch(
+                                "refmac_diagnostic_profile.os.open",
+                                side_effect=open_for_end_fstat,
+                            ),
+                            mock.patch(
+                                "refmac_diagnostic_profile.os.fstat",
+                                side_effect=fstat_for_end_fstat,
+                            ),
+                        ):
+                            with self.assertRaises(
+                                _PartialFileReadError
+                            ) as ef_ctx:
+                                profile_mod._stream_observe_regular_file(
+                                    target_lexical,
+                                    chunk_size=7,
+                                    retain_bytes=True,
+                                )
+                        self.assertGreater(fd_state["owned_fd"], 0)
+                        self.assertEqual(fd_state["fstat_count_for_owned"], 2)
+                        with self.assertRaises(OSError) as ebadf_ef:
+                            real_fstat(fd_state["owned_fd"])
+                        self.assertEqual(ebadf_ef.exception.errno, errno.EBADF)
+
+                        self.assertIs(ef_ctx.exception.__cause__, end_fstat_eio)
+                        ef_obs = ef_ctx.exception.observation
+                        self.assertTrue(ef_obs.observed_eof)
+                        self.assertEqual(
+                            ef_obs.streamed_size_bytes, len(exp_bytes)
+                        )
+                        self.assertEqual(
+                            ef_obs.stat_size_bytes, int(exp_st_before.st_size)
+                        )
+                        self.assertEqual(
+                            ef_obs.observed_stream_sha256,
+                            _sha256_bytes(exp_bytes),
+                        )
+                        self.assertEqual(
+                            ef_obs.observed_eof_sha256,
+                            _sha256_bytes(exp_bytes),
+                        )
+                        self.assertEqual(
+                            ef_obs.initial_fstat,
+                            LookupStatObservation.from_stat_result(
+                                exp_st_before
+                            ),
+                        )
+                        self.assertIsNone(ef_obs.end_fstat)
+                        self.assertEqual(ef_obs.failure_phase, "end_fstat")
+                        self.assertIsNone(ef_obs.sha256)
+                        self.assertIsNone(ef_obs.size_bytes)
+                        self.assertFalse(ef_obs.read_complete)
+                        self.assertFalse(ef_obs.verified)
+
+                # 4. Descriptor identity conflict and descriptor size conflict at end_fstat
+                base_reg_st = os.stat(reg_file)
+                changed_ino_st = os.stat_result(
+                    (
+                        base_reg_st.st_mode,
+                        base_reg_st.st_ino + 424242,
+                        base_reg_st.st_dev,
+                        base_reg_st.st_nlink,
+                        base_reg_st.st_uid,
+                        base_reg_st.st_gid,
+                        base_reg_st.st_size,
+                        base_reg_st.st_atime,
+                        base_reg_st.st_mtime,
+                        base_reg_st.st_ctime,
+                    )
+                )
+                changed_size_st = os.stat_result(
+                    (
+                        base_reg_st.st_mode,
+                        base_reg_st.st_ino,
+                        base_reg_st.st_dev,
+                        base_reg_st.st_nlink,
+                        base_reg_st.st_uid,
+                        base_reg_st.st_gid,
+                        base_reg_st.st_size + 19,
+                        base_reg_st.st_atime,
+                        base_reg_st.st_mtime,
+                        base_reg_st.st_ctime,
+                    )
+                )
+                for conflict_phase, synthetic_after_st in (
+                    ("descriptor_identity_comparison", changed_ino_st),
+                    ("descriptor_size_comparison", changed_size_st),
+                ):
+                    with self.subTest(descriptor_conflict=conflict_phase):
+                        d_state = {"owned_fd": -1, "owned_fstats": 0}
+
+                        def open_d(path, flags, *a, **kw):
+                            fd = real_open(path, flags, *a, **kw)
+                            if str(path) == str(reg_file):
+                                d_state["owned_fd"] = fd
+                            return fd
+
+                        def fstat_d(fd: int):
+                            if fd == d_state["owned_fd"]:
+                                d_state["owned_fstats"] += 1
+                                if d_state["owned_fstats"] == 2:
+                                    return synthetic_after_st
+                            return real_fstat(fd)
+
+                        with (
+                            mock.patch(
+                                "refmac_diagnostic_profile.os.open",
+                                side_effect=open_d,
+                            ),
+                            mock.patch(
+                                "refmac_diagnostic_profile.os.fstat",
+                                side_effect=fstat_d,
+                            ),
+                        ):
+                            with self.assertRaises(
+                                _PartialFileReadError
+                            ) as dc_ctx:
+                                profile_mod._stream_observe_regular_file(
+                                    str(sym_alias)
+                                )
+                        dc_obs = dc_ctx.exception.observation
+                        self.assertTrue(dc_obs.observed_eof)
+                        self.assertEqual(dc_obs.failure_phase, conflict_phase)
+                        self.assertEqual(
+                            dc_obs.streamed_size_bytes, len(reg_bytes)
+                        )
+                        self.assertEqual(
+                            dc_obs.observed_eof_sha256, reg_sha
+                        )
+                        # Initial fstat identity/size preserved on top-level fields and initial_fstat
+                        self.assertEqual(dc_obs.ino, int(base_reg_st.st_ino))
+                        self.assertEqual(
+                            dc_obs.stat_size_bytes, int(base_reg_st.st_size)
+                        )
+                        self.assertEqual(
+                            dc_obs.initial_fstat,
+                            LookupStatObservation.from_stat_result(base_reg_st),
+                        )
+                        # Conflicting end_fstat preserved separately
+                        self.assertEqual(
+                            dc_obs.end_fstat,
+                            LookupStatObservation.from_stat_result(
+                                synthetic_after_st
+                            ),
+                        )
+                        self.assertNotEqual(
+                            dc_obs.initial_fstat, dc_obs.end_fstat
+                        )
+                        self.assertIsNone(dc_obs.final_lexical_lstat)
+
+                # 5. Final kernel lookup EIO and dangling-symlink ENOENT after EOF
+                real_lstat = os.lstat
+                real_stat = os.stat
+                lookup_eio = OSError(
+                    errno.EIO, "synthetic post-EOF final_kernel_lookup EIO"
+                )
+                l_state = {"eof_fstat_done": False, "owned_fd": -1, "owned_fstats": 0}
+
+                def open_l(path, flags, *a, **kw):
+                    fd = real_open(path, flags, *a, **kw)
+                    if str(path) == str(reg_file):
+                        l_state["owned_fd"] = fd
+                    return fd
+
+                def fstat_l(fd: int):
+                    res = real_fstat(fd)
+                    if fd == l_state["owned_fd"]:
+                        l_state["owned_fstats"] += 1
+                        if l_state["owned_fstats"] == 2:
+                            l_state["eof_fstat_done"] = True
+                    return res
+
+                def lstat_fail_after_eof(path, *a, **kw):
+                    if l_state["eof_fstat_done"] and str(path) == str(sym_alias):
+                        raise lookup_eio
+                    return real_lstat(path, *a, **kw)
+
+                with (
+                    mock.patch(
+                        "refmac_diagnostic_profile.os.open",
+                        side_effect=open_l,
+                    ),
+                    mock.patch(
+                        "refmac_diagnostic_profile.os.fstat",
+                        side_effect=fstat_l,
+                    ),
+                    mock.patch(
+                        "refmac_diagnostic_profile.os.lstat",
+                        side_effect=lstat_fail_after_eof,
+                    ),
+                ):
+                    with self.assertRaises(_PartialFileReadError) as fk_ctx:
+                        profile_mod._stream_observe_regular_file(str(sym_alias))
+                fk_obs = fk_ctx.exception.observation
+                self.assertIs(
+                    profile_mod._select_original_cause_exception(
+                        fk_ctx.exception
+                    ),
+                    lookup_eio,
+                )
+                self.assertTrue(fk_obs.observed_eof)
+                self.assertEqual(fk_obs.failure_phase, "final_kernel_lookup")
+                self.assertIsNotNone(fk_obs.end_fstat)
+                self.assertIsNone(fk_obs.final_lexical_lstat)
+                self.assertIsNone(fk_obs.final_lexical_stat)
+
+                # 5b. os.lstat succeeds on sym_alias after EOF, then os.stat fails with ENOENT:
+                # final_lexical_lstat is retained while final_lexical_stat is None
+                stat_enoent = FileNotFoundError(
+                    errno.ENOENT,
+                    "synthetic dangling target on final os.stat",
+                    str(sym_alias),
+                )
+                l_state_b = {
+                    "eof_fstat_done": False,
+                    "owned_fd": -1,
+                    "owned_fstats": 0,
+                }
+
+                def open_lb(path, flags, *a, **kw):
+                    fd = real_open(path, flags, *a, **kw)
+                    if str(path) == str(reg_file):
+                        l_state_b["owned_fd"] = fd
+                    return fd
+
+                def fstat_lb(fd: int):
+                    res = real_fstat(fd)
+                    if fd == l_state_b["owned_fd"]:
+                        l_state_b["owned_fstats"] += 1
+                        if l_state_b["owned_fstats"] == 2:
+                            l_state_b["eof_fstat_done"] = True
+                    return res
+
+                def stat_fail_after_eof(path, *a, **kw):
+                    if l_state_b["eof_fstat_done"] and str(path) == str(
+                        sym_alias
+                    ):
+                        raise stat_enoent
+                    return real_stat(path, *a, **kw)
+
+                with (
+                    mock.patch(
+                        "refmac_diagnostic_profile.os.open",
+                        side_effect=open_lb,
+                    ),
+                    mock.patch(
+                        "refmac_diagnostic_profile.os.fstat",
+                        side_effect=fstat_lb,
+                    ),
+                    mock.patch(
+                        "refmac_diagnostic_profile.os.stat",
+                        side_effect=stat_fail_after_eof,
+                    ),
+                ):
+                    with self.assertRaises(_PartialFileReadError) as fkb_ctx:
+                        profile_mod._stream_observe_regular_file(str(sym_alias))
+                fkb_obs = fkb_ctx.exception.observation
+                self.assertIs(
+                    profile_mod._select_original_cause_exception(
+                        fkb_ctx.exception
+                    ),
+                    stat_enoent,
+                )
+                self.assertTrue(fkb_obs.observed_eof)
+                self.assertEqual(fkb_obs.failure_phase, "final_kernel_lookup")
+                self.assertIsNotNone(fkb_obs.end_fstat)
+                self.assertEqual(
+                    fkb_obs.final_lexical_lstat,
+                    LookupStatObservation.from_stat_result(
+                        os.lstat(sym_alias)
+                    ),
+                )
+                self.assertIsNone(fkb_obs.final_lexical_stat)
+
+                # 6. Final path traversal failure after final_kernel_lookup succeeds
+                real_readlink = os.readlink
+                readlink_eio = OSError(
+                    errno.EIO, "synthetic post-EOF readlink EIO"
+                )
+                t_state = {"eof_fstat_done": False, "owned_fd": -1, "owned_fstats": 0}
+
+                def open_t(path, flags, *a, **kw):
+                    fd = real_open(path, flags, *a, **kw)
+                    if str(path) == str(reg_file):
+                        t_state["owned_fd"] = fd
+                    return fd
+
+                def fstat_t(fd: int):
+                    res = real_fstat(fd)
+                    if fd == t_state["owned_fd"]:
+                        t_state["owned_fstats"] += 1
+                        if t_state["owned_fstats"] == 2:
+                            t_state["eof_fstat_done"] = True
+                    return res
+
+                def readlink_fail_after_eof(path, *a, **kw):
+                    if t_state["eof_fstat_done"] and str(path) == str(sym_alias):
+                        raise readlink_eio
+                    return real_readlink(path, *a, **kw)
+
+                with (
+                    mock.patch(
+                        "refmac_diagnostic_profile.os.open",
+                        side_effect=open_t,
+                    ),
+                    mock.patch(
+                        "refmac_diagnostic_profile.os.fstat",
+                        side_effect=fstat_t,
+                    ),
+                    mock.patch(
+                        "refmac_diagnostic_profile.os.readlink",
+                        side_effect=readlink_fail_after_eof,
+                    ),
+                ):
+                    with self.assertRaises(_PartialFileReadError) as ft_ctx:
+                        profile_mod._stream_observe_regular_file(str(sym_alias))
+                ft_obs = ft_ctx.exception.observation
+                self.assertIs(
+                    profile_mod._select_original_cause_exception(
+                        ft_ctx.exception
+                    ),
+                    readlink_eio,
+                )
+                self.assertTrue(ft_obs.observed_eof)
+                self.assertEqual(ft_obs.failure_phase, "final_path_traversal")
+                self.assertIsNotNone(ft_obs.end_fstat)
+                self.assertIsNotNone(ft_obs.final_lexical_lstat)
+                self.assertIsNotNone(ft_obs.final_lexical_stat)
+                # Partial traversal progress up to root/parent directory before readlink failed is retained
+                self.assertIsNotNone(ft_obs.final_traversed_directories)
+                self.assertEqual(ft_obs.final_symlinks, ())
+                self.assertIsNone(ft_obs.final_traversal_resolved_path)
+                self.assertIsNone(ft_obs.final_resolved_path)
+
+                # 7. Final target resolution failure after final_path_traversal succeeds
+                res_err = OSError(
+                    errno.EIO, "synthetic post-EOF strict resolve EIO"
+                )
+                real_resolve_strict = profile_mod._resolve_regular_target_strict
+                r_calls = {"count": 0}
+
+                def resolve_fail_second(raw_lex: str):
+                    r_calls["count"] += 1
+                    if r_calls["count"] == 2:
+                        raise ValueError(
+                            f"Failed to resolve path {raw_lex!r} (OSError): {res_err}"
+                        ) from res_err
+                    return real_resolve_strict(raw_lex)
+
+                with mock.patch(
+                    "refmac_diagnostic_profile._resolve_regular_target_strict",
+                    side_effect=resolve_fail_second,
+                ):
+                    with self.assertRaises(_PartialFileReadError) as fr_ctx:
+                        profile_mod._stream_observe_regular_file(str(sym_alias))
+                fr_obs = fr_ctx.exception.observation
+                self.assertIs(
+                    profile_mod._select_original_cause_exception(
+                        fr_ctx.exception
+                    ),
+                    res_err,
+                )
+                self.assertTrue(fr_obs.observed_eof)
+                self.assertEqual(
+                    fr_obs.failure_phase, "final_target_resolution"
+                )
+                self.assertIsNotNone(fr_obs.end_fstat)
+                self.assertIsNotNone(fr_obs.final_lexical_lstat)
+                self.assertIsNotNone(fr_obs.final_lexical_stat)
+                self.assertEqual(
+                    fr_obs.final_traversal_resolved_path, str(reg_file)
+                )
+                self.assertIsNotNone(fr_obs.final_traversal_target_lstat)
+                self.assertEqual(
+                    fr_obs.final_symlinks,
+                    (
+                        _SymlinkEdge(
+                            path=str(sym_alias), target="sub/payload.txt"
+                        ),
+                    ),
+                )
+                self.assertIsNotNone(fr_obs.final_traversed_directories)
+                self.assertIsNone(fr_obs.final_resolved_path)
+                self.assertIsNone(fr_obs.final_resolved_target_lstat)
+
+                # 8. Real on-disk post-EOF namespace mutations:
+                # 8a. Same-bytes new-inode replacement on direct regular file and via symlink alias
+                for via_symlink in (False, True):
+                    with self.subTest(same_bytes_new_inode_via_symlink=via_symlink):
+                        work_file = sub_dir / (
+                            "swap_sym_target.txt"
+                            if via_symlink
+                            else "swap_direct.txt"
+                        )
+                        work_file.write_bytes(reg_bytes)
+                        work_link = root / "swap-link.txt"
+                        if via_symlink:
+                            if work_link.exists() or work_link.is_symlink():
+                                work_link.unlink()
+                            os.symlink(f"sub/{work_file.name}", work_link)
+                        lex_arg = str(work_link if via_symlink else work_file)
+                        orig_st = os.lstat(work_file)
+                        swap_tmp = sub_dir / "swap_replacement.tmp"
+                        swap_tmp.write_bytes(reg_bytes)
+                        new_st = os.lstat(swap_tmp)
+                        self.assertEqual(swap_tmp.read_bytes(), reg_bytes)
+                        self.assertEqual(work_file.read_bytes(), reg_bytes)
+                        self.assertEqual(
+                            _sha256_bytes(swap_tmp.read_bytes()), reg_sha
+                        )
+                        self.assertNotEqual(orig_st.st_ino, new_st.st_ino)
+                        self.assertEqual(orig_st.st_size, new_st.st_size)
+
+                        s_state = {
+                            "owned_fd": -1,
+                            "captured_fd": -1,
+                            "observed_eof": False,
+                            "owned_fstats": 0,
+                        }
+
+                        def open_swap(path, flags, *a, **kw):
+                            fd = real_open(path, flags, *a, **kw)
+                            if str(path) == str(work_file):
+                                s_state["owned_fd"] = fd
+                                s_state["captured_fd"] = fd
+                            return fd
+
+                        def fdopen_swap(fd, mode="rb", *a, **kw):
+                            handle = real_fdopen(fd, mode, *a, **kw)
+                            if fd == s_state["owned_fd"]:
+                                orig_read = handle.read
+
+                                def read_track_eof(n=-1):
+                                    chunk = orig_read(n)
+                                    if chunk == b"":
+                                        s_state["observed_eof"] = True
+                                    return chunk
+
+                                handle.read = read_track_eof  # type: ignore[method-assign]
+                            return handle
+
+                        def fstat_swap_at_eof(fd: int):
+                            res = real_fstat(fd)
+                            if fd == s_state["owned_fd"]:
+                                s_state["owned_fstats"] += 1
+                                if s_state["owned_fstats"] == 2:
+                                    self.assertTrue(s_state["observed_eof"])
+                                    os.replace(swap_tmp, work_file)
+                            return res
+
+                        with (
+                            mock.patch(
+                                "refmac_diagnostic_profile.os.open",
+                                side_effect=open_swap,
+                            ),
+                            mock.patch(
+                                "refmac_diagnostic_profile.os.fdopen",
+                                side_effect=fdopen_swap,
+                            ),
+                            mock.patch(
+                                "refmac_diagnostic_profile.os.fstat",
+                                side_effect=fstat_swap_at_eof,
+                            ),
+                        ):
+                            with self.assertRaises(
+                                _PartialFileReadError
+                            ) as sw_ctx:
+                                profile_mod._stream_observe_regular_file(
+                                    lex_arg
+                                )
+                        self.assertTrue(s_state["observed_eof"])
+                        self.assertGreaterEqual(s_state["captured_fd"], 0)
+                        with self.assertRaises(OSError) as sw_ebadf:
+                            real_fstat(s_state["captured_fd"])
+                        self.assertEqual(sw_ebadf.exception.errno, errno.EBADF)
+                        self.assertEqual(work_file.read_bytes(), reg_bytes)
+                        self.assertEqual(
+                            _sha256_bytes(work_file.read_bytes()), reg_sha
+                        )
+                        self.assertEqual(
+                            os.lstat(work_file).st_ino, new_st.st_ino
+                        )
+                        sw_obs = sw_ctx.exception.observation
+                        self.assertTrue(sw_obs.observed_eof)
+                        self.assertEqual(
+                            sw_obs.failure_phase,
+                            "post_read_namespace_comparison",
+                        )
+                        # Streamed digest is the original opened inode's bytes (identical to replacement bytes)
+                        self.assertEqual(
+                            sw_obs.streamed_size_bytes, len(reg_bytes)
+                        )
+                        self.assertEqual(
+                            sw_obs.observed_stream_sha256, reg_sha
+                        )
+                        self.assertEqual(sw_obs.observed_eof_sha256, reg_sha)
+                        self.assertIsNone(sw_obs.sha256)
+                        self.assertIsNone(sw_obs.size_bytes)
+                        self.assertFalse(sw_obs.read_complete)
+                        self.assertEqual(sw_obs.ino, int(orig_st.st_ino))
+                        self.assertEqual(
+                            sw_obs.initial_fstat.ino, int(orig_st.st_ino)
+                        )
+                        self.assertEqual(
+                            sw_obs.lookup_snapshot.target_lstat.ino,
+                            int(orig_st.st_ino),
+                        )
+                        assert sw_obs.end_fstat is not None
+                        self.assertEqual(
+                            sw_obs.end_fstat.ino, int(orig_st.st_ino)
+                        )
+                        # Final lookup/traversal/resolution captured the new replacement inode!
+                        assert sw_obs.final_lexical_stat is not None
+                        assert sw_obs.final_traversal_target_lstat is not None
+                        assert sw_obs.final_resolved_target_lstat is not None
+                        self.assertEqual(
+                            sw_obs.final_lexical_stat.ino, int(new_st.st_ino)
+                        )
+                        self.assertEqual(
+                            sw_obs.final_traversal_target_lstat.ino,
+                            int(new_st.st_ino),
+                        )
+                        self.assertEqual(
+                            sw_obs.final_resolved_target_lstat.ino,
+                            int(new_st.st_ino),
+                        )
+                        self.assertNotEqual(
+                            sw_obs.end_fstat.ino,
+                            sw_obs.final_lexical_stat.ino,
+                        )
+
+                # 8b. Persistent symlink retarget to alt_file during read
+                retarget_link = root / "retarget-link.txt"
+                os.symlink("sub/payload.txt", retarget_link)
+                rt_state = {"owned_fd": -1, "owned_fstats": 0}
+
+                def open_rt(path, flags, *a, **kw):
+                    fd = real_open(path, flags, *a, **kw)
+                    if str(path) == str(reg_file):
+                        rt_state["owned_fd"] = fd
+                    return fd
+
+                def fstat_rt(fd: int):
+                    res = real_fstat(fd)
+                    if fd == rt_state["owned_fd"]:
+                        rt_state["owned_fstats"] += 1
+                        if rt_state["owned_fstats"] == 2:
+                            tmp_lnk = root / "retarget-link.tmp"
+                            os.symlink("alt/alt_payload.txt", tmp_lnk)
+                            os.replace(tmp_lnk, retarget_link)
+                    return res
+
+                with (
+                    mock.patch(
+                        "refmac_diagnostic_profile.os.open",
+                        side_effect=open_rt,
+                    ),
+                    mock.patch(
+                        "refmac_diagnostic_profile.os.fstat",
+                        side_effect=fstat_rt,
+                    ),
+                ):
+                    with self.assertRaises(_PartialFileReadError) as rt_ctx:
+                        profile_mod._stream_observe_regular_file(
+                            str(retarget_link)
+                        )
+                rt_obs = rt_ctx.exception.observation
+                self.assertTrue(rt_obs.observed_eof)
+                self.assertEqual(
+                    rt_obs.failure_phase, "post_read_namespace_comparison"
+                )
+                # Initial symlink target and resolved path preserved
+                self.assertEqual(rt_obs.resolved_path, str(reg_file))
+                self.assertEqual(
+                    rt_obs.symlinks,
+                    (
+                        _SymlinkEdge(
+                            path=str(retarget_link), target="sub/payload.txt"
+                        ),
+                    ),
+                )
+                # Final retargeted symlink and resolved path also preserved
+                self.assertEqual(
+                    rt_obs.final_symlinks,
+                    (
+                        _SymlinkEdge(
+                            path=str(retarget_link),
+                            target="alt/alt_payload.txt",
+                        ),
+                    ),
+                )
+                self.assertEqual(
+                    rt_obs.final_traversal_resolved_path, str(alt_file)
+                )
+                self.assertEqual(rt_obs.final_resolved_path, str(alt_file))
+                assert rt_obs.final_resolved_target_lstat is not None
+                self.assertEqual(
+                    rt_obs.final_resolved_target_lstat.ino,
+                    int(os.lstat(alt_file).st_ino),
+                )
+            finally:
+                real_fstat(bystander_fd)
+                os.close(bystander_fd)
+
+            # 9. Pre-EOF partial prefix read EIO contrast and PostReadVerificationObservation guardrails
+            prefix_eio = OSError(errno.EIO, "synthetic prefix read EIO")
+            tracked_fds: list[int] = []
+
+            def open_track_reg(path, flags, *a, **kw):
+                fd = real_open(path, flags, *a, **kw)
+                if str(path) == str(reg_file):
+                    tracked_fds.append(fd)
+                return fd
+
+            def fdopen_prefix_5(fd, mode="rb", *a, **kw):
+                handle = real_fdopen(fd, mode, *a, **kw)
+                if fd in tracked_fds:
+                    orig_read = handle.read
+                    calls = 0
+
+                    def read_5_then_eio(_n=-1):
+                        nonlocal calls
+                        calls += 1
+                        if calls == 1:
+                            return orig_read(5)
+                        raise prefix_eio
+
+                    handle.read = read_5_then_eio  # type: ignore[method-assign]
+                return handle
+
+            with (
+                mock.patch(
+                    "refmac_diagnostic_profile.os.open",
+                    side_effect=open_track_reg,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.fdopen",
+                    side_effect=fdopen_prefix_5,
+                ),
+            ):
+                with self.assertRaises(_PartialFileReadError) as pre_ctx:
+                    profile_mod._stream_observe_regular_file(
+                        str(sym_alias), chunk_size=5
+                    )
+            self.assertEqual(len(tracked_fds), 1)
+            with self.assertRaises(OSError) as ebadf_pre:
+                real_fstat(tracked_fds[0])
+            self.assertEqual(ebadf_pre.exception.errno, errno.EBADF)
+            pre_obs = pre_ctx.exception.observation
+            self.assertFalse(pre_obs.observed_eof)
+            self.assertEqual(pre_obs.streamed_size_bytes, 5)
+            self.assertEqual(
+                pre_obs.observed_stream_sha256, _sha256_bytes(reg_bytes[:5])
+            )
+            self.assertIsNone(pre_obs.observed_eof_sha256)
+            self.assertIsNone(pre_obs.end_fstat)
+            self.assertEqual(pre_obs.failure_phase, "stream_read")
+            self.assertIsNone(pre_obs.sha256)
+            self.assertIsNone(pre_obs.size_bytes)
+            self.assertFalse(pre_obs.read_complete)
+            assert pre_obs.post_read_observation is not None
+            self.assertFalse(pre_obs.post_read_observation.observed_eof)
+            self.assertEqual(
+                pre_obs.post_read_observation.observed_stream_sha256,
+                _sha256_bytes(reg_bytes[:5]),
+            )
+            self.assertIsNone(
+                pre_obs.post_read_observation.observed_eof_sha256
+            )
+            with self.assertRaises(FrozenInstanceError):
+                pre_obs.post_read_observation.observed_eof = True  # type: ignore[misc]
+            with self.assertRaisesRegex(
+                ValueError, "cannot be converted to a FilePin"
+            ):
+                pre_obs.as_file_pin()
+
+    def test_task990_post_eof_observation_admission_and_recheck_integration(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fx = _build_synthetic_outer_profile_fixture(Path(tmpdir))
+            root = fx["root"]
+            assert isinstance(root, Path)
+            support_dir = root / "support"
+            installed_record = fx["installed_record"]
+            assert isinstance(installed_record, dict)
+            ccp4_env = fx["ccp4_env"]
+            assert isinstance(ccp4_env, dict)
+            ev_root = fx["evidence_root"]
+            assert isinstance(ev_root, Path)
+            alias_symlink = fx["alias_symlink"]
+            assert isinstance(alias_symlink, Path)
+            manifest_path = fx["manifest_path"]
+            assert isinstance(manifest_path, Path)
+            profile = fx["profile"]
+            assert isinstance(profile, RefmacDiagnosticProfile)
+            base_payload = fx["manifest_payload"]
+            assert isinstance(base_payload, dict)
+
+            validated = validate_profile(
+                profile, installed_record, ccp4_env, ev_root
+            )
+            state = validated._outer_state
+            assert state is not None
+
+            direct_fid = base_payload["roles"]["collection_interpreter"][0]  # type: ignore[index]
+            alias_fid = next(
+                fid
+                for fid, row in base_payload["files"].items()  # type: ignore[union-attr]
+                if row["path"] == str(alias_symlink)
+            )
+            dotdot_path_str = str(
+                support_dir / "bin" / ".." / "collection-python"
+            )
+            dotdot_fid = next(
+                fid
+                for fid, row in base_payload["files"].items()  # type: ignore[union-attr]
+                if row["path"] == dotdot_path_str
+            )
+            alias_resolved = str(alias_symlink.resolve(strict=True))
+            self.assertLess(direct_fid, alias_fid)
+            self.assertLess(alias_fid, dotdot_fid)
+            self.assertEqual(
+                validated.files[direct_fid].resolved_path, alias_resolved
+            )
+            self.assertEqual(
+                validated.files[alias_fid].resolved_path, alias_resolved
+            )
+            self.assertEqual(
+                validated.files[dotdot_fid].resolved_path, alias_resolved
+            )
+            alias_bytes = Path(alias_resolved).read_bytes()
+            alias_sha = _sha256_bytes(alias_bytes)
+            last_fid = sorted(validated.files.keys())[-1]
+            last_fpath = validated.files[last_fid].path
+
+            # 1. Declared-file owner post-EOF failure (end_fstat EIO and final_kernel_lookup ENOENT)
+            # across validate_profile, _reobserve_outer_profile_state, and recheck_profile
+            real_open = os.open
+            real_fdopen = os.fdopen
+            real_fstat = os.fstat
+            real_lstat = os.lstat
+            real_obs_pin = profile_mod._observe_regular_file_pin
+            real_dir_obs = profile_mod._observe_directory_identity
+
+            for failure_kind in ("end_fstat_eio", "final_lookup_enoent"):
+                with self.subTest(declared_file_failure=failure_kind):
+                    injected_exc: OSError = (
+                        OSError(
+                            errno.EIO,
+                            "synthetic #1168 declared-file end_fstat EIO",
+                        )
+                        if failure_kind == "end_fstat_eio"
+                        else FileNotFoundError(
+                            errno.ENOENT,
+                            "synthetic #1168 declared-file post-EOF lookup ENOENT",
+                            str(alias_symlink),
+                        )
+                    )
+                    run_state: dict[str, object] = {
+                        "active_lexical": None,
+                        "owned_fd": -1,
+                        "captured_fd": -1,
+                        "owned_fstats": 0,
+                        "observed_eof_on_owned_fd": False,
+                        "eof_fstat_done": False,
+                        "injected": False,
+                    }
+                    recheck_track = {"files_done": False}
+
+                    def reset_run_state() -> None:
+                        run_state["active_lexical"] = None
+                        run_state["owned_fd"] = -1
+                        run_state["captured_fd"] = -1
+                        run_state["owned_fstats"] = 0
+                        run_state["observed_eof_on_owned_fd"] = False
+                        run_state["eof_fstat_done"] = False
+                        run_state["injected"] = False
+                        recheck_track["files_done"] = False
+
+                    def observe_pin_alias(path, *a, **kw):
+                        prev_lexical = run_state["active_lexical"]
+                        path_str = str(path)
+                        run_state["active_lexical"] = path_str
+                        if (
+                            path_str == str(alias_symlink)
+                            and not run_state["injected"]
+                        ):
+                            run_state["owned_fd"] = -1
+                            run_state["owned_fstats"] = 0
+                            run_state["observed_eof_on_owned_fd"] = False
+                            run_state["eof_fstat_done"] = False
+                        try:
+                            return real_obs_pin(path, *a, **kw)
+                        finally:
+                            if path_str == str(alias_symlink):
+                                run_state["owned_fd"] = -1
+                                run_state["owned_fstats"] = 0
+                                run_state["observed_eof_on_owned_fd"] = False
+                                run_state["eof_fstat_done"] = False
+                            if path_str == str(last_fpath):
+                                recheck_track["files_done"] = True
+                            run_state["active_lexical"] = prev_lexical
+
+                    def open_alias(path, flags, *a, **kw):
+                        fd = real_open(path, flags, *a, **kw)
+                        if (
+                            run_state["active_lexical"] == str(alias_symlink)
+                            and not run_state["injected"]
+                            and str(path) == alias_resolved
+                        ):
+                            run_state["owned_fd"] = fd
+                            run_state["captured_fd"] = fd
+                            run_state["owned_fstats"] = 0
+                            run_state["observed_eof_on_owned_fd"] = False
+                            run_state["eof_fstat_done"] = False
+                        return fd
+
+                    def fdopen_alias(fd, mode="rb", *a, **kw):
+                        handle = real_fdopen(fd, mode, *a, **kw)
+                        if (
+                            run_state["active_lexical"] == str(alias_symlink)
+                            and fd == run_state["owned_fd"]
+                        ):
+                            orig_read = handle.read
+
+                            def read_track_alias_eof(n=-1):
+                                chunk = orig_read(n)
+                                if chunk == b"":
+                                    run_state["observed_eof_on_owned_fd"] = True
+                                return chunk
+
+                            handle.read = read_track_alias_eof  # type: ignore[method-assign]
+                        return handle
+
+                    def fstat_alias(fd: int):
+                        if (
+                            run_state["active_lexical"] == str(alias_symlink)
+                            and fd == run_state["owned_fd"]
+                        ):
+                            run_state["owned_fstats"] = (
+                                int(run_state["owned_fstats"]) + 1  # type: ignore[arg-type]
+                            )
+                            if run_state["owned_fstats"] == 2:
+                                self.assertTrue(
+                                    run_state["observed_eof_on_owned_fd"]
+                                )
+                                if failure_kind == "end_fstat_eio":
+                                    run_state["injected"] = True
+                                    raise injected_exc
+                                run_state["eof_fstat_done"] = True
+                        return real_fstat(fd)
+
+                    def lstat_alias(path, *a, **kw):
+                        if (
+                            failure_kind == "final_lookup_enoent"
+                            and run_state["active_lexical"]
+                            == str(alias_symlink)
+                            and run_state["observed_eof_on_owned_fd"]
+                            and run_state["eof_fstat_done"]
+                            and not run_state["injected"]
+                            and str(path) == str(alias_symlink)
+                        ):
+                            run_state["injected"] = True
+                            raise injected_exc
+                        return real_lstat(path, *a, **kw)
+
+                    reset_run_state()
+                    with (
+                        mock.patch(
+                            "refmac_diagnostic_profile._observe_regular_file_pin",
+                            side_effect=observe_pin_alias,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.open",
+                            side_effect=open_alias,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.fdopen",
+                            side_effect=fdopen_alias,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.fstat",
+                            side_effect=fstat_alias,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.lstat",
+                            side_effect=lstat_alias,
+                        ),
+                    ):
+                        with self.assertRaises(
+                            ProfileValidationError
+                        ) as val_ctx:
+                            validate_profile(
+                                profile, installed_record, ccp4_env, ev_root
+                            )
+                    self.assertTrue(run_state["injected"])
+                    self.assertGreaterEqual(int(run_state["captured_fd"]), 0)  # type: ignore[arg-type]
+                    with self.assertRaises(OSError) as val_ebadf:
+                        real_fstat(int(run_state["captured_fd"]))  # type: ignore[arg-type]
+                    self.assertEqual(val_ebadf.exception.errno, errno.EBADF)
+
+                    val_err = val_ctx.exception
+                    self.assertEqual(
+                        val_err.failed_check, "outer_profile_files_and_roots"
+                    )
+                    self.assertIs(val_err.cause_exception, injected_exc)
+                    self.assertEqual(val_err.error_errno, injected_exc.errno)
+                    self.assertEqual(len(val_err.files), 59)
+                    self.assertEqual(len(val_err.roots), 3)
+                    # Earlier direct_fid and later dotdot_fid sharing alias_resolved completed as verified FileObservation
+                    direct_obs = val_err.files[direct_fid]
+                    assert isinstance(direct_obs, FileObservation)
+                    self.assertTrue(direct_obs.verified)
+                    self.assertEqual(direct_obs.resolved_path, alias_resolved)
+                    self.assertEqual(direct_obs.sha256, alias_sha)
+                    dotdot_obs = val_err.files[dotdot_fid]
+                    assert isinstance(dotdot_obs, FileObservation)
+                    self.assertTrue(dotdot_obs.verified)
+                    self.assertEqual(dotdot_obs.resolved_path, alias_resolved)
+                    self.assertEqual(dotdot_obs.sha256, alias_sha)
+                    # Later files after alias_fid still completed as verified FileObservation
+                    later_fids = [
+                        fid for fid, _ in val_err.files if fid > alias_fid
+                    ]
+                    self.assertGreaterEqual(len(later_fids), 1)
+                    for fid, fobs in val_err.files:
+                        if fid == alias_fid:
+                            self.assertIsInstance(
+                                fobs, PartialFileReadObservation
+                            )
+                        else:
+                            self.assertIsInstance(fobs, FileObservation)
+                            self.assertTrue(fobs.verified)
+
+                    pobs = val_err.files[alias_fid]
+                    assert isinstance(pobs, PartialFileReadObservation)
+                    self.assertEqual(pobs.path, str(alias_symlink))
+                    self.assertEqual(pobs.resolved_path, alias_resolved)
+                    self.assertTrue(pobs.observed_eof)
+                    self.assertEqual(pobs.streamed_size_bytes, len(alias_bytes))
+                    self.assertEqual(pobs.observed_stream_sha256, alias_sha)
+                    self.assertEqual(pobs.observed_eof_sha256, alias_sha)
+                    self.assertIsNone(pobs.sha256)
+                    self.assertIsNone(pobs.size_bytes)
+                    self.assertFalse(pobs.read_complete)
+                    if failure_kind == "end_fstat_eio":
+                        self.assertIsNone(pobs.end_fstat)
+                        self.assertEqual(pobs.failure_phase, "end_fstat")
+                    else:
+                        self.assertIsNotNone(pobs.end_fstat)
+                        self.assertEqual(
+                            pobs.failure_phase, "final_kernel_lookup"
+                        )
+
+                    # Pure in-memory provenance projection with poisoned filesystem entry points
+                    with (
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.lstat",
+                            side_effect=AssertionError("no lstat"),
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.stat",
+                            side_effect=AssertionError("no stat"),
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.readlink",
+                            side_effect=AssertionError("no readlink"),
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.open",
+                            side_effect=AssertionError("no open"),
+                        ),
+                    ):
+                        prov = val_err.to_provenance()
+                    json.dumps(prov, allow_nan=False)
+                    self.assertTrue(prov["files"][alias_fid]["observed_eof"])
+                    self.assertEqual(
+                        prov["files"][alias_fid]["observed_eof_sha256"],
+                        alias_sha,
+                    )
+                    self.assertIsNone(prov["files"][alias_fid]["sha256"])
+                    self.assertIsNone(prov["files"][alias_fid]["size_bytes"])
+                    self.assertEqual(
+                        prov["files"][direct_fid]["sha256"], alias_sha
+                    )
+                    self.assertEqual(
+                        prov["files"][dotdot_fid]["sha256"], alias_sha
+                    )
+
+                    # Recheck integration + Step 4 shared dependency failure attachment
+                    step4_perm = PermissionError(
+                        errno.EACCES,
+                        "synthetic Step 4 support_dir PermissionError",
+                        str(support_dir),
+                    )
+
+                    def fail_support_in_step4(
+                        dir_path_str: str,
+                        *,
+                        require_no_symlink_ancestors: bool = False,
+                    ):
+                        if (
+                            recheck_track["files_done"]
+                            and str(dir_path_str) == str(support_dir)
+                        ):
+                            raise ValueError(
+                                f"Cannot lstat directory {dir_path_str!r} (PermissionError): {step4_perm}"
+                            ) from step4_perm
+                        return real_dir_obs(
+                            dir_path_str,
+                            require_no_symlink_ancestors=require_no_symlink_ancestors,
+                        )
+
+                    reset_run_state()
+                    with (
+                        mock.patch(
+                            "refmac_diagnostic_profile._observe_regular_file_pin",
+                            side_effect=observe_pin_alias,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.open",
+                            side_effect=open_alias,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.fdopen",
+                            side_effect=fdopen_alias,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.fstat",
+                            side_effect=fstat_alias,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.lstat",
+                            side_effect=lstat_alias,
+                        ),
+                    ):
+                        priv_recheck = _reobserve_outer_profile_state(state)
+                    self.assertTrue(run_state["injected"])
+                    self.assertGreaterEqual(int(run_state["captured_fd"]), 0)  # type: ignore[arg-type]
+                    with self.assertRaises(OSError) as priv_ebadf:
+                        real_fstat(int(run_state["captured_fd"]))  # type: ignore[arg-type]
+                    self.assertEqual(priv_ebadf.exception.errno, errno.EBADF)
+
+                    self.assertFalse(priv_recheck.verified)
+                    self.assertNotIn(direct_fid, priv_recheck.partial_files)
+                    self.assertNotIn(dotdot_fid, priv_recheck.partial_files)
+                    self.assertIsInstance(
+                        priv_recheck.file_observations[direct_fid],
+                        FileObservation,
+                    )
+                    self.assertTrue(
+                        priv_recheck.file_observations[direct_fid].verified
+                    )
+                    self.assertIsInstance(
+                        priv_recheck.file_observations[dotdot_fid],
+                        FileObservation,
+                    )
+                    self.assertTrue(
+                        priv_recheck.file_observations[dotdot_fid].verified
+                    )
+                    self.assertIn(alias_fid, priv_recheck.partial_files)
+                    self.assertIs(
+                        priv_recheck.file_observations[alias_fid],
+                        priv_recheck.partial_files[alias_fid],
+                    )
+                    self.assertIs(
+                        priv_recheck.file_causes[alias_fid], injected_exc
+                    )
+                    self.assertTrue(
+                        priv_recheck.partial_files[alias_fid].observed_eof
+                    )
+
+                    # 1a. Public recheck EOF-only run (without Step 4 shared-dependency injection)
+                    reset_run_state()
+                    eof_only_causes: list[Exception | None] = []
+                    with (
+                        mock.patch(
+                            "refmac_diagnostic_profile._observe_regular_file_pin",
+                            side_effect=observe_pin_alias,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.open",
+                            side_effect=open_alias,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.fdopen",
+                            side_effect=fdopen_alias,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.fstat",
+                            side_effect=fstat_alias,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.lstat",
+                            side_effect=lstat_alias,
+                        ),
+                    ):
+                        eof_only_report = recheck_profile(
+                            validated, mutation_causes_out=eof_only_causes
+                        )
+                    self.assertTrue(run_state["injected"])
+                    self.assertGreaterEqual(int(run_state["captured_fd"]), 0)  # type: ignore[arg-type]
+                    with self.assertRaises(OSError) as eof_only_ebadf:
+                        real_fstat(int(run_state["captured_fd"]))  # type: ignore[arg-type]
+                    self.assertEqual(
+                        eof_only_ebadf.exception.errno, errno.EBADF
+                    )
+                    self.assertFalse(eof_only_report["verified"])
+                    self.assertTrue(
+                        eof_only_report["files"][direct_fid][
+                            "matches_baseline"
+                        ]
+                    )
+                    self.assertEqual(
+                        eof_only_report["files"][direct_fid]["errors"], []
+                    )
+                    self.assertEqual(
+                        eof_only_report["files"][direct_fid]["observed"][
+                            "sha256"
+                        ],
+                        alias_sha,
+                    )
+                    self.assertTrue(
+                        eof_only_report["files"][direct_fid]["observed"][
+                            "verified"
+                        ]
+                    )
+                    self.assertTrue(
+                        eof_only_report["files"][dotdot_fid][
+                            "matches_baseline"
+                        ]
+                    )
+                    self.assertEqual(
+                        eof_only_report["files"][dotdot_fid]["errors"], []
+                    )
+                    self.assertEqual(
+                        eof_only_report["files"][dotdot_fid]["observed"][
+                            "sha256"
+                        ],
+                        alias_sha,
+                    )
+                    self.assertTrue(
+                        eof_only_report["files"][dotdot_fid]["observed"][
+                            "verified"
+                        ]
+                    )
+                    eof_only_frow = eof_only_report["files"][alias_fid]
+                    self.assertFalse(eof_only_frow["matches_baseline"])
+                    self.assertTrue(eof_only_frow["observed"]["observed_eof"])
+                    self.assertEqual(
+                        eof_only_frow["observed"]["observed_eof_sha256"],
+                        alias_sha,
+                    )
+                    self.assertIsNone(eof_only_frow["observed"]["sha256"])
+                    self.assertIsNone(eof_only_frow["observed"]["size_bytes"])
+                    self.assertEqual(len(eof_only_frow["errors"]), 1)
+                    self.assertEqual(len(eof_only_report["mutations"]), 1)
+                    self.assertEqual(
+                        eof_only_report["mutations"][0]["key"],
+                        f"profile:file:{alias_fid}",
+                    )
+                    self.assertEqual(len(eof_only_causes), 1)
+                    self.assertIs(eof_only_causes[0], injected_exc)
+
+                    # 1b. Combined Step 4 shared-dependency run (alias_fid post-EOF failure + support_dir Step 4 failure)
+                    reset_run_state()
+                    recheck_causes: list[Exception | None] = []
+                    with (
+                        mock.patch(
+                            "refmac_diagnostic_profile._observe_regular_file_pin",
+                            side_effect=observe_pin_alias,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.open",
+                            side_effect=open_alias,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.fdopen",
+                            side_effect=fdopen_alias,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.fstat",
+                            side_effect=fstat_alias,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.lstat",
+                            side_effect=lstat_alias,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile._observe_directory_identity",
+                            side_effect=fail_support_in_step4,
+                        ),
+                    ):
+                        pub_report = recheck_profile(
+                            validated, mutation_causes_out=recheck_causes
+                        )
+                    self.assertTrue(run_state["injected"])
+                    self.assertGreaterEqual(int(run_state["captured_fd"]), 0)  # type: ignore[arg-type]
+                    with self.assertRaises(OSError) as pub_ebadf:
+                        real_fstat(int(run_state["captured_fd"]))  # type: ignore[arg-type]
+                    self.assertEqual(pub_ebadf.exception.errno, errno.EBADF)
+                    self.assertFalse(pub_report["verified"])
+                    for other_fid in (direct_fid, dotdot_fid):
+                        other_row = pub_report["files"][other_fid]
+                        self.assertFalse(other_row["matches_baseline"])
+                        self.assertEqual(
+                            other_row["observed"]["resolved_path"],
+                            alias_resolved,
+                        )
+                        self.assertEqual(
+                            other_row["observed"]["sha256"], alias_sha
+                        )
+                        self.assertEqual(
+                            other_row["observed"]["size_bytes"],
+                            len(alias_bytes),
+                        )
+                        self.assertFalse(
+                            other_row["observed"]["dependencies_complete"]
+                        )
+                        self.assertFalse(other_row["observed"]["verified"])
+                        self.assertEqual(len(other_row["errors"]), 1)
+                        self.assertEqual(
+                            other_row["errors"][0]["errno"], errno.EACCES
+                        )
+                        other_muts = [
+                            (idx, m)
+                            for idx, m in enumerate(pub_report["mutations"])
+                            if m["key"] == f"profile:file:{other_fid}"
+                        ]
+                        self.assertEqual(len(other_muts), 1)
+                        self.assertIs(
+                            recheck_causes[other_muts[0][0]], step4_perm
+                        )
+                    frow = pub_report["files"][alias_fid]
+                    self.assertFalse(frow["matches_baseline"])
+                    self.assertTrue(frow["observed"]["observed_eof"])
+                    self.assertEqual(
+                        frow["observed"]["observed_eof_sha256"], alias_sha
+                    )
+                    self.assertEqual(len(frow["errors"]), 2)
+                    alias_muts = [
+                        (idx, m)
+                        for idx, m in enumerate(pub_report["mutations"])
+                        if m["key"] == f"profile:file:{alias_fid}"
+                    ]
+                    self.assertEqual(len(alias_muts), 2)
+                    self.assertIs(recheck_causes[alias_muts[0][0]], injected_exc)
+                    self.assertIs(recheck_causes[alias_muts[1][0]], step4_perm)
+
+            # 2. Manifest owner post-EOF failure prevents JSON parsing and retains post-EOF observation
+            real_stream_obs = profile_mod._stream_observe_regular_file
+            manifest_resolved = str(manifest_path.resolve(strict=True))
+            manifest_bytes = manifest_path.read_bytes()
+            manifest_sha = _sha256_bytes(manifest_bytes)
+            m_end_eio = OSError(
+                errno.EIO, "synthetic #1168 manifest end_fstat EIO"
+            )
+            m_state: dict[str, object] = {
+                "active_lexical": None,
+                "owned_fd": -1,
+                "captured_fd": -1,
+                "owned_fstats": 0,
+                "observed_eof_on_owned_fd": False,
+                "injected": False,
+            }
+
+            def stream_obs_m(path, *a, **kw):
+                prev_lex = m_state["active_lexical"]
+                path_str = str(path)
+                m_state["active_lexical"] = path_str
+                try:
+                    return real_stream_obs(path, *a, **kw)
+                finally:
+                    if path_str == str(manifest_path):
+                        m_state["owned_fd"] = -1
+                        m_state["owned_fstats"] = 0
+                        m_state["observed_eof_on_owned_fd"] = False
+                    m_state["active_lexical"] = prev_lex
+
+            def open_m(path, flags, *a, **kw):
+                fd = real_open(path, flags, *a, **kw)
+                if (
+                    m_state["active_lexical"] == str(manifest_path)
+                    and not m_state["injected"]
+                    and str(path) == manifest_resolved
+                ):
+                    m_state["owned_fd"] = fd
+                    m_state["captured_fd"] = fd
+                    m_state["owned_fstats"] = 0
+                    m_state["observed_eof_on_owned_fd"] = False
+                return fd
+
+            def fdopen_m(fd, mode="rb", *a, **kw):
+                handle = real_fdopen(fd, mode, *a, **kw)
+                if (
+                    m_state["active_lexical"] == str(manifest_path)
+                    and fd == m_state["owned_fd"]
+                ):
+                    orig_read = handle.read
+
+                    def read_track_m_eof(n=-1):
+                        chunk = orig_read(n)
+                        if chunk == b"":
+                            m_state["observed_eof_on_owned_fd"] = True
+                        return chunk
+
+                    handle.read = read_track_m_eof  # type: ignore[method-assign]
+                return handle
+
+            def fstat_m(fd: int):
+                if (
+                    m_state["active_lexical"] == str(manifest_path)
+                    and fd == m_state["owned_fd"]
+                ):
+                    m_state["owned_fstats"] = (
+                        int(m_state["owned_fstats"]) + 1  # type: ignore[arg-type]
+                    )
+                    if m_state["owned_fstats"] == 2:
+                        self.assertTrue(m_state["observed_eof_on_owned_fd"])
+                        m_state["injected"] = True
+                        raise m_end_eio
+                return real_fstat(fd)
+
+            with (
+                mock.patch(
+                    "refmac_diagnostic_profile._stream_observe_regular_file",
+                    side_effect=stream_obs_m,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.open", side_effect=open_m
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.fdopen", side_effect=fdopen_m
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.fstat", side_effect=fstat_m
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile._parse_verified_json_bytes",
+                    side_effect=AssertionError("must not parse JSON"),
+                ) as mocked_parse,
+                mock.patch(
+                    "refmac_diagnostic_profile._validate_outer_manifest_shape",
+                    side_effect=AssertionError("must not validate shape"),
+                ) as mocked_shape,
+                mock.patch(
+                    "refmac_diagnostic_profile._observe_controlled_root",
+                    side_effect=AssertionError("must not inspect roots"),
+                ) as mocked_root,
+            ):
+                with self.assertRaises(ProfileValidationError) as m_ctx:
+                    validate_profile(
+                        profile, installed_record, ccp4_env, ev_root
+                    )
+                mocked_parse.assert_not_called()
+                mocked_shape.assert_not_called()
+                mocked_root.assert_not_called()
+            self.assertTrue(m_state["injected"])
+            self.assertGreaterEqual(int(m_state["captured_fd"]), 0)  # type: ignore[arg-type]
+            with self.assertRaises(OSError) as m_ebadf:
+                real_fstat(int(m_state["captured_fd"]))  # type: ignore[arg-type]
+            self.assertEqual(m_ebadf.exception.errno, errno.EBADF)
+
+            m_err = m_ctx.exception
+            self.assertEqual(m_err.failed_check, "manifest_pin")
+            self.assertIs(m_err.cause_exception, m_end_eio)
+            self.assertEqual(len(m_err.files), 0)
+            self.assertEqual(len(m_err.roots), 0)
+            assert isinstance(
+                m_err.manifest_identity, PartialFileReadObservation
+            )
+            self.assertTrue(m_err.manifest_identity.observed_eof)
+            self.assertEqual(
+                m_err.manifest_identity.streamed_size_bytes, len(manifest_bytes)
+            )
+            self.assertEqual(
+                m_err.manifest_identity.observed_eof_sha256, manifest_sha
+            )
+            self.assertIsNone(m_err.manifest_identity.end_fstat)
+            self.assertEqual(m_err.manifest_identity.failure_phase, "end_fstat")
+            self.assertIsNone(m_err.manifest_identity.sha256)
+            self.assertIsNone(m_err.manifest_identity.size_bytes)
+
+    def test_task990_post_eof_observation_contextual_dependency_conflict_copy(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fx = _build_synthetic_outer_profile_fixture(Path(tmpdir))
+            root = fx["root"]
+            assert isinstance(root, Path)
+            alias_symlink = fx["alias_symlink"]
+            assert isinstance(alias_symlink, Path)
+            installed_record = fx["installed_record"]
+            assert isinstance(installed_record, dict)
+            ccp4_env = fx["ccp4_env"]
+            assert isinstance(ccp4_env, dict)
+            ev_root = fx["evidence_root"]
+            assert isinstance(ev_root, Path)
+            payload = copy.deepcopy(fx["manifest_payload"])
+            assert isinstance(payload, dict)
+
+            first_fid = next(
+                fid
+                for fid, row in payload["files"].items()  # type: ignore[union-attr]
+                if row["path"] == str(alias_symlink)
+            )
+            second_fid = "zz_second_shared_symlink_post_eof"
+            second_path = f"{root}/support/bin/../python-alias"
+            payload["files"][second_fid] = (  # type: ignore[index]
+                _observe_regular_file_pin(second_path).to_manifest_row()
+            )
+            payload["roles"]["qc_evidence"] = sorted(  # type: ignore[index]
+                [*payload["roles"]["qc_evidence"], second_fid]  # type: ignore[index]
+            )
+            profile = _rewrite_manifest_and_profile(fx, payload)
+
+            target_resolved = str(alias_symlink.resolve(strict=True))
+            target_bytes = Path(target_resolved).read_bytes()
+            target_sha = _sha256_bytes(target_bytes)
+            park_link = alias_symlink.with_name("python-alias.post-eof-old")
+
+            real_deps = profile_mod._collect_file_dependencies
+            real_observe = profile_mod._observe_regular_file_pin
+            real_open = os.open
+            real_fstat = os.fstat
+            real_lstat = os.lstat
+
+            armed: list[bool] = []
+            inodes: list[int] = []
+            state_box = {
+                "owned_fd": -1,
+                "owned_fstats": 0,
+                "eof_fstat_done": False,
+                "fired": False,
+            }
+            lookup_eio = OSError(
+                errno.EIO,
+                "synthetic post-EOF final_kernel_lookup EIO on second shared-symlink owner",
+            )
+
+            def deps_replace_link(file_obs, **kw):
+                res = real_deps(file_obs, **kw)
+                if file_obs.path == str(alias_symlink):
+                    inodes.append(real_lstat(alias_symlink).st_ino)
+                    alias_symlink.rename(park_link)
+                    alias_symlink.symlink_to("collection-python")
+                    inodes.append(real_lstat(alias_symlink).st_ino)
+                return res
+
+            def observe_track_second(path, *a, **kw):
+                if path != second_path:
+                    return real_observe(path, *a, **kw)
+                armed.append(True)
+                try:
+                    return real_observe(path, *a, **kw)
+                finally:
+                    armed.pop()
+
+            def open_track_second(path, flags, *a, **kw):
+                fd = real_open(path, flags, *a, **kw)
+                if armed and str(path) == target_resolved:
+                    state_box["owned_fd"] = fd
+                    state_box["owned_fstats"] = 0
+                return fd
+
+            def fstat_track_second(fd: int):
+                res = real_fstat(fd)
+                if armed and fd == state_box["owned_fd"]:
+                    state_box["owned_fstats"] += 1
+                    if state_box["owned_fstats"] == 2:
+                        state_box["eof_fstat_done"] = True
+                return res
+
+            def lstat_fail_post_eof_second(path, *a, **kw):
+                if (
+                    armed
+                    and state_box["eof_fstat_done"]
+                    and not state_box["fired"]
+                    and str(path) == second_path
+                ):
+                    state_box["fired"] = True
+                    raise lookup_eio
+                return real_lstat(path, *a, **kw)
+
+            with (
+                mock.patch(
+                    "refmac_diagnostic_profile._collect_file_dependencies",
+                    side_effect=deps_replace_link,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile._observe_regular_file_pin",
+                    side_effect=observe_track_second,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.open",
+                    side_effect=open_track_second,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.fstat",
+                    side_effect=fstat_track_second,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.lstat",
+                    side_effect=lstat_fail_post_eof_second,
+                ),
+            ):
+                with self.assertRaises(ProfileValidationError) as fail_ctx:
+                    validate_profile(
+                        profile, installed_record, ccp4_env, ev_root
+                    )
+
+            self.assertTrue(state_box["fired"])
+            self.assertEqual(len(inodes), 2)
+            self.assertNotEqual(inodes[0], inodes[1])
+
+            failure = fail_ctx.exception
+            self.assertIs(failure.cause_exception, lookup_eio)
+            fobs_first = failure.files[first_fid]
+            self.assertIsInstance(fobs_first, FileObservation)
+            fobs_second = failure.files[second_fid]
+            assert isinstance(fobs_second, PartialFileReadObservation)
+
+            # Contextual copy allocated by _build_partial_file_observation preserves all post-EOF fields
+            # while marking dependencies_complete=False and retaining both errors.
+            self.assertFalse(fobs_second.dependencies_complete)
+            self.assertFalse(fobs_second.verified)
+            self.assertFalse(fobs_second.read_complete)
+            self.assertTrue(fobs_second.observed_eof)
+            self.assertEqual(
+                fobs_second.streamed_size_bytes, len(target_bytes)
+            )
+            self.assertEqual(fobs_second.observed_stream_sha256, target_sha)
+            self.assertEqual(fobs_second.observed_eof_sha256, target_sha)
+            self.assertIsNotNone(fobs_second.initial_fstat)
+            self.assertIsNotNone(fobs_second.end_fstat)
+            self.assertEqual(fobs_second.failure_phase, "final_kernel_lookup")
+            self.assertIsNotNone(fobs_second.post_read_observation)
+            self.assertEqual(len(fobs_second.errors), 2)
+            self.assertIn(
+                "Kernel path lookup failed", fobs_second.errors[0]
+            )
+            self.assertIn(
+                "Symlink identity changed during observation",
+                fobs_second.errors[1],
+            )
+
+    def test_task1023_post_eof_kernel_lookup_nonregular_producer(self) -> None:
+        real_fdopen = os.fdopen
+        real_fstat = os.fstat
+        real_lstat = os.lstat
+        real_stat = os.stat
+        payload = b"owned completed stream\n"
+        digest = _sha256_bytes(payload)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir).resolve()
+            for case in ("final_directory", "final_fifo"):
+                with self.subTest(kernel_nonregular_case=case):
+                    r = base_dir / case
+                    r.mkdir()
+                    p = r / "input.bin"
+                    p.write_bytes(payload)
+                    initial = real_lstat(p)
+                    state: dict[str, object] = {
+                        "eof": False,
+                        "fd": -1,
+                        "mutated": False,
+                        "bytes_read": 0,
+                        "facts": [],
+                    }
+                    stream_hash = hashlib.sha256()
+
+                    def mutate_target() -> None:
+                        self.assertFalse(state["mutated"])
+                        p.rename(r / "original.bin")
+                        if case == "final_directory":
+                            p.mkdir()
+                        else:
+                            os.mkfifo(p)
+                        state["mutated"] = True
+
+                    def fdopen_hook(fd: int, *a, **kw):
+                        state["fd"] = fd
+                        handle = real_fdopen(fd, *a, **kw)
+                        orig_read = handle.read
+
+                        def read_hook(n: int = -1) -> bytes:
+                            b = orig_read(n)
+                            state["bytes_read"] = int(state["bytes_read"]) + len(b)  # type: ignore[arg-type]
+                            stream_hash.update(b)
+                            if not b:
+                                state["eof"] = True
+                                if not state["mutated"]:
+                                    mutate_target()
+                            return b
+
+                        handle.read = read_hook  # type: ignore[method-assign]
+                        return handle
+
+                    def remember(stage_kind: str, path, s: os.stat_result):
+                        if state["eof"] and state["mutated"] and str(path) == str(p):
+                            facts_list = state["facts"]
+                            assert isinstance(facts_list, list)
+                            facts_list.append(
+                                {
+                                    "stage": stage_kind,
+                                    "dev": int(s.st_dev),
+                                    "ino": int(s.st_ino),
+                                    "file_type": stat.S_IFMT(s.st_mode),
+                                    "mode": int(s.st_mode),
+                                    "uid": int(s.st_uid),
+                                    "gid": int(s.st_gid),
+                                    "size": int(s.st_size),
+                                }
+                            )
+                        return s
+
+                    def lstat_hook(path, *a, **kw):
+                        return remember(
+                            "lstat", path, real_lstat(path, *a, **kw)
+                        )
+
+                    def stat_hook(path, *a, **kw):
+                        return remember("stat", path, real_stat(path, *a, **kw))
+
+                    with (
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.fdopen",
+                            side_effect=fdopen_hook,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.lstat",
+                            side_effect=lstat_hook,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.stat",
+                            side_effect=stat_hook,
+                        ),
+                    ):
+                        with self.assertRaises(_PartialFileReadError) as ctx:
+                            profile_mod._stream_observe_regular_file(
+                                str(p), retain_bytes=True, chunk_size=7
+                            )
+
+                    self.assertTrue(state["eof"])
+                    self.assertTrue(state["mutated"])
+                    self.assertEqual(state["bytes_read"], len(payload))
+                    self.assertEqual(stream_hash.hexdigest(), digest)
+                    fd_val = int(state["fd"])  # type: ignore[arg-type]
+                    self.assertGreaterEqual(fd_val, 0)
+                    with self.assertRaises(OSError) as ebadf_ctx:
+                        real_fstat(fd_val)
+                    self.assertEqual(ebadf_ctx.exception.errno, errno.EBADF)
+
+                    err = ctx.exception
+                    ob = err.observation
+                    self.assertIs(type(ob), PartialFileReadObservation)
+                    self.assertIsNone(ob.sha256)
+                    self.assertIsNone(ob.size_bytes)
+                    self.assertFalse(ob.verified)
+                    self.assertFalse(ob.read_complete)
+                    self.assertTrue(ob.observed_eof)
+                    post = ob.post_read_observation
+                    assert post is not None
+                    self.assertTrue(post.observed_eof)
+                    self.assertEqual(ob.streamed_size_bytes, len(payload))
+                    self.assertEqual(post.streamed_size_bytes, len(payload))
+                    self.assertEqual(ob.observed_stream_sha256, digest)
+                    self.assertEqual(ob.observed_eof_sha256, digest)
+                    self.assertEqual(post.observed_stream_sha256, digest)
+                    self.assertEqual(post.observed_eof_sha256, digest)
+                    self.assertEqual(ob.failure_phase, "final_kernel_lookup")
+                    self.assertEqual(post.failure_phase, "final_kernel_lookup")
+                    assert post.initial_fstat is not None
+                    assert post.end_fstat is not None
+                    self.assertEqual(
+                        post.initial_fstat.ino, int(initial.st_ino)
+                    )
+                    self.assertEqual(post.end_fstat.ino, int(initial.st_ino))
+                    self.assertEqual(
+                        post.initial_fstat.dev, int(initial.st_dev)
+                    )
+                    self.assertEqual(post.end_fstat.dev, int(initial.st_dev))
+
+                    facts_list = state["facts"]
+                    assert isinstance(facts_list, list)
+                    self.assertEqual(len(facts_list), 2)
+                    self.assertEqual(
+                        [f["stage"] for f in facts_list], ["lstat", "stat"]
+                    )
+                    expected_kind = (
+                        "directory" if case == "final_directory" else "fifo"
+                    )
+                    for observed_snap, actual_fact in zip(
+                        (post.final_lexical_lstat, post.final_lexical_stat),
+                        facts_list,
+                    ):
+                        assert observed_snap is not None
+                        self.assertNotEqual(
+                            observed_snap.ino, int(initial.st_ino)
+                        )
+                        self.assertEqual(
+                            (
+                                observed_snap.dev,
+                                observed_snap.ino,
+                                observed_snap.mode,
+                                observed_snap.uid,
+                                observed_snap.gid,
+                                observed_snap.size_bytes,
+                                observed_snap.file_type,
+                                observed_snap.raw_mode,
+                            ),
+                            (
+                                actual_fact["dev"],
+                                actual_fact["ino"],
+                                stat.S_IMODE(actual_fact["mode"]),
+                                actual_fact["uid"],
+                                actual_fact["gid"],
+                                actual_fact["size"],
+                                actual_fact["file_type"],
+                                actual_fact["mode"],
+                            ),
+                        )
+                        self.assertEqual(observed_snap.kind, expected_kind)
+                        self.assertFalse(observed_snap.is_regular)
+                        self.assertFalse(observed_snap.is_symlink)
+                        self.assertEqual(
+                            observed_snap.is_directory,
+                            case == "final_directory",
+                        )
+                        self.assertEqual(
+                            observed_snap.is_fifo, case == "final_fifo"
+                        )
+
+                    self.assertIsNone(post.final_traversal_resolved_path)
+                    self.assertIsNone(post.final_traversal_target_lstat)
+                    self.assertIsNone(post.final_traversal_observation)
+                    self.assertIsNone(post.final_resolved_path)
+                    self.assertIsNone(post.final_resolved_target_lstat)
+                    self.assertIsNone(post.final_resolution_observation)
+
+                    with (
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.stat",
+                            side_effect=AssertionError("stat forbidden"),
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.lstat",
+                            side_effect=AssertionError("lstat forbidden"),
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.open",
+                            side_effect=AssertionError("open forbidden"),
+                        ),
+                    ):
+                        orig_dict = ob.to_dict()
+                        mut_dict = ob.to_dict()
+                        mut_dict["post_read_observation"][
+                            "final_lexical_lstat"
+                        ]["ino"] = -1
+                        self.assertEqual(ob.to_dict(), orig_dict)
+
+                    # Pre-open exclusion control: non-regular path before open raises ValueError, not _PartialFileReadError
+                    with self.assertRaises(ValueError) as pre_open_ctx:
+                        profile_mod._stream_observe_regular_file(str(p))
+                    self.assertNotIsInstance(
+                        pre_open_ctx.exception, _PartialFileReadError
+                    )
+
+    def test_task1023_post_eof_target_resolution_stage_producer(self) -> None:
+        real_fdopen = os.fdopen
+        real_fstat = os.fstat
+        real_lstat = os.lstat
+        real_path_resolve = Path.resolve
+        real_resolve = profile_mod._resolve_regular_target_strict
+        real_traverse = profile_mod._traverse_path_components
+        payload = b"owned resolution completed stream\n"
+        digest = _sha256_bytes(payload)
+
+        def stat_dict(st: os.stat_result) -> dict[str, int]:
+            return {
+                "dev": int(st.st_dev),
+                "ino": int(st.st_ino),
+                "raw_mode": int(st.st_mode),
+                "mode": int(stat.S_IMODE(st.st_mode)),
+                "file_type": int(stat.S_IFMT(st.st_mode)),
+                "uid": int(st.st_uid),
+                "gid": int(st.st_gid),
+                "size_bytes": int(st.st_size),
+            }
+
+        def check_stat(ob, actual: dict[str, int]) -> None:
+            self.assertIsNotNone(ob)
+            self.assertEqual({k: getattr(ob, k) for k in actual}, actual)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir).resolve()
+            for case in (
+                "ancestor_eio",
+                "final_target_symlink",
+                "initial_component_symlink",
+                "resolved_root_directory",
+            ):
+                with self.subTest(resolution_case=case):
+                    root = (base_dir / case).resolve()
+                    root.mkdir()
+                    p = root / "input.bin"
+                    p.write_bytes(payload)
+                    initial = real_lstat(p)
+                    injected = OSError(
+                        errno.EIO, "owned post-EOF ancestor lstat failure"
+                    )
+                    state: dict[str, object] = {
+                        "eof": False,
+                        "fd": -1,
+                        "in_resolve": False,
+                        "in_path_resolve": False,
+                        "target_calls": 0,
+                        "events": [],
+                        "path_resolve_events": [],
+                        "path_resolve_returns": [],
+                        "traversal_returns": [],
+                        "failed_path": None,
+                        "bytes_read": 0,
+                        "mutated": False,
+                        "resolver_error": None,
+                    }
+                    stream_hash = hashlib.sha256()
+
+                    def fdopen_hook(fd: int, *a, **kw):
+                        state["fd"] = fd
+                        handle = real_fdopen(fd, *a, **kw)
+                        orig_read = handle.read
+
+                        def read_hook(n: int = -1) -> bytes:
+                            b = orig_read(n)
+                            stream_hash.update(b)
+                            state["bytes_read"] = int(state["bytes_read"]) + len(b)  # type: ignore[arg-type]
+                            if not b:
+                                state["eof"] = True
+                            return b
+
+                        handle.read = read_hook  # type: ignore[method-assign]
+                        return handle
+
+                    def path_resolve_hook(path_obj: Path, *a, **kw):
+                        prev = state["in_path_resolve"]
+                        state["in_path_resolve"] = True
+                        if (
+                            state["eof"]
+                            and state["in_resolve"]
+                            and case == "resolved_root_directory"
+                        ):
+                            self.assertFalse(state["mutated"])
+                            p.rename(root / "original.bin")
+                            p.symlink_to("/")
+                            state["mutated"] = True
+                        try:
+                            res_path = real_path_resolve(path_obj, *a, **kw)
+                            if state["eof"] and state["in_resolve"]:
+                                self.assertIs(kw.get("strict"), True)
+                                pr_rets = state["path_resolve_returns"]
+                                assert isinstance(pr_rets, list)
+                                pr_rets.append(str(res_path))
+                            return res_path
+                        finally:
+                            state["in_path_resolve"] = prev
+
+                    def lstat_hook(path, *a, **kw):
+                        explicit = bool(
+                            state["eof"]
+                            and state["in_resolve"]
+                            and not state["in_path_resolve"]
+                        )
+                        if explicit:
+                            if str(path) == str(p):
+                                state["target_calls"] = (
+                                    int(state["target_calls"]) + 1  # type: ignore[arg-type]
+                                )
+                                if (
+                                    case == "ancestor_eio"
+                                    and state["target_calls"] == 1
+                                ):
+                                    p.rename(root / "original.bin")
+                                    p.write_bytes(payload)
+                                    state["mutated"] = True
+                                wanted = (
+                                    1
+                                    if case == "initial_component_symlink"
+                                    else 2
+                                )
+                                if (
+                                    case.endswith("symlink")
+                                    and state["target_calls"] == wanted
+                                ):
+                                    self.assertFalse(state["mutated"])
+                                    p.rename(root / "original.bin")
+                                    p.symlink_to(root / "original.bin")
+                                    state["mutated"] = True
+                            if case == "ancestor_eio" and str(path) == str(
+                                root.parent
+                            ):
+                                self.assertEqual(state["target_calls"], 1)
+                                state["failed_path"] = str(path)
+                                raise injected
+                        s = real_lstat(path, *a, **kw)
+                        row = {
+                            "path": str(path),
+                            "stat": stat_dict(s),
+                            "target_call": state["target_calls"],
+                        }
+                        if explicit:
+                            ev_list = state["events"]
+                            assert isinstance(ev_list, list)
+                            ev_list.append(row)
+                        elif (
+                            state["eof"]
+                            and state["in_resolve"]
+                            and state["in_path_resolve"]
+                        ):
+                            pr_evs = state["path_resolve_events"]
+                            assert isinstance(pr_evs, list)
+                            pr_evs.append(row)
+                        return s
+
+                    def resolve_hook(path_str: str):
+                        prev = state["in_resolve"]
+                        state["in_resolve"] = True
+                        try:
+                            return real_resolve(path_str)
+                        except BaseException as exc:
+                            if state["eof"]:
+                                state["resolver_error"] = exc
+                            raise
+                        finally:
+                            state["in_resolve"] = prev
+
+                    def traverse_hook(path_str: str):
+                        result = real_traverse(path_str)
+                        if state["eof"]:
+                            tr_rets = state["traversal_returns"]
+                            assert isinstance(tr_rets, list)
+                            tr_rets.append(
+                                {
+                                    "path": result.resolved_path,
+                                    "stat": stat_dict(result.target_lstat),
+                                }
+                            )
+                        return result
+
+                    with (
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.fdopen",
+                            side_effect=fdopen_hook,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.lstat",
+                            side_effect=lstat_hook,
+                        ),
+                        mock.patch.object(Path, "resolve", path_resolve_hook),
+                        mock.patch.object(
+                            profile_mod,
+                            "_resolve_regular_target_strict",
+                            side_effect=resolve_hook,
+                        ),
+                        mock.patch.object(
+                            profile_mod,
+                            "_traverse_path_components",
+                            side_effect=traverse_hook,
+                        ),
+                    ):
+                        with self.assertRaises(_PartialFileReadError) as ctx:
+                            profile_mod._stream_observe_regular_file(
+                                str(p), retain_bytes=True, chunk_size=7
+                            )
+
+                    self.assertTrue(state["eof"])
+                    self.assertEqual(state["bytes_read"], len(payload))
+                    self.assertEqual(stream_hash.hexdigest(), digest)
+                    fd_val = int(state["fd"])  # type: ignore[arg-type]
+                    self.assertGreaterEqual(fd_val, 0)
+                    with self.assertRaises(OSError) as ebadf_ctx:
+                        real_fstat(fd_val)
+                    self.assertEqual(ebadf_ctx.exception.errno, errno.EBADF)
+
+                    err = ctx.exception
+                    ob = err.observation
+                    post = ob.post_read_observation
+                    assert post is not None
+                    res = post.final_resolution_observation
+                    assert res is not None
+                    self.assertIs(ob.final_resolution_observation, res)
+                    self.assertIs(err.__cause__, state["resolver_error"])
+                    self.assertIsNone(ob.sha256)
+                    self.assertIsNone(ob.size_bytes)
+                    self.assertFalse(ob.read_complete)
+                    self.assertFalse(ob.verified)
+                    self.assertTrue(ob.observed_eof)
+                    self.assertTrue(post.observed_eof)
+                    self.assertEqual(ob.observed_eof_sha256, digest)
+                    self.assertEqual(post.observed_eof_sha256, digest)
+                    self.assertEqual(ob.observed_stream_sha256, digest)
+                    self.assertEqual(post.observed_stream_sha256, digest)
+                    self.assertEqual(ob.streamed_size_bytes, len(payload))
+                    self.assertEqual(post.streamed_size_bytes, len(payload))
+                    self.assertEqual(
+                        ob.failure_phase, "final_target_resolution"
+                    )
+                    self.assertEqual(
+                        post.failure_phase, "final_target_resolution"
+                    )
+                    check_stat(post.initial_fstat, stat_dict(initial))
+                    check_stat(post.end_fstat, stat_dict(initial))
+
+                    expected_target = (
+                        "/" if case == "resolved_root_directory" else str(p)
+                    )
+                    self.assertEqual(res.lexical_path, str(p))
+                    self.assertEqual(res.resolved_path, expected_target)
+                    self.assertEqual(post.final_resolved_path, expected_target)
+                    self.assertEqual(
+                        state["path_resolve_returns"], [expected_target]
+                    )
+                    tr_rets = state["traversal_returns"]
+                    assert isinstance(tr_rets, list)
+                    self.assertEqual(len(tr_rets), 1)
+                    self.assertEqual(tr_rets[0]["path"], str(p))
+                    self.assertEqual(post.final_traversal_resolved_path, str(p))
+                    check_stat(
+                        post.final_traversal_target_lstat, tr_rets[0]["stat"]
+                    )
+
+                    events = state["events"]
+                    assert isinstance(events, list)
+                    self.assertEqual(events[0]["path"], expected_target)
+                    check_stat(res.first_target_lstat, events[0]["stat"])
+
+                    if case == "ancestor_eio":
+                        self.assertEqual(len(events), 2)
+                        self.assertEqual(
+                            [e["path"] for e in events], [str(p), str(root)]
+                        )
+                        self.assertEqual(
+                            state["failed_path"], str(root.parent)
+                        )
+                        self.assertEqual(state["target_calls"], 1)
+                        self.assertEqual(
+                            res.failed_stage, "ancestor_component_lstat"
+                        )
+                        self.assertEqual(
+                            res.failed_component_path, str(root.parent)
+                        )
+                        self.assertIsNone(res.final_target_lstat)
+                        self.assertIsNone(res.failed_component_lstat)
+                        self.assertEqual(len(res.ancestor_lstats), 1)
+                        self.assertIs(
+                            state["resolver_error"].__cause__,  # type: ignore[union-attr]
+                            injected,
+                        )
+                        self.assertIs(
+                            profile_mod._select_original_cause_exception(err),
+                            injected,
+                        )
+                        assert res.first_target_lstat is not None
+                        assert post.final_traversal_target_lstat is not None
+                        self.assertNotEqual(
+                            res.first_target_lstat.ino, int(initial.st_ino)
+                        )
+                        self.assertEqual(
+                            post.final_traversal_target_lstat.ino,
+                            int(initial.st_ino),
+                        )
+                        self.assertEqual(p.read_bytes(), payload)
+                        self.assertEqual(
+                            (root / "original.bin").read_bytes(), payload
+                        )
+                        expected_components = events
+                    elif case == "initial_component_symlink":
+                        self.assertEqual(len(events), 1)
+                        self.assertEqual(state["target_calls"], 1)
+                        self.assertTrue(state["mutated"])
+                        self.assertEqual(
+                            res.failed_stage,
+                            "initial_target_component_symlink",
+                        )
+                        self.assertEqual(res.failed_component_path, str(p))
+                        assert res.first_target_lstat is not None
+                        self.assertTrue(res.first_target_lstat.is_symlink)
+                        self.assertIsNone(res.final_target_lstat)
+                        self.assertEqual(res.ancestor_lstats, ())
+                        self.assertTrue(
+                            str(err.__cause__).startswith(
+                                "Resolved path still contains a symlink component"
+                            )
+                        )
+                        self.assertIsNone(err.__cause__.__cause__)  # type: ignore[union-attr]
+                        self.assertIs(
+                            profile_mod._select_original_cause_exception(err),
+                            state["resolver_error"],
+                        )
+                        check_stat(
+                            res.failed_component_lstat, events[0]["stat"]
+                        )
+                        expected_components = events
+                    elif case == "resolved_root_directory":
+                        self.assertTrue(state["mutated"])
+                        self.assertEqual(
+                            [e["path"] for e in events], ["/", "/"]
+                        )
+                        self.assertEqual(
+                            res.failed_stage, "final_target_not_regular"
+                        )
+                        self.assertEqual(res.failed_component_path, "/")
+                        self.assertEqual(res.ancestor_lstats, ())
+                        assert res.first_target_lstat is not None
+                        assert res.final_target_lstat is not None
+                        self.assertTrue(res.first_target_lstat.is_directory)
+                        self.assertTrue(res.final_target_lstat.is_directory)
+                        check_stat(res.final_target_lstat, events[-1]["stat"])
+                        check_stat(
+                            res.failed_component_lstat, events[-1]["stat"]
+                        )
+                        self.assertEqual(
+                            post.final_resolved_target_lstat,
+                            res.final_target_lstat,
+                        )
+                        self.assertTrue(
+                            str(err.__cause__).startswith(
+                                "Target is not a regular file:"
+                            )
+                        )
+                        self.assertIsNone(err.__cause__.__cause__)  # type: ignore[union-attr]
+                        self.assertIs(
+                            profile_mod._select_original_cause_exception(err),
+                            state["resolver_error"],
+                        )
+                        expected_components = events[:-1]
+                    else:
+                        self.assertEqual(state["target_calls"], 2)
+                        self.assertTrue(state["mutated"])
+                        self.assertEqual(
+                            [e["path"] for e in events],
+                            [str(p), *(str(a) for a in p.parents), str(p)],
+                        )
+                        self.assertEqual(
+                            res.failed_stage, "final_target_not_regular"
+                        )
+                        self.assertEqual(res.failed_component_path, str(p))
+                        check_stat(res.final_target_lstat, events[-1]["stat"])
+                        check_stat(
+                            res.failed_component_lstat, events[-1]["stat"]
+                        )
+                        assert res.final_target_lstat is not None
+                        assert res.first_target_lstat is not None
+                        self.assertTrue(res.final_target_lstat.is_symlink)
+                        self.assertTrue(res.first_target_lstat.is_regular)
+                        self.assertTrue(
+                            str(err.__cause__).startswith(
+                                "Target is not a regular file:"
+                            )
+                        )
+                        self.assertIsNone(err.__cause__.__cause__)  # type: ignore[union-attr]
+                        self.assertIs(
+                            profile_mod._select_original_cause_exception(err),
+                            state["resolver_error"],
+                        )
+                        self.assertNotEqual(
+                            res.final_target_lstat.ino,
+                            res.first_target_lstat.ino,
+                        )
+                        self.assertEqual(
+                            post.final_resolved_target_lstat,
+                            res.final_target_lstat,
+                        )
+                        expected_components = events[:-1]
+
+                    self.assertEqual(
+                        len(res.component_observations),
+                        len(expected_components),
+                    )
+                    for idx, (comp, ev) in enumerate(
+                        zip(res.component_observations, expected_components)
+                    ):
+                        self.assertEqual(comp.path, ev["path"])
+                        self.assertIs(comp.is_target, idx == 0)
+                        check_stat(comp.lstat, ev["stat"])
+                    self.assertEqual(
+                        res.ancestor_lstats, res.component_observations[1:]
+                    )
+                    if case not in (
+                        "final_target_symlink",
+                        "resolved_root_directory",
+                    ):
+                        self.assertIsNone(post.final_resolved_target_lstat)
+
+                    with self.assertRaises(FrozenInstanceError):
+                        res.failed_stage = "fabricated"  # type: ignore[misc]
+
+                    with (
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.stat",
+                            side_effect=AssertionError("stat forbidden"),
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.lstat",
+                            side_effect=AssertionError("lstat forbidden"),
+                        ),
+                        mock.patch.object(
+                            Path,
+                            "resolve",
+                            side_effect=AssertionError("resolve forbidden"),
+                        ),
+                    ):
+                        original = ob.to_dict()
+                        detached = ob.to_dict()
+                        detached["post_read_observation"][
+                            "final_resolution_observation"
+                        ]["component_observations"][0]["lstat"]["ino"] = -1
+                        self.assertEqual(ob.to_dict(), original)
+                        rd = original["post_read_observation"][
+                            "final_resolution_observation"
+                        ]
+                        self.assertEqual(
+                            original["final_resolution_observation"], rd
+                        )
+                        self.assertEqual(rd["lexical_path"], str(p))
+                        self.assertEqual(
+                            rd["resolved_path"], expected_target
+                        )
+                        self.assertEqual(rd["failed_stage"], res.failed_stage)
+                        self.assertEqual(
+                            rd["failed_component_path"],
+                            res.failed_component_path,
+                        )
+                        contextual = profile_mod._build_partial_file_observation(
+                            ob, errors=("owned contextual marker",)
+                        )
+                        self.assertIsNot(contextual, ob)
+                        self.assertIs(contextual.post_read_observation, post)
+                        self.assertIs(
+                            contextual.final_resolution_observation, res
+                        )
+                        public = ProfileValidationError(
+                            "owned projection",
+                            failed_check="owned_resolution_probe",
+                            manifest_identity=contextual,
+                            files={"owned_file": contextual},
+                            cause_exception=err,
+                        )
+                        provenance = public.to_provenance()
+                        self.assertFalse(provenance["profile_files_verified"])
+                        self.assertIsNone(provenance["selected_executable"])
+                        for row in (
+                            provenance["manifest"],
+                            provenance["files"]["owned_file"],
+                        ):
+                            self.assertEqual(
+                                row["post_read_observation"],
+                                original["post_read_observation"],
+                            )
+                            self.assertEqual(
+                                row["final_resolution_observation"], rd
+                            )
+                        if case == "ancestor_eio":
+                            self.assertIs(public.cause_exception, injected)
+                        copied = public.to_provenance()
+                        copied["files"]["owned_file"]["post_read_observation"][
+                            "final_resolution_observation"
+                        ]["component_observations"][0]["lstat"]["ino"] = -2
+                        self.assertEqual(public.to_provenance(), provenance)
+
+    def test_task1023_post_eof_opaque_and_legacy_resolution_producer(
+        self,
+    ) -> None:
+        real_resolve = profile_mod._resolve_regular_target_strict
+        real_fdopen = os.fdopen
+        real_fstat = os.fstat
+        payload = b"owned opaque resolver fixture\n"
+        digest = _sha256_bytes(payload)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir).resolve()
+            for case in (
+                "opaque_no_attributes",
+                "completed_helper_then_legacy_refusal",
+            ):
+                with self.subTest(opaque_resolution_case=case):
+                    root = base_dir / case
+                    root.mkdir()
+                    path = root / "input.bin"
+                    path.write_bytes(payload)
+                    state = {
+                        "eof": False,
+                        "fd": -1,
+                        "bytes": 0,
+                        "helper_completed": False,
+                    }
+                    injected = ValueError(
+                        "owned opaque post-EOF helper refusal"
+                    )
+
+                    def fdopen_hook(fd: int, *a, **kw):
+                        state["fd"] = fd
+                        handle = real_fdopen(fd, *a, **kw)
+                        orig_read = handle.read
+
+                        def read_hook(n: int = -1) -> bytes:
+                            b = orig_read(n)
+                            state["bytes"] = int(state["bytes"]) + len(b)
+                            if not b:
+                                state["eof"] = True
+                            return b
+
+                        handle.read = read_hook  # type: ignore[method-assign]
+                        return handle
+
+                    def resolve_hook(p_str: str):
+                        if not state["eof"]:
+                            return real_resolve(p_str)
+                        if case == "completed_helper_then_legacy_refusal":
+                            resolved, st = real_resolve(p_str)
+                            state["helper_completed"] = True
+                            injected._partial_resolved_path = resolved  # type: ignore[attr-defined]
+                            injected._partial_target_lstat = st  # type: ignore[attr-defined]
+                        raise injected
+
+                    with (
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.fdopen",
+                            side_effect=fdopen_hook,
+                        ),
+                        mock.patch.object(
+                            profile_mod,
+                            "_resolve_regular_target_strict",
+                            side_effect=resolve_hook,
+                        ),
+                    ):
+                        with self.assertRaises(_PartialFileReadError) as ctx:
+                            profile_mod._stream_observe_regular_file(
+                                str(path), retain_bytes=True, chunk_size=7
+                            )
+
+                    self.assertTrue(state["eof"])
+                    self.assertEqual(state["bytes"], len(payload))
+                    fd_val = int(state["fd"])
+                    self.assertGreaterEqual(fd_val, 0)
+                    with self.assertRaises(OSError) as ebadf_ctx:
+                        real_fstat(fd_val)
+                    self.assertEqual(ebadf_ctx.exception.errno, errno.EBADF)
+
+                    err = ctx.exception
+                    self.assertIs(err.__cause__, injected)
+                    ob = err.observation
+                    self.assertFalse(ob.verified)
+                    self.assertFalse(ob.read_complete)
+                    self.assertIsNone(ob.sha256)
+                    self.assertIsNone(ob.size_bytes)
+                    self.assertEqual(
+                        ob.failure_phase, "final_target_resolution"
+                    )
+                    self.assertTrue(ob.observed_eof)
+                    self.assertEqual(ob.observed_eof_sha256, digest)
+                    self.assertIsNone(ob.final_resolution_observation)
+                    self.assertIsNone(ob.final_resolution_failed_stage)
+                    post = ob.post_read_observation
+                    assert post is not None
+                    self.assertIsNone(post.final_resolution_observation)
+                    self.assertIsNone(post.final_resolution_failed_stage)
+                    if case == "completed_helper_then_legacy_refusal":
+                        self.assertTrue(state["helper_completed"])
+                        self.assertEqual(post.final_resolved_path, str(path))
+                        assert post.final_resolved_target_lstat is not None
+                        self.assertEqual(
+                            post.final_resolved_target_lstat.ino,
+                            int(injected._partial_target_lstat.st_ino),  # type: ignore[attr-defined]
+                        )
+                    else:
+                        self.assertFalse(state["helper_completed"])
+                        self.assertIsNone(post.final_resolved_path)
+                        self.assertIsNone(post.final_resolved_target_lstat)
+
+    def test_task1023_post_eof_resolution_entrypoint_admission_and_recheck(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fx = _build_synthetic_outer_profile_fixture(Path(tmpdir))
+            root = fx["root"]
+            assert isinstance(root, Path)
+            support_dir = root / "support"
+            installed_record = fx["installed_record"]
+            assert isinstance(installed_record, dict)
+            ccp4_env = fx["ccp4_env"]
+            assert isinstance(ccp4_env, dict)
+            ev_root = fx["evidence_root"]
+            assert isinstance(ev_root, Path)
+            alias_symlink = fx["alias_symlink"]
+            assert isinstance(alias_symlink, Path)
+            manifest_path = fx["manifest_path"]
+            assert isinstance(manifest_path, Path)
+            profile = fx["profile"]
+            assert isinstance(profile, RefmacDiagnosticProfile)
+            base_payload = fx["manifest_payload"]
+            assert isinstance(base_payload, dict)
+
+            validated = validate_profile(
+                profile, installed_record, ccp4_env, ev_root
+            )
+            state = validated._outer_state
+            assert state is not None
+
+            direct_fid = base_payload["roles"]["collection_interpreter"][0]  # type: ignore[index]
+            alias_fid = next(
+                fid
+                for fid, row in base_payload["files"].items()  # type: ignore[union-attr]
+                if row["path"] == str(alias_symlink)
+            )
+            dotdot_path_str = str(
+                support_dir / "bin" / ".." / "collection-python"
+            )
+            dotdot_fid = next(
+                fid
+                for fid, row in base_payload["files"].items()  # type: ignore[union-attr]
+                if row["path"] == dotdot_path_str
+            )
+            alias_resolved = str(alias_symlink.resolve(strict=True))
+            alias_bytes = Path(alias_resolved).read_bytes()
+            alias_sha = _sha256_bytes(alias_bytes)
+            alias_orig_ino = int(os.lstat(alias_resolved).st_ino)
+
+            real_open = os.open
+            real_fdopen = os.fdopen
+            real_fstat = os.fstat
+            real_lstat = os.lstat
+            real_path_resolve = Path.resolve
+            real_resolve = profile_mod._resolve_regular_target_strict
+            real_obs_pin = profile_mod._observe_regular_file_pin
+            real_stream_obs = profile_mod._stream_observe_regular_file
+
+            # 1. Declared-file owner (alias_fid) post-EOF resolution ancestor_component_lstat EIO
+            # across validate_profile, _reobserve_outer_profile_state, and recheck_profile
+            injected_exc = OSError(
+                errno.EIO,
+                "synthetic #1168 declared-file post-EOF resolution ancestor EIO",
+            )
+            run_state: dict[str, object] = {
+                "active_lexical": None,
+                "owned_fd": -1,
+                "captured_fd": -1,
+                "observed_eof_on_owned_fd": False,
+                "in_resolve": False,
+                "in_path_resolve": False,
+                "target_calls": 0,
+                "injected": False,
+            }
+
+            def reset_run_state() -> None:
+                run_state["active_lexical"] = None
+                run_state["owned_fd"] = -1
+                run_state["captured_fd"] = -1
+                run_state["observed_eof_on_owned_fd"] = False
+                run_state["in_resolve"] = False
+                run_state["in_path_resolve"] = False
+                run_state["target_calls"] = 0
+                run_state["injected"] = False
+
+            def observe_pin_alias(path, *a, **kw):
+                prev_lex = run_state["active_lexical"]
+                path_str = str(path)
+                run_state["active_lexical"] = path_str
+                if path_str == str(alias_symlink) and not run_state["injected"]:
+                    run_state["owned_fd"] = -1
+                    run_state["observed_eof_on_owned_fd"] = False
+                    run_state["target_calls"] = 0
+                try:
+                    return real_obs_pin(path, *a, **kw)
+                finally:
+                    if path_str == str(alias_symlink):
+                        run_state["owned_fd"] = -1
+                        run_state["observed_eof_on_owned_fd"] = False
+                        run_state["target_calls"] = 0
+                    run_state["active_lexical"] = prev_lex
+
+            def open_alias(path, flags, *a, **kw):
+                fd = real_open(path, flags, *a, **kw)
+                if (
+                    run_state["active_lexical"] == str(alias_symlink)
+                    and not run_state["injected"]
+                    and str(path) == alias_resolved
+                ):
+                    run_state["owned_fd"] = fd
+                    run_state["captured_fd"] = fd
+                    run_state["observed_eof_on_owned_fd"] = False
+                return fd
+
+            def fdopen_alias(fd: int, mode: str = "rb", *a, **kw):
+                handle = real_fdopen(fd, mode, *a, **kw)
+                if (
+                    run_state["active_lexical"] == str(alias_symlink)
+                    and fd == run_state["owned_fd"]
+                ):
+                    orig_read = handle.read
+
+                    def read_track_eof(n: int = -1) -> bytes:
+                        chunk = orig_read(n)
+                        if chunk == b"":
+                            run_state["observed_eof_on_owned_fd"] = True
+                        return chunk
+
+                    handle.read = read_track_eof  # type: ignore[method-assign]
+                return handle
+
+            def path_resolve_alias(path_obj: Path, *a, **kw):
+                prev = run_state["in_path_resolve"]
+                run_state["in_path_resolve"] = True
+                try:
+                    return real_path_resolve(path_obj, *a, **kw)
+                finally:
+                    run_state["in_path_resolve"] = prev
+
+            def resolve_alias(path_str: str):
+                prev = run_state["in_resolve"]
+                run_state["in_resolve"] = True
+                try:
+                    return real_resolve(path_str)
+                finally:
+                    run_state["in_resolve"] = prev
+
+            def lstat_alias(path, *a, **kw):
+                explicit = bool(
+                    run_state["active_lexical"] == str(alias_symlink)
+                    and run_state["observed_eof_on_owned_fd"]
+                    and run_state["in_resolve"]
+                    and not run_state["in_path_resolve"]
+                    and not run_state["injected"]
+                )
+                if explicit:
+                    if str(path) == alias_resolved:
+                        run_state["target_calls"] = (
+                            int(run_state["target_calls"]) + 1  # type: ignore[arg-type]
+                        )
+                    elif (
+                        run_state["target_calls"] == 1
+                        and str(path) == str(root)
+                    ):
+                        run_state["injected"] = True
+                        raise injected_exc
+                return real_lstat(path, *a, **kw)
+
+            reset_run_state()
+            with (
+                mock.patch(
+                    "refmac_diagnostic_profile._observe_regular_file_pin",
+                    side_effect=observe_pin_alias,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.open",
+                    side_effect=open_alias,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.fdopen",
+                    side_effect=fdopen_alias,
+                ),
+                mock.patch.object(Path, "resolve", path_resolve_alias),
+                mock.patch.object(
+                    profile_mod,
+                    "_resolve_regular_target_strict",
+                    side_effect=resolve_alias,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.lstat",
+                    side_effect=lstat_alias,
+                ),
+            ):
+                with self.assertRaises(ProfileValidationError) as val_ctx:
+                    validate_profile(
+                        profile, installed_record, ccp4_env, ev_root
+                    )
+            self.assertTrue(run_state["injected"])
+            self.assertGreaterEqual(int(run_state["captured_fd"]), 0)  # type: ignore[arg-type]
+            with self.assertRaises(OSError) as val_ebadf:
+                real_fstat(int(run_state["captured_fd"]))  # type: ignore[arg-type]
+            self.assertEqual(val_ebadf.exception.errno, errno.EBADF)
+
+            val_err = val_ctx.exception
+            self.assertEqual(
+                val_err.failed_check, "outer_profile_files_and_roots"
+            )
+            self.assertIs(val_err.cause_exception, injected_exc)
+            self.assertIsInstance(val_err.files[direct_fid], FileObservation)
+            self.assertTrue(val_err.files[direct_fid].verified)
+            self.assertIsInstance(val_err.files[dotdot_fid], FileObservation)
+            self.assertTrue(val_err.files[dotdot_fid].verified)
+
+            pobs = val_err.files[alias_fid]
+            assert isinstance(pobs, PartialFileReadObservation)
+            self.assertTrue(pobs.observed_eof)
+            self.assertEqual(pobs.observed_eof_sha256, alias_sha)
+            self.assertEqual(pobs.failure_phase, "final_target_resolution")
+            res_obs = pobs.final_resolution_observation
+            assert res_obs is not None
+            self.assertEqual(res_obs.failed_stage, "ancestor_component_lstat")
+            self.assertEqual(res_obs.lexical_path, str(alias_symlink))
+            self.assertEqual(res_obs.resolved_path, alias_resolved)
+            assert res_obs.first_target_lstat is not None
+            self.assertEqual(res_obs.first_target_lstat.ino, alias_orig_ino)
+            self.assertEqual(len(res_obs.ancestor_lstats), 1)
+            self.assertEqual(res_obs.ancestor_lstats[0].path, str(support_dir))
+            self.assertIsNone(res_obs.final_target_lstat)
+            self.assertEqual(res_obs.failed_component_path, str(root))
+            self.assertIsNone(res_obs.failed_component_lstat)
+
+            prov = val_err.to_provenance()
+            self.assertEqual(
+                prov["files"][alias_fid]["final_resolution_observation"][
+                    "failed_stage"
+                ],
+                "ancestor_component_lstat",
+            )
+            self.assertEqual(
+                prov["files"][alias_fid]["post_read_observation"][
+                    "final_resolution_observation"
+                ]["failed_component_path"],
+                str(root),
+            )
+
+            reset_run_state()
+            with (
+                mock.patch(
+                    "refmac_diagnostic_profile._observe_regular_file_pin",
+                    side_effect=observe_pin_alias,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.open",
+                    side_effect=open_alias,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.fdopen",
+                    side_effect=fdopen_alias,
+                ),
+                mock.patch.object(Path, "resolve", path_resolve_alias),
+                mock.patch.object(
+                    profile_mod,
+                    "_resolve_regular_target_strict",
+                    side_effect=resolve_alias,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.lstat",
+                    side_effect=lstat_alias,
+                ),
+            ):
+                priv_recheck = _reobserve_outer_profile_state(state)
+            self.assertTrue(run_state["injected"])
+            with self.assertRaises(OSError) as priv_ebadf:
+                real_fstat(int(run_state["captured_fd"]))  # type: ignore[arg-type]
+            self.assertEqual(priv_ebadf.exception.errno, errno.EBADF)
+            self.assertFalse(priv_recheck.verified)
+            self.assertNotIn(direct_fid, priv_recheck.partial_files)
+            self.assertNotIn(dotdot_fid, priv_recheck.partial_files)
+            self.assertIn(alias_fid, priv_recheck.partial_files)
+            self.assertIs(priv_recheck.file_causes[alias_fid], injected_exc)
+            priv_res = priv_recheck.partial_files[
+                alias_fid
+            ].final_resolution_observation
+            assert priv_res is not None
+            self.assertEqual(priv_res.failed_stage, "ancestor_component_lstat")
+            self.assertEqual(priv_res.failed_component_path, str(root))
+
+            reset_run_state()
+            pub_causes: list[Exception | None] = []
+            with (
+                mock.patch(
+                    "refmac_diagnostic_profile._observe_regular_file_pin",
+                    side_effect=observe_pin_alias,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.open",
+                    side_effect=open_alias,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.fdopen",
+                    side_effect=fdopen_alias,
+                ),
+                mock.patch.object(Path, "resolve", path_resolve_alias),
+                mock.patch.object(
+                    profile_mod,
+                    "_resolve_regular_target_strict",
+                    side_effect=resolve_alias,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.lstat",
+                    side_effect=lstat_alias,
+                ),
+            ):
+                pub_report = recheck_profile(
+                    validated, mutation_causes_out=pub_causes
+                )
+            self.assertTrue(run_state["injected"])
+            with self.assertRaises(OSError) as pub_ebadf:
+                real_fstat(int(run_state["captured_fd"]))  # type: ignore[arg-type]
+            self.assertEqual(pub_ebadf.exception.errno, errno.EBADF)
+            self.assertFalse(pub_report["verified"])
+            self.assertTrue(
+                pub_report["files"][direct_fid]["matches_baseline"]
+            )
+            self.assertEqual(pub_report["files"][direct_fid]["errors"], [])
+            self.assertTrue(
+                pub_report["files"][dotdot_fid]["matches_baseline"]
+            )
+            self.assertEqual(pub_report["files"][dotdot_fid]["errors"], [])
+            pub_frow = pub_report["files"][alias_fid]
+            self.assertFalse(pub_frow["matches_baseline"])
+            self.assertEqual(
+                pub_frow["observed"]["final_resolution_observation"][
+                    "failed_stage"
+                ],
+                "ancestor_component_lstat",
+            )
+            self.assertEqual(
+                pub_frow["observed"]["final_resolution_observation"][
+                    "failed_component_path"
+                ],
+                str(root),
+            )
+            self.assertEqual(len(pub_causes), 1)
+            self.assertIs(pub_causes[0], injected_exc)
+
+            # 2. Manifest owner (manifest_pin) post-EOF resolution final_target_not_regular
+            manifest_resolved = str(manifest_path.resolve(strict=True))
+            manifest_bytes = manifest_path.read_bytes()
+            manifest_sha = _sha256_bytes(manifest_bytes)
+            park_manifest = manifest_path.with_name(
+                "diagnostic-profile.parked.json"
+            )
+            m_state: dict[str, object] = {
+                "active_lexical": None,
+                "owned_fd": -1,
+                "captured_fd": -1,
+                "observed_eof_on_owned_fd": False,
+                "in_resolve": False,
+                "in_path_resolve": False,
+                "target_calls": 0,
+                "mutated": False,
+            }
+
+            def stream_obs_m(path, *a, **kw):
+                prev_lex = m_state["active_lexical"]
+                path_str = str(path)
+                m_state["active_lexical"] = path_str
+                try:
+                    return real_stream_obs(path, *a, **kw)
+                finally:
+                    if path_str == str(manifest_path):
+                        m_state["owned_fd"] = -1
+                        m_state["observed_eof_on_owned_fd"] = False
+                        m_state["target_calls"] = 0
+                    m_state["active_lexical"] = prev_lex
+
+            def open_m(path, flags, *a, **kw):
+                fd = real_open(path, flags, *a, **kw)
+                if (
+                    m_state["active_lexical"] == str(manifest_path)
+                    and not m_state["mutated"]
+                    and str(path) == manifest_resolved
+                ):
+                    m_state["owned_fd"] = fd
+                    m_state["captured_fd"] = fd
+                    m_state["observed_eof_on_owned_fd"] = False
+                return fd
+
+            def fdopen_m(fd: int, mode: str = "rb", *a, **kw):
+                handle = real_fdopen(fd, mode, *a, **kw)
+                if (
+                    m_state["active_lexical"] == str(manifest_path)
+                    and fd == m_state["owned_fd"]
+                ):
+                    orig_read = handle.read
+
+                    def read_track_m_eof(n: int = -1) -> bytes:
+                        chunk = orig_read(n)
+                        if chunk == b"":
+                            m_state["observed_eof_on_owned_fd"] = True
+                        return chunk
+
+                    handle.read = read_track_m_eof  # type: ignore[method-assign]
+                return handle
+
+            def path_resolve_m(path_obj: Path, *a, **kw):
+                prev = m_state["in_path_resolve"]
+                m_state["in_path_resolve"] = True
+                try:
+                    return real_path_resolve(path_obj, *a, **kw)
+                finally:
+                    m_state["in_path_resolve"] = prev
+
+            def resolve_m(path_str: str):
+                prev = m_state["in_resolve"]
+                m_state["in_resolve"] = True
+                try:
+                    return real_resolve(path_str)
+                finally:
+                    m_state["in_resolve"] = prev
+
+            def lstat_m(path, *a, **kw):
+                explicit = bool(
+                    m_state["active_lexical"] == str(manifest_path)
+                    and m_state["observed_eof_on_owned_fd"]
+                    and m_state["in_resolve"]
+                    and not m_state["in_path_resolve"]
+                )
+                if explicit and str(path) == manifest_resolved:
+                    m_state["target_calls"] = (
+                        int(m_state["target_calls"]) + 1  # type: ignore[arg-type]
+                    )
+                    if m_state["target_calls"] == 2 and not m_state["mutated"]:
+                        manifest_path.rename(park_manifest)
+                        manifest_path.symlink_to(park_manifest)
+                        m_state["mutated"] = True
+                return real_lstat(path, *a, **kw)
+
+            with (
+                mock.patch(
+                    "refmac_diagnostic_profile._stream_observe_regular_file",
+                    side_effect=stream_obs_m,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.open", side_effect=open_m
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.fdopen", side_effect=fdopen_m
+                ),
+                mock.patch.object(Path, "resolve", path_resolve_m),
+                mock.patch.object(
+                    profile_mod,
+                    "_resolve_regular_target_strict",
+                    side_effect=resolve_m,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.lstat", side_effect=lstat_m
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile._parse_verified_json_bytes",
+                    side_effect=AssertionError("must not parse JSON"),
+                ) as mocked_parse,
+                mock.patch(
+                    "refmac_diagnostic_profile._validate_outer_manifest_shape",
+                    side_effect=AssertionError("must not validate shape"),
+                ) as mocked_shape,
+                mock.patch(
+                    "refmac_diagnostic_profile._observe_controlled_root",
+                    side_effect=AssertionError("must not inspect roots"),
+                ) as mocked_root,
+            ):
+                with self.assertRaises(ProfileValidationError) as m_ctx:
+                    validate_profile(
+                        profile, installed_record, ccp4_env, ev_root
+                    )
+                mocked_parse.assert_not_called()
+                mocked_shape.assert_not_called()
+                mocked_root.assert_not_called()
+
+            self.assertTrue(m_state["mutated"])
+            with self.assertRaises(OSError) as m_ebadf:
+                real_fstat(int(m_state["captured_fd"]))  # type: ignore[arg-type]
+            self.assertEqual(m_ebadf.exception.errno, errno.EBADF)
+            m_err = m_ctx.exception
+            self.assertEqual(m_err.failed_check, "manifest_pin")
+            assert isinstance(
+                m_err.manifest_identity, PartialFileReadObservation
+            )
+            self.assertTrue(m_err.manifest_identity.observed_eof)
+            self.assertEqual(
+                m_err.manifest_identity.observed_eof_sha256, manifest_sha
+            )
+            self.assertEqual(
+                m_err.manifest_identity.failure_phase,
+                "final_target_resolution",
+            )
+            m_res = m_err.manifest_identity.final_resolution_observation
+            assert m_res is not None
+            self.assertEqual(m_res.failed_stage, "final_target_not_regular")
+            assert m_res.first_target_lstat is not None
+            assert m_res.final_target_lstat is not None
+            self.assertTrue(m_res.first_target_lstat.is_regular)
+            self.assertTrue(m_res.final_target_lstat.is_symlink)
+            self.assertEqual(
+                m_res.failed_component_lstat, m_res.final_target_lstat
+            )
+
+    def test_task1023_stat_and_resolution_carrier_invariants(self) -> None:
+        from dataclasses import replace
+
+        ObservedStatSnapshot = profile_mod.ObservedStatSnapshot
+        ResolutionComponentObservation = (
+            profile_mod.ResolutionComponentObservation
+        )
+        FinalTargetResolutionObservation = (
+            profile_mod.FinalTargetResolutionObservation
+        )
+        PostReadVerificationObservation = (
+            profile_mod.PostReadVerificationObservation
+        )
+
+        self.assertIsNone(profile_mod._stat_to_lookup_obs_or_none(None))
+        self.assertIsNone(profile_mod._stat_to_observed_stat_or_none(None))
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            (root / "regular").write_bytes(b"owned\n")
+            (root / "directory").mkdir()
+            os.mkfifo(root / "fifo")
+            (root / "symlink").symlink_to(root / "regular")
+
+            snaps: dict[str, object] = {}
+            for kind in ("regular", "directory", "fifo", "symlink"):
+                st = (root / kind).lstat()
+                ob = profile_mod._stat_to_lookup_obs_or_none(st)
+                self.assertIs(type(ob), ObservedStatSnapshot)
+                self.assertEqual(
+                    ob, profile_mod._stat_to_observed_stat_or_none(st)
+                )
+                assert ob is not None
+                snaps[kind] = ob
+                self.assertEqual(
+                    (
+                        ob.dev,
+                        ob.ino,
+                        ob.mode,
+                        ob.uid,
+                        ob.gid,
+                        ob.size_bytes,
+                    ),
+                    (
+                        int(st.st_dev),
+                        int(st.st_ino),
+                        int(stat.S_IMODE(st.st_mode)),
+                        int(st.st_uid),
+                        int(st.st_gid),
+                        int(st.st_size),
+                    ),
+                )
+                self.assertEqual(ob.file_type, stat.S_IFMT(st.st_mode))
+                self.assertEqual(ob.raw_mode, int(st.st_mode))
+                self.assertEqual(ob.kind, kind)
+                if kind in ("directory", "fifo"):
+                    with self.assertRaises(ValueError):
+                        LookupStatObservation.from_stat_result(st)
+                else:
+                    legacy = LookupStatObservation.from_stat_result(st)
+                    self.assertEqual(ob, legacy)
+                    self.assertEqual(legacy, ob)
+                    self.assertEqual(hash(ob), hash(legacy))
+                    self.assertEqual(
+                        {ob: "same-observation"}[legacy], "same-observation"
+                    )
+                with self.assertRaises(FrozenInstanceError):
+                    ob.ino = 1  # type: ignore[misc]
+                with (
+                    mock.patch(
+                        "refmac_diagnostic_profile.os.stat",
+                        side_effect=AssertionError("stat forbidden"),
+                    ),
+                    mock.patch(
+                        "refmac_diagnostic_profile.os.lstat",
+                        side_effect=AssertionError("lstat forbidden"),
+                    ),
+                    mock.patch(
+                        "refmac_diagnostic_profile.os.open",
+                        side_effect=AssertionError("open forbidden"),
+                    ),
+                ):
+                    projection = ob.to_dict()
+                    json.dumps(projection, allow_nan=False)
+                    projection["ino"] = -1
+                    self.assertEqual(ob.to_dict()["ino"], int(st.st_ino))
+
+            reg = snaps["regular"]
+            dir_snap = snaps["directory"]
+            fifo_snap = snaps["fifo"]
+            sym_snap = snaps["symlink"]
+            for bad_kw in (
+                {"is_directory": True},
+                {"file_type": stat.S_IFDIR},
+                {"dev": True},
+                {"mode": reg.raw_mode},
+            ):
+                with self.assertRaises(ValueError):
+                    replace(reg, **bad_kw)
+
+            # ResolutionComponentObservation & FinalTargetResolutionObservation invariants
+            res_path = str(root / "regular")
+            parent_paths = [str(p) for p in Path(res_path).parents]
+            anc_comps = tuple(
+                ResolutionComponentObservation(
+                    path=p_str, is_target=False, lstat=dir_snap
+                )
+                for p_str in parent_paths
+            )
+            first_comp = ResolutionComponentObservation(
+                path=res_path, is_target=True, lstat=reg
+            )
+
+            # Bidirectional population between (first_target_lstat, ancestor_lstats) and component_observations
+            from_comps = FinalTargetResolutionObservation(
+                failed_stage="final_target_not_regular",
+                lexical_path=res_path,
+                resolved_path=res_path,
+                component_observations=(first_comp, *anc_comps),
+                final_target_lstat=sym_snap,
+            )
+            self.assertEqual(from_comps.first_target_lstat, reg)
+            self.assertEqual(from_comps.ancestor_lstats, anc_comps)
+            self.assertEqual(from_comps.failed_component_path, res_path)
+            self.assertEqual(from_comps.failed_component_lstat, sym_snap)
+
+            # Empty-root parent chain valid when resolved_path == "/"
+            root_res = FinalTargetResolutionObservation(
+                failed_stage="final_target_not_regular",
+                lexical_path=res_path,
+                resolved_path="/",
+                first_target_lstat=dir_snap,
+                ancestor_lstats=(),
+                final_target_lstat=dir_snap,
+            )
+            self.assertEqual(root_res.failed_component_path, "/")
+            self.assertEqual(len(root_res.component_observations), 1)
+
+            # Reject invalid stage, incomplete ancestors for non-root final_target_*, wrong failed_component_path,
+            # non-trailing symlink/non-directory ancestor, and regular final_target_lstat on final_target_not_regular
+            with self.assertRaises(ValueError):
+                FinalTargetResolutionObservation(
+                    failed_stage="unknown_stage",
+                    resolved_path=res_path,
+                )
+            with self.assertRaises(ValueError):
+                FinalTargetResolutionObservation(
+                    failed_stage="final_target_not_regular",
+                    resolved_path=res_path,
+                    first_target_lstat=reg,
+                    ancestor_lstats=anc_comps[:-1],
+                    final_target_lstat=sym_snap,
+                )
+            with self.assertRaises(ValueError):
+                FinalTargetResolutionObservation(
+                    failed_stage="ancestor_component_lstat",
+                    resolved_path=res_path,
+                    first_target_lstat=reg,
+                    ancestor_lstats=anc_comps[:1],
+                    failed_component_path=parent_paths[0],
+                )
+            with self.assertRaises(ValueError):
+                FinalTargetResolutionObservation(
+                    failed_stage="ancestor_component_lstat",
+                    resolved_path=res_path,
+                    first_target_lstat=reg,
+                    ancestor_lstats=(
+                        ResolutionComponentObservation(
+                            path=parent_paths[0],
+                            is_target=False,
+                            lstat=fifo_snap,
+                        ),
+                        ResolutionComponentObservation(
+                            path=parent_paths[1],
+                            is_target=False,
+                            lstat=dir_snap,
+                        ),
+                    ),
+                )
+            with self.assertRaises(ValueError):
+                FinalTargetResolutionObservation(
+                    failed_stage="final_target_not_regular",
+                    resolved_path=res_path,
+                    first_target_lstat=reg,
+                    ancestor_lstats=anc_comps,
+                    final_target_lstat=reg,
+                )
+            prod_file = root / "prod_res.bin"
+            prod_file.write_bytes(b"owned\n")
+            prod_resolved = str(prod_file.resolve(strict=True))
+            real_lstat = os.lstat
+            real_path_resolve = Path.resolve
+            real_resolve = profile_mod._resolve_regular_target_strict
+            prod_state: dict[str, object] = {
+                "resolve_calls": 0,
+                "in_path_resolve": False,
+                "target_calls": 0,
+            }
+
+            def prod_path_resolve(path_obj: Path, *a, **kw):
+                prev = prod_state["in_path_resolve"]
+                prod_state["in_path_resolve"] = True
+                try:
+                    return real_path_resolve(path_obj, *a, **kw)
+                finally:
+                    prod_state["in_path_resolve"] = prev
+
+            def prod_resolve(path_str: str):
+                prod_state["resolve_calls"] = (
+                    int(prod_state["resolve_calls"]) + 1  # type: ignore[arg-type]
+                )
+                return real_resolve(path_str)
+
+            def prod_lstat(path, *a, **kw):
+                if (
+                    prod_state["resolve_calls"] == 2
+                    and not prod_state["in_path_resolve"]
+                    and str(path) == prod_resolved
+                ):
+                    prod_state["target_calls"] = (
+                        int(prod_state["target_calls"]) + 1  # type: ignore[arg-type]
+                    )
+                    if prod_state["target_calls"] == 2:
+                        parked = root / "prod_res.parked"
+                        prod_file.rename(parked)
+                        prod_file.symlink_to(parked)
+                return real_lstat(path, *a, **kw)
+
+            with (
+                mock.patch.object(Path, "resolve", prod_path_resolve),
+                mock.patch.object(
+                    profile_mod,
+                    "_resolve_regular_target_strict",
+                    side_effect=prod_resolve,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.lstat",
+                    side_effect=prod_lstat,
+                ),
+                self.assertRaises(_PartialFileReadError) as prod_ctx,
+            ):
+                profile_mod._stream_observe_regular_file(str(prod_file))
+
+            accepted_post = prod_ctx.exception.observation.post_read_observation
+            assert isinstance(accepted_post, PostReadVerificationObservation)
+            self.assertGreater(len(accepted_post.final_traversed_directories), 0)
+            assert accepted_post.final_resolution_observation is not None
+            self.assertEqual(
+                accepted_post.final_resolved_target_lstat,
+                accepted_post.final_resolution_observation.final_target_lstat,
+            )
+            self.assertEqual(replace(accepted_post), accepted_post)
+
+            with self.assertRaisesRegex(
+                ValueError,
+                r"^PostReadVerificationObservation\.final_resolved_target_lstat must match final_resolution_observation\.final_target_lstat$",
+            ):
+                replace(accepted_post, final_resolved_target_lstat=dir_snap)
+
+            with self.assertRaisesRegex(
+                ValueError,
+                r"^PostReadVerificationObservation\.final_traversed_directories must be a non-empty tuple of _ObservedDirectoryIdentity$",
+            ):
+                replace(accepted_post, final_traversed_directories=())
+
+            valid_partial_no_post = PartialFileReadObservation(
+                path=str(prod_file),
+                resolved_path=prod_resolved,
+                stat_size_bytes=reg.size_bytes,
+                streamed_size_bytes=0,
+                read_complete=False,
+                dev=reg.dev,
+                ino=reg.ino,
+                mode=0o644,
+                uid=reg.uid,
+                gid=reg.gid,
+                verified=False,
+                errors=("owned partial read without post_read_observation",),
+                observed_eof=False,
+                failure_phase="pre_read_size_check",
+                post_read_observation=None,
+            )
+            valid_partial_dict = valid_partial_no_post.to_dict()
+            self.assertEqual(valid_partial_dict["mode"], 0o644)
+            self.assertEqual(
+                valid_partial_dict["initial_fstat"]["mode"], 0o644
+            )
+            self.assertEqual(
+                valid_partial_dict["initial_fstat"]["raw_mode"],
+                int(stat.S_IFREG | 0o644),
+            )
+            with self.assertRaisesRegex(
+                ValueError,
+                r"^PartialFileReadObservation\.mode must be permission bits only \(S_IMODE\), got 0o100644$",
+            ):
+                replace(valid_partial_no_post, mode=0o100644)
+            with self.assertRaisesRegex(
+                ValueError,
+                r"^PartialFileReadObservation\.mode must be permission bits only \(S_IMODE\), got 0o100644$",
+            ):
+                replace(prod_ctx.exception.observation, mode=0o100644)
+
+    def test_task1024_post_eof_path_traversal_stage_producer(self) -> None:
+        from contextlib import ExitStack
+
+        real_lstat = os.lstat
+        real_stat = os.stat
+        real_readlink = os.readlink
+        real_fdopen = os.fdopen
+        real_fstat = os.fstat
+        real_traverse = profile_mod._traverse_path_components
+        real_lookup = profile_mod._validate_kernel_regular_lookup
+        real_resolve = profile_mod._resolve_regular_target_strict
+        payload = b"owned exact traversal witness\n"
+        payload_digest = _sha256_bytes(payload)
+
+        def facts(st: os.stat_result) -> dict[str, int]:
+            return {
+                "dev": int(st.st_dev),
+                "ino": int(st.st_ino),
+                "mode": int(stat.S_IMODE(st.st_mode)),
+                "uid": int(st.st_uid),
+                "gid": int(st.st_gid),
+                "size_bytes": int(st.st_size),
+                "file_type": int(stat.S_IFMT(st.st_mode)),
+                "raw_mode": int(st.st_mode),
+            }
+
+        def compare_stat(ob, ev: dict[str, object]) -> None:
+            self.assertIsNotNone(ob)
+            st_map = ev["stat"]
+            assert isinstance(st_map, dict)
+            self.assertEqual({k: getattr(ob, k) for k in st_map}, st_map)
+            self.assertIs(ob.is_regular, stat.S_ISREG(st_map["raw_mode"]))
+            self.assertIs(ob.is_symlink, stat.S_ISLNK(st_map["raw_mode"]))
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir).resolve()
+            for case in (
+                "terminal_directory",
+                "literal_suffix",
+                "readlink_eio",
+                "repeated_link_target",
+                "repeated_link_inode",
+                "repeated_directory",
+            ):
+                with self.subTest(traversal_case=case):
+                    root = (base_dir / case).resolve()
+                    root.mkdir()
+                    repeated = case.startswith("repeated_")
+                    if repeated:
+                        for d_name in ("d", "e"):
+                            (root / d_name).mkdir()
+                            (root / d_name / "input.bin").write_bytes(payload)
+                        if case == "repeated_directory":
+                            mutation_path = root / "d"
+                            lexical = f"{root}/d/../d/input.bin"
+                        else:
+                            mutation_path = root / "link"
+                            mutation_path.symlink_to("d")
+                            lexical = f"{root}/link/../link/input.bin"
+                    else:
+                        mutation_path = root / "input.bin"
+                        mutation_path.write_bytes(payload)
+                        (root / "suffix").mkdir()
+                        lexical = str(mutation_path)
+
+                    initial = real_stat(lexical)
+                    state: dict[str, object] = {
+                        "eof": False,
+                        "in_traverse": False,
+                        "in_preliminary": False,
+                        "mutated": False,
+                        "component_hits": 0,
+                        "fd": -1,
+                        "bytes_read": 0,
+                        "in_lookup": False,
+                        "post_eof_resolver_entries": 0,
+                        "post_eof_traversal_invocations": 0,
+                    }
+                    events: list[dict[str, object]] = []
+                    outer_events: list[dict[str, object]] = []
+                    descriptor_events: list[dict[str, object]] = []
+                    caught_helpers: list[Exception] = []
+                    injected = OSError(
+                        errno.EIO, "owned exact traversal readlink refusal"
+                    )
+                    digest = hashlib.sha256()
+
+                    def record_event(call_name: str, path_val, **extra):
+                        row = {
+                            "index": len(events),
+                            "call": call_name,
+                            "path": str(path_val),
+                            "preliminary": state["in_preliminary"],
+                            "invocation": state[
+                                "post_eof_traversal_invocations"
+                            ],
+                            **extra,
+                        }
+                        events.append(row)
+                        return row
+
+                    def mutate() -> None:
+                        self.assertFalse(state["mutated"])
+                        mutation_path.rename(root / "original-entry")
+                        if case in ("terminal_directory", "repeated_directory"):
+                            mutation_path.mkdir()
+                        elif case == "literal_suffix":
+                            mutation_path.symlink_to("suffix/")
+                        elif case in ("readlink_eio", "repeated_link_inode"):
+                            mutation_path.symlink_to(
+                                "original-entry"
+                                if case == "readlink_eio"
+                                else "d"
+                            )
+                        else:
+                            mutation_path.symlink_to("e")
+                        state["mutated"] = True
+
+                    def fdopen_hook(fd: int, *a, **kw):
+                        state["fd"] = fd
+                        handle = real_fdopen(fd, *a, **kw)
+                        orig_read = handle.read
+
+                        def read_hook(n: int = -1) -> bytes:
+                            b = orig_read(n)
+                            state["bytes_read"] = (
+                                int(state["bytes_read"]) + len(b)  # type: ignore[arg-type]
+                            )
+                            digest.update(b)
+                            if not b:
+                                state["eof"] = True
+                            return b
+
+                        handle.read = read_hook  # type: ignore[method-assign]
+                        return handle
+
+                    def lstat_hook(path, *a, **kw):
+                        active = bool(state["eof"] and state["in_traverse"])
+                        if (
+                            active
+                            and not state["in_preliminary"]
+                            and str(path) == str(mutation_path)
+                        ):
+                            state["component_hits"] = (
+                                int(state["component_hits"]) + 1  # type: ignore[arg-type]
+                            )
+                            if state["component_hits"] == (2 if repeated else 1):
+                                mutate()
+                        st = real_lstat(path, *a, **kw)
+                        if active:
+                            record_event("lstat", path, stat=facts(st))
+                        elif state["eof"] and state["in_lookup"]:
+                            outer_events.append(
+                                {
+                                    "call": "lstat",
+                                    "path": str(path),
+                                    "stat": facts(st),
+                                }
+                            )
+                        return st
+
+                    def stat_hook(path, *a, **kw):
+                        st = real_stat(path, *a, **kw)
+                        if state["eof"] and state["in_traverse"]:
+                            record_event("stat", path, stat=facts(st))
+                        elif state["eof"] and state["in_lookup"]:
+                            outer_events.append(
+                                {
+                                    "call": "stat",
+                                    "path": str(path),
+                                    "stat": facts(st),
+                                }
+                            )
+                        return st
+
+                    def fstat_hook(fd: int):
+                        st = real_fstat(fd)
+                        if (
+                            st.st_dev == initial.st_dev
+                            and st.st_ino == initial.st_ino
+                        ):
+                            descriptor_events.append(
+                                {
+                                    "fd": fd,
+                                    "eof": state["eof"],
+                                    "stat": facts(st),
+                                }
+                            )
+                        return st
+
+                    def readlink_hook(path, *a, **kw):
+                        active = bool(state["eof"] and state["in_traverse"])
+                        if (
+                            active
+                            and case == "readlink_eio"
+                            and str(path) == str(mutation_path)
+                        ):
+                            record_event(
+                                "readlink",
+                                path,
+                                returned=False,
+                                errno=errno.EIO,
+                            )
+                            raise injected
+                        val = real_readlink(path, *a, **kw)
+                        if active:
+                            record_event(
+                                "readlink", path, returned=True, target=val
+                            )
+                        return val
+
+                    def lookup_hook(path_str: str):
+                        old_prelim = state["in_preliminary"]
+                        old_lookup = state["in_lookup"]
+                        state["in_lookup"] = True
+                        state["in_preliminary"] = state["in_traverse"]
+                        try:
+                            return real_lookup(path_str)
+                        finally:
+                            state["in_preliminary"] = old_prelim
+                            state["in_lookup"] = old_lookup
+
+                    def resolve_hook(path_str: str):
+                        if state["eof"]:
+                            state["post_eof_resolver_entries"] = (
+                                int(state["post_eof_resolver_entries"]) + 1  # type: ignore[arg-type]
+                            )
+                        return real_resolve(path_str)
+
+                    def traverse_hook(path_str: str):
+                        state["in_traverse"] = True
+                        if state["eof"]:
+                            state["post_eof_traversal_invocations"] = (
+                                int(state["post_eof_traversal_invocations"]) + 1  # type: ignore[arg-type]
+                            )
+                        try:
+                            return real_traverse(path_str)
+                        except Exception as exc:
+                            if state["eof"]:
+                                caught_helpers.append(exc)
+                            raise
+                        finally:
+                            state["in_traverse"] = False
+
+                    with (
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.fdopen",
+                            side_effect=fdopen_hook,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.fstat",
+                            side_effect=fstat_hook,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.lstat",
+                            side_effect=lstat_hook,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.stat",
+                            side_effect=stat_hook,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.readlink",
+                            side_effect=readlink_hook,
+                        ),
+                        mock.patch.object(
+                            profile_mod,
+                            "_traverse_path_components",
+                            side_effect=traverse_hook,
+                        ),
+                        mock.patch.object(
+                            profile_mod,
+                            "_validate_kernel_regular_lookup",
+                            side_effect=lookup_hook,
+                        ),
+                        mock.patch.object(
+                            profile_mod,
+                            "_resolve_regular_target_strict",
+                            side_effect=resolve_hook,
+                        ),
+                    ):
+                        with self.assertRaises(_PartialFileReadError) as ctx:
+                            profile_mod._stream_observe_regular_file(
+                                lexical, retain_bytes=True, chunk_size=7
+                            )
+
+                    self.assertTrue(state["eof"])
+                    self.assertTrue(state["mutated"])
+                    self.assertEqual(state["bytes_read"], len(payload))
+                    self.assertEqual(digest.hexdigest(), payload_digest)
+                    fd_val = int(state["fd"])  # type: ignore[arg-type]
+                    self.assertGreaterEqual(fd_val, 0)
+                    with self.assertRaises(OSError) as ebadf_ctx:
+                        real_fstat(fd_val)
+                    self.assertEqual(ebadf_ctx.exception.errno, errno.EBADF)
+
+                    err = ctx.exception
+                    self.assertEqual(len(caught_helpers), 1)
+                    self.assertIs(err.__cause__, caught_helpers[0])
+                    ob = err.observation
+                    post = ob.post_read_observation
+                    assert post is not None
+                    self.assertIsNone(ob.sha256)
+                    self.assertIsNone(ob.size_bytes)
+                    self.assertFalse(ob.verified)
+                    self.assertFalse(ob.read_complete)
+                    self.assertFalse(ob.complete)
+                    with self.assertRaises(ValueError):
+                        ob.as_file_pin()
+                    self.assertTrue(ob.observed_eof)
+                    self.assertTrue(post.observed_eof)
+                    self.assertEqual(
+                        ob.failure_phase, "final_path_traversal"
+                    )
+                    self.assertEqual(
+                        post.failure_phase, "final_path_traversal"
+                    )
+                    self.assertEqual(ob.observed_eof_sha256, payload_digest)
+                    self.assertEqual(post.observed_eof_sha256, payload_digest)
+                    self.assertEqual(ob.observed_stream_sha256, payload_digest)
+                    self.assertEqual(
+                        post.observed_stream_sha256, payload_digest
+                    )
+                    self.assertEqual(ob.streamed_size_bytes, len(payload))
+                    self.assertEqual(post.streamed_size_bytes, len(payload))
+                    self.assertEqual(len(descriptor_events), 2)
+                    self.assertEqual(
+                        [e["eof"] for e in descriptor_events], [False, True]
+                    )
+                    compare_stat(post.initial_fstat, descriptor_events[0])
+                    compare_stat(post.end_fstat, descriptor_events[1])
+                    self.assertEqual(
+                        [e["call"] for e in outer_events], ["lstat", "stat"]
+                    )
+                    self.assertTrue(
+                        all(e["path"] == lexical for e in outer_events)
+                    )
+                    compare_stat(post.final_lexical_lstat, outer_events[0])
+                    compare_stat(post.final_lexical_stat, outer_events[1])
+                    self.assertEqual(state["post_eof_resolver_entries"], 0)
+                    self.assertEqual(
+                        state["post_eof_traversal_invocations"], 1
+                    )
+                    self.assertTrue(all(e["invocation"] == 1 for e in events))
+
+                    t = post.final_traversal_observation
+                    assert t is not None
+                    self.assertIs(ob.final_traversal_observation, t)
+                    self.assertEqual(t.lexical_path, lexical)
+                    preliminary = [e for e in events if e["preliminary"]]
+                    self.assertEqual(
+                        [e["call"] for e in preliminary], ["lstat", "stat"]
+                    )
+                    compare_stat(t.preliminary_lexical_lstat, preliminary[0])
+                    compare_stat(t.preliminary_lexical_stat, preliminary[1])
+
+                    component_events = [
+                        e
+                        for e in events
+                        if not e["preliminary"] and e["call"] == "lstat"
+                    ]
+                    self.assertEqual(component_events[0]["path"], "/")
+                    compare_stat(t.root_lstat, component_events[0])
+                    self.assertEqual(
+                        len(t.component_observations), len(component_events)
+                    )
+                    for idx, (comp, actual) in enumerate(
+                        zip(t.component_observations, component_events)
+                    ):
+                        self.assertEqual(comp.path, actual["path"])
+                        compare_stat(comp.lstat, actual)
+                        self.assertIs(
+                            comp.accepted, idx < len(component_events) - 1
+                        )
+                    rejected = t.component_observations[-1]
+                    self.assertEqual(t.rejected_component, rejected)
+                    self.assertFalse(rejected.accepted)
+                    self.assertEqual(
+                        t.failed_component_path, str(mutation_path)
+                    )
+                    self.assertEqual(rejected.path, str(mutation_path))
+                    compare_stat(
+                        t.failed_component_lstat, component_events[-1]
+                    )
+                    self.assertEqual(t.failed_component_lstat, rejected.lstat)
+                    self.assertIsNone(post.final_traversal_resolved_path)
+                    self.assertIsNone(post.final_traversal_target_lstat)
+                    self.assertIsNone(post.final_resolution_observation)
+                    self.assertIsNone(post.final_resolved_path)
+                    self.assertIsNone(post.final_resolved_target_lstat)
+
+                    expected_stage = {
+                        "terminal_directory": "leaf_component_directory",
+                        "literal_suffix": "leaf_symlink_directory_suffix",
+                        "readlink_eio": "symlink_readlink",
+                        "repeated_link_target": "symlink_target_changed",
+                        "repeated_link_inode": "symlink_identity_changed",
+                        "repeated_directory": "directory_identity_changed",
+                    }[case]
+                    self.assertEqual(t.failed_stage, expected_stage)
+
+                    links = [e for e in events if e["call"] == "readlink"]
+                    for link_ev in links:
+                        prev_ev = events[int(link_ev["index"]) - 1]  # type: ignore[arg-type]
+                        self.assertEqual(prev_ev["call"], "lstat")
+                        self.assertEqual(prev_ev["path"], link_ev["path"])
+                        self.assertTrue(
+                            stat.S_ISLNK(prev_ev["stat"]["raw_mode"])  # type: ignore[index]
+                        )
+
+                    if case == "literal_suffix":
+                        self.assertEqual(len(links), 1)
+                        self.assertEqual(
+                            links[0]["path"], str(mutation_path)
+                        )
+                        self.assertEqual(links[0]["target"], "suffix/")
+                        self.assertIs(links[0]["returned"], True)
+                        self.assertEqual(rejected.readlink_target, "suffix/")
+                        self.assertEqual(
+                            t.failed_component_readlink_target, "suffix/"
+                        )
+                    if case == "readlink_eio":
+                        self.assertEqual(len(links), 1)
+                        self.assertIs(links[0]["returned"], False)
+                        self.assertIsNone(rejected.readlink_target)
+                        self.assertIsNone(t.failed_component_readlink_target)
+                        self.assertIs(caught_helpers[0].__cause__, injected)
+                        self.assertIs(
+                            profile_mod._select_original_cause_exception(err),
+                            injected,
+                        )
+                    if repeated:
+                        previous = [
+                            x
+                            for x in t.component_observations[:-1]
+                            if x.path == str(mutation_path)
+                        ]
+                        self.assertEqual(len(previous), 1)
+                        self.assertNotEqual(
+                            previous[0].lstat.ino, rejected.lstat.ino
+                        )
+                        self.assertEqual(
+                            t.prior_component_lstat, previous[0].lstat
+                        )
+                        if case.startswith("repeated_link"):
+                            self.assertEqual(len(links), 2)
+                            self.assertEqual(
+                                [e["target"] for e in links],
+                                [
+                                    "d",
+                                    "e"
+                                    if case == "repeated_link_target"
+                                    else "d",
+                                ],
+                            )
+                            self.assertEqual(previous[0].readlink_target, "d")
+                            assert t.prior_symlink_edge is not None
+                            self.assertEqual(t.prior_symlink_edge.target, "d")
+                            self.assertEqual(
+                                rejected.readlink_target, links[-1]["target"]
+                            )
+                            self.assertEqual(
+                                next(
+                                    x
+                                    for x in t.accepted_symlinks
+                                    if x.path == str(mutation_path)
+                                ),
+                                t.prior_symlink_edge,
+                            )
+
+                    accepted = t.component_observations[:-1]
+                    expected_dirs = {
+                        c.path: c
+                        for c in accepted
+                        if c.lstat.kind == "directory"
+                    }
+                    expected_links = {
+                        c.path: c for c in accepted if c.lstat.is_symlink
+                    }
+                    self.assertEqual(
+                        {x.path for x in t.accepted_directories},
+                        set(expected_dirs),
+                    )
+                    self.assertEqual(
+                        {x.path for x in t.accepted_symlinks},
+                        set(expected_links),
+                    )
+                    self.assertEqual(
+                        {x.path for x in t.accepted_symlink_identities},
+                        set(expected_links),
+                    )
+                    self.assertEqual(post.final_symlinks, t.accepted_symlinks)
+                    self.assertEqual(
+                        post.final_symlink_identities,
+                        t.accepted_symlink_identities,
+                    )
+                    self.assertEqual(
+                        post.final_traversed_directories,
+                        t.accepted_directories,
+                    )
+
+                    if case != "readlink_eio":
+                        helper = caught_helpers[0]
+                        self.assertIs(type(helper), ValueError)
+                        self.assertIsNone(helper.__cause__)
+                        expected_message = {
+                            "terminal_directory": "Target is not a regular file",
+                            "literal_suffix": "Regular-file target path must not end with a directory suffix",
+                            "repeated_link_target": "Symlink target changed during traversal",
+                            "repeated_link_inode": "Symlink identity changed during traversal",
+                            "repeated_directory": "Directory identity changed during traversal",
+                        }[case]
+                        self.assertIn(expected_message, str(helper))
+                        self.assertIs(
+                            profile_mod._select_original_cause_exception(err),
+                            helper,
+                        )
+
+                    selected_cause = (
+                        injected if case == "readlink_eio" else caught_helpers[0]
+                    )
+                    with ExitStack() as stack:
+                        for fn_name in (
+                            "stat",
+                            "lstat",
+                            "fstat",
+                            "open",
+                            "readlink",
+                        ):
+                            stack.enter_context(
+                                mock.patch(
+                                    f"refmac_diagnostic_profile.os.{fn_name}",
+                                    side_effect=AssertionError(
+                                        "projection filesystem access forbidden"
+                                    ),
+                                )
+                            )
+                        contextual = profile_mod._build_partial_file_observation(
+                            ob, errors=("owned contextual marker",)
+                        )
+                        self.assertIsNot(contextual, ob)
+                        self.assertIn(
+                            "owned contextual marker", contextual.errors
+                        )
+                        self.assertIs(contextual.post_read_observation, post)
+                        self.assertIs(
+                            contextual.final_traversal_observation, t
+                        )
+                        public = ProfileValidationError(
+                            "owned projection",
+                            failed_check="owned_traversal_probe",
+                            manifest_identity=contextual,
+                            files={"owned_file": contextual},
+                            cause_exception=err,
+                        )
+                        projection = public.to_provenance()
+                        self.assertFalse(projection["profile_files_verified"])
+                        self.assertIsNone(projection["selected_executable"])
+                        self.assertIs(public.cause_exception, selected_cause)
+                        self.assertEqual(
+                            projection["error"]["type"],
+                            type(selected_cause).__name__,
+                        )
+                        self.assertEqual(
+                            projection["error"]["message"],
+                            str(selected_cause),
+                        )
+                        self.assertEqual(
+                            projection["error"]["errno"],
+                            errno.EIO if case == "readlink_eio" else None,
+                        )
+                        self.assertEqual(
+                            projection["error"]["wrapper_message"],
+                            "owned projection",
+                        )
+                        post_dict = post.to_dict()
+                        for owner in (
+                            projection["manifest"],
+                            projection["files"]["owned_file"],
+                        ):
+                            self.assertEqual(
+                                owner["post_read_observation"], post_dict
+                            )
+                            self.assertEqual(
+                                owner["final_traversal_observation"],
+                                post_dict["final_traversal_observation"],
+                            )
+                        fresh = public.to_provenance()
+                        fresh["files"]["owned_file"]["post_read_observation"][
+                            "final_traversal_observation"
+                        ]["component_observations"][0]["lstat"]["ino"] = -1
+                        fresh["manifest"]["post_read_observation"][
+                            "final_traversal_observation"
+                        ]["component_observations"][-1][
+                            "readlink_target"
+                        ] = "invented"
+                        self.assertEqual(public.to_provenance(), projection)
+                        detached = t.to_dict()
+                        detached["component_observations"].clear()
+                        self.assertEqual(
+                            len(t.to_dict()["component_observations"]),
+                            len(component_events),
+                        )
+                        with self.assertRaises(FrozenInstanceError):
+                            rejected.readlink_target = "invented"  # type: ignore[misc]
+                        with self.assertRaises(FrozenInstanceError):
+                            rejected.lstat.ino = -1  # type: ignore[misc]
+                        with self.assertRaises(TypeError):
+                            t.component_observations[0] = rejected  # type: ignore[index]
+                        with self.assertRaises(FrozenInstanceError):
+                            t.failed_stage = "invented"  # type: ignore[misc]
+
+                    if case in ("terminal_directory", "literal_suffix"):
+                        with self.assertRaises(ValueError) as pre_open_ctx:
+                            profile_mod._stream_observe_regular_file(lexical)
+                        self.assertNotIsInstance(
+                            pre_open_ctx.exception, _PartialFileReadError
+                        )
+
+    def test_task1024_post_eof_traversal_preliminary_non_oserror_producer(
+        self,
+    ) -> None:
+        real_fdopen = os.fdopen
+        real_lstat = os.lstat
+        real_stat = os.stat
+        real_fstat = os.fstat
+        real_traverse = profile_mod._traverse_path_components
+        real_lookup = profile_mod._validate_kernel_regular_lookup
+        payload = b"owned preliminary actual EOF\n"
+        digest = _sha256_bytes(payload)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir).resolve()
+            # 1. Preliminary lstat succeeds then non-OSError stat failure (Report 1047 / Task 1049)
+            target = base_dir / "owned.bin"
+            target.write_bytes(payload)
+            state: dict[str, object] = {
+                "eof": False,
+                "traverse": False,
+                "preliminary": False,
+                "fd": -1,
+                "bytes_read": 0,
+            }
+            events: list[dict[str, object]] = []
+            injected = RuntimeError(
+                "owned non-OSError after preliminary lstat"
+            )
+
+            def fdopen_hook(fd: int, *a, **kw):
+                state["fd"] = fd
+                handle = real_fdopen(fd, *a, **kw)
+                orig_read = handle.read
+
+                def read_hook(n: int = -1) -> bytes:
+                    b = orig_read(n)
+                    state["bytes_read"] = int(state["bytes_read"]) + len(b)  # type: ignore[arg-type]
+                    if not b:
+                        state["eof"] = True
+                    return b
+
+                handle.read = read_hook  # type: ignore[method-assign]
+                return handle
+
+            def trav_hook(path_str: str):
+                state["traverse"] = True
+                try:
+                    return real_traverse(path_str)
+                finally:
+                    state["traverse"] = False
+
+            def look_hook(path_str: str):
+                state["preliminary"] = state["traverse"]
+                try:
+                    return real_lookup(path_str)
+                finally:
+                    state["preliminary"] = False
+
+            def lstat_hook(path, *a, **kw):
+                st = real_lstat(path, *a, **kw)
+                if state["eof"] and state["preliminary"]:
+                    events.append(
+                        {
+                            "call": "lstat",
+                            "path": str(path),
+                            "dev": int(st.st_dev),
+                            "ino": int(st.st_ino),
+                            "mode": int(stat.S_IMODE(st.st_mode)),
+                            "uid": int(st.st_uid),
+                            "gid": int(st.st_gid),
+                            "size_bytes": int(st.st_size),
+                            "file_type": int(stat.S_IFMT(st.st_mode)),
+                            "raw_mode": int(st.st_mode),
+                        }
+                    )
+                return st
+
+            def stat_hook(path, *a, **kw):
+                if state["eof"] and state["preliminary"]:
+                    events.append(
+                        {"call": "stat", "path": str(path), "returned": False}
+                    )
+                    raise injected
+                return real_stat(path, *a, **kw)
+
+            with (
+                mock.patch(
+                    "refmac_diagnostic_profile.os.fdopen",
+                    side_effect=fdopen_hook,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.lstat",
+                    side_effect=lstat_hook,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.stat",
+                    side_effect=stat_hook,
+                ),
+                mock.patch.object(
+                    profile_mod,
+                    "_traverse_path_components",
+                    side_effect=trav_hook,
+                ),
+                mock.patch.object(
+                    profile_mod,
+                    "_validate_kernel_regular_lookup",
+                    side_effect=look_hook,
+                ),
+            ):
+                with self.assertRaises(_PartialFileReadError) as ctx:
+                    profile_mod._stream_observe_regular_file(
+                        str(target), retain_bytes=True, chunk_size=7
+                    )
+
+            self.assertTrue(state["eof"])
+            self.assertEqual(state["bytes_read"], len(payload))
+            fd_val = int(state["fd"])  # type: ignore[arg-type]
+            self.assertGreaterEqual(fd_val, 0)
+            with self.assertRaises(OSError) as ebadf_ctx:
+                real_fstat(fd_val)
+            self.assertEqual(ebadf_ctx.exception.errno, errno.EBADF)
+            self.assertEqual([e["call"] for e in events], ["lstat", "stat"])
+            self.assertTrue(all(e["path"] == str(target) for e in events))
+
+            err = ctx.exception
+            self.assertIs(err.__cause__, injected)
+            ob = err.observation
+            self.assertEqual(ob.failure_phase, "final_path_traversal")
+            self.assertTrue(ob.observed_eof)
+            self.assertEqual(ob.observed_eof_sha256, digest)
+            self.assertIsNone(ob.sha256)
+            self.assertFalse(ob.verified)
+            self.assertFalse(ob.read_complete)
+            t = ob.final_traversal_observation
+            assert t is not None
+            self.assertIsNone(t.preliminary_lexical_stat)
+            self.assertEqual(t.failed_stage, "preliminary_kernel_stat")
+            assert t.preliminary_lexical_lstat is not None
+            expected_lstat = {
+                k: v for k, v in events[0].items() if k not in ("call", "path")
+            }
+            self.assertEqual(
+                {
+                    k: getattr(t.preliminary_lexical_lstat, k)
+                    for k in expected_lstat
+                },
+                expected_lstat,
+            )
+
+            # 2. Opaque traversal helper failure without _partial_traversal_observation stays None
+            opaque_target = base_dir / "opaque_trav.bin"
+            opaque_target.write_bytes(payload)
+            opaque_state = {"eof": False, "fd": -1}
+            opaque_exc = ValueError("owned opaque post-EOF traversal refusal")
+
+            def fdopen_opaque(fd: int, *a, **kw):
+                opaque_state["fd"] = fd
+                handle = real_fdopen(fd, *a, **kw)
+                orig_read = handle.read
+
+                def read_opaque(n: int = -1) -> bytes:
+                    b = orig_read(n)
+                    if not b:
+                        opaque_state["eof"] = True
+                    return b
+
+                handle.read = read_opaque  # type: ignore[method-assign]
+                return handle
+
+            def trav_opaque(path_str: str):
+                if opaque_state["eof"]:
+                    raise opaque_exc
+                return real_traverse(path_str)
+
+            with (
+                mock.patch(
+                    "refmac_diagnostic_profile.os.fdopen",
+                    side_effect=fdopen_opaque,
+                ),
+                mock.patch.object(
+                    profile_mod,
+                    "_traverse_path_components",
+                    side_effect=trav_opaque,
+                ),
+            ):
+                with self.assertRaises(_PartialFileReadError) as op_ctx:
+                    profile_mod._stream_observe_regular_file(
+                        str(opaque_target), retain_bytes=True, chunk_size=7
+                    )
+            self.assertTrue(opaque_state["eof"])
+            with self.assertRaises(OSError) as op_ebadf:
+                real_fstat(int(opaque_state["fd"]))
+            self.assertEqual(op_ebadf.exception.errno, errno.EBADF)
+            op_err = op_ctx.exception
+            self.assertIs(op_err.__cause__, opaque_exc)
+            self.assertEqual(
+                op_err.observation.failure_phase, "final_path_traversal"
+            )
+            self.assertIsNone(op_err.observation.final_traversal_observation)
+            self.assertIsNone(op_err.observation.final_traversal_failed_stage)
+
+    def test_task1024_post_eof_traversal_entrypoint_admission_and_recheck(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fx = _build_synthetic_outer_profile_fixture(Path(tmpdir))
+            root = fx["root"]
+            assert isinstance(root, Path)
+            support_dir = root / "support"
+            installed_record = fx["installed_record"]
+            assert isinstance(installed_record, dict)
+            ccp4_env = fx["ccp4_env"]
+            assert isinstance(ccp4_env, dict)
+            ev_root = fx["evidence_root"]
+            assert isinstance(ev_root, Path)
+            alias_symlink = fx["alias_symlink"]
+            assert isinstance(alias_symlink, Path)
+            manifest_path = fx["manifest_path"]
+            assert isinstance(manifest_path, Path)
+            profile = fx["profile"]
+            assert isinstance(profile, RefmacDiagnosticProfile)
+            base_payload = fx["manifest_payload"]
+            assert isinstance(base_payload, dict)
+
+            validated = validate_profile(
+                profile, installed_record, ccp4_env, ev_root
+            )
+            state = validated._outer_state
+            assert state is not None
+
+            direct_fid = base_payload["roles"]["collection_interpreter"][0]  # type: ignore[index]
+            alias_fid = next(
+                fid
+                for fid, row in base_payload["files"].items()  # type: ignore[union-attr]
+                if row["path"] == str(alias_symlink)
+            )
+            dotdot_path_str = str(
+                support_dir / "bin" / ".." / "collection-python"
+            )
+            dotdot_fid = next(
+                fid
+                for fid, row in base_payload["files"].items()  # type: ignore[union-attr]
+                if row["path"] == dotdot_path_str
+            )
+            alias_resolved = str(alias_symlink.resolve(strict=True))
+            alias_bytes = Path(alias_resolved).read_bytes()
+            alias_sha = _sha256_bytes(alias_bytes)
+
+            real_open = os.open
+            real_fdopen = os.fdopen
+            real_fstat = os.fstat
+            real_lstat = os.lstat
+            real_readlink = os.readlink
+            real_traverse = profile_mod._traverse_path_components
+            real_lookup = profile_mod._validate_kernel_regular_lookup
+            real_obs_pin = profile_mod._observe_regular_file_pin
+            real_stream_obs = profile_mod._stream_observe_regular_file
+
+            # 1. Declared-file owner (alias_fid) post-EOF traversal symlink_readlink EIO
+            # across validate_profile, _reobserve_outer_profile_state, and recheck_profile
+            injected_exc = OSError(
+                errno.EIO,
+                "synthetic #1168 declared-file post-EOF traversal readlink EIO",
+            )
+            run_state: dict[str, object] = {
+                "active_lexical": None,
+                "owned_fd": -1,
+                "captured_fd": -1,
+                "observed_eof_on_owned_fd": False,
+                "in_traverse": False,
+                "in_preliminary": False,
+                "injected": False,
+            }
+
+            def reset_run_state() -> None:
+                run_state["active_lexical"] = None
+                run_state["owned_fd"] = -1
+                run_state["captured_fd"] = -1
+                run_state["observed_eof_on_owned_fd"] = False
+                run_state["in_traverse"] = False
+                run_state["in_preliminary"] = False
+                run_state["injected"] = False
+
+            def observe_pin_alias(path, *a, **kw):
+                prev_lex = run_state["active_lexical"]
+                path_str = str(path)
+                run_state["active_lexical"] = path_str
+                if path_str == str(alias_symlink) and not run_state["injected"]:
+                    run_state["owned_fd"] = -1
+                    run_state["observed_eof_on_owned_fd"] = False
+                try:
+                    return real_obs_pin(path, *a, **kw)
+                finally:
+                    if path_str == str(alias_symlink):
+                        run_state["owned_fd"] = -1
+                        run_state["observed_eof_on_owned_fd"] = False
+                    run_state["active_lexical"] = prev_lex
+
+            def open_alias(path, flags, *a, **kw):
+                fd = real_open(path, flags, *a, **kw)
+                if (
+                    run_state["active_lexical"] == str(alias_symlink)
+                    and not run_state["injected"]
+                    and str(path) == alias_resolved
+                ):
+                    run_state["owned_fd"] = fd
+                    run_state["captured_fd"] = fd
+                    run_state["observed_eof_on_owned_fd"] = False
+                return fd
+
+            def fdopen_alias(fd: int, mode: str = "rb", *a, **kw):
+                handle = real_fdopen(fd, mode, *a, **kw)
+                if (
+                    run_state["active_lexical"] == str(alias_symlink)
+                    and fd == run_state["owned_fd"]
+                ):
+                    orig_read = handle.read
+
+                    def read_track_eof(n: int = -1) -> bytes:
+                        chunk = orig_read(n)
+                        if chunk == b"":
+                            run_state["observed_eof_on_owned_fd"] = True
+                        return chunk
+
+                    handle.read = read_track_eof  # type: ignore[method-assign]
+                return handle
+
+            def traverse_alias(path_str: str):
+                prev = run_state["in_traverse"]
+                run_state["in_traverse"] = True
+                try:
+                    return real_traverse(path_str)
+                finally:
+                    run_state["in_traverse"] = prev
+
+            def lookup_alias(path_str: str):
+                prev = run_state["in_preliminary"]
+                run_state["in_preliminary"] = run_state["in_traverse"]
+                try:
+                    return real_lookup(path_str)
+                finally:
+                    run_state["in_preliminary"] = prev
+
+            def readlink_alias(path, *a, **kw):
+                if (
+                    run_state["active_lexical"] == str(alias_symlink)
+                    and run_state["observed_eof_on_owned_fd"]
+                    and run_state["in_traverse"]
+                    and not run_state["in_preliminary"]
+                    and not run_state["injected"]
+                    and str(path) == str(alias_symlink)
+                ):
+                    run_state["injected"] = True
+                    raise injected_exc
+                return real_readlink(path, *a, **kw)
+
+            reset_run_state()
+            with (
+                mock.patch(
+                    "refmac_diagnostic_profile._observe_regular_file_pin",
+                    side_effect=observe_pin_alias,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.open",
+                    side_effect=open_alias,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.fdopen",
+                    side_effect=fdopen_alias,
+                ),
+                mock.patch.object(
+                    profile_mod,
+                    "_traverse_path_components",
+                    side_effect=traverse_alias,
+                ),
+                mock.patch.object(
+                    profile_mod,
+                    "_validate_kernel_regular_lookup",
+                    side_effect=lookup_alias,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.readlink",
+                    side_effect=readlink_alias,
+                ),
+            ):
+                with self.assertRaises(ProfileValidationError) as val_ctx:
+                    validate_profile(
+                        profile, installed_record, ccp4_env, ev_root
+                    )
+            self.assertTrue(run_state["injected"])
+            with self.assertRaises(OSError) as val_ebadf:
+                real_fstat(int(run_state["captured_fd"]))  # type: ignore[arg-type]
+            self.assertEqual(val_ebadf.exception.errno, errno.EBADF)
+
+            val_err = val_ctx.exception
+            self.assertEqual(
+                val_err.failed_check, "outer_profile_files_and_roots"
+            )
+            self.assertIs(val_err.cause_exception, injected_exc)
+            self.assertIsInstance(val_err.files[direct_fid], FileObservation)
+            self.assertTrue(val_err.files[direct_fid].verified)
+            self.assertIsInstance(val_err.files[dotdot_fid], FileObservation)
+            self.assertTrue(val_err.files[dotdot_fid].verified)
+
+            pobs = val_err.files[alias_fid]
+            assert isinstance(pobs, PartialFileReadObservation)
+            self.assertTrue(pobs.observed_eof)
+            self.assertEqual(pobs.observed_eof_sha256, alias_sha)
+            self.assertEqual(pobs.failure_phase, "final_path_traversal")
+            trav_obs = pobs.final_traversal_observation
+            assert trav_obs is not None
+            self.assertEqual(trav_obs.failed_stage, "symlink_readlink")
+            self.assertEqual(trav_obs.lexical_path, str(alias_symlink))
+            self.assertEqual(
+                trav_obs.failed_component_path, str(alias_symlink)
+            )
+            self.assertIs(trav_obs.failed_component_is_leaf, True)
+            assert trav_obs.failed_component_lstat is not None
+            self.assertTrue(trav_obs.failed_component_lstat.is_symlink)
+            self.assertIsNone(trav_obs.failed_component_readlink_target)
+            assert trav_obs.rejected_component is not None
+            self.assertEqual(
+                trav_obs.rejected_component.path, str(alias_symlink)
+            )
+            self.assertFalse(trav_obs.rejected_component.accepted)
+
+            prov = val_err.to_provenance()
+            self.assertEqual(
+                prov["files"][alias_fid]["final_traversal_observation"][
+                    "failed_stage"
+                ],
+                "symlink_readlink",
+            )
+            self.assertEqual(
+                prov["files"][alias_fid]["post_read_observation"][
+                    "final_traversal_observation"
+                ]["failed_component_path"],
+                str(alias_symlink),
+            )
+
+            reset_run_state()
+            with (
+                mock.patch(
+                    "refmac_diagnostic_profile._observe_regular_file_pin",
+                    side_effect=observe_pin_alias,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.open",
+                    side_effect=open_alias,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.fdopen",
+                    side_effect=fdopen_alias,
+                ),
+                mock.patch.object(
+                    profile_mod,
+                    "_traverse_path_components",
+                    side_effect=traverse_alias,
+                ),
+                mock.patch.object(
+                    profile_mod,
+                    "_validate_kernel_regular_lookup",
+                    side_effect=lookup_alias,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.readlink",
+                    side_effect=readlink_alias,
+                ),
+            ):
+                priv_recheck = _reobserve_outer_profile_state(state)
+            self.assertTrue(run_state["injected"])
+            with self.assertRaises(OSError) as priv_ebadf:
+                real_fstat(int(run_state["captured_fd"]))  # type: ignore[arg-type]
+            self.assertEqual(priv_ebadf.exception.errno, errno.EBADF)
+            self.assertFalse(priv_recheck.verified)
+            self.assertNotIn(direct_fid, priv_recheck.partial_files)
+            self.assertNotIn(dotdot_fid, priv_recheck.partial_files)
+            self.assertIn(alias_fid, priv_recheck.partial_files)
+            self.assertIs(priv_recheck.file_causes[alias_fid], injected_exc)
+            priv_trav = priv_recheck.partial_files[
+                alias_fid
+            ].final_traversal_observation
+            assert priv_trav is not None
+            self.assertEqual(priv_trav.failed_stage, "symlink_readlink")
+
+            reset_run_state()
+            pub_causes: list[Exception | None] = []
+            with (
+                mock.patch(
+                    "refmac_diagnostic_profile._observe_regular_file_pin",
+                    side_effect=observe_pin_alias,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.open",
+                    side_effect=open_alias,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.fdopen",
+                    side_effect=fdopen_alias,
+                ),
+                mock.patch.object(
+                    profile_mod,
+                    "_traverse_path_components",
+                    side_effect=traverse_alias,
+                ),
+                mock.patch.object(
+                    profile_mod,
+                    "_validate_kernel_regular_lookup",
+                    side_effect=lookup_alias,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.readlink",
+                    side_effect=readlink_alias,
+                ),
+            ):
+                pub_report = recheck_profile(
+                    validated, mutation_causes_out=pub_causes
+                )
+            self.assertTrue(run_state["injected"])
+            with self.assertRaises(OSError) as pub_ebadf:
+                real_fstat(int(run_state["captured_fd"]))  # type: ignore[arg-type]
+            self.assertEqual(pub_ebadf.exception.errno, errno.EBADF)
+            self.assertFalse(pub_report["verified"])
+            self.assertTrue(
+                pub_report["files"][direct_fid]["matches_baseline"]
+            )
+            self.assertEqual(pub_report["files"][direct_fid]["errors"], [])
+            self.assertTrue(
+                pub_report["files"][dotdot_fid]["matches_baseline"]
+            )
+            self.assertEqual(pub_report["files"][dotdot_fid]["errors"], [])
+            pub_frow = pub_report["files"][alias_fid]
+            self.assertFalse(pub_frow["matches_baseline"])
+            self.assertEqual(
+                pub_frow["observed"]["final_traversal_observation"][
+                    "failed_stage"
+                ],
+                "symlink_readlink",
+            )
+            self.assertEqual(
+                pub_frow["observed"]["final_traversal_observation"][
+                    "failed_component_path"
+                ],
+                str(alias_symlink),
+            )
+            self.assertEqual(len(pub_causes), 1)
+            self.assertIs(pub_causes[0], injected_exc)
+
+            # 2. Manifest owner (manifest_pin) post-EOF traversal leaf_component_directory
+            manifest_resolved = str(manifest_path.resolve(strict=True))
+            manifest_bytes = manifest_path.read_bytes()
+            manifest_sha = _sha256_bytes(manifest_bytes)
+            park_manifest = manifest_path.with_name(
+                "diagnostic-profile.trav-parked.json"
+            )
+            m_state: dict[str, object] = {
+                "active_lexical": None,
+                "owned_fd": -1,
+                "captured_fd": -1,
+                "observed_eof_on_owned_fd": False,
+                "in_traverse": False,
+                "in_preliminary": False,
+                "component_hits": 0,
+                "mutated": False,
+            }
+
+            def stream_obs_m(path, *a, **kw):
+                prev_lex = m_state["active_lexical"]
+                path_str = str(path)
+                m_state["active_lexical"] = path_str
+                try:
+                    return real_stream_obs(path, *a, **kw)
+                finally:
+                    if path_str == str(manifest_path):
+                        m_state["owned_fd"] = -1
+                        m_state["observed_eof_on_owned_fd"] = False
+                        m_state["component_hits"] = 0
+                    m_state["active_lexical"] = prev_lex
+
+            def open_m(path, flags, *a, **kw):
+                fd = real_open(path, flags, *a, **kw)
+                if (
+                    m_state["active_lexical"] == str(manifest_path)
+                    and not m_state["mutated"]
+                    and str(path) == manifest_resolved
+                ):
+                    m_state["owned_fd"] = fd
+                    m_state["captured_fd"] = fd
+                    m_state["observed_eof_on_owned_fd"] = False
+                return fd
+
+            def fdopen_m(fd: int, mode: str = "rb", *a, **kw):
+                handle = real_fdopen(fd, mode, *a, **kw)
+                if (
+                    m_state["active_lexical"] == str(manifest_path)
+                    and fd == m_state["owned_fd"]
+                ):
+                    orig_read = handle.read
+
+                    def read_track_m_eof(n: int = -1) -> bytes:
+                        chunk = orig_read(n)
+                        if chunk == b"":
+                            m_state["observed_eof_on_owned_fd"] = True
+                        return chunk
+
+                    handle.read = read_track_m_eof  # type: ignore[method-assign]
+                return handle
+
+            def traverse_m(path_str: str):
+                prev = m_state["in_traverse"]
+                m_state["in_traverse"] = True
+                try:
+                    return real_traverse(path_str)
+                finally:
+                    m_state["in_traverse"] = prev
+
+            def lookup_m(path_str: str):
+                prev = m_state["in_preliminary"]
+                m_state["in_preliminary"] = m_state["in_traverse"]
+                try:
+                    return real_lookup(path_str)
+                finally:
+                    m_state["in_preliminary"] = prev
+
+            def lstat_m(path, *a, **kw):
+                if (
+                    m_state["active_lexical"] == str(manifest_path)
+                    and m_state["observed_eof_on_owned_fd"]
+                    and m_state["in_traverse"]
+                    and not m_state["in_preliminary"]
+                    and str(path) == manifest_resolved
+                ):
+                    m_state["component_hits"] = (
+                        int(m_state["component_hits"]) + 1  # type: ignore[arg-type]
+                    )
+                    if m_state["component_hits"] == 1 and not m_state["mutated"]:
+                        manifest_path.rename(park_manifest)
+                        manifest_path.mkdir()
+                        m_state["mutated"] = True
+                return real_lstat(path, *a, **kw)
+
+            with (
+                mock.patch(
+                    "refmac_diagnostic_profile._stream_observe_regular_file",
+                    side_effect=stream_obs_m,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.open", side_effect=open_m
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.fdopen", side_effect=fdopen_m
+                ),
+                mock.patch.object(
+                    profile_mod,
+                    "_traverse_path_components",
+                    side_effect=traverse_m,
+                ),
+                mock.patch.object(
+                    profile_mod,
+                    "_validate_kernel_regular_lookup",
+                    side_effect=lookup_m,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.lstat", side_effect=lstat_m
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile._parse_verified_json_bytes",
+                    side_effect=AssertionError("must not parse JSON"),
+                ) as mocked_parse,
+                mock.patch(
+                    "refmac_diagnostic_profile._validate_outer_manifest_shape",
+                    side_effect=AssertionError("must not validate shape"),
+                ) as mocked_shape,
+                mock.patch(
+                    "refmac_diagnostic_profile._observe_controlled_root",
+                    side_effect=AssertionError("must not inspect roots"),
+                ) as mocked_root,
+            ):
+                with self.assertRaises(ProfileValidationError) as m_ctx:
+                    validate_profile(
+                        profile, installed_record, ccp4_env, ev_root
+                    )
+                mocked_parse.assert_not_called()
+                mocked_shape.assert_not_called()
+                mocked_root.assert_not_called()
+
+            self.assertTrue(m_state["mutated"])
+            with self.assertRaises(OSError) as m_ebadf:
+                real_fstat(int(m_state["captured_fd"]))  # type: ignore[arg-type]
+            self.assertEqual(m_ebadf.exception.errno, errno.EBADF)
+            m_err = m_ctx.exception
+            self.assertEqual(m_err.failed_check, "manifest_pin")
+            assert isinstance(
+                m_err.manifest_identity, PartialFileReadObservation
+            )
+            self.assertTrue(m_err.manifest_identity.observed_eof)
+            self.assertEqual(
+                m_err.manifest_identity.observed_eof_sha256, manifest_sha
+            )
+            self.assertEqual(
+                m_err.manifest_identity.failure_phase,
+                "final_path_traversal",
+            )
+            m_trav = m_err.manifest_identity.final_traversal_observation
+            assert m_trav is not None
+            self.assertEqual(m_trav.failed_stage, "leaf_component_directory")
+            self.assertEqual(m_trav.failed_component_path, str(manifest_path))
+            self.assertIs(m_trav.failed_component_is_leaf, True)
+            assert m_trav.failed_component_lstat is not None
+            self.assertTrue(m_trav.failed_component_lstat.is_directory)
+
+    def test_task1024_traversal_carrier_invariants(self) -> None:
+        from dataclasses import replace
+
+        ObservedStatSnapshot = profile_mod.ObservedStatSnapshot
+        TraversalComponentObservation = (
+            profile_mod.TraversalComponentObservation
+        )
+        FinalPathTraversalObservation = (
+            profile_mod.FinalPathTraversalObservation
+        )
+        _ObservedDirectoryIdentity = profile_mod._ObservedDirectoryIdentity
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir).resolve()
+            root_snap = ObservedStatSnapshot.from_stat_result(os.lstat("/"))
+            directory = _ObservedDirectoryIdentity(
+                path="/",
+                resolved_path="/",
+                dev=root_snap.dev,
+                ino=root_snap.ino,
+                mode=root_snap.mode,
+                uid=root_snap.uid,
+                gid=root_snap.gid,
+            )
+            p = base / "owned-link"
+            p.symlink_to("owned-target")
+            s0 = ObservedStatSnapshot.from_stat_result(os.lstat(p))
+            p.rename(base / "owned-original")
+            p.symlink_to("owned-target")
+            s1 = ObservedStatSnapshot.from_stat_result(os.lstat(p))
+            self.assertNotEqual(s0.ino, s1.ino)
+
+            root_component = TraversalComponentObservation(
+                path="/",
+                lstat=root_snap,
+                is_root=True,
+                directory_identity=directory,
+            )
+            leaf = TraversalComponentObservation(
+                path="/link",
+                lstat=s0,
+                is_leaf=True,
+                accepted=False,
+            )
+            prior = TraversalComponentObservation(
+                path="/link",
+                lstat=s0,
+                is_leaf=False,
+                readlink_target="d",
+            )
+            rejected = TraversalComponentObservation(
+                path="/link",
+                lstat=s1,
+                is_leaf=False,
+                readlink_target="d",
+                accepted=False,
+            )
+            unknown_kwargs: dict[str, object] = {
+                "failed_stage": "symlink_readlink",
+                "lexical_path": "/link",
+                "root_lstat": root_snap,
+                "accepted_directories": (directory,),
+                "failed_component_path": "/link",
+                "failed_component_lstat": s0,
+                "symlink_expansions_count": 1,
+            }
+            consistent_kwargs: dict[str, object] = {
+                "failed_stage": "symlink_identity_changed",
+                "lexical_path": "/link/../link/file",
+                "root_lstat": root_snap,
+                "accepted_directories": (directory,),
+                "accepted_symlinks": (prior.symlink_edge,),
+                "accepted_symlink_identities": (prior.symlink_identity,),
+                "component_observations": (root_component, prior, rejected),
+                "failed_component_path": "/link",
+                "failed_component_is_leaf": False,
+                "failed_component_lstat": s1,
+                "rejected_component": rejected,
+                "prior_symlink_identity": prior.symlink_identity,
+                "prior_symlink_edge": prior.symlink_edge,
+                "symlink_expansions_count": 2,
+            }
+            (base / "owned-directory").mkdir()
+            ds = ObservedStatSnapshot.from_stat_result(
+                os.lstat(base / "owned-directory")
+            )
+            self.assertNotEqual(s0, ds)
+            dc = TraversalComponentObservation(
+                path="/link",
+                lstat=ds,
+                is_leaf=False,
+                accepted=True,
+            )
+            crosskind_kwargs: dict[str, object] = {
+                **consistent_kwargs,
+                "lexical_path": "/link/../link/../link/file",
+                "accepted_directories": (directory, dc.directory_identity),
+                "component_observations": (
+                    root_component,
+                    prior,
+                    dc,
+                    rejected,
+                ),
+                "prior_component_lstat": ds,
+                "prior_directory_identity": dc.directory_identity,
+            }
+
+            with (
+                mock.patch(
+                    "refmac_diagnostic_profile.os.lstat",
+                    side_effect=AssertionError("constructor filesystem call"),
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.stat",
+                    side_effect=AssertionError("constructor filesystem call"),
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.open",
+                    side_effect=AssertionError("constructor filesystem call"),
+                ),
+            ):
+                for bad_name, bad_kw in (
+                    ("unknown_position", unknown_kwargs),
+                    (
+                        "prior_wrong_kind",
+                        {
+                            **consistent_kwargs,
+                            "prior_component_lstat": root_snap,
+                        },
+                    ),
+                    (
+                        "prior_wrong_size",
+                        {
+                            **consistent_kwargs,
+                            "prior_component_lstat": replace(
+                                s0, size_bytes=s0.size_bytes + 1
+                            ),
+                        },
+                    ),
+                    (
+                        "unknown_failed_stage",
+                        {
+                            **consistent_kwargs,
+                            "failed_stage": "unknown_traversal_stage",
+                        },
+                    ),
+                ):
+                    with self.subTest(bad_traversal_carrier=bad_name):
+                        with self.assertRaises(ValueError):
+                            FinalPathTraversalObservation(**bad_kw)  # type: ignore[arg-type]
+
+                supplied_leaf_obs = FinalPathTraversalObservation(
+                    **{  # type: ignore[arg-type]
+                        **unknown_kwargs,
+                        "component_observations": (root_component, leaf),
+                    }
+                )
+                self.assertIs(supplied_leaf_obs.failed_component_is_leaf, True)
+                self.assertEqual(supplied_leaf_obs.rejected_component, leaf)
+
+                prior_consistent_obs = FinalPathTraversalObservation(
+                    **{  # type: ignore[arg-type]
+                        **consistent_kwargs,
+                        "prior_component_lstat": s0,
+                    }
+                )
+                self.assertEqual(
+                    prior_consistent_obs.prior_component_lstat, s0
+                )
+                self.assertEqual(
+                    prior_consistent_obs.symlink_expansions_count, 2
+                )
+                self.assertEqual(
+                    prior_consistent_obs.to_dict()["symlink_expansions_count"],
+                    2,
+                )
+                with self.assertRaisesRegex(
+                    ValueError,
+                    r"^FinalPathTraversalObservation\.symlink_expansions_count \(0\) must match non-root symlink components in component_observations \(2\)$",
+                ):
+                    replace(prior_consistent_obs, symlink_expansions_count=0)
+                with self.assertRaisesRegex(
+                    ValueError,
+                    r"^FinalPathTraversalObservation\.symlink_expansions_count \(3\) must match non-root symlink components in component_observations \(2\)$",
+                ):
+                    replace(prior_consistent_obs, symlink_expansions_count=3)
+
+                rejected_root_obs = FinalPathTraversalObservation(
+                    failed_stage="root_component_not_canonical_directory",
+                    lexical_path="/link",
+                    root_lstat=s0,
+                    component_observations=(
+                        TraversalComponentObservation(
+                            path="/",
+                            lstat=s0,
+                            is_root=True,
+                            is_leaf=False,
+                            accepted=False,
+                        ),
+                    ),
+                    symlink_expansions_count=0,
+                )
+                self.assertEqual(
+                    rejected_root_obs.symlink_expansions_count, 0
+                )
+                opaque_no_seq_obs = FinalPathTraversalObservation(
+                    **{  # type: ignore[arg-type]
+                        **unknown_kwargs,
+                        "failed_component_is_leaf": True,
+                    }
+                )
+                self.assertEqual(opaque_no_seq_obs.component_observations, ())
+                self.assertEqual(
+                    opaque_no_seq_obs.symlink_expansions_count, 1
+                )
+
+                prior_crosskind_obs = FinalPathTraversalObservation(
+                    **crosskind_kwargs  # type: ignore[arg-type]
+                )
+                self.assertEqual(
+                    [
+                        c.lstat
+                        for c in prior_crosskind_obs.component_observations
+                        if c.accepted and c.path == "/link"
+                    ],
+                    [s0, ds],
+                )
+                self.assertEqual(
+                    prior_crosskind_obs.prior_component_lstat, ds
+                )
+                self.assertEqual(
+                    prior_crosskind_obs.prior_symlink_identity,
+                    prior.symlink_identity,
+                )
+                self.assertEqual(
+                    prior_crosskind_obs.prior_directory_identity,
+                    dc.directory_identity,
+                )
+                with self.assertRaisesRegex(
+                    ValueError,
+                    r"^FinalPathTraversalObservation\.prior_component_lstat must match the latest accepted component lstat for failed_component_path$",
+                ):
+                    FinalPathTraversalObservation(
+                        **{  # type: ignore[arg-type]
+                            **crosskind_kwargs,
+                            "prior_component_lstat": s0,
+                        }
+                    )
+
+    def test_task1025_controlled_root_partial_member_producer_and_entrypoints(
+        self,
+    ) -> None:
+        from contextlib import ExitStack
+
+        real_open = os.open
+        real_fdopen = os.fdopen
+        real_fstat = os.fstat
+        real_lstat = os.lstat
+        real_obs_root = profile_mod._observe_controlled_root
+        real_obs_pin = profile_mod._observe_regular_file_pin
+        real_obs_dir = profile_mod._observe_directory_identity
+
+        # 1. Direct _observe_controlled_root + _build_root_observation + later separate _observe_regular_file_pin
+        # across ordinary ("member.dat"), single-space (" "), and tab ("\t") registered member names (#1168 / #1056)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base_tmp = Path(tmpdir).resolve()
+            for label, member_name in (
+                ("ordinary", "member.dat"),
+                ("space", " "),
+                ("tab", "\t"),
+            ):
+                with self.subTest(direct_root_member=label):
+                    sub_root = (base_tmp / f"direct-{label}").resolve()
+                    sub_root.mkdir()
+                    member_path = sub_root / member_name
+                    payload = b"owned inventory stream\n"
+                    member_path.write_bytes(payload)
+                    sha = _sha256_bytes(payload)
+                    declared = {
+                        "owned_member": {
+                            "path": str(member_path),
+                            "sha256": sha,
+                            "size_bytes": len(payload),
+                        }
+                    }
+
+                    healthy_inv = _observe_controlled_root(
+                        "build",
+                        str(sub_root),
+                        ("owned_member",),
+                        declared_files=declared,
+                    )
+                    self.assertIs(healthy_inv.scan_complete, True)
+                    self.assertIs(healthy_inv.verified, True)
+                    self.assertEqual(
+                        dict(healthy_inv.partial_member_observations), {}
+                    )
+                    self.assertEqual(
+                        healthy_inv.member_pins[member_name].path,
+                        str(member_path),
+                    )
+                    self.assertEqual(
+                        healthy_inv.member_observations[member_name].path,
+                        str(member_path),
+                    )
+                    healthy_pub = profile_mod._build_root_observation(
+                        healthy_inv, None
+                    )
+                    self.assertEqual(
+                        healthy_pub.partial_member_observations, ()
+                    )
+                    self.assertNotIn(
+                        "partial_member_observations", healthy_pub.to_dict()
+                    )
+                    self.assertEqual(
+                        [m.relative_path for m in healthy_pub.members],
+                        [member_name],
+                    )
+
+                    d_state: dict[str, object] = {
+                        "fd": -1,
+                        "eof": False,
+                        "injected": False,
+                        "bytes_read": 0,
+                    }
+                    stream_hash = hashlib.sha256()
+                    injected_eio = OSError(
+                        errno.EIO, f"owned {label} inventory end-fstat EIO"
+                    )
+
+                    def d_fdopen(fd: int, mode: str = "rb", *a, **kw):
+                        d_state["fd"] = fd
+                        handle = real_fdopen(fd, mode, *a, **kw)
+                        orig_read = handle.read
+
+                        def read_track(n: int = -1) -> bytes:
+                            chunk = orig_read(n)
+                            d_state["bytes_read"] = (
+                                int(d_state["bytes_read"]) + len(chunk)  # type: ignore[arg-type]
+                            )
+                            stream_hash.update(chunk)
+                            if chunk == b"":
+                                d_state["eof"] = True
+                            return chunk
+
+                        handle.read = read_track  # type: ignore[method-assign]
+                        return handle
+
+                    def d_fstat(fd: int, *a, **kw):
+                        if (
+                            d_state["eof"]
+                            and fd == d_state["fd"]
+                            and not d_state["injected"]
+                        ):
+                            d_state["injected"] = True
+                            raise injected_eio
+                        return real_fstat(fd, *a, **kw)
+
+                    with (
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.fdopen",
+                            side_effect=d_fdopen,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.fstat",
+                            side_effect=d_fstat,
+                        ),
+                        self.assertRaises(
+                            profile_mod._ControlledRootObservationError
+                        ) as err_ctx,
+                    ):
+                        _observe_controlled_root(
+                            "build",
+                            str(sub_root),
+                            ("owned_member",),
+                            declared_files=declared,
+                        )
+
+                    self.assertIs(d_state["eof"], True)
+                    self.assertIs(d_state["injected"], True)
+                    self.assertEqual(d_state["bytes_read"], len(payload))
+                    self.assertEqual(stream_hash.hexdigest(), sha)
+                    with self.assertRaises(OSError) as ebadf_ctx:
+                        real_fstat(int(d_state["fd"]))  # type: ignore[arg-type]
+                    self.assertEqual(ebadf_ctx.exception.errno, errno.EBADF)
+
+                    err = err_ctx.exception
+                    chain: list[BaseException] = []
+                    cur: BaseException | None = err
+                    while cur is not None:
+                        chain.append(cur)
+                        cur = cur.__cause__
+                    self.assertIn(injected_eio, chain)
+                    partial_errs = [
+                        e
+                        for e in chain
+                        if type(e) is _PartialFileReadError
+                    ]
+                    self.assertEqual(len(partial_errs), 1)
+                    orig_partial = partial_errs[0].observation
+
+                    inv = err.root_inventory
+                    assert inv is not None
+                    self.assertIs(inv.scan_complete, False)
+                    self.assertIs(inv.verified, False)
+                    self.assertNotIn(member_name, inv.member_pins)
+                    self.assertNotIn(member_name, inv.member_observations)
+                    self.assertEqual(
+                        list(inv.partial_member_observations.keys()),
+                        [member_name],
+                    )
+                    partial = inv.partial_member_observations[member_name]
+                    self.assertIs(partial, orig_partial)
+                    self.assertEqual(partial.path, str(member_path))
+                    self.assertIs(partial.observed_eof, True)
+                    self.assertIsNone(partial.sha256)
+                    self.assertIsNone(partial.size_bytes)
+                    self.assertIs(partial.verified, False)
+                    self.assertIs(partial.read_complete, False)
+                    self.assertEqual(partial.streamed_size_bytes, len(payload))
+                    self.assertEqual(partial.observed_stream_sha256, sha)
+                    self.assertEqual(partial.observed_eof_sha256, sha)
+                    self.assertEqual(partial.failure_phase, "end_fstat")
+                    assert partial.post_read_observation is not None
+                    self.assertIsNotNone(
+                        partial.post_read_observation.initial_fstat
+                    )
+                    self.assertIsNone(partial.post_read_observation.end_fstat)
+                    with self.assertRaisesRegex(
+                        ValueError,
+                        r"^PartialFileReadObservation cannot be converted to a FilePin because stream read or post-read verification did not complete$",
+                    ):
+                        partial.as_file_pin()
+
+                    with ExitStack() as poison:
+                        for fn_name in ("stat", "lstat", "open", "readlink"):
+                            poison.enter_context(
+                                mock.patch(
+                                    f"refmac_diagnostic_profile.os.{fn_name}",
+                                    side_effect=AssertionError(
+                                        f"projection {fn_name} forbidden"
+                                    ),
+                                )
+                            )
+                        pub_obs = profile_mod._build_root_observation(
+                            inv, None
+                        )
+                        pub_dict = pub_obs.to_dict()
+                        mut_dict = pub_obs.to_dict()
+                        mut_dict["partial_member_observations"][member_name][
+                            "observed_eof"
+                        ] = False
+                        self.assertEqual(pub_obs.to_dict(), pub_dict)
+
+                    self.assertIs(pub_obs.scan_complete, False)
+                    self.assertIs(pub_obs.verified, False)
+                    self.assertEqual(pub_obs.members, ())
+                    self.assertEqual(
+                        list(pub_obs.partial_member_observations.keys()),
+                        [member_name],
+                    )
+                    self.assertIs(
+                        pub_obs.partial_member_observations[member_name],
+                        partial,
+                    )
+                    self.assertEqual(
+                        pub_dict["partial_member_observations"][member_name],
+                        partial.to_dict(),
+                    )
+                    self.assertEqual(
+                        pub_dict["partial_member_observations"][member_name][
+                            "path"
+                        ],
+                        str(member_path),
+                    )
+
+                    later = _observe_regular_file_pin(str(member_path))
+                    self.assertIsNot(later, partial)
+                    self.assertEqual(later.sha256, sha)
+                    self.assertEqual(later.as_file_pin().sha256, sha)
+
+        # 2. Full profile entrypoints (_validate_and_observe_outer_profile, validate_profile,
+        # _reobserve_outer_profile_state, recheck_profile)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fx = _build_synthetic_outer_profile_fixture(Path(tmpdir))
+            root = fx["root"]
+            assert isinstance(root, Path)
+            trees = fx["trees"]
+            assert isinstance(trees, dict)
+            installed_record = fx["installed_record"]
+            assert isinstance(installed_record, dict)
+            ccp4_env = fx["ccp4_env"]
+            assert isinstance(ccp4_env, dict)
+            ev_root = fx["evidence_root"]
+            assert isinstance(ev_root, Path)
+            profile = fx["profile"]
+            assert isinstance(profile, RefmacDiagnosticProfile)
+            base_payload = fx["manifest_payload"]
+            assert isinstance(base_payload, dict)
+
+            validated = validate_profile(
+                profile, installed_record, ccp4_env, ev_root
+            )
+            baseline_state = validated._outer_state
+            assert baseline_state is not None
+            baseline_prov = validated.to_provenance()
+            for rname in ("vendor", "prepared", "build"):
+                self.assertEqual(
+                    dict(
+                        baseline_state.observed_roots[
+                            rname
+                        ].partial_member_observations
+                    ),
+                    {},
+                )
+                self.assertEqual(
+                    validated.roots[rname].partial_member_observations, ()
+                )
+                self.assertNotIn(
+                    "partial_member_observations",
+                    baseline_prov["roots"][rname],
+                )
+            healthy_recheck = recheck_profile(validated)
+            self.assertIs(healthy_recheck["verified"], True)
+            for rname in ("vendor", "prepared", "build"):
+                self.assertNotIn(
+                    "partial_member_observations",
+                    healthy_recheck["roots"][rname]["observed"],
+                )
+
+            patch_path = trees["prepared"] / "refmac_diagnostic_hooks.patch"
+            patch_resolved = str(patch_path.resolve(strict=True))
+            patch_bytes = patch_path.read_bytes()
+            patch_sha = _sha256_bytes(patch_bytes)
+            patch_fid = next(
+                fid
+                for fid, row in base_payload["files"].items()  # type: ignore[union-attr]
+                if row["path"] == str(patch_path)
+            )
+            park_patch = patch_path.with_name("refmac_diagnostic_hooks.parked")
+
+            # Scenario A (post-EOF namespace directory replacement on inventory read; later declared-file read succeeds)
+            # and Scenario B (pre-EOF stream_read EIO on inventory read; later declared-file read succeeds)
+            for mode in ("post_eof_dir_swap", "pre_eof_stream_eio"):
+                with self.subTest(entrypoint_inventory_only_mode=mode):
+                    pre_eof_exc = OSError(
+                        errno.EIO,
+                        "owned pre-EOF prepared inventory stream_read EIO",
+                    )
+                    m_state: dict[str, object] = {
+                        "in_prepared_root": False,
+                        "active_lexical": None,
+                        "inv_owned_fd": -1,
+                        "inv_captured_fd": -1,
+                        "file_reads": 0,
+                        "inv_eof": False,
+                        "inv_bytes": 0,
+                        "mutated": False,
+                    }
+
+                    def reset_m_state() -> None:
+                        if park_patch.exists():
+                            if patch_path.is_dir():
+                                patch_path.rmdir()
+                            park_patch.rename(patch_path)
+                        m_state["in_prepared_root"] = False
+                        m_state["active_lexical"] = None
+                        m_state["inv_owned_fd"] = -1
+                        m_state["inv_captured_fd"] = -1
+                        m_state["file_reads"] = 0
+                        m_state["inv_eof"] = False
+                        m_state["inv_bytes"] = 0
+                        m_state["mutated"] = False
+
+                    def obs_root_hook(name: str, *a, **kw):
+                        prev = m_state["in_prepared_root"]
+                        if name == "prepared":
+                            m_state["in_prepared_root"] = True
+                        try:
+                            return real_obs_root(name, *a, **kw)
+                        finally:
+                            if name == "prepared":
+                                m_state["in_prepared_root"] = prev
+                                if park_patch.exists():
+                                    if patch_path.is_dir():
+                                        patch_path.rmdir()
+                                    park_patch.rename(patch_path)
+
+                    def obs_pin_hook(path, *a, **kw):
+                        prev_lex = m_state["active_lexical"]
+                        p_str = str(path)
+                        m_state["active_lexical"] = p_str
+                        if (
+                            p_str == str(patch_path)
+                            and not m_state["in_prepared_root"]
+                        ):
+                            m_state["file_reads"] = (
+                                int(m_state["file_reads"]) + 1  # type: ignore[arg-type]
+                            )
+                        try:
+                            return real_obs_pin(path, *a, **kw)
+                        finally:
+                            if p_str == str(patch_path):
+                                m_state["inv_owned_fd"] = -1
+                                m_state["inv_eof"] = False
+                            m_state["active_lexical"] = prev_lex
+
+                    def open_hook(path, flags, *a, **kw):
+                        fd = real_open(path, flags, *a, **kw)
+                        if (
+                            m_state["in_prepared_root"]
+                            and m_state["active_lexical"] == str(patch_path)
+                            and str(path) == patch_resolved
+                            and not m_state["mutated"]
+                        ):
+                            m_state["inv_owned_fd"] = fd
+                            m_state["inv_captured_fd"] = fd
+                            m_state["inv_eof"] = False
+                            m_state["inv_bytes"] = 0
+                        return fd
+
+                    def fdopen_hook(fd: int, mode_str: str = "rb", *a, **kw):
+                        handle = real_fdopen(fd, mode_str, *a, **kw)
+                        if (
+                            m_state["in_prepared_root"]
+                            and fd == m_state["inv_owned_fd"]
+                        ):
+                            orig_read = handle.read
+
+                            def read_hook(n: int = -1) -> bytes:
+                                if (
+                                    mode == "pre_eof_stream_eio"
+                                    and int(m_state["inv_bytes"]) > 0  # type: ignore[arg-type]
+                                    and not m_state["mutated"]
+                                ):
+                                    m_state["mutated"] = True
+                                    raise pre_eof_exc
+                                chunk = orig_read(
+                                    5 if mode == "pre_eof_stream_eio" else n
+                                )
+                                m_state["inv_bytes"] = (
+                                    int(m_state["inv_bytes"]) + len(chunk)  # type: ignore[arg-type]
+                                )
+                                if chunk == b"":
+                                    m_state["inv_eof"] = True
+                                return chunk
+
+                            handle.read = read_hook  # type: ignore[method-assign]
+                        return handle
+
+                    def lstat_hook(path, *a, **kw):
+                        if (
+                            mode == "post_eof_dir_swap"
+                            and m_state["in_prepared_root"]
+                            and m_state["inv_eof"]
+                            and not m_state["mutated"]
+                            and str(path) == str(patch_path)
+                        ):
+                            patch_path.rename(park_patch)
+                            patch_path.mkdir()
+                            m_state["mutated"] = True
+                        return real_lstat(path, *a, **kw)
+
+                    def check_partial_member(
+                        p_obs: PartialFileReadObservation,
+                    ) -> None:
+                        self.assertEqual(p_obs.path, str(patch_path))
+                        self.assertIsNone(p_obs.sha256)
+                        self.assertIsNone(p_obs.size_bytes)
+                        self.assertIs(p_obs.read_complete, False)
+                        self.assertIs(p_obs.verified, False)
+                        with self.assertRaisesRegex(
+                            ValueError,
+                            r"^PartialFileReadObservation cannot be converted to a FilePin because stream read or post-read verification did not complete$",
+                        ):
+                            p_obs.as_file_pin()
+                        assert p_obs.post_read_observation is not None
+                        self.assertIsNotNone(
+                            p_obs.post_read_observation.initial_fstat
+                        )
+                        if mode == "post_eof_dir_swap":
+                            self.assertIs(p_obs.observed_eof, True)
+                            self.assertEqual(
+                                p_obs.streamed_size_bytes, len(patch_bytes)
+                            )
+                            self.assertEqual(
+                                p_obs.observed_stream_sha256, patch_sha
+                            )
+                            self.assertEqual(
+                                p_obs.observed_eof_sha256, patch_sha
+                            )
+                            self.assertEqual(
+                                p_obs.failure_phase,
+                                "final_kernel_lookup",
+                            )
+                            assert (
+                                p_obs.post_read_observation.end_fstat
+                                is not None
+                            )
+                            self.assertIs(
+                                p_obs.post_read_observation.end_fstat.is_regular,
+                                True,
+                            )
+                            assert p_obs.final_lexical_lstat is not None
+                            assert p_obs.final_lexical_stat is not None
+                            self.assertIs(
+                                p_obs.final_lexical_lstat.is_directory, True
+                            )
+                            self.assertIs(
+                                p_obs.final_lexical_stat.is_directory, True
+                            )
+                        else:
+                            self.assertIs(p_obs.observed_eof, False)
+                            self.assertIsNone(p_obs.observed_eof_sha256)
+                            self.assertEqual(p_obs.streamed_size_bytes, 5)
+                            self.assertEqual(
+                                p_obs.observed_stream_sha256,
+                                _sha256_bytes(patch_bytes[:5]),
+                            )
+                            self.assertEqual(
+                                p_obs.failure_phase, "stream_read"
+                            )
+                            self.assertIsNone(
+                                p_obs.post_read_observation.end_fstat
+                            )
+
+                    # 2a. Private admission (_validate_and_observe_outer_profile)
+                    reset_m_state()
+                    with (
+                        mock.patch(
+                            "refmac_diagnostic_profile._observe_controlled_root",
+                            side_effect=obs_root_hook,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile._observe_regular_file_pin",
+                            side_effect=obs_pin_hook,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.open",
+                            side_effect=open_hook,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.fdopen",
+                            side_effect=fdopen_hook,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.lstat",
+                            side_effect=lstat_hook,
+                        ),
+                        self.assertRaises(_ProfileObservationError) as priv_ctx,
+                    ):
+                        _validate_and_observe_outer_profile(
+                            profile, evidence_root=ev_root, chunk_size=5
+                        )
+                    self.assertIs(m_state["mutated"], True)
+                    self.assertEqual(m_state["file_reads"], 1)
+                    with self.assertRaises(OSError) as ebadf_a:
+                        real_fstat(int(m_state["inv_captured_fd"]))  # type: ignore[arg-type]
+                    self.assertEqual(ebadf_a.exception.errno, errno.EBADF)
+
+                    priv_partial = priv_ctx.exception.partial_observation
+                    self.assertIn("vendor", priv_partial.verified_roots)
+                    self.assertIn("build", priv_partial.verified_roots)
+                    self.assertIn("prepared", priv_partial.incomplete_roots)
+                    self.assertIn("prepared", priv_partial.failed_roots)
+                    self.assertNotIn("prepared", priv_partial.verified_roots)
+                    prep_inv = priv_partial.observed_roots["prepared"]
+                    self.assertIs(prep_inv.scan_complete, False)
+                    self.assertIs(prep_inv.verified, False)
+                    self.assertIn(".hidden_prepared_cfg", prep_inv.member_pins)
+                    self.assertIn(
+                        ".hidden_prepared_cfg", prep_inv.member_observations
+                    )
+                    self.assertNotIn(
+                        "refmac_diagnostic_hooks.patch", prep_inv.member_pins
+                    )
+                    self.assertNotIn(
+                        "refmac_diagnostic_hooks.patch",
+                        prep_inv.member_observations,
+                    )
+                    p_member = prep_inv.partial_member_observations[
+                        "refmac_diagnostic_hooks.patch"
+                    ]
+                    check_partial_member(p_member)
+                    self.assertIn(patch_fid, priv_partial.verified_files)
+                    self.assertNotIn(patch_fid, priv_partial.partial_files)
+                    self.assertEqual(
+                        priv_partial.observed_files[patch_fid].sha256,
+                        patch_sha,
+                    )
+                    root_rec = next(
+                        r
+                        for r in priv_ctx.exception.error_records
+                        if r.stage == "outer_profile_files_and_roots"
+                        and isinstance(r.exception, _PartialFileReadError)
+                        and r.exception.observation is p_member
+                    )
+                    assert isinstance(
+                        root_rec.exception, _PartialFileReadError
+                    )
+                    self.assertIs(root_rec.exception.observation, p_member)
+                    self.assertIsNotNone(root_rec.exception.__cause__)
+                    self.assertIs(
+                        profile_mod._select_original_cause_exception(
+                            root_rec.exception
+                        ),
+                        root_rec.exception.__cause__,
+                    )
+                    if mode == "pre_eof_stream_eio":
+                        self.assertIs(
+                            root_rec.exception.__cause__, pre_eof_exc
+                        )
+
+                    # 2b. Public admission (validate_profile)
+                    reset_m_state()
+                    with (
+                        mock.patch(
+                            "refmac_diagnostic_profile._observe_controlled_root",
+                            side_effect=obs_root_hook,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile._observe_regular_file_pin",
+                            side_effect=obs_pin_hook,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.open",
+                            side_effect=open_hook,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.fdopen",
+                            side_effect=fdopen_hook,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.lstat",
+                            side_effect=lstat_hook,
+                        ),
+                        self.assertRaises(ProfileValidationError) as pub_ctx,
+                    ):
+                        validate_profile(
+                            profile,
+                            installed_record,
+                            ccp4_env,
+                            ev_root,
+                            chunk_size=5,
+                        )
+                    self.assertIs(m_state["mutated"], True)
+                    self.assertEqual(m_state["file_reads"], 1)
+                    with self.assertRaises(OSError) as ebadf_b:
+                        real_fstat(int(m_state["inv_captured_fd"]))  # type: ignore[arg-type]
+                    self.assertEqual(ebadf_b.exception.errno, errno.EBADF)
+
+                    val_err = pub_ctx.exception
+                    self.assertEqual(
+                        val_err.failed_check, "outer_profile_files_and_roots"
+                    )
+                    if mode == "pre_eof_stream_eio":
+                        self.assertIs(val_err.cause_exception, pre_eof_exc)
+                    pub_prep = val_err.roots["prepared"]
+                    self.assertIs(pub_prep.scan_complete, False)
+                    self.assertIs(pub_prep.verified, False)
+                    self.assertIn(".hidden_prepared_cfg", pub_prep.members)
+                    self.assertNotIn(
+                        "refmac_diagnostic_hooks.patch", pub_prep.members
+                    )
+                    check_partial_member(
+                        pub_prep.partial_member_observations[
+                            "refmac_diagnostic_hooks.patch"
+                        ]
+                    )
+                    pub_file_obs = val_err.files[patch_fid]
+                    assert isinstance(pub_file_obs, FileObservation)
+                    self.assertIs(pub_file_obs.verified, True)
+                    self.assertEqual(pub_file_obs.sha256, patch_sha)
+                    with ExitStack() as poison:
+                        for fn_name in ("stat", "lstat", "open", "readlink"):
+                            poison.enter_context(
+                                mock.patch(
+                                    f"refmac_diagnostic_profile.os.{fn_name}",
+                                    side_effect=AssertionError(
+                                        f"provenance {fn_name} forbidden"
+                                    ),
+                                )
+                            )
+                        prov = val_err.to_provenance()
+                        prov_mut = val_err.to_provenance()
+                        prov_mut["roots"]["prepared"][
+                            "partial_member_observations"
+                        ]["refmac_diagnostic_hooks.patch"][
+                            "observed_eof"
+                        ] = None
+                        self.assertEqual(val_err.to_provenance(), prov)
+                    self.assertNotIn(
+                        "partial_member_observations", prov["roots"]["vendor"]
+                    )
+                    self.assertNotIn(
+                        "partial_member_observations", prov["roots"]["build"]
+                    )
+                    self.assertEqual(
+                        prov["roots"]["prepared"][
+                            "partial_member_observations"
+                        ]["refmac_diagnostic_hooks.patch"]["failure_phase"],
+                        (
+                            "final_kernel_lookup"
+                            if mode == "post_eof_dir_swap"
+                            else "stream_read"
+                        ),
+                    )
+
+                    # 2c. Private recheck (_reobserve_outer_profile_state)
+                    reset_m_state()
+                    with (
+                        mock.patch(
+                            "refmac_diagnostic_profile._observe_controlled_root",
+                            side_effect=obs_root_hook,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile._observe_regular_file_pin",
+                            side_effect=obs_pin_hook,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.open",
+                            side_effect=open_hook,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.fdopen",
+                            side_effect=fdopen_hook,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.lstat",
+                            side_effect=lstat_hook,
+                        ),
+                    ):
+                        priv_recheck = _reobserve_outer_profile_state(
+                            baseline_state, chunk_size=5
+                        )
+                    self.assertIs(m_state["mutated"], True)
+                    self.assertEqual(m_state["file_reads"], 1)
+                    with self.assertRaises(OSError) as ebadf_c:
+                        real_fstat(int(m_state["inv_captured_fd"]))  # type: ignore[arg-type]
+                    self.assertEqual(ebadf_c.exception.errno, errno.EBADF)
+
+                    self.assertIs(priv_recheck.verified, False)
+                    self.assertIn("vendor", priv_recheck.verified_roots)
+                    self.assertIn("build", priv_recheck.verified_roots)
+                    self.assertIn("prepared", priv_recheck.incomplete_roots)
+                    self.assertIn("prepared", priv_recheck.failed_roots)
+                    check_partial_member(
+                        priv_recheck.observed_roots[
+                            "prepared"
+                        ].partial_member_observations[
+                            "refmac_diagnostic_hooks.patch"
+                        ]
+                    )
+                    self.assertIn(patch_fid, priv_recheck.verified_files)
+                    self.assertNotIn(patch_fid, priv_recheck.partial_files)
+                    if mode == "pre_eof_stream_eio":
+                        self.assertIs(
+                            priv_recheck.root_causes["prepared"], pre_eof_exc
+                        )
+                        self.assertIs(
+                            priv_recheck.observation_causes[
+                                "profile:root:prepared"
+                            ],
+                            pre_eof_exc,
+                        )
+
+                    # 2d. Public recheck (recheck_profile)
+                    reset_m_state()
+                    pub_causes: list[BaseException | None] = []
+                    with (
+                        mock.patch(
+                            "refmac_diagnostic_profile._observe_controlled_root",
+                            side_effect=obs_root_hook,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile._observe_regular_file_pin",
+                            side_effect=obs_pin_hook,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.open",
+                            side_effect=open_hook,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.fdopen",
+                            side_effect=fdopen_hook,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.lstat",
+                            side_effect=lstat_hook,
+                        ),
+                    ):
+                        pub_report = recheck_profile(
+                            validated,
+                            mutation_causes_out=pub_causes,
+                        )
+                    self.assertIs(m_state["mutated"], True)
+                    self.assertEqual(m_state["file_reads"], 1)
+                    with self.assertRaises(OSError) as ebadf_d:
+                        real_fstat(int(m_state["inv_captured_fd"]))  # type: ignore[arg-type]
+                    self.assertEqual(ebadf_d.exception.errno, errno.EBADF)
+
+                    self.assertIs(pub_report["verified"], False)
+                    self.assertIs(
+                        pub_report["roots"]["vendor"]["matches_baseline"], True
+                    )
+                    self.assertIs(
+                        pub_report["roots"]["build"]["matches_baseline"], True
+                    )
+                    prep_row = pub_report["roots"]["prepared"]
+                    self.assertIs(prep_row["matches_baseline"], False)
+                    self.assertEqual(
+                        prep_row["member_diff"],
+                        {"added": [], "removed": []},
+                    )
+                    self.assertEqual(
+                        prep_row["observed"]["partial_member_observations"][
+                            "refmac_diagnostic_hooks.patch"
+                        ]["path"],
+                        str(patch_path),
+                    )
+                    self.assertIs(
+                        pub_report["files"][patch_fid]["matches_baseline"],
+                        True,
+                    )
+                    self.assertEqual(
+                        pub_report["files"][patch_fid]["errors"], []
+                    )
+                    self.assertEqual(
+                        pub_report["files"][patch_fid]["observed"]["sha256"],
+                        patch_sha,
+                    )
+                    self.assertEqual(len(pub_causes), 1)
+                    if mode == "pre_eof_stream_eio":
+                        self.assertIs(pub_causes[0], pre_eof_exc)
+
+            # 3. Distinct inventory vs declared-file failures on the same path + ancestor-error reconstruction (#1035 Site 5)
+            inv_eio = OSError(
+                errno.EIO, "owned prepared inventory post-EOF end_fstat EIO"
+            )
+            file_eio = OSError(
+                errno.EIO, "owned declared-file pre-EOF stream_read EIO"
+            )
+            anc_eio = OSError(
+                errno.EACCES, "owned ancestor directory recheck EACCES"
+            )
+            dual_state: dict[str, object] = {
+                "in_prepared_root": False,
+                "active_lexical": None,
+                "inv_fd": -1,
+                "inv_captured_fd": -1,
+                "inv_eof": False,
+                "inv_injected": False,
+                "file_fd": -1,
+                "file_captured_fd": -1,
+                "file_bytes": 0,
+                "file_injected": False,
+                "anc_injected": False,
+            }
+
+            def reset_dual_state() -> None:
+                dual_state["in_prepared_root"] = False
+                dual_state["active_lexical"] = None
+                dual_state["inv_fd"] = -1
+                dual_state["inv_captured_fd"] = -1
+                dual_state["inv_eof"] = False
+                dual_state["inv_injected"] = False
+                dual_state["file_fd"] = -1
+                dual_state["file_captured_fd"] = -1
+                dual_state["file_bytes"] = 0
+                dual_state["file_injected"] = False
+                dual_state["anc_injected"] = False
+
+            def dual_obs_root(name: str, *a, **kw):
+                prev = dual_state["in_prepared_root"]
+                if name == "prepared":
+                    dual_state["in_prepared_root"] = True
+                try:
+                    return real_obs_root(name, *a, **kw)
+                finally:
+                    dual_state["in_prepared_root"] = prev
+
+            def dual_obs_pin(path, *a, **kw):
+                prev_lex = dual_state["active_lexical"]
+                dual_state["active_lexical"] = str(path)
+                try:
+                    return real_obs_pin(path, *a, **kw)
+                finally:
+                    dual_state["inv_fd"] = -1
+                    dual_state["file_fd"] = -1
+                    dual_state["active_lexical"] = prev_lex
+
+            def dual_open(path, flags, *a, **kw):
+                fd = real_open(path, flags, *a, **kw)
+                if (
+                    dual_state["active_lexical"] == str(patch_path)
+                    and str(path) == patch_resolved
+                ):
+                    if (
+                        dual_state["in_prepared_root"]
+                        and not dual_state["inv_injected"]
+                    ):
+                        dual_state["inv_fd"] = fd
+                        dual_state["inv_captured_fd"] = fd
+                        dual_state["inv_eof"] = False
+                    elif (
+                        not dual_state["in_prepared_root"]
+                        and not dual_state["file_injected"]
+                    ):
+                        dual_state["file_fd"] = fd
+                        dual_state["file_captured_fd"] = fd
+                        dual_state["file_bytes"] = 0
+                return fd
+
+            def dual_fdopen(fd: int, mode_str: str = "rb", *a, **kw):
+                handle = real_fdopen(fd, mode_str, *a, **kw)
+                if fd == dual_state["inv_fd"]:
+                    orig_read = handle.read
+
+                    def read_inv(n: int = -1) -> bytes:
+                        chunk = orig_read(n)
+                        if chunk == b"":
+                            dual_state["inv_eof"] = True
+                        return chunk
+
+                    handle.read = read_inv  # type: ignore[method-assign]
+                elif fd == dual_state["file_fd"]:
+                    orig_read_f = handle.read
+
+                    def read_file(n: int = -1) -> bytes:
+                        if (
+                            int(dual_state["file_bytes"]) > 0  # type: ignore[arg-type]
+                            and not dual_state["file_injected"]
+                        ):
+                            dual_state["file_injected"] = True
+                            raise file_eio
+                        chunk = orig_read_f(6)
+                        dual_state["file_bytes"] = (
+                            int(dual_state["file_bytes"]) + len(chunk)  # type: ignore[arg-type]
+                        )
+                        return chunk
+
+                    handle.read = read_file  # type: ignore[method-assign]
+                return handle
+
+            def dual_fstat(fd: int, *a, **kw):
+                if (
+                    dual_state["inv_eof"]
+                    and fd == dual_state["inv_fd"]
+                    and not dual_state["inv_injected"]
+                ):
+                    dual_state["inv_injected"] = True
+                    raise inv_eio
+                return real_fstat(fd, *a, **kw)
+
+            def dual_obs_dir(
+                dir_path: str,
+                *,
+                require_no_symlink_ancestors: bool = True,
+            ):
+                if (
+                    not require_no_symlink_ancestors
+                    and dir_path == str(root)
+                    and not dual_state["anc_injected"]
+                ):
+                    dual_state["anc_injected"] = True
+                    raise ValueError(
+                        f"Cannot inspect directory {dir_path!r}"
+                    ) from anc_eio
+                return real_obs_dir(
+                    dir_path,
+                    require_no_symlink_ancestors=require_no_symlink_ancestors,
+                )
+
+            reset_dual_state()
+            with (
+                mock.patch(
+                    "refmac_diagnostic_profile._observe_controlled_root",
+                    side_effect=dual_obs_root,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile._observe_regular_file_pin",
+                    side_effect=dual_obs_pin,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.open",
+                    side_effect=dual_open,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.fdopen",
+                    side_effect=dual_fdopen,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.fstat",
+                    side_effect=dual_fstat,
+                ),
+                self.assertRaises(ProfileValidationError) as dual_adm_ctx,
+            ):
+                validate_profile(
+                    profile, installed_record, ccp4_env, ev_root, chunk_size=6
+                )
+            self.assertIs(dual_state["inv_injected"], True)
+            self.assertIs(dual_state["file_injected"], True)
+            dual_adm = dual_adm_ctx.exception
+            adm_root_p = dual_adm.roots[
+                "prepared"
+            ].partial_member_observations["refmac_diagnostic_hooks.patch"]
+            adm_file_p = dual_adm.files[patch_fid]
+            assert isinstance(adm_file_p, PartialFileReadObservation)
+            self.assertIsNot(adm_root_p, adm_file_p)
+            self.assertEqual(adm_root_p.failure_phase, "end_fstat")
+            self.assertIs(adm_root_p.observed_eof, True)
+            self.assertEqual(adm_file_p.failure_phase, "stream_read")
+            self.assertIs(adm_file_p.observed_eof, False)
+
+            reset_dual_state()
+            with (
+                mock.patch(
+                    "refmac_diagnostic_profile._observe_controlled_root",
+                    side_effect=dual_obs_root,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile._observe_regular_file_pin",
+                    side_effect=dual_obs_pin,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile._observe_directory_identity",
+                    side_effect=dual_obs_dir,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.open",
+                    side_effect=dual_open,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.fdopen",
+                    side_effect=dual_fdopen,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.fstat",
+                    side_effect=dual_fstat,
+                ),
+            ):
+                dual_recheck = _reobserve_outer_profile_state(
+                    baseline_state, chunk_size=6
+                )
+            self.assertIs(dual_state["inv_injected"], True)
+            self.assertIs(dual_state["file_injected"], True)
+            self.assertIs(dual_state["anc_injected"], True)
+            for c_fd in (
+                int(dual_state["inv_captured_fd"]),  # type: ignore[arg-type]
+                int(dual_state["file_captured_fd"]),  # type: ignore[arg-type]
+            ):
+                with self.assertRaises(OSError) as ebadf_dual:
+                    real_fstat(c_fd)
+                self.assertEqual(ebadf_dual.exception.errno, errno.EBADF)
+
+            prep_after = dual_recheck.observed_roots["prepared"]
+            self.assertTrue(
+                any(
+                    "Controlled root 'prepared' recheck failed" in e
+                    for e in prep_after.errors
+                )
+            )
+            self.assertTrue(
+                any(
+                    f"Ancestor directory {str(root)!r} recheck failed" in e
+                    for e in prep_after.errors
+                )
+            )
+            inv_partial = prep_after.partial_member_observations[
+                "refmac_diagnostic_hooks.patch"
+            ]
+            file_partial = dual_recheck.partial_files[patch_fid]
+            self.assertIsNot(inv_partial, file_partial)
+            self.assertIs(inv_partial.observed_eof, True)
+            self.assertEqual(inv_partial.streamed_size_bytes, len(patch_bytes))
+            self.assertEqual(inv_partial.observed_eof_sha256, patch_sha)
+            self.assertEqual(inv_partial.failure_phase, "end_fstat")
+            self.assertIs(file_partial.observed_eof, False)
+            self.assertEqual(file_partial.streamed_size_bytes, 6)
+            self.assertEqual(
+                file_partial.observed_stream_sha256,
+                _sha256_bytes(patch_bytes[:6]),
+            )
+            self.assertIsNone(file_partial.observed_eof_sha256)
+            self.assertEqual(file_partial.failure_phase, "stream_read")
+            self.assertIs(dual_recheck.root_causes["prepared"], inv_eio)
+            self.assertIs(dual_recheck.file_causes[patch_fid], file_eio)
+            self.assertIs(dual_recheck.ancestor_causes[str(root)], anc_eio)
+
+            reset_dual_state()
+            dual_pub_causes: list[BaseException | None] = []
+            with (
+                mock.patch(
+                    "refmac_diagnostic_profile._observe_controlled_root",
+                    side_effect=dual_obs_root,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile._observe_regular_file_pin",
+                    side_effect=dual_obs_pin,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile._observe_directory_identity",
+                    side_effect=dual_obs_dir,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.open",
+                    side_effect=dual_open,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.fdopen",
+                    side_effect=dual_fdopen,
+                ),
+                mock.patch(
+                    "refmac_diagnostic_profile.os.fstat",
+                    side_effect=dual_fstat,
+                ),
+            ):
+                dual_pub = recheck_profile(
+                    validated,
+                    mutation_causes_out=dual_pub_causes,
+                )
+            self.assertEqual(
+                dual_pub["roots"]["prepared"]["observed"][
+                    "partial_member_observations"
+                ]["refmac_diagnostic_hooks.patch"]["failure_phase"],
+                "end_fstat",
+            )
+            self.assertEqual(
+                dual_pub["files"][patch_fid]["observed"]["failure_phase"],
+                "stream_read",
+            )
+            self.assertEqual(
+                [
+                    e["message"]
+                    for e in dual_pub["roots"]["prepared"]["errors"]
+                ],
+                [str(inv_eio), str(anc_eio)],
+            )
+            self.assertEqual(
+                [e["message"] for e in dual_pub["files"][patch_fid]["errors"]],
+                [str(file_eio), str(anc_eio)],
+            )
+            self.assertIn(inv_eio, dual_pub_causes)
+            self.assertIn(file_eio, dual_pub_causes)
+            self.assertIn(anc_eio, dual_pub_causes)
+
+            # 4. Hidden unregistered member partial failure + opaque-prefix file_id collision guard
+            colliding_payload = copy.deepcopy(base_payload)
+            old_writer_id = colliding_payload["roles"]["writer_input"][0]  # type: ignore[index]
+            colliding_id = "unregistered:build:.hidden-extra.dat"
+            writer_row = colliding_payload["files"].pop(old_writer_id)  # type: ignore[union-attr]
+            writer_path_str = writer_row["path"]
+            colliding_payload["files"][colliding_id] = writer_row  # type: ignore[index]
+            colliding_payload["roles"]["writer_input"] = [colliding_id]  # type: ignore[index]
+            colliding_profile = _rewrite_manifest_and_profile(
+                fx, colliding_payload
+            )
+            colliding_validated = validate_profile(
+                colliding_profile, installed_record, ccp4_env, ev_root
+            )
+            colliding_state = colliding_validated._outer_state
+            assert colliding_state is not None
+
+            hidden_extra = trees["build"] / ".hidden-extra.dat"
+            hidden_bytes = b"hidden unregistered partial\n"
+            hidden_sha = _sha256_bytes(hidden_bytes)
+            hidden_extra.write_bytes(hidden_bytes)
+            hidden_eio = OSError(
+                errno.EIO, "owned hidden unregistered end_fstat EIO"
+            )
+            h_state: dict[str, object] = {
+                "fd": -1,
+                "eof": False,
+                "injected": False,
+            }
+
+            def h_open(path, flags, *a, **kw):
+                fd = real_open(path, flags, *a, **kw)
+                if str(path) == str(hidden_extra) and not h_state["injected"]:
+                    h_state["fd"] = fd
+                    h_state["eof"] = False
+                return fd
+
+            def h_fdopen(fd: int, mode_str: str = "rb", *a, **kw):
+                handle = real_fdopen(fd, mode_str, *a, **kw)
+                if fd == h_state["fd"]:
+                    orig_read = handle.read
+
+                    def read_h(n: int = -1) -> bytes:
+                        chunk = orig_read(n)
+                        if chunk == b"":
+                            h_state["eof"] = True
+                        return chunk
+
+                    handle.read = read_h  # type: ignore[method-assign]
+                return handle
+
+            def h_fstat(fd: int, *a, **kw):
+                if (
+                    h_state["eof"]
+                    and fd == h_state["fd"]
+                    and not h_state["injected"]
+                ):
+                    h_state["injected"] = True
+                    raise hidden_eio
+                return real_fstat(fd, *a, **kw)
+
+            try:
+                with (
+                    mock.patch(
+                        "refmac_diagnostic_profile.os.open",
+                        side_effect=h_open,
+                    ),
+                    mock.patch(
+                        "refmac_diagnostic_profile.os.fdopen",
+                        side_effect=h_fdopen,
+                    ),
+                    mock.patch(
+                        "refmac_diagnostic_profile.os.fstat",
+                        side_effect=h_fstat,
+                    ),
+                    self.assertRaises(ProfileValidationError) as h_adm_ctx,
+                ):
+                    validate_profile(
+                        colliding_profile, installed_record, ccp4_env, ev_root
+                    )
+                self.assertIs(h_state["injected"], True)
+                with self.assertRaises(OSError) as h_ebadf_1:
+                    real_fstat(int(h_state["fd"]))  # type: ignore[arg-type]
+                self.assertEqual(h_ebadf_1.exception.errno, errno.EBADF)
+
+                h_adm = h_adm_ctx.exception
+                self.assertIs(h_adm.cause_exception, hidden_eio)
+                h_build = h_adm.roots["build"]
+                self.assertNotIn(".hidden-extra.dat", h_build.members)
+                h_part = h_build.partial_member_observations[
+                    ".hidden-extra.dat"
+                ]
+                self.assertEqual(h_part.path, str(hidden_extra))
+                self.assertEqual(h_part.observed_eof_sha256, hidden_sha)
+                self.assertEqual(
+                    set(h_adm.files.keys()),
+                    set(colliding_payload["files"].keys()),  # type: ignore[union-attr]
+                )
+                self.assertEqual(h_adm.files[colliding_id].path, writer_path_str)
+                self.assertIs(h_adm.files[colliding_id].verified, True)
+
+                h_state["fd"] = -1
+                h_state["eof"] = False
+                h_state["injected"] = False
+                with (
+                    mock.patch(
+                        "refmac_diagnostic_profile.os.open",
+                        side_effect=h_open,
+                    ),
+                    mock.patch(
+                        "refmac_diagnostic_profile.os.fdopen",
+                        side_effect=h_fdopen,
+                    ),
+                    mock.patch(
+                        "refmac_diagnostic_profile.os.fstat",
+                        side_effect=h_fstat,
+                    ),
+                ):
+                    h_priv_rec = _reobserve_outer_profile_state(colliding_state)
+                self.assertEqual(dict(h_priv_rec.partial_files), {})
+                self.assertIn(colliding_id, h_priv_rec.verified_files)
+                self.assertEqual(
+                    h_priv_rec.observed_files[colliding_id].path,
+                    writer_path_str,
+                )
+                self.assertEqual(
+                    h_priv_rec.observed_roots[
+                        "build"
+                    ].partial_member_observations[".hidden-extra.dat"].path,
+                    str(hidden_extra),
+                )
+
+                h_state["fd"] = -1
+                h_state["eof"] = False
+                h_state["injected"] = False
+                h_causes: list[BaseException | None] = []
+                with (
+                    mock.patch(
+                        "refmac_diagnostic_profile.os.open",
+                        side_effect=h_open,
+                    ),
+                    mock.patch(
+                        "refmac_diagnostic_profile.os.fdopen",
+                        side_effect=h_fdopen,
+                    ),
+                    mock.patch(
+                        "refmac_diagnostic_profile.os.fstat",
+                        side_effect=h_fstat,
+                    ),
+                ):
+                    h_pub_rec = recheck_profile(
+                        colliding_validated, mutation_causes_out=h_causes
+                    )
+                self.assertEqual(
+                    h_pub_rec["roots"]["build"]["member_diff"],
+                    {"added": [], "removed": []},
+                )
+                self.assertEqual(
+                    h_pub_rec["roots"]["build"]["observed"][
+                        "partial_member_observations"
+                    ][".hidden-extra.dat"]["observed_eof_sha256"],
+                    hidden_sha,
+                )
+                self.assertIs(
+                    h_pub_rec["files"][colliding_id]["matches_baseline"], True
+                )
+                self.assertEqual(h_causes, [hidden_eio])
+            finally:
+                if hidden_extra.exists():
+                    hidden_extra.unlink()
+                _rewrite_manifest_and_profile(fx, base_payload)
+
+    def test_task1025_controlled_root_partial_member_carrier_invariants(
+        self,
+    ) -> None:
+        from contextlib import ExitStack
+        from dataclasses import replace
+
+        real_fdopen = os.fdopen
+        real_fstat = os.fstat
+
+        for bad_rel, pattern in (
+            (123, r"must be a str, got int"),
+            ("", r"must be a non-empty relative POSIX path without NUL bytes"),
+            (
+                "a\x00b",
+                r"must be a non-empty relative POSIX path without NUL bytes",
+            ),
+            (
+                "/member.dat",
+                r"must be a relative POSIX path without leading or trailing '/'",
+            ),
+            (
+                "member.dat/",
+                r"must be a relative POSIX path without leading or trailing '/'",
+            ),
+            (
+                "sub//member.dat",
+                r"must not contain empty, '\.', or '\.\.' path segments",
+            ),
+            (
+                "./member.dat",
+                r"must not contain empty, '\.', or '\.\.' path segments",
+            ),
+            (
+                "../member.dat",
+                r"must not contain empty, '\.', or '\.\.' path segments",
+            ),
+            (
+                "sub/../member.dat",
+                r"must not contain empty, '\.', or '\.\.' path segments",
+            ),
+        ):
+            with self.subTest(bad_rel_key=repr(bad_rel)):
+                with self.assertRaisesRegex(ValueError, pattern):
+                    profile_mod._validate_root_relative_member_path(
+                        bad_rel, field_name="test_rel"
+                    )
+
+        for good_rel in ("member.dat", " ", "\t", "sub/ ", "sub/\t"):
+            with self.subTest(good_rel_key=repr(good_rel)):
+                self.assertEqual(
+                    profile_mod._validate_root_relative_member_path(
+                        good_rel, field_name="test_rel"
+                    ),
+                    good_rel,
+                )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base_tmp = Path(tmpdir).resolve()
+            for label, member_name in (
+                ("ordinary", "member.dat"),
+                ("space", " "),
+                ("tab", "\t"),
+            ):
+                with self.subTest(carrier_member=label):
+                    root = (base_tmp / f"carrier-{label}").resolve()
+                    root.mkdir()
+                    member = root / member_name
+                    payload = b"owned partial root carrier\n"
+                    member.write_bytes(payload)
+                    sha = _sha256_bytes(payload)
+
+                    healthy = _observe_controlled_root(
+                        "build",
+                        str(root),
+                        ("owned_member",),
+                        declared_files={
+                            "owned_member": {
+                                "path": str(member),
+                                "sha256": sha,
+                                "size_bytes": len(payload),
+                            }
+                        },
+                    )
+                    public_healthy = profile_mod._build_root_observation(
+                        healthy, None
+                    )
+                    self.assertNotIn(
+                        "partial_member_observations", public_healthy.to_dict()
+                    )
+
+                    state: dict[str, object] = {
+                        "fd": -1,
+                        "eof": False,
+                        "bytes_read": 0,
+                        "injected": False,
+                    }
+                    injected = OSError(
+                        errno.EIO, f"owned {label} carrier end_fstat EIO"
+                    )
+
+                    def c_fdopen(fd: int, mode: str = "rb", *a, **kw):
+                        state["fd"] = fd
+                        handle = real_fdopen(fd, mode, *a, **kw)
+                        orig_read = handle.read
+
+                        def read_track(n: int = -1) -> bytes:
+                            b = orig_read(n)
+                            state["bytes_read"] = (
+                                int(state["bytes_read"]) + len(b)  # type: ignore[arg-type]
+                            )
+                            if b == b"":
+                                state["eof"] = True
+                            return b
+
+                        handle.read = read_track  # type: ignore[method-assign]
+                        return handle
+
+                    def c_fstat(fd: int, *a, **kw):
+                        if (
+                            state["eof"]
+                            and fd == state["fd"]
+                            and not state["injected"]
+                        ):
+                            state["injected"] = True
+                            raise injected
+                        return real_fstat(fd, *a, **kw)
+
+                    with (
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.fdopen",
+                            side_effect=c_fdopen,
+                        ),
+                        mock.patch(
+                            "refmac_diagnostic_profile.os.fstat",
+                            side_effect=c_fstat,
+                        ),
+                        self.assertRaises(_PartialFileReadError) as p_ctx,
+                    ):
+                        profile_mod._stream_observe_regular_file(
+                            str(member), retain_bytes=True, chunk_size=7
+                        )
+                    self.assertIs(p_ctx.exception.__cause__, injected)
+                    partial = p_ctx.exception.observation
+                    self.assertIs(state["eof"], True)
+                    self.assertEqual(state["bytes_read"], len(payload))
+                    self.assertEqual(partial.observed_eof_sha256, sha)
+                    with self.assertRaises(OSError) as ebadf_ctx:
+                        real_fstat(int(state["fd"]))  # type: ignore[arg-type]
+                    self.assertEqual(ebadf_ctx.exception.errno, errno.EBADF)
+
+                    private_args: dict[str, object] = {
+                        "member_pins": {},
+                        "member_observations": {},
+                        "scan_complete": False,
+                        "verified": False,
+                        "errors": ("owned interrupted inventory",),
+                    }
+                    public_args: dict[str, object] = {
+                        "members": (),
+                        "scan_complete": False,
+                        "verified": False,
+                        "errors": ("owned interrupted inventory",),
+                    }
+                    outside = PartialFileReadObservation(
+                        path=str(root.parent / "outside.dat"),
+                        resolved_path=None,
+                        errors=("owned synthetic outside lexical owner",),
+                        failure_phase="open",
+                    )
+
+                    with ExitStack() as stack:
+                        for fn_name in (
+                            "stat",
+                            "lstat",
+                            "fstat",
+                            "open",
+                            "readlink",
+                        ):
+                            stack.enter_context(
+                                mock.patch(
+                                    f"refmac_diagnostic_profile.os.{fn_name}",
+                                    side_effect=AssertionError(
+                                        "carrier/projection filesystem access forbidden"
+                                    ),
+                                )
+                            )
+
+                        # Positive accepted controls + input mapping detachment
+                        source_map = {member_name: partial}
+                        inv = replace(
+                            healthy,
+                            **private_args,  # type: ignore[arg-type]
+                            partial_member_observations=source_map,
+                        )
+                        source_map.clear()
+                        self.assertIs(
+                            inv.partial_member_observations[member_name],
+                            partial,
+                        )
+                        self.assertEqual(replace(inv), inv)
+
+                        pub_map = {member_name: partial}
+                        pub_from_map = replace(
+                            public_healthy,
+                            **public_args,  # type: ignore[arg-type]
+                            partial_member_observations=pub_map,
+                        )
+                        pub_map.clear()
+                        pub = replace(
+                            public_healthy,
+                            **public_args,  # type: ignore[arg-type]
+                            partial_member_observations=(
+                                (member_name, partial),
+                            ),
+                        )
+                        self.assertEqual(pub_from_map, pub)
+                        self.assertIs(
+                            dict(pub.partial_member_observations)[member_name],
+                            partial,
+                        )
+                        self.assertEqual(replace(pub), pub)
+                        self.assertIs(inv.scan_complete, False)
+                        self.assertIs(inv.verified, False)
+                        self.assertIs(pub.scan_complete, False)
+                        self.assertIs(pub.verified, False)
+                        self.assertEqual(dict(inv.member_pins), {})
+                        self.assertEqual(dict(inv.member_observations), {})
+                        self.assertEqual(pub.members, ())
+
+                        # Isolated single-fact negative guards from accepted inv and pub bases
+                        for bad_key, priv_key_regex, pub_key_regex in (
+                            (
+                                "../member.dat",
+                                r"must not contain empty, '\.', or '\.\.' path segments",
+                                r"must not contain empty, '\.', or '\.\.' path segments",
+                            ),
+                            (
+                                "/member.dat",
+                                r"must be a relative POSIX path without leading or trailing '/'",
+                                r"must be a relative POSIX path without leading or trailing '/'",
+                            ),
+                            (
+                                "sub/../member.dat",
+                                r"must not contain empty, '\.', or '\.\.' path segments",
+                                r"must not contain empty, '\.', or '\.\.' path segments",
+                            ),
+                            (
+                                "member.dat/",
+                                r"must be a relative POSIX path without leading or trailing '/'",
+                                r"must be a relative POSIX path without leading or trailing '/'",
+                            ),
+                            (
+                                "sub//member.dat",
+                                r"must not contain empty, '\.', or '\.\.' path segments",
+                                r"must not contain empty, '\.', or '\.\.' path segments",
+                            ),
+                            (
+                                "",
+                                r"must be a non-empty relative POSIX path without NUL bytes",
+                                r"^_FrozenPairTable entries must be \(non-empty str, value\) pairs",
+                            ),
+                            (
+                                "a\x00b",
+                                r"must be a non-empty relative POSIX path without NUL bytes",
+                                r"must be a non-empty relative POSIX path without NUL bytes",
+                            ),
+                        ):
+                            with self.assertRaisesRegex(
+                                ValueError, priv_key_regex
+                            ):
+                                replace(
+                                    inv,
+                                    partial_member_observations={
+                                        bad_key: partial
+                                    },
+                                )
+                            with self.assertRaisesRegex(
+                                ValueError, pub_key_regex
+                            ):
+                                replace(
+                                    pub,
+                                    partial_member_observations=(
+                                        (bad_key, partial),
+                                    ),
+                                )
+
+                        for bad_owner_map in (
+                            {"other.dat": partial},
+                            {member_name: outside},
+                        ):
+                            with self.assertRaisesRegex(
+                                ValueError,
+                                r"^_ObservedRootInventory\.partial_member_observations\[.*\]\.path .* must equal ",
+                            ):
+                                replace(
+                                    inv,
+                                    partial_member_observations=bad_owner_map,
+                                )
+                            with self.assertRaisesRegex(
+                                ValueError,
+                                r"^RootObservation\.partial_member_observations\[.*\]\.path .* must equal ",
+                            ):
+                                replace(
+                                    pub,
+                                    partial_member_observations=tuple(
+                                        bad_owner_map.items()
+                                    ),
+                                )
+
+                        for field_name, bad_val in (
+                            ("scan_complete", True),
+                            ("errors", ()),
+                            ("errors", ("",)),
+                        ):
+                            with self.assertRaisesRegex(
+                                ValueError,
+                                r"^_ObservedRootInventory with non-empty partial_member_observations requires scan_complete=False, verified=False, and non-empty errors$",
+                            ):
+                                replace(inv, **{field_name: bad_val})
+                            with self.assertRaisesRegex(
+                                ValueError,
+                                r"^RootObservation with non-empty partial_member_observations requires scan_complete=False, verified=False, and non-empty errors$",
+                            ):
+                                replace(pub, **{field_name: bad_val})
+
+                        with self.assertRaisesRegex(
+                            ValueError,
+                            r"^_ObservedRootInventory cannot be verified when scan_complete is False or errors are present$",
+                        ):
+                            replace(inv, verified=True)
+                        with self.assertRaisesRegex(
+                            ValueError,
+                            r"^RootObservation cannot have verified=True when scan_complete is False or errors are present$",
+                        ):
+                            replace(pub, verified=True)
+
+                        with self.assertRaisesRegex(
+                            ValueError,
+                            r"^_ObservedRootInventory\.partial_member_observations key .* overlaps verified member_pins/member_observations$",
+                        ):
+                            replace(inv, member_pins=healthy.member_pins)
+                        with self.assertRaisesRegex(
+                            ValueError,
+                            r"^_ObservedRootInventory\.partial_member_observations key .* overlaps verified member_pins/member_observations$",
+                        ):
+                            replace(
+                                inv,
+                                member_observations=healthy.member_observations,
+                            )
+                        with self.assertRaisesRegex(
+                            ValueError,
+                            r"^RootObservation\.partial_member_observations key .* overlaps RootObservation\.members$",
+                        ):
+                            replace(pub, members=public_healthy.members)
+
+                        with self.assertRaisesRegex(
+                            ValueError,
+                            r"^_ObservedRootInventory\.partial_member_observations must map rel_posix -> PartialFileReadObservation$",
+                        ):
+                            replace(
+                                inv,
+                                partial_member_observations={
+                                    member_name: None  # type: ignore[dict-item]
+                                },
+                            )
+                        with self.assertRaisesRegex(
+                            ValueError,
+                            r"^RootObservation\.partial_member_observations values must be PartialFileReadObservation$",
+                        ):
+                            replace(
+                                pub,
+                                partial_member_observations=(
+                                    (member_name, None),  # type: ignore[arg-type]
+                                ),
+                            )
+                        with self.assertRaisesRegex(
+                            ValueError,
+                            r"^RootObservation\.partial_member_observations must be a Mapping or sequence of \(rel_posix, PartialFileReadObservation\) pairs$",
+                        ):
+                            replace(
+                                pub,
+                                partial_member_observations=123,  # type: ignore[arg-type]
+                            )
+                        with self.assertRaisesRegex(
+                            ValueError, r"Duplicate key in _FrozenPairTable"
+                        ):
+                            replace(
+                                pub,
+                                partial_member_observations=(
+                                    (member_name, partial),
+                                    (member_name, partial),
+                                ),
+                            )
+
+                        with self.assertRaises(TypeError):
+                            inv.partial_member_observations[member_name] = (  # type: ignore[index]
+                                partial
+                            )
+                        with self.assertRaises(TypeError):
+                            pub.partial_member_observations[0] = (  # type: ignore[index]
+                                member_name,
+                                partial,
+                            )
+                        with self.assertRaises(FrozenInstanceError):
+                            partial.verified = True  # type: ignore[misc]
+
+                        actual = pub.to_dict()
+                        self.assertEqual(
+                            actual["partial_member_observations"][member_name][
+                                "observed_eof_sha256"
+                            ],
+                            sha,
+                        )
+                        self.assertEqual(
+                            actual["partial_member_observations"][member_name][
+                                "streamed_size_bytes"
+                            ],
+                            len(payload),
+                        )
+                        self.assertEqual(
+                            actual["partial_member_observations"][member_name][
+                                "path"
+                            ],
+                            str(member),
+                        )
+                        detached = pub.to_dict()
+                        detached["partial_member_observations"][member_name][
+                            "observed_eof"
+                        ] = False
+                        self.assertEqual(pub.to_dict(), actual)
+                        self.assertNotIn(
+                            "partial_member_observations",
+                            public_healthy.to_dict(),
+                        )
 
 
 if __name__ == "__main__":

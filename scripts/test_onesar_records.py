@@ -288,7 +288,9 @@ class TestRetainedReferenceFirstSlice(unittest.TestCase):
             # Usable-child sibling collision fallback shape (#1057):
             # onesar_refmac._write_json_with_sibling_collision_fallback returns
             # {"path", "sha256", "size_bytes", "temp_cleanup_succeeded",
-            #  "temp_cleanup_status", "fallback_for_preexisting_path"}.
+            #  "temp_handling_policy", "temp_handling_succeeded",
+            #  "temp_handling_disposition", "temp_cleanup_status",
+            #  "fallback_for_preexisting_path"}.
             usable_child_dir = attempt_root / "refmac_child" / "refmac"
             intended_target = usable_child_dir / "refmac_manifest.json"
             _, _, preexisting_bytes = _write_json_with_digest(
@@ -312,31 +314,88 @@ class TestRetainedReferenceFirstSlice(unittest.TestCase):
                     "sha256",
                     "size_bytes",
                     "temp_cleanup_succeeded",
+                    "temp_handling_policy",
+                    "temp_handling_succeeded",
+                    "temp_handling_disposition",
                     "temp_cleanup_status",
                     "fallback_for_preexisting_path",
                 },
             )
-            self.assertIs(sibling_ref["temp_cleanup_succeeded"], True)
+            self.assertIs(sibling_ref["temp_cleanup_succeeded"], False)
+            self.assertEqual(
+                sibling_ref["temp_handling_policy"],
+                onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+            )
+            self.assertIs(sibling_ref["temp_handling_succeeded"], True)
+            self.assertEqual(
+                sibling_ref["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+            )
             cleanup_status = sibling_ref["temp_cleanup_status"]
             self.assertIsInstance(cleanup_status, Mapping)
             self.assertIs(cleanup_status["temp_identity_known"], True)
-            self.assertIs(cleanup_status["unlink_attempted"], True)
-            self.assertIs(cleanup_status["unlinked"], True)
-            self.assertIs(cleanup_status["cleanup_verified"], True)
-            self.assertIs(cleanup_status["temp_present_after_cleanup"], False)
+            self.assertIs(cleanup_status["unlink_attempted"], False)
+            self.assertEqual(cleanup_status["unlink_attempt_count"], 0)
+            self.assertIs(cleanup_status["unlinked"], False)
+            self.assertIs(cleanup_status["cleanup_verified"], False)
+            self.assertIs(cleanup_status["temp_present_after_cleanup"], True)
+            self.assertEqual(
+                cleanup_status["temp_handling_policy"],
+                onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+            )
+            self.assertIs(cleanup_status["temp_handling_succeeded"], True)
+            self.assertEqual(
+                cleanup_status["temp_handling_disposition"],
+                onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+            )
             self.assertIsNone(cleanup_status["error"])
             self.assertEqual(cleanup_status["errors"], [])
             temp_name = cleanup_status["temp_name"]
             self.assertIsInstance(temp_name, str)
-            self.assertFalse(
-                os.path.lexists(usable_child_dir / str(temp_name))
-            )
+            retained_temp_path = usable_child_dir / str(temp_name)
+            self.assertTrue(retained_temp_path.is_file())
             self.assertEqual(
                 sibling_ref["fallback_for_preexisting_path"],
                 str(intended_target),
             )
             sibling_path = Path(sibling_ref["path"])
             sibling_bytes = sibling_path.read_bytes()
+            sib_st = os.lstat(sibling_path)
+            tmp_st = os.lstat(retained_temp_path)
+            self.assertEqual(
+                (int(tmp_st.st_dev), int(tmp_st.st_ino)),
+                (int(sib_st.st_dev), int(sib_st.st_ino)),
+            )
+            self.assertEqual(
+                (int(tmp_st.st_dev), int(tmp_st.st_ino)),
+                (
+                    cleanup_status["expected_temp_dev"],
+                    cleanup_status["expected_temp_ino"],
+                ),
+            )
+            self.assertEqual(
+                (int(tmp_st.st_dev), int(tmp_st.st_ino)),
+                (
+                    cleanup_status["observed_temp_dev"],
+                    cleanup_status["observed_temp_ino"],
+                ),
+            )
+            self.assertEqual(
+                (int(sib_st.st_dev), int(sib_st.st_ino)),
+                (
+                    cleanup_status["expected_temp_dev"],
+                    cleanup_status["expected_temp_ino"],
+                ),
+            )
+            self.assertEqual(
+                (int(sib_st.st_dev), int(sib_st.st_ino)),
+                (
+                    cleanup_status["observed_temp_dev"],
+                    cleanup_status["observed_temp_ino"],
+                ),
+            )
+            self.assertGreaterEqual(int(sib_st.st_nlink), 2)
+            self.assertEqual(retained_temp_path.read_bytes(), sibling_bytes)
             self.assertEqual(
                 hashlib.sha256(sibling_bytes).hexdigest(),
                 sibling_ref["sha256"],

@@ -2322,6 +2322,338 @@ def _reverify_admitted_directory_binding(
     return live_status
 
 
+JSON_TEMP_HANDLING_POLICY_RETAIN_V1: str = "retain_entries_v1"
+RECOGNIZED_JSON_TEMP_HANDLING_POLICIES: frozenset[str] = frozenset(
+    {JSON_TEMP_HANDLING_POLICY_RETAIN_V1}
+)
+JSON_TEMP_DISPOSITION_RETAINED: str = "owned_temp_retained_by_policy"
+JSON_TEMP_DISPOSITION_IDENTITY_MISMATCH: str = "temp_path_identity_mismatch"
+JSON_TEMP_DISPOSITION_ALREADY_ABSENT: str = "temp_path_already_absent"
+JSON_TEMP_DISPOSITION_IDENTITY_UNKNOWN: str = (
+    "initial_temp_fstat_identity_unknown"
+)
+JSON_TEMP_DISPOSITION_STAT_ERROR: str = "temp_observation_stat_error"
+JSON_TEMP_DISPOSITION_NOT_CREATED: str = "temp_not_created"
+VALID_JSON_TEMP_HANDLING_DISPOSITIONS: frozenset[str] = frozenset(
+    {
+        JSON_TEMP_DISPOSITION_RETAINED,
+        JSON_TEMP_DISPOSITION_IDENTITY_MISMATCH,
+        JSON_TEMP_DISPOSITION_ALREADY_ABSENT,
+        JSON_TEMP_DISPOSITION_IDENTITY_UNKNOWN,
+        JSON_TEMP_DISPOSITION_STAT_ERROR,
+        JSON_TEMP_DISPOSITION_NOT_CREATED,
+    }
+)
+VALID_JSON_TEMP_OBSERVATION_PHASES: frozenset[str] = frozenset(
+    {"post_link_stat", "final_cleanup_stat"}
+)
+_JSON_TEMP_POLICY_MARKER_KEYS: tuple[str, ...] = (
+    "temp_handling_policy",
+    "temp_handling_succeeded",
+    "temp_handling_disposition",
+)
+
+
+def _is_json_temp_status_handling_satisfied(
+    status: Mapping[str, Any] | None,
+    *,
+    legacy_missing_unlinked_default: bool = False,
+) -> bool:
+    """Return True iff a writer ``temp_cleanup_status`` mapping satisfies its recognized or legacy temp-handling policy."""
+    if not isinstance(status, Mapping):
+        return False
+
+    has_policy_markers = any(k in status for k in _JSON_TEMP_POLICY_MARKER_KEYS)
+    if has_policy_markers:
+        policy = status.get("temp_handling_policy")
+        if (
+            type(policy) is not str
+            or policy not in RECOGNIZED_JSON_TEMP_HANDLING_POLICIES
+        ):
+            return False
+        handling_ok = status.get("temp_handling_succeeded")
+        if type(handling_ok) is not bool or handling_ok is not True:
+            return False
+        disposition = status.get("temp_handling_disposition")
+        if (
+            type(disposition) is not str
+            or disposition != JSON_TEMP_DISPOSITION_RETAINED
+        ):
+            return False
+        temp_name = status.get("temp_name")
+        if type(temp_name) is not str or not temp_name:
+            return False
+        if (
+            type(status.get("temp_identity_known")) is not bool
+            or status.get("temp_identity_known") is not True
+        ):
+            return False
+        if (
+            type(status.get("unlinked")) is not bool
+            or status.get("unlinked") is not False
+        ):
+            return False
+        if (
+            type(status.get("unlink_attempted")) is not bool
+            or status.get("unlink_attempted") is not False
+        ):
+            return False
+        unlink_count = status.get("unlink_attempt_count")
+        if type(unlink_count) is not int or unlink_count != 0:
+            return False
+        if (
+            type(status.get("cleanup_verified")) is not bool
+            or status.get("cleanup_verified") is not False
+        ):
+            return False
+        if (
+            type(status.get("observed_temp_present")) is not bool
+            or status.get("observed_temp_present") is not True
+        ):
+            return False
+        if (
+            type(status.get("temp_present_after_cleanup")) is not bool
+            or status.get("temp_present_after_cleanup") is not True
+        ):
+            return False
+        if (
+            type(status.get("observed_temp_is_regular_file")) is not bool
+            or status.get("observed_temp_is_regular_file") is not True
+        ):
+            return False
+        if (
+            type(status.get("observed_temp_is_symlink")) is not bool
+            or status.get("observed_temp_is_symlink") is not False
+        ):
+            return False
+        obs_mode = status.get("observed_temp_mode")
+        if (
+            type(obs_mode) is not int
+            or not stat.S_ISREG(obs_mode)
+            or stat.S_ISLNK(obs_mode)
+        ):
+            return False
+        pub_created = status.get("published_link_created")
+        if type(pub_created) is not bool:
+            return False
+        rb_verified = status.get("readback_verified")
+        if type(rb_verified) is not bool:
+            return False
+        obs_phase = status.get("temp_observation_phase")
+        if (
+            type(obs_phase) is not str
+            or obs_phase not in VALID_JSON_TEMP_OBSERVATION_PHASES
+        ):
+            return False
+        post_obs = status.get("post_link_temp_observed")
+        final_obs = status.get("final_cleanup_temp_observed")
+        if type(post_obs) is not bool or type(final_obs) is not bool:
+            return False
+        if obs_phase == "post_link_stat":
+            if (
+                post_obs is not True
+                or final_obs is not False
+                or pub_created is not True
+            ):
+                return False
+        elif obs_phase == "final_cleanup_stat":
+            if (
+                final_obs is not True
+                or rb_verified is not False
+                or (post_obs is True and pub_created is not True)
+            ):
+                return False
+        else:
+            return False
+        reason = status.get("reason")
+        if type(reason) is not str or reason != JSON_TEMP_DISPOSITION_RETAINED:
+            return False
+        exp_dev = status.get("expected_temp_dev")
+        exp_ino = status.get("expected_temp_ino")
+        obs_dev = status.get("observed_temp_dev")
+        obs_ino = status.get("observed_temp_ino")
+        if (
+            type(exp_dev) is not int
+            or exp_dev <= 0
+            or type(exp_ino) is not int
+            or exp_ino <= 0
+            or type(obs_dev) is not int
+            or obs_dev <= 0
+            or type(obs_ino) is not int
+            or obs_ino <= 0
+            or (obs_dev, obs_ino) != (exp_dev, exp_ino)
+        ):
+            return False
+        if (
+            status.get("error") is not None
+            or status.get("exception_type") is not None
+            or status.get("exception_message") is not None
+            or status.get("errno") is not None
+        ):
+            return False
+        errors_list = status.get("errors")
+        if not isinstance(errors_list, list) or len(errors_list) > 0:
+            return False
+        if "prior_collision_temp_cleanup_failures" in status:
+            prior_failures = status.get("prior_collision_temp_cleanup_failures")
+            if not isinstance(prior_failures, list) or len(prior_failures) > 0:
+                return False
+        return True
+
+    if (
+        status.get("error") is not None
+        or status.get("exception_type") is not None
+        or status.get("exception_message") is not None
+        or status.get("errno") is not None
+    ):
+        return False
+    if "errors" in status:
+        errors_list = status.get("errors")
+        if not isinstance(errors_list, list) or len(errors_list) > 0:
+            return False
+    if "prior_collision_temp_cleanup_failures" in status:
+        prior_failures = status.get("prior_collision_temp_cleanup_failures")
+        if not isinstance(prior_failures, list) or len(prior_failures) > 0:
+            return False
+    if "cleanup_verified" in status and (
+        type(status.get("cleanup_verified")) is not bool
+        or status.get("cleanup_verified") is not True
+    ):
+        return False
+    if "temp_present_after_cleanup" in status and (
+        type(status.get("temp_present_after_cleanup")) is not bool
+        or status.get("temp_present_after_cleanup") is not False
+    ):
+        return False
+    if "temp_identity_known" in status and (
+        type(status.get("temp_identity_known")) is not bool
+        or status.get("temp_identity_known") is not True
+    ):
+        return False
+    if "reason" in status and status.get("reason") not in (
+        "unlinked_immediately_after_link",
+        "verified_temp_identity_unlinked",
+    ):
+        return False
+    if "unlinked" not in status:
+        return bool(legacy_missing_unlinked_default)
+    unlinked_val = status.get("unlinked")
+    return type(unlinked_val) is bool and unlinked_val is True
+
+
+def _is_json_temp_handling_satisfied(
+    record: Mapping[str, Any] | None,
+    *,
+    legacy_missing_receipt_default: bool = True,
+) -> bool:
+    """Return True iff a writer receipt/artifact (or raw status) satisfies its recognized or legacy temp-handling policy."""
+    if not isinstance(record, Mapping):
+        return False
+
+    if (
+        "temp_cleanup_status" not in record
+        and "temp_cleanup_succeeded" not in record
+        and ("temp_name" in record or "unlinked" in record)
+    ):
+        return _is_json_temp_status_handling_satisfied(
+            record,
+            legacy_missing_unlinked_default=False,
+        )
+
+    if "prior_collision_temp_cleanup_failures" in record:
+        prior_failures = record.get("prior_collision_temp_cleanup_failures")
+        if not isinstance(prior_failures, list) or len(prior_failures) > 0:
+            return False
+
+    nested_status = record.get("temp_cleanup_status")
+    has_top_policy_keys = any(
+        k in record for k in _JSON_TEMP_POLICY_MARKER_KEYS
+    )
+    has_nested_policy_keys = isinstance(nested_status, Mapping) and any(
+        k in nested_status for k in _JSON_TEMP_POLICY_MARKER_KEYS
+    )
+
+    if has_top_policy_keys or has_nested_policy_keys:
+        if not isinstance(nested_status, Mapping):
+            return False
+        nested_policy = nested_status.get("temp_handling_policy")
+        nested_ok = nested_status.get("temp_handling_succeeded")
+        nested_disp = nested_status.get("temp_handling_disposition")
+        if (
+            type(nested_policy) is not str
+            or nested_policy not in RECOGNIZED_JSON_TEMP_HANDLING_POLICIES
+            or type(nested_ok) is not bool
+            or nested_ok is not True
+            or type(nested_disp) is not str
+            or nested_disp != JSON_TEMP_DISPOSITION_RETAINED
+        ):
+            return False
+        if not _is_json_temp_status_handling_satisfied(
+            nested_status,
+            legacy_missing_unlinked_default=False,
+        ):
+            return False
+        if "temp_handling_policy" in record:
+            top_policy = record.get("temp_handling_policy")
+            if (
+                type(top_policy) is not str
+                or top_policy not in RECOGNIZED_JSON_TEMP_HANDLING_POLICIES
+                or top_policy != nested_policy
+            ):
+                return False
+        if "temp_handling_succeeded" in record:
+            top_ok = record.get("temp_handling_succeeded")
+            if type(top_ok) is not bool or top_ok is not True:
+                return False
+        if "temp_handling_disposition" in record:
+            top_disp = record.get("temp_handling_disposition")
+            if (
+                type(top_disp) is not str
+                or top_disp != JSON_TEMP_DISPOSITION_RETAINED
+                or top_disp != nested_disp
+            ):
+                return False
+        if "temp_cleanup_succeeded" in record:
+            top_cleanup_ok = record.get("temp_cleanup_succeeded")
+            if type(top_cleanup_ok) is not bool or top_cleanup_ok is not False:
+                return False
+        if "published_link_created" in record:
+            top_pub = record.get("published_link_created")
+            if (
+                type(top_pub) is not bool
+                or top_pub != nested_status.get("published_link_created")
+            ):
+                return False
+        if "readback_verified" in record:
+            top_rb = record.get("readback_verified")
+            if (
+                type(top_rb) is not bool
+                or top_rb != nested_status.get("readback_verified")
+            ):
+                return False
+        return True
+
+    if "temp_cleanup_status" in record:
+        if not isinstance(nested_status, Mapping):
+            return False
+        if not _is_json_temp_status_handling_satisfied(
+            nested_status,
+            legacy_missing_unlinked_default=False,
+        ):
+            return False
+
+    if "temp_cleanup_succeeded" in record:
+        legacy_ok = record.get("temp_cleanup_succeeded")
+        if type(legacy_ok) is not bool:
+            return False
+        return legacy_ok
+
+    if "temp_cleanup_status" in record:
+        return True
+
+    return bool(legacy_missing_receipt_default)
+
+
 def _atomic_write_new_json_file(
     payload: (
         Mapping[str, Any]
@@ -2372,10 +2704,19 @@ def _atomic_write_new_json_file(
     intermediate_hops: list[dict[str, Any]] = []
     created_tmp = False
     tmp_unlinked = False
+    post_link_temp_observed = False
+    post_link_temp_verified = False
     post_link_temp_absent = False
     post_link_temp_identity_mismatch = False
+    post_link_obs_dev: int | None = None
+    post_link_obs_ino: int | None = None
+    post_link_obs_mode: int | None = None
+    post_link_obs_is_regular: bool | None = None
+    post_link_obs_is_symlink: bool | None = None
     post_link_mismatch_dev: int | None = None
     post_link_mismatch_ino: int | None = None
+    final_cleanup_temp_observed = False
+    final_cleanup_temp_verified = False
     published_link_created = False
     readback_verified = False
     unlink_attempt_count = 0
@@ -2557,6 +2898,7 @@ def _atomic_write_new_json_file(
 
     def _finalize_temp_cleanup() -> dict[str, Any]:
         nonlocal tmp_unlinked, unlink_attempt_count, final_cleanup_executed
+        nonlocal final_cleanup_temp_observed, final_cleanup_temp_verified
         nonlocal temp_cleanup_status
         if final_cleanup_executed and temp_cleanup_status is not None:
             return temp_cleanup_status
@@ -2564,35 +2906,74 @@ def _atomic_write_new_json_file(
 
         obs_cleanup_dev: int | None = None
         obs_cleanup_ino: int | None = None
-        temp_present_after_cleanup: bool | None = (
-            False if tmp_unlinked else None
-        )
-        reason: str = (
-            "unlinked_immediately_after_link"
-            if tmp_unlinked
-            else "temp_not_created"
-        )
+        obs_cleanup_mode: int | None = None
+        obs_cleanup_is_regular: bool | None = None
+        obs_cleanup_is_symlink: bool | None = None
+        observed_temp_present: bool | None = None
+        temp_present_after_cleanup: bool | None = None
+        temp_observation_phase: str | None = None
+        temp_handling_succeeded = False
+        temp_handling_disposition: str = JSON_TEMP_DISPOSITION_NOT_CREATED
+        reason: str = JSON_TEMP_DISPOSITION_NOT_CREATED
 
-        if created_tmp and not tmp_unlinked:
+        if created_tmp:
             if post_link_temp_absent:
-                reason = "temp_path_already_absent"
+                temp_observation_phase = "post_link_stat"
+                observed_temp_present = False
                 temp_present_after_cleanup = False
+                temp_handling_succeeded = False
+                temp_handling_disposition = JSON_TEMP_DISPOSITION_ALREADY_ABSENT
+                reason = JSON_TEMP_DISPOSITION_ALREADY_ABSENT
             elif post_link_temp_identity_mismatch:
+                temp_observation_phase = "post_link_stat"
                 obs_cleanup_dev = post_link_mismatch_dev
                 obs_cleanup_ino = post_link_mismatch_ino
+                obs_cleanup_mode = post_link_obs_mode
+                obs_cleanup_is_regular = post_link_obs_is_regular
+                obs_cleanup_is_symlink = post_link_obs_is_symlink
+                observed_temp_present = True
                 temp_present_after_cleanup = True
-                reason = "temp_path_identity_mismatch"
+                temp_handling_succeeded = False
+                temp_handling_disposition = (
+                    JSON_TEMP_DISPOSITION_IDENTITY_MISMATCH
+                )
+                reason = JSON_TEMP_DISPOSITION_IDENTITY_MISMATCH
             elif tmp_dev is None or tmp_ino is None:
-                reason = "initial_temp_fstat_identity_unknown"
+                temp_observation_phase = None
+                observed_temp_present = None
                 temp_present_after_cleanup = None
+                temp_handling_succeeded = False
+                temp_handling_disposition = (
+                    JSON_TEMP_DISPOSITION_IDENTITY_UNKNOWN
+                )
+                reason = JSON_TEMP_DISPOSITION_IDENTITY_UNKNOWN
+            elif post_link_temp_verified and not cleanup_errors:
+                temp_observation_phase = "post_link_stat"
+                obs_cleanup_dev = post_link_obs_dev
+                obs_cleanup_ino = post_link_obs_ino
+                obs_cleanup_mode = post_link_obs_mode
+                obs_cleanup_is_regular = True
+                obs_cleanup_is_symlink = False
+                observed_temp_present = True
+                temp_present_after_cleanup = True
+                temp_handling_succeeded = True
+                temp_handling_disposition = JSON_TEMP_DISPOSITION_RETAINED
+                reason = JSON_TEMP_DISPOSITION_RETAINED
             else:
+                temp_observation_phase = "final_cleanup_stat"
                 try:
                     cleanup_st = os.stat(
                         tmp_name, dir_fd=parent_fd, follow_symlinks=False
                     )
                 except FileNotFoundError:
-                    reason = "temp_path_already_absent"
+                    final_cleanup_temp_observed = True
+                    observed_temp_present = False
                     temp_present_after_cleanup = False
+                    temp_handling_succeeded = False
+                    temp_handling_disposition = (
+                        JSON_TEMP_DISPOSITION_ALREADY_ABSENT
+                    )
+                    reason = JSON_TEMP_DISPOSITION_ALREADY_ABSENT
                 except OSError as stat_exc:
                     try:
                         setattr(stat_exc, "_is_temp_cleanup_error", True)
@@ -2602,43 +2983,59 @@ def _atomic_write_new_json_file(
                         ("final_cleanup_stat", stat_exc)
                     )
                     cleanup_errors.append(stat_exc)
+                    observed_temp_present = None
                     temp_present_after_cleanup = None
+                    temp_handling_succeeded = False
+                    temp_handling_disposition = JSON_TEMP_DISPOSITION_STAT_ERROR
                     reason = (
                         f"temp_cleanup_stat_or_unlink_error: "
                         f"{type(stat_exc).__name__}: {stat_exc}"
                     )
                 else:
+                    final_cleanup_temp_observed = True
                     obs_cleanup_dev = int(cleanup_st.st_dev)
                     obs_cleanup_ino = int(cleanup_st.st_ino)
-                    if stat.S_ISREG(cleanup_st.st_mode) and (
-                        obs_cleanup_dev,
-                        obs_cleanup_ino,
-                    ) == (tmp_dev, tmp_ino):
-                        unlink_attempt_count += 1
-                        try:
-                            os.unlink(tmp_name, dir_fd=parent_fd)
-                            tmp_unlinked = True
-                            temp_present_after_cleanup = False
-                            reason = "verified_temp_identity_unlinked"
-                        except OSError as unlink_exc:
-                            try:
-                                setattr(
-                                    unlink_exc, "_is_temp_cleanup_error", True
-                                )
-                            except Exception:
-                                pass
-                            cleanup_error_records.append(
-                                ("final_cleanup_unlink", unlink_exc)
+                    obs_cleanup_mode = int(cleanup_st.st_mode)
+                    obs_cleanup_is_regular = bool(
+                        stat.S_ISREG(cleanup_st.st_mode)
+                    )
+                    obs_cleanup_is_symlink = bool(
+                        stat.S_ISLNK(cleanup_st.st_mode)
+                    )
+                    observed_temp_present = True
+                    temp_present_after_cleanup = True
+                    if (
+                        obs_cleanup_is_regular
+                        and not obs_cleanup_is_symlink
+                        and (
+                            obs_cleanup_dev,
+                            obs_cleanup_ino,
+                        )
+                        == (tmp_dev, tmp_ino)
+                    ):
+                        final_cleanup_temp_verified = True
+                        if not cleanup_errors:
+                            temp_handling_succeeded = True
+                            temp_handling_disposition = (
+                                JSON_TEMP_DISPOSITION_RETAINED
                             )
-                            cleanup_errors.append(unlink_exc)
-                            temp_present_after_cleanup = True
+                            reason = JSON_TEMP_DISPOSITION_RETAINED
+                        else:
+                            prior_stat_exc = cleanup_errors[-1]
+                            temp_handling_succeeded = False
+                            temp_handling_disposition = (
+                                JSON_TEMP_DISPOSITION_STAT_ERROR
+                            )
                             reason = (
                                 f"temp_cleanup_stat_or_unlink_error: "
-                                f"{type(unlink_exc).__name__}: {unlink_exc}"
+                                f"{type(prior_stat_exc).__name__}: {prior_stat_exc}"
                             )
                     else:
-                        temp_present_after_cleanup = True
-                        reason = "temp_path_identity_mismatch"
+                        temp_handling_succeeded = False
+                        temp_handling_disposition = (
+                            JSON_TEMP_DISPOSITION_IDENTITY_MISMATCH
+                        )
+                        reason = JSON_TEMP_DISPOSITION_IDENTITY_MISMATCH
 
         last_cleanup_exc: OSError | None = (
             cleanup_errors[-1] if cleanup_errors else None
@@ -2663,44 +3060,44 @@ def _atomic_write_new_json_file(
             "temp_identity_known": (
                 tmp_dev is not None and tmp_ino is not None
             ),
+            "temp_handling_policy": JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+            "temp_handling_succeeded": temp_handling_succeeded,
+            "temp_handling_disposition": temp_handling_disposition,
+            "temp_observation_phase": temp_observation_phase,
+            "post_link_temp_observed": post_link_temp_observed,
+            "final_cleanup_temp_observed": final_cleanup_temp_observed,
+            "observed_temp_present": observed_temp_present,
+            "observed_temp_is_regular_file": obs_cleanup_is_regular,
+            "observed_temp_is_symlink": obs_cleanup_is_symlink,
+            "observed_temp_mode": obs_cleanup_mode,
             "unlink_attempted": unlink_attempt_count > 0,
             "unlink_attempt_count": unlink_attempt_count,
             "unlinked": tmp_unlinked,
-            "cleanup_verified": (
-                tmp_unlinked or reason == "temp_path_already_absent"
-            ),
+            "cleanup_verified": False,
             "temp_present_after_cleanup": temp_present_after_cleanup,
             "reason": reason,
             "expected_temp_dev": tmp_dev,
             "expected_temp_ino": tmp_ino,
-            "observed_temp_dev": (
-                tmp_dev
-                if tmp_unlinked and obs_cleanup_dev is None
-                else obs_cleanup_dev
-            ),
-            "observed_temp_ino": (
-                tmp_ino
-                if tmp_unlinked and obs_cleanup_ino is None
-                else obs_cleanup_ino
-            ),
+            "observed_temp_dev": obs_cleanup_dev,
+            "observed_temp_ino": obs_cleanup_ino,
             "error": (
                 f"{type(last_cleanup_exc).__name__}: {last_cleanup_exc}"
-                if last_cleanup_exc is not None and not tmp_unlinked
+                if last_cleanup_exc is not None and not temp_handling_succeeded
                 else None
             ),
             "exception_type": (
                 type(last_cleanup_exc).__name__
-                if last_cleanup_exc is not None and not tmp_unlinked
+                if last_cleanup_exc is not None and not temp_handling_succeeded
                 else None
             ),
             "exception_message": (
                 str(last_cleanup_exc)
-                if last_cleanup_exc is not None and not tmp_unlinked
+                if last_cleanup_exc is not None and not temp_handling_succeeded
                 else None
             ),
             "errno": (
                 getattr(last_cleanup_exc, "errno", None)
-                if last_cleanup_exc is not None and not tmp_unlinked
+                if last_cleanup_exc is not None and not temp_handling_succeeded
                 else None
             ),
             "errors": error_entries,
@@ -2715,6 +3112,11 @@ def _atomic_write_new_json_file(
                 )
             except Exception:
                 pass
+        active_cleanup_sink = _ACTIVE_WRITE_CLEANUP_ERRORS_SINK_CTX.get()
+        if active_cleanup_sink is not None:
+            active_cleanup_sink.clear()
+            if not temp_handling_succeeded:
+                active_cleanup_sink.extend(cleanup_errors)
         return temp_cleanup_status
 
     def _attach_cleanup_metadata_to_exception(
@@ -2982,6 +3384,7 @@ def _atomic_write_new_json_file(
                     tmp_name, dir_fd=parent_fd, follow_symlinks=False
                 )
             except FileNotFoundError:
+                post_link_temp_observed = True
                 post_link_temp_absent = True
             except OSError as post_link_stat_exc:
                 try:
@@ -2993,29 +3396,26 @@ def _atomic_write_new_json_file(
                 )
                 cleanup_errors.append(post_link_stat_exc)
             else:
+                post_link_temp_observed = True
                 post_link_obs_dev = int(post_link_tmp_st.st_dev)
                 post_link_obs_ino = int(post_link_tmp_st.st_ino)
-                if stat.S_ISREG(post_link_tmp_st.st_mode) and (
-                    post_link_obs_dev,
-                    post_link_obs_ino,
-                ) == (tmp_dev, tmp_ino):
-                    unlink_attempt_count += 1
-                    try:
-                        os.unlink(tmp_name, dir_fd=parent_fd)
-                        tmp_unlinked = True
-                    except OSError as post_link_unlink_exc:
-                        try:
-                            setattr(
-                                post_link_unlink_exc,
-                                "_is_temp_cleanup_error",
-                                True,
-                            )
-                        except Exception:
-                            pass
-                        cleanup_error_records.append(
-                            ("post_link_unlink", post_link_unlink_exc)
-                        )
-                        cleanup_errors.append(post_link_unlink_exc)
+                post_link_obs_mode = int(post_link_tmp_st.st_mode)
+                post_link_obs_is_regular = bool(
+                    stat.S_ISREG(post_link_tmp_st.st_mode)
+                )
+                post_link_obs_is_symlink = bool(
+                    stat.S_ISLNK(post_link_tmp_st.st_mode)
+                )
+                if (
+                    post_link_obs_is_regular
+                    and not post_link_obs_is_symlink
+                    and (
+                        post_link_obs_dev,
+                        post_link_obs_ino,
+                    )
+                    == (tmp_dev, tmp_ino)
+                ):
+                    post_link_temp_verified = True
                 else:
                     post_link_temp_identity_mismatch = True
                     post_link_mismatch_dev = post_link_obs_dev
@@ -3177,6 +3577,18 @@ def _atomic_write_new_json_file(
                     else None
                 ),
                 "namespace_binding_error": None,
+                "temp_cleanup_succeeded": bool(
+                    cleanup_status_now.get("unlinked", False)
+                ),
+                "temp_handling_policy": cleanup_status_now[
+                    "temp_handling_policy"
+                ],
+                "temp_handling_succeeded": bool(
+                    cleanup_status_now.get("temp_handling_succeeded", False)
+                ),
+                "temp_handling_disposition": cleanup_status_now[
+                    "temp_handling_disposition"
+                ],
                 "temp_cleanup_status": copy.deepcopy(cleanup_status_now),
             }
             if eff_causes is not None:
@@ -3190,6 +3602,15 @@ def _atomic_write_new_json_file(
                     and id(readback_cleanup_close_exc) not in existing_cause_ids
                 ):
                     eff_causes.append(readback_cleanup_close_exc)
+                    existing_cause_ids.add(id(readback_cleanup_close_exc))
+                if not _is_json_temp_status_handling_satisfied(
+                    cleanup_status_now,
+                    legacy_missing_unlinked_default=False,
+                ):
+                    for err_obj in cleanup_errors:
+                        if id(err_obj) not in existing_cause_ids:
+                            eff_causes.append(err_obj)
+                            existing_cause_ids.add(id(err_obj))
             if eff_status_out is not None:
                 eff_status_out["published_receipt"] = copy.deepcopy(
                     readback_partial_receipt
@@ -3246,7 +3667,20 @@ def _atomic_write_new_json_file(
                 existing_cause_ids = {id(c) for c in eff_causes}
                 if id(post_exc) not in existing_cause_ids:
                     eff_causes.append(post_exc)
+                    existing_cause_ids.add(id(post_exc))
             cleanup_status_now = _finalize_temp_cleanup()
+            if (
+                eff_causes is not None
+                and not _is_json_temp_status_handling_satisfied(
+                    cleanup_status_now,
+                    legacy_missing_unlinked_default=False,
+                )
+            ):
+                existing_cause_ids = {id(c) for c in eff_causes}
+                for err_obj in cleanup_errors:
+                    if id(err_obj) not in existing_cause_ids:
+                        eff_causes.append(err_obj)
+                        existing_cause_ids.add(id(err_obj))
             detachment_observed = _is_observed_namespace_detachment(post_exc)
             post_partial_receipt: dict[str, Any] = {
                 "path": None,
@@ -3289,6 +3723,18 @@ def _atomic_write_new_json_file(
                 "failure_phase": "after_publication",
                 "readback_error": None,
                 "namespace_binding_error": f"{type(post_exc).__name__}: {post_exc}",
+                "temp_cleanup_succeeded": bool(
+                    cleanup_status_now.get("unlinked", False)
+                ),
+                "temp_handling_policy": cleanup_status_now[
+                    "temp_handling_policy"
+                ],
+                "temp_handling_succeeded": bool(
+                    cleanup_status_now.get("temp_handling_succeeded", False)
+                ),
+                "temp_handling_disposition": cleanup_status_now[
+                    "temp_handling_disposition"
+                ],
                 "temp_cleanup_status": copy.deepcopy(cleanup_status_now),
             }
             if eff_status_out is not None:
@@ -3311,6 +3757,10 @@ def _atomic_write_new_json_file(
             raise wrapped_post_err from post_exc
 
         cleanup_status_now = _finalize_temp_cleanup()
+        temp_handling_ok_now = _is_json_temp_status_handling_satisfied(
+            cleanup_status_now,
+            legacy_missing_unlinked_default=False,
+        )
         receipt: dict[str, Any] = {
             "path": str(target_path),
             "sha256": observed_readback_sha256,
@@ -3318,14 +3768,21 @@ def _atomic_write_new_json_file(
             "temp_cleanup_succeeded": bool(
                 cleanup_status_now.get("unlinked", False)
             ),
+            "temp_handling_policy": cleanup_status_now["temp_handling_policy"],
+            "temp_handling_succeeded": bool(
+                cleanup_status_now.get("temp_handling_succeeded", False)
+            ),
+            "temp_handling_disposition": cleanup_status_now[
+                "temp_handling_disposition"
+            ],
             "temp_cleanup_status": copy.deepcopy(cleanup_status_now),
         }
         active_cleanup_sink = _ACTIVE_WRITE_CLEANUP_ERRORS_SINK_CTX.get()
         if active_cleanup_sink is not None:
             active_cleanup_sink.clear()
-            if not bool(cleanup_status_now.get("unlinked", False)):
+            if not temp_handling_ok_now:
                 active_cleanup_sink.extend(cleanup_errors)
-        if not bool(cleanup_status_now.get("unlinked", False)):
+        if not temp_handling_ok_now:
             for err_obj in cleanup_errors:
                 try:
                     setattr(
@@ -3464,6 +3921,15 @@ def _atomic_write_new_json_file(
                 "temp_cleanup_succeeded": bool(
                     cleanup_status_now.get("unlinked", False)
                 ),
+                "temp_handling_policy": cleanup_status_now[
+                    "temp_handling_policy"
+                ],
+                "temp_handling_succeeded": bool(
+                    cleanup_status_now.get("temp_handling_succeeded", False)
+                ),
+                "temp_handling_disposition": cleanup_status_now[
+                    "temp_handling_disposition"
+                ],
                 "temp_cleanup_status": copy.deepcopy(cleanup_status_now),
             }
             if eff_status_out is not None:
@@ -3539,7 +4005,10 @@ def _atomic_write_new_json_file(
     finally:
         if created_tmp and not final_cleanup_executed:
             cleanup_status_final = _finalize_temp_cleanup()
-            if not bool(cleanup_status_final.get("unlinked", False)):
+            if not _is_json_temp_status_handling_satisfied(
+                cleanup_status_final,
+                legacy_missing_unlinked_default=False,
+            ):
                 if eff_causes is not None:
                     existing_cause_ids = {id(c) for c in eff_causes}
                     for err_obj in cleanup_errors:
@@ -3702,6 +4171,21 @@ def _atomic_write_new_json_file(
                                     first_dc_exc, "errno", None
                                 )
                             setattr(tgt, "published_receipt", updated_rec)
+                            for err_obj in cleanup_errors:
+                                try:
+                                    if isinstance(
+                                        getattr(
+                                            err_obj, "published_receipt", None
+                                        ),
+                                        Mapping,
+                                    ):
+                                        setattr(
+                                            err_obj,
+                                            "published_receipt",
+                                            copy.deepcopy(updated_rec),
+                                        )
+                                except Exception:
+                                    pass
                             if eff_status_out is not None:
                                 eff_status_out["published_receipt"] = (
                                     copy.deepcopy(updated_rec)
@@ -3736,6 +4220,8 @@ def _write_json_with_sibling_collision_fallback(
             exc
         ) or _has_directory_close_failure(exc):
             raise
+        prior_collision_temp_statuses: list[dict[str, Any]] = []
+        prior_collision_retained_temporaries: list[dict[str, Any]] = []
         prior_collision_cleanup_statuses: list[dict[str, Any]] = []
         prior_collision_cleanup_errors: list[OSError] = []
         prior_collision_exceptions: list[FileExistsError] = []
@@ -3745,10 +4231,18 @@ def _write_json_with_sibling_collision_fallback(
             attempted_dest: Path,
         ) -> None:
             prior_collision_exceptions.append(coll_exc)
+            raw_errs = getattr(coll_exc, "temp_cleanup_errors", None)
+            attempt_cleanup_errors: list[OSError] = []
+            if isinstance(raw_errs, list):
+                existing_ids = {id(e) for e in prior_collision_cleanup_errors}
+                for item in raw_errs:
+                    if isinstance(item, OSError):
+                        attempt_cleanup_errors.append(item)
+                        if id(item) not in existing_ids:
+                            prior_collision_cleanup_errors.append(item)
+                            existing_ids.add(id(item))
             raw_st = getattr(coll_exc, "temp_cleanup_status", None)
-            if isinstance(raw_st, Mapping) and not bool(
-                raw_st.get("unlinked", True)
-            ):
+            if isinstance(raw_st, Mapping):
                 st_entry = copy.deepcopy(dict(raw_st))
                 st_entry["attempted_path"] = str(attempted_dest)
                 st_entry["intended_lexical_path"] = str(attempted_dest)
@@ -3761,23 +4255,42 @@ def _write_json_with_sibling_collision_fallback(
                 st_entry["collision_errno"] = getattr(
                     coll_exc, "errno", None
                 )
-                prior_collision_cleanup_statuses.append(st_entry)
-            raw_errs = getattr(coll_exc, "temp_cleanup_errors", None)
-            if isinstance(raw_errs, list):
-                existing_ids = {id(e) for e in prior_collision_cleanup_errors}
-                for item in raw_errs:
-                    if (
-                        isinstance(item, OSError)
-                        and id(item) not in existing_ids
-                    ):
-                        prior_collision_cleanup_errors.append(item)
-                        existing_ids.add(id(item))
+                attempt_handling_satisfied = (
+                    not attempt_cleanup_errors
+                    and _is_json_temp_status_handling_satisfied(
+                        st_entry,
+                        legacy_missing_unlinked_default=True,
+                    )
+                )
+                if any(k in st_entry for k in _JSON_TEMP_POLICY_MARKER_KEYS):
+                    st_entry["temp_handling_succeeded"] = (
+                        attempt_handling_satisfied
+                    )
+                try:
+                    setattr(
+                        coll_exc,
+                        "temp_cleanup_status",
+                        copy.deepcopy(st_entry),
+                    )
+                except Exception:
+                    pass
+                prior_collision_temp_statuses.append(copy.deepcopy(st_entry))
+                if attempt_handling_satisfied:
+                    if not bool(st_entry.get("unlinked", False)):
+                        prior_collision_retained_temporaries.append(
+                            copy.deepcopy(st_entry)
+                        )
+                else:
+                    prior_collision_cleanup_statuses.append(
+                        copy.deepcopy(st_entry)
+                    )
 
         def _attach_prior_collision_cleanup_to_exc(
             target_exc: BaseException,
         ) -> None:
             if (
-                not prior_collision_cleanup_statuses
+                not prior_collision_temp_statuses
+                and not prior_collision_cleanup_statuses
                 and not prior_collision_cleanup_errors
             ):
                 return
@@ -3809,10 +4322,16 @@ def _write_json_with_sibling_collision_fallback(
                 cur_walk = next_walk
 
             existing_st = getattr(target_exc, "temp_cleanup_status", None)
-            if isinstance(existing_st, Mapping) and not bool(
-                existing_st.get("unlinked", True)
-            ):
-                effective_st = copy.deepcopy(dict(existing_st))
+            existing_st_failed = isinstance(
+                existing_st, Mapping
+            ) and not _is_json_temp_status_handling_satisfied(
+                existing_st,
+                legacy_missing_unlinked_default=True,
+            )
+            if existing_st_failed and isinstance(existing_st, Mapping):
+                effective_st: dict[str, Any] | None = copy.deepcopy(
+                    dict(existing_st)
+                )
                 if prior_collision_cleanup_statuses:
                     effective_st["prior_collision_temp_cleanup_failures"] = (
                         copy.deepcopy(prior_collision_cleanup_statuses)
@@ -3830,8 +4349,24 @@ def _write_json_with_sibling_collision_fallback(
                 )
             elif isinstance(existing_st, Mapping):
                 effective_st = copy.deepcopy(dict(existing_st))
+            elif prior_collision_temp_statuses:
+                effective_st = copy.deepcopy(prior_collision_temp_statuses[-1])
             else:
                 effective_st = None
+
+            if effective_st is not None:
+                if prior_collision_temp_statuses:
+                    effective_st["prior_collision_temp_cleanup_statuses"] = (
+                        copy.deepcopy(prior_collision_temp_statuses)
+                    )
+                if prior_collision_retained_temporaries:
+                    effective_st["prior_collision_retained_temporaries"] = (
+                        copy.deepcopy(prior_collision_retained_temporaries)
+                    )
+                if prior_collision_cleanup_statuses and any(
+                    k in effective_st for k in _JSON_TEMP_POLICY_MARKER_KEYS
+                ):
+                    effective_st["temp_handling_succeeded"] = False
 
             assign_seen: set[int] = set()
             cur_assign: BaseException | None = target_exc
@@ -3850,6 +4385,18 @@ def _write_json_with_sibling_collision_fallback(
                             "prior_collision_temp_cleanup_failures",
                             copy.deepcopy(prior_collision_cleanup_statuses),
                         )
+                    if prior_collision_temp_statuses:
+                        setattr(
+                            cur_assign,
+                            "prior_collision_temp_cleanup_statuses",
+                            copy.deepcopy(prior_collision_temp_statuses),
+                        )
+                    if prior_collision_retained_temporaries:
+                        setattr(
+                            cur_assign,
+                            "prior_collision_retained_temporaries",
+                            copy.deepcopy(prior_collision_retained_temporaries),
+                        )
                     if merged_cleanup_errors:
                         setattr(
                             cur_assign,
@@ -3864,22 +4411,71 @@ def _write_json_with_sibling_collision_fallback(
                     cur_pub_rec = getattr(
                         cur_assign, "published_receipt", None
                     )
-                    if (
-                        isinstance(cur_pub_rec, Mapping)
-                        and prior_collision_cleanup_statuses
+                    if isinstance(cur_pub_rec, Mapping) and (
+                        prior_collision_cleanup_statuses
+                        or prior_collision_temp_statuses
+                        or prior_collision_retained_temporaries
                     ):
                         updated_pub_rec = copy.deepcopy(dict(cur_pub_rec))
-                        updated_pub_rec[
-                            "prior_collision_temp_cleanup_failures"
-                        ] = copy.deepcopy(prior_collision_cleanup_statuses)
+                        if prior_collision_cleanup_statuses:
+                            updated_pub_rec["temp_cleanup_succeeded"] = False
+                            if (
+                                "temp_handling_succeeded" in updated_pub_rec
+                                or any(
+                                    k in updated_pub_rec
+                                    for k in _JSON_TEMP_POLICY_MARKER_KEYS
+                                )
+                            ):
+                                updated_pub_rec["temp_handling_succeeded"] = (
+                                    False
+                                )
+                            updated_pub_rec[
+                                "prior_collision_temp_cleanup_failures"
+                            ] = copy.deepcopy(prior_collision_cleanup_statuses)
+                        if prior_collision_temp_statuses:
+                            updated_pub_rec[
+                                "prior_collision_temp_cleanup_statuses"
+                            ] = copy.deepcopy(prior_collision_temp_statuses)
+                        if prior_collision_retained_temporaries:
+                            updated_pub_rec[
+                                "prior_collision_retained_temporaries"
+                            ] = copy.deepcopy(
+                                prior_collision_retained_temporaries
+                            )
                         if isinstance(
                             updated_pub_rec.get("temp_cleanup_status"),
                             Mapping,
                         ):
-                            updated_pub_rec["temp_cleanup_status"][
-                                "prior_collision_temp_cleanup_failures"
-                            ] = copy.deepcopy(
-                                prior_collision_cleanup_statuses
+                            updated_pub_st = copy.deepcopy(
+                                dict(updated_pub_rec["temp_cleanup_status"])
+                            )
+                            if prior_collision_cleanup_statuses:
+                                if any(
+                                    k in updated_pub_st
+                                    for k in _JSON_TEMP_POLICY_MARKER_KEYS
+                                ):
+                                    updated_pub_st[
+                                        "temp_handling_succeeded"
+                                    ] = False
+                                updated_pub_st[
+                                    "prior_collision_temp_cleanup_failures"
+                                ] = copy.deepcopy(
+                                    prior_collision_cleanup_statuses
+                                )
+                            if prior_collision_temp_statuses:
+                                updated_pub_st[
+                                    "prior_collision_temp_cleanup_statuses"
+                                ] = copy.deepcopy(
+                                    prior_collision_temp_statuses
+                                )
+                            if prior_collision_retained_temporaries:
+                                updated_pub_st[
+                                    "prior_collision_retained_temporaries"
+                                ] = copy.deepcopy(
+                                    prior_collision_retained_temporaries
+                                )
+                            updated_pub_rec["temp_cleanup_status"] = (
+                                updated_pub_st
                             )
                         setattr(
                             cur_assign, "published_receipt", updated_pub_rec
@@ -3891,6 +4487,81 @@ def _write_json_with_sibling_collision_fallback(
                     next_assign = cur_assign.__cause__
                 cur_assign = next_assign
 
+            outer_cleanup_sink = _ACTIVE_WRITE_CLEANUP_ERRORS_SINK_CTX.get()
+            if outer_cleanup_sink is not None:
+                outer_cleanup_sink.clear()
+                outer_cleanup_sink.extend(merged_cleanup_errors)
+
+            def _shared_published_receipt_matches_exception_receipt(
+                shared_rec: Any, exc_rec: Any
+            ) -> bool:
+                if not isinstance(shared_rec, Mapping) or not isinstance(
+                    exc_rec, Mapping
+                ):
+                    return False
+                identity_keys = (
+                    "intended_lexical_path",
+                    "path",
+                    "target_name",
+                    "failure_phase",
+                    "source_tmp_dev",
+                    "source_tmp_ino",
+                    "dev",
+                    "ino",
+                    "observed_target_dev",
+                    "observed_target_ino",
+                    "parent_dir_dev",
+                    "parent_dir_ino",
+                    "dir_dev",
+                    "dir_ino",
+                    "expected_sha256",
+                    "expected_size_bytes",
+                )
+                matched_anchor = False
+                for key in identity_keys:
+                    if key in shared_rec or key in exc_rec:
+                        if shared_rec.get(key) != exc_rec.get(key):
+                            return False
+                        if shared_rec.get(key) is not None and key in (
+                            "intended_lexical_path",
+                            "path",
+                            "target_name",
+                            "source_tmp_ino",
+                            "observed_target_ino",
+                            "ino",
+                        ):
+                            matched_anchor = True
+                shared_st = shared_rec.get("temp_cleanup_status")
+                exc_st = exc_rec.get("temp_cleanup_status")
+                if isinstance(shared_st, Mapping) and isinstance(
+                    exc_st, Mapping
+                ):
+                    st_identity_keys = (
+                        "temp_name",
+                        "attempted_path",
+                        "intended_lexical_path",
+                        "target_name",
+                        "expected_temp_dev",
+                        "expected_temp_ino",
+                    )
+                    for key in st_identity_keys:
+                        if key in shared_st or key in exc_st:
+                            if shared_st.get(key) != exc_st.get(key):
+                                return False
+                            if shared_st.get(key) is not None and key in (
+                                "temp_name",
+                                "attempted_path",
+                                "intended_lexical_path",
+                                "target_name",
+                                "expected_temp_ino",
+                            ):
+                                matched_anchor = True
+                elif isinstance(shared_st, Mapping) != isinstance(
+                    exc_st, Mapping
+                ):
+                    return False
+                return matched_anchor
+
             ctx_info = _ADMITTED_DIR_BASELINE_CTX.get()
             normalized_root_str = str(
                 Path(os.path.abspath(os.fspath(root)))
@@ -3899,20 +4570,47 @@ def _write_json_with_sibling_collision_fallback(
                 ctx_status_out = ctx_info[2]
                 ctx_causes = ctx_info[3]
                 if ctx_status_out is not None:
-                    if effective_st is not None:
-                        ctx_status_out["temp_cleanup_status"] = copy.deepcopy(
-                            effective_st
+                    updated_target_pub_rec = getattr(
+                        target_exc, "published_receipt", None
+                    )
+                    if not isinstance(updated_target_pub_rec, Mapping):
+                        inner_target_cause = getattr(target_exc, "cause", None)
+                        if not isinstance(inner_target_cause, BaseException):
+                            inner_target_cause = target_exc.__cause__
+                        if isinstance(inner_target_cause, BaseException):
+                            updated_target_pub_rec = getattr(
+                                inner_target_cause, "published_receipt", None
+                            )
+                    if _shared_published_receipt_matches_exception_receipt(
+                        ctx_status_out.get("published_receipt"),
+                        updated_target_pub_rec,
+                    ):
+                        ctx_status_out["published_receipt"] = copy.deepcopy(
+                            dict(updated_target_pub_rec)
                         )
-                    if prior_collision_cleanup_statuses:
-                        ctx_status_out[
-                            "prior_collision_temp_cleanup_failures"
-                        ] = copy.deepcopy(prior_collision_cleanup_statuses)
-                if ctx_causes is not None and merged_cleanup_errors:
-                    existing_ids = {id(c) for c in ctx_causes}
-                    for c_err in merged_cleanup_errors:
-                        if id(c_err) not in existing_ids:
-                            ctx_causes.append(c_err)
-                            existing_ids.add(id(c_err))
+                if (
+                    prior_collision_cleanup_statuses
+                    or existing_st_failed
+                    or merged_cleanup_errors
+                ):
+                    if ctx_status_out is not None:
+                        if effective_st is not None and (
+                            prior_collision_cleanup_statuses
+                            or existing_st_failed
+                        ):
+                            ctx_status_out["temp_cleanup_status"] = (
+                                copy.deepcopy(effective_st)
+                            )
+                        if prior_collision_cleanup_statuses:
+                            ctx_status_out[
+                                "prior_collision_temp_cleanup_failures"
+                            ] = copy.deepcopy(prior_collision_cleanup_statuses)
+                    if ctx_causes is not None and merged_cleanup_errors:
+                        existing_ids = {id(c) for c in ctx_causes}
+                        for c_err in merged_cleanup_errors:
+                            if id(c_err) not in existing_ids:
+                                ctx_causes.append(c_err)
+                                existing_ids.add(id(c_err))
 
         _record_collision_attempt_cleanup(exc, target_path)
         last_collision_exc: FileExistsError = exc
@@ -3930,10 +4628,20 @@ def _write_json_with_sibling_collision_fallback(
                 prior_statuses_snapshot = copy.deepcopy(
                     prior_collision_cleanup_statuses
                 )
+                prior_all_statuses_snapshot = copy.deepcopy(
+                    prior_collision_temp_statuses
+                )
+                prior_retained_snapshot = copy.deepcopy(
+                    prior_collision_retained_temporaries
+                )
 
                 def _payload_with_prior_collision_cleanup(
                     dest: Path,
                     _snap: list[dict[str, Any]] = prior_statuses_snapshot,
+                    _all_snap: list[
+                        dict[str, Any]
+                    ] = prior_all_statuses_snapshot,
+                    _ret_snap: list[dict[str, Any]] = prior_retained_snapshot,
                 ) -> Mapping[str, Any]:
                     base_map = _materialize_json_payload(payload, dest)
                     enriched_map = dict(base_map)
@@ -3948,6 +4656,14 @@ def _write_json_with_sibling_collision_fallback(
                     prior_primary_st[
                         "prior_collision_temp_cleanup_failures"
                     ] = copy.deepcopy(_snap)
+                    if _all_snap:
+                        prior_primary_st[
+                            "prior_collision_temp_cleanup_statuses"
+                        ] = copy.deepcopy(_all_snap)
+                    if _ret_snap:
+                        prior_primary_st[
+                            "prior_collision_retained_temporaries"
+                        ] = copy.deepcopy(_ret_snap)
                     enriched_map["prior_collision_temp_cleanup_status"] = (
                         prior_primary_st
                     )
@@ -3987,16 +4703,38 @@ def _write_json_with_sibling_collision_fallback(
                 _attach_prior_collision_cleanup_to_exc(sub_other_exc)
                 raise
             artifact["fallback_for_preexisting_path"] = str(target_path)
+            sibling_cleanup_status = copy.deepcopy(
+                artifact.get("temp_cleanup_status")
+            )
+            sibling_cleanup_succeeded = bool(
+                artifact.get("temp_cleanup_succeeded", True)
+            )
+            sibling_handling_succeeded = (
+                not sibling_cleanup_errors
+                and _is_json_temp_handling_satisfied(
+                    artifact,
+                    legacy_missing_receipt_default=True,
+                )
+            )
             if prior_collision_cleanup_statuses:
-                sibling_cleanup_status = copy.deepcopy(
-                    artifact.get("temp_cleanup_status")
-                )
-                sibling_cleanup_succeeded = bool(
-                    artifact.get("temp_cleanup_succeeded", True)
-                )
                 artifact["temp_cleanup_succeeded"] = False
+                if (
+                    "temp_handling_succeeded" in artifact
+                    or any(k in artifact for k in _JSON_TEMP_POLICY_MARKER_KEYS)
+                    or (
+                        isinstance(sibling_cleanup_status, Mapping)
+                        and any(
+                            k in sibling_cleanup_status
+                            for k in _JSON_TEMP_POLICY_MARKER_KEYS
+                        )
+                    )
+                ):
+                    artifact["temp_handling_succeeded"] = False
                 artifact["sibling_temp_cleanup_succeeded"] = (
                     sibling_cleanup_succeeded
+                )
+                artifact["sibling_temp_handling_succeeded"] = (
+                    sibling_handling_succeeded
                 )
                 artifact["sibling_temp_cleanup_status"] = (
                     sibling_cleanup_status
@@ -4004,24 +4742,86 @@ def _write_json_with_sibling_collision_fallback(
                 artifact["prior_collision_temp_cleanup_failures"] = (
                     copy.deepcopy(prior_collision_cleanup_statuses)
                 )
+                if prior_collision_temp_statuses:
+                    artifact["prior_collision_temp_cleanup_statuses"] = (
+                        copy.deepcopy(prior_collision_temp_statuses)
+                    )
+                if prior_collision_retained_temporaries:
+                    artifact["prior_collision_retained_temporaries"] = (
+                        copy.deepcopy(prior_collision_retained_temporaries)
+                    )
                 primary_failed_cleanup = (
                     copy.deepcopy(dict(sibling_cleanup_status))
                     if (
-                        not sibling_cleanup_succeeded
+                        not sibling_handling_succeeded
                         and isinstance(sibling_cleanup_status, Mapping)
                     )
                     else copy.deepcopy(prior_collision_cleanup_statuses[-1])
                 )
+                if any(
+                    k in primary_failed_cleanup
+                    for k in _JSON_TEMP_POLICY_MARKER_KEYS
+                ):
+                    primary_failed_cleanup["temp_handling_succeeded"] = False
                 primary_failed_cleanup["actual_published_path"] = str(
                     artifact["path"]
                 )
                 primary_failed_cleanup["sibling_temp_cleanup_status"] = (
                     copy.deepcopy(sibling_cleanup_status)
                 )
+                primary_failed_cleanup["sibling_temp_handling_succeeded"] = (
+                    sibling_handling_succeeded
+                )
                 primary_failed_cleanup[
                     "prior_collision_temp_cleanup_failures"
                 ] = copy.deepcopy(prior_collision_cleanup_statuses)
+                if prior_collision_temp_statuses:
+                    primary_failed_cleanup[
+                        "prior_collision_temp_cleanup_statuses"
+                    ] = copy.deepcopy(prior_collision_temp_statuses)
+                if prior_collision_retained_temporaries:
+                    primary_failed_cleanup[
+                        "prior_collision_retained_temporaries"
+                    ] = copy.deepcopy(prior_collision_retained_temporaries)
                 artifact["temp_cleanup_status"] = primary_failed_cleanup
+            elif prior_collision_temp_statuses:
+                artifact["sibling_temp_cleanup_succeeded"] = (
+                    sibling_cleanup_succeeded
+                )
+                artifact["sibling_temp_handling_succeeded"] = (
+                    sibling_handling_succeeded
+                )
+                artifact["sibling_temp_cleanup_status"] = (
+                    copy.deepcopy(sibling_cleanup_status)
+                )
+                artifact["prior_collision_temp_cleanup_statuses"] = (
+                    copy.deepcopy(prior_collision_temp_statuses)
+                )
+                if prior_collision_retained_temporaries:
+                    artifact["prior_collision_retained_temporaries"] = (
+                        copy.deepcopy(prior_collision_retained_temporaries)
+                    )
+                if isinstance(sibling_cleanup_status, Mapping):
+                    enriched_sibling_status = copy.deepcopy(
+                        dict(sibling_cleanup_status)
+                    )
+                    enriched_sibling_status["actual_published_path"] = str(
+                        artifact["path"]
+                    )
+                    enriched_sibling_status["sibling_temp_cleanup_status"] = (
+                        copy.deepcopy(sibling_cleanup_status)
+                    )
+                    enriched_sibling_status[
+                        "sibling_temp_handling_succeeded"
+                    ] = sibling_handling_succeeded
+                    enriched_sibling_status[
+                        "prior_collision_temp_cleanup_statuses"
+                    ] = copy.deepcopy(prior_collision_temp_statuses)
+                    if prior_collision_retained_temporaries:
+                        enriched_sibling_status[
+                            "prior_collision_retained_temporaries"
+                        ] = copy.deepcopy(prior_collision_retained_temporaries)
+                    artifact["temp_cleanup_status"] = enriched_sibling_status
             combined_cleanup_errors: list[OSError] = []
             seen_cleanup_err_ids: set[int] = set()
             for c_err in (
@@ -4067,9 +4867,23 @@ def _write_json_with_sibling_collision_fallback(
                                 "prior_collision_temp_cleanup_failures",
                                 copy.deepcopy(prior_collision_cleanup_statuses),
                             )
+                        if prior_collision_temp_statuses:
+                            setattr(
+                                c_err,
+                                "prior_collision_temp_cleanup_statuses",
+                                copy.deepcopy(prior_collision_temp_statuses),
+                            )
+                        if prior_collision_retained_temporaries:
+                            setattr(
+                                c_err,
+                                "prior_collision_retained_temporaries",
+                                copy.deepcopy(
+                                    prior_collision_retained_temporaries
+                                ),
+                            )
                     except Exception:
                         pass
-            if prior_collision_cleanup_statuses:
+            if prior_collision_cleanup_statuses or not sibling_handling_succeeded:
                 ctx_info = _ADMITTED_DIR_BASELINE_CTX.get()
                 normalized_root_str = str(
                     Path(os.path.abspath(os.fspath(root)))
@@ -4081,9 +4895,10 @@ def _write_json_with_sibling_collision_fallback(
                         ctx_status_out["temp_cleanup_status"] = copy.deepcopy(
                             artifact["temp_cleanup_status"]
                         )
-                        ctx_status_out[
-                            "prior_collision_temp_cleanup_failures"
-                        ] = copy.deepcopy(prior_collision_cleanup_statuses)
+                        if prior_collision_cleanup_statuses:
+                            ctx_status_out[
+                                "prior_collision_temp_cleanup_failures"
+                            ] = copy.deepcopy(prior_collision_cleanup_statuses)
                     if ctx_causes is not None and combined_cleanup_errors:
                         combined_ids = {id(c) for c in combined_cleanup_errors}
                         retained_other_causes = [
@@ -4732,7 +5547,9 @@ def _persist_collector_json_with_fallback(
                 child_written = _write_json_with_sibling_collision_fallback(
                     child_payload, target_path, root=root
                 )
-            if not bool(child_written.get("temp_cleanup_succeeded", True)):
+            if not _is_json_temp_handling_satisfied(
+                child_written, legacy_missing_receipt_default=True
+            ):
                 if caught_persistence_exceptions is not None:
                     existing_ids = {
                         id(c) for c in caught_persistence_exceptions
@@ -4800,6 +5617,25 @@ def _persist_collector_json_with_fallback(
                         ),
                     }
                     if isinstance(
+                        child_written.get("temp_handling_policy"), str
+                    ):
+                        cleanup_fail_entry["temp_handling_policy"] = str(
+                            child_written["temp_handling_policy"]
+                        )
+                    if (
+                        type(child_written.get("temp_handling_succeeded"))
+                        is bool
+                    ):
+                        cleanup_fail_entry["temp_handling_succeeded"] = (
+                            child_written["temp_handling_succeeded"]
+                        )
+                    if isinstance(
+                        child_written.get("temp_handling_disposition"), str
+                    ):
+                        cleanup_fail_entry["temp_handling_disposition"] = str(
+                            child_written["temp_handling_disposition"]
+                        )
+                    if isinstance(
                         child_written.get(
                             "prior_collision_temp_cleanup_failures"
                         ),
@@ -4811,6 +5647,61 @@ def _persist_collector_json_with_fallback(
                             child_written[
                                 "prior_collision_temp_cleanup_failures"
                             ]
+                        )
+                    if isinstance(
+                        child_written.get(
+                            "prior_collision_temp_cleanup_statuses"
+                        ),
+                        list,
+                    ):
+                        cleanup_fail_entry[
+                            "prior_collision_temp_cleanup_statuses"
+                        ] = copy.deepcopy(
+                            child_written[
+                                "prior_collision_temp_cleanup_statuses"
+                            ]
+                        )
+                    if isinstance(
+                        child_written.get(
+                            "prior_collision_retained_temporaries"
+                        ),
+                        list,
+                    ):
+                        cleanup_fail_entry[
+                            "prior_collision_retained_temporaries"
+                        ] = copy.deepcopy(
+                            child_written[
+                                "prior_collision_retained_temporaries"
+                            ]
+                        )
+                    if (
+                        type(child_written.get("sibling_temp_cleanup_succeeded"))
+                        is bool
+                    ):
+                        cleanup_fail_entry["sibling_temp_cleanup_succeeded"] = (
+                            child_written["sibling_temp_cleanup_succeeded"]
+                        )
+                    if (
+                        type(
+                            child_written.get("sibling_temp_handling_succeeded")
+                        )
+                        is bool
+                    ):
+                        cleanup_fail_entry[
+                            "sibling_temp_handling_succeeded"
+                        ] = child_written["sibling_temp_handling_succeeded"]
+                    if isinstance(
+                        child_written.get("sibling_temp_cleanup_status"),
+                        Mapping,
+                    ):
+                        cleanup_fail_entry["sibling_temp_cleanup_status"] = (
+                            copy.deepcopy(
+                                dict(
+                                    child_written[
+                                        "sibling_temp_cleanup_status"
+                                    ]
+                                )
+                            )
                         )
                     child_dir_persistence_failures.append(cleanup_fail_entry)
                 if (
@@ -4905,6 +5796,20 @@ def _persist_collector_json_with_fallback(
                 raw_child_prior_collision_cleanup = getattr(
                     exc, "prior_collision_temp_cleanup_failures", None
                 )
+            raw_child_prior_collision_statuses = getattr(
+                actual_child_exc, "prior_collision_temp_cleanup_statuses", None
+            )
+            if not isinstance(raw_child_prior_collision_statuses, list):
+                raw_child_prior_collision_statuses = getattr(
+                    exc, "prior_collision_temp_cleanup_statuses", None
+                )
+            raw_child_prior_collision_retained = getattr(
+                actual_child_exc, "prior_collision_retained_temporaries", None
+            )
+            if not isinstance(raw_child_prior_collision_retained, list):
+                raw_child_prior_collision_retained = getattr(
+                    exc, "prior_collision_retained_temporaries", None
+                )
             if isinstance(raw_child_dir_close_err, BaseException):
                 try:
                     setattr(
@@ -4938,6 +5843,24 @@ def _persist_collector_json_with_fallback(
                         actual_child_exc,
                         "prior_collision_temp_cleanup_failures",
                         copy.deepcopy(raw_child_prior_collision_cleanup),
+                    )
+                except Exception:
+                    pass
+            if isinstance(raw_child_prior_collision_statuses, list):
+                try:
+                    setattr(
+                        actual_child_exc,
+                        "prior_collision_temp_cleanup_statuses",
+                        copy.deepcopy(raw_child_prior_collision_statuses),
+                    )
+                except Exception:
+                    pass
+            if isinstance(raw_child_prior_collision_retained, list):
+                try:
+                    setattr(
+                        actual_child_exc,
+                        "prior_collision_retained_temporaries",
+                        copy.deepcopy(raw_child_prior_collision_retained),
                     )
                 except Exception:
                     pass
@@ -5321,7 +6244,9 @@ def _persist_collector_json_with_fallback(
                 )
             if (
                 caught_persistence_exceptions is not None
-                and not bool(artifact.get("temp_cleanup_succeeded", True))
+                and not _is_json_temp_handling_satisfied(
+                    artifact, legacy_missing_receipt_default=True
+                )
             ):
                 existing_ids = {id(c) for c in caught_persistence_exceptions}
                 for p_exc in parent_attempt_causes:
@@ -5433,6 +6358,20 @@ def _persist_collector_json_with_fallback(
                 raw_parent_prior_collision_cleanup = getattr(
                     exc, "prior_collision_temp_cleanup_failures", None
                 )
+            raw_parent_prior_collision_statuses = getattr(
+                actual_parent_exc, "prior_collision_temp_cleanup_statuses", None
+            )
+            if not isinstance(raw_parent_prior_collision_statuses, list):
+                raw_parent_prior_collision_statuses = getattr(
+                    exc, "prior_collision_temp_cleanup_statuses", None
+                )
+            raw_parent_prior_collision_retained = getattr(
+                actual_parent_exc, "prior_collision_retained_temporaries", None
+            )
+            if not isinstance(raw_parent_prior_collision_retained, list):
+                raw_parent_prior_collision_retained = getattr(
+                    exc, "prior_collision_retained_temporaries", None
+                )
             if isinstance(raw_parent_dir_close_err, BaseException):
                 try:
                     setattr(
@@ -5466,6 +6405,24 @@ def _persist_collector_json_with_fallback(
                         actual_parent_exc,
                         "prior_collision_temp_cleanup_failures",
                         copy.deepcopy(raw_parent_prior_collision_cleanup),
+                    )
+                except Exception:
+                    pass
+            if isinstance(raw_parent_prior_collision_statuses, list):
+                try:
+                    setattr(
+                        actual_parent_exc,
+                        "prior_collision_temp_cleanup_statuses",
+                        copy.deepcopy(raw_parent_prior_collision_statuses),
+                    )
+                except Exception:
+                    pass
+            if isinstance(raw_parent_prior_collision_retained, list):
+                try:
+                    setattr(
+                        actual_parent_exc,
+                        "prior_collision_retained_temporaries",
+                        copy.deepcopy(raw_parent_prior_collision_retained),
                     )
                 except Exception:
                     pass
@@ -5656,7 +6613,9 @@ def _persist_collector_json_with_fallback(
                 )
             if (
                 caught_persistence_exceptions is not None
-                and not bool(artifact.get("temp_cleanup_succeeded", True))
+                and not _is_json_temp_handling_satisfied(
+                    artifact, legacy_missing_receipt_default=True
+                )
             ):
                 existing_ids = {id(c) for c in caught_persistence_exceptions}
                 for a_exc in anchor_attempt_causes:
@@ -5758,6 +6717,23 @@ def _persist_collector_json_with_fallback(
                         )
                 except Exception:
                     pass
+            for attr_name in (
+                "prior_collision_temp_cleanup_failures",
+                "prior_collision_temp_cleanup_statuses",
+                "prior_collision_retained_temporaries",
+            ):
+                raw_anchor_attr = getattr(actual_anchor_exc, attr_name, None)
+                if not isinstance(raw_anchor_attr, list):
+                    raw_anchor_attr = getattr(exc, attr_name, None)
+                if isinstance(raw_anchor_attr, list):
+                    try:
+                        setattr(
+                            actual_anchor_exc,
+                            attr_name,
+                            copy.deepcopy(raw_anchor_attr),
+                        )
+                    except Exception:
+                        pass
             raw_anchor_close_err = getattr(
                 actual_anchor_exc, "cleanup_close_error", None
             )
@@ -7923,7 +8899,15 @@ def _verify_immutable_baselines_post_run(
     mutation_causes_out: list[Exception | None] | None = None,
     pre_checkpoint_cause_out: list[Exception | None] | None = None,
 ) -> dict[str, Any]:
-    """Re-hash staged inputs, helper sources, keywords file, and pre-execution checkpoint after child execution."""
+    """Re-hash staged inputs, helper sources, keywords file, and pre-execution checkpoint after child execution.
+
+    Saved pre-execution checkpoint leaf verification opens the relative entry under the admitted
+    parent descriptor with ``O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC``, verifies pre-read
+    and post-EOF ``fstat`` regular-file identity and size on the opened descriptor, and performs
+    a final admitted-parent-relative ``os.stat(..., dir_fd=..., follow_symlinks=False)`` before
+    closing the leaf descriptor. Final relative-name verification proves only the observed
+    directory-entry binding at the check, not a timeless snapshot or atomic namespace exclusion.
+    """
     mutations: list[dict[str, Any]] = []
     post_staged_inputs: dict[str, dict[str, Any]] = {}
     post_helper_sources: dict[str, dict[str, Any]] = {}
@@ -9138,6 +10122,39 @@ def _verify_immutable_baselines_post_run(
                         assert cp_st is not None
                         cp_is_symlink = bool(stat.S_ISLNK(cp_st.st_mode))
                         cp_is_regular = bool(stat.S_ISREG(cp_st.st_mode))
+                        cp_initial_dev = int(cp_st.st_dev)
+                        cp_initial_ino = int(cp_st.st_ino)
+                        cp_initial_size = int(cp_st.st_size)
+                        cp_initial_mode = int(stat.S_IMODE(cp_st.st_mode))
+                        cp_initial_lookup_info: dict[str, Any] = {
+                            "attempted": True,
+                            "succeeded": True,
+                            "exists": True,
+                            "is_symlink": cp_is_symlink,
+                            "is_regular_file": bool(
+                                cp_is_regular and not cp_is_symlink
+                            ),
+                            "dev": cp_initial_dev,
+                            "ino": cp_initial_ino,
+                            "size_bytes": cp_initial_size,
+                            "mode": cp_initial_mode,
+                        }
+                        cp_unattempted_final_lookup_info: dict[str, Any] = {
+                            "attempted": False,
+                            "succeeded": False,
+                            "verified": False,
+                            "exists": None,
+                            "is_symlink": None,
+                            "is_regular_file": None,
+                            "dev": None,
+                            "ino": None,
+                            "size_bytes": None,
+                            "mode": None,
+                            "error": None,
+                            "exception_type": None,
+                            "exception_message": None,
+                            "errno": None,
+                        }
                         if cp_is_symlink:
                             cp_err = (
                                 f"Pre-execution checkpoint path was replaced by a symlink: {cp_path}"
@@ -9162,14 +10179,43 @@ def _verify_immutable_baselines_post_run(
                                 "is_symlink": True,
                                 "is_regular_file": False,
                                 "sha256": None,
-                                "size_bytes": int(cp_st.st_size),
-                                "stat_size_bytes": int(cp_st.st_size),
+                                "size_bytes": cp_initial_size,
+                                "stat_size_bytes": cp_initial_size,
+                                "initial_leaf_lookup": dict(
+                                    cp_initial_lookup_info
+                                ),
+                                "initial_leaf_dev": cp_initial_dev,
+                                "initial_leaf_ino": cp_initial_ino,
+                                "initial_leaf_size_bytes": cp_initial_size,
+                                "initial_leaf_mode": cp_initial_mode,
                                 "observed_read_bytes": 0,
                                 "observed_read_sha256": None,
                                 "observed_eof": False,
                                 "read_complete": False,
+                                "leaf_descriptor_opened": False,
                                 "leaf_pre_fstat_verified": False,
+                                "leaf_pre_fstat_is_regular_file": None,
+                                "leaf_pre_fstat_dev": None,
+                                "leaf_pre_fstat_ino": None,
+                                "leaf_pre_fstat_size_bytes": None,
                                 "leaf_post_fstat_verified": False,
+                                "leaf_post_fstat_is_regular_file": None,
+                                "leaf_post_fstat_dev": None,
+                                "leaf_post_fstat_ino": None,
+                                "leaf_post_fstat_size_bytes": None,
+                                "final_leaf_lookup": dict(
+                                    cp_unattempted_final_lookup_info
+                                ),
+                                "leaf_final_stat_attempted": False,
+                                "leaf_final_stat_succeeded": False,
+                                "leaf_final_stat_verified": False,
+                                "leaf_final_stat_exists": None,
+                                "leaf_final_stat_is_symlink": None,
+                                "leaf_final_stat_is_regular_file": None,
+                                "leaf_final_stat_dev": None,
+                                "leaf_final_stat_ino": None,
+                                "leaf_final_stat_size_bytes": None,
+                                "leaf_final_stat_mode": None,
                                 "leaf_close_attempted": False,
                                 "leaf_close_succeeded": False,
                                 "parent_descriptor_opened": True,
@@ -9197,7 +10243,7 @@ def _verify_immutable_baselines_post_run(
                                     "expected_sha256": expected_cp_sha256,
                                     "expected_size_bytes": expected_cp_size,
                                     "actual_sha256": None,
-                                    "actual_size_bytes": int(cp_st.st_size),
+                                    "actual_size_bytes": cp_initial_size,
                                     "exists_post_run": True,
                                     "is_symlink_post_run": True,
                                     "is_regular_file_post_run": False,
@@ -9232,14 +10278,43 @@ def _verify_immutable_baselines_post_run(
                                 "is_symlink": False,
                                 "is_regular_file": False,
                                 "sha256": None,
-                                "size_bytes": int(cp_st.st_size),
-                                "stat_size_bytes": int(cp_st.st_size),
+                                "size_bytes": cp_initial_size,
+                                "stat_size_bytes": cp_initial_size,
+                                "initial_leaf_lookup": dict(
+                                    cp_initial_lookup_info
+                                ),
+                                "initial_leaf_dev": cp_initial_dev,
+                                "initial_leaf_ino": cp_initial_ino,
+                                "initial_leaf_size_bytes": cp_initial_size,
+                                "initial_leaf_mode": cp_initial_mode,
                                 "observed_read_bytes": 0,
                                 "observed_read_sha256": None,
                                 "observed_eof": False,
                                 "read_complete": False,
+                                "leaf_descriptor_opened": False,
                                 "leaf_pre_fstat_verified": False,
+                                "leaf_pre_fstat_is_regular_file": None,
+                                "leaf_pre_fstat_dev": None,
+                                "leaf_pre_fstat_ino": None,
+                                "leaf_pre_fstat_size_bytes": None,
                                 "leaf_post_fstat_verified": False,
+                                "leaf_post_fstat_is_regular_file": None,
+                                "leaf_post_fstat_dev": None,
+                                "leaf_post_fstat_ino": None,
+                                "leaf_post_fstat_size_bytes": None,
+                                "final_leaf_lookup": dict(
+                                    cp_unattempted_final_lookup_info
+                                ),
+                                "leaf_final_stat_attempted": False,
+                                "leaf_final_stat_succeeded": False,
+                                "leaf_final_stat_verified": False,
+                                "leaf_final_stat_exists": None,
+                                "leaf_final_stat_is_symlink": None,
+                                "leaf_final_stat_is_regular_file": None,
+                                "leaf_final_stat_dev": None,
+                                "leaf_final_stat_ino": None,
+                                "leaf_final_stat_size_bytes": None,
+                                "leaf_final_stat_mode": None,
                                 "leaf_close_attempted": False,
                                 "leaf_close_succeeded": False,
                                 "parent_descriptor_opened": True,
@@ -9267,7 +10342,7 @@ def _verify_immutable_baselines_post_run(
                                     "expected_sha256": expected_cp_sha256,
                                     "expected_size_bytes": expected_cp_size,
                                     "actual_sha256": None,
-                                    "actual_size_bytes": int(cp_st.st_size),
+                                    "actual_size_bytes": cp_initial_size,
                                     "exists_post_run": True,
                                     "is_symlink_post_run": False,
                                     "is_regular_file_post_run": False,
@@ -9281,8 +10356,31 @@ def _verify_immutable_baselines_post_run(
                         else:
                             cp_chunks: list[bytes] = []
                             cp_eof_reached = False
+                            cp_descriptor_opened = False
                             cp_pre_fstat_verified = False
+                            cp_pre_fstat_is_regular: bool | None = None
+                            cp_pre_fstat_dev: int | None = None
+                            cp_pre_fstat_ino: int | None = None
+                            cp_pre_fstat_size: int | None = None
                             cp_post_fstat_verified = False
+                            cp_post_fstat_is_regular: bool | None = None
+                            cp_post_fstat_dev: int | None = None
+                            cp_post_fstat_ino: int | None = None
+                            cp_post_fstat_size: int | None = None
+                            cp_final_lookup_attempted = False
+                            cp_final_lookup_succeeded = False
+                            cp_final_lookup_verified = False
+                            cp_final_exists: bool | None = None
+                            cp_final_is_symlink: bool | None = None
+                            cp_final_is_regular: bool | None = None
+                            cp_final_dev: int | None = None
+                            cp_final_ino: int | None = None
+                            cp_final_size: int | None = None
+                            cp_final_mode: int | None = None
+                            cp_final_lookup_err: str | None = None
+                            cp_final_lookup_exc_type: str | None = None
+                            cp_final_lookup_exc_msg: str | None = None
+                            cp_final_lookup_errno: int | None = None
                             cp_close_attempted = False
                             cp_close_succeeded = False
                             cp_cleanup_close_exc: OSError | None = None
@@ -9291,22 +10389,39 @@ def _verify_immutable_baselines_post_run(
                                 cp_fd = os.open(
                                     cp_leaf_name,
                                     os.O_RDONLY
+                                    | getattr(os, "O_NONBLOCK", 0)
                                     | getattr(os, "O_NOFOLLOW", 0)
                                     | getattr(os, "O_CLOEXEC", 0),
                                     0o644,
                                     dir_fd=cp_parent_cap.fd,
                                 )
+                                cp_descriptor_opened = True
                                 cp_leaf_closed = False
                                 try:
                                     cp_leaf_phase = "leaf_pre_read_fstat"
                                     cp_fd_st = os.fstat(cp_fd)
-                                    if not stat.S_ISREG(cp_fd_st.st_mode) or (
-                                        int(cp_fd_st.st_dev),
-                                        int(cp_fd_st.st_ino),
-                                    ) != (int(cp_st.st_dev), int(cp_st.st_ino)):
+                                    cp_pre_fstat_is_regular = bool(
+                                        stat.S_ISREG(cp_fd_st.st_mode)
+                                    )
+                                    cp_pre_fstat_dev = int(cp_fd_st.st_dev)
+                                    cp_pre_fstat_ino = int(cp_fd_st.st_ino)
+                                    cp_pre_fstat_size = int(cp_fd_st.st_size)
+                                    if (
+                                        not cp_pre_fstat_is_regular
+                                        or (
+                                            cp_pre_fstat_dev,
+                                            cp_pre_fstat_ino,
+                                        )
+                                        != (cp_initial_dev, cp_initial_ino)
+                                        or cp_pre_fstat_size != cp_initial_size
+                                    ):
                                         raise OSError(
                                             errno.ESTALE,
-                                            "Pre-execution checkpoint inode changed while opening descriptor",
+                                            (
+                                                "Pre-execution checkpoint inode, file type, or size changed while opening descriptor: "
+                                                f"expected regular file (dev={cp_initial_dev}, ino={cp_initial_ino}, size={cp_initial_size}), "
+                                                f"observed (regular={cp_pre_fstat_is_regular}, dev={cp_pre_fstat_dev}, ino={cp_pre_fstat_ino}, size={cp_pre_fstat_size})"
+                                            ),
                                             str(cp_path),
                                         )
                                     cp_pre_fstat_verified = True
@@ -9317,19 +10432,128 @@ def _verify_immutable_baselines_post_run(
                                             cp_eof_reached = True
                                             break
                                         cp_chunks.append(chunk)
+                                    cp_bytes = b"".join(cp_chunks)
                                     cp_leaf_phase = "leaf_post_read_fstat"
                                     cp_post_st = os.fstat(cp_fd)
-                                    if not stat.S_ISREG(cp_post_st.st_mode) or (
-                                        int(cp_post_st.st_dev),
-                                        int(cp_post_st.st_ino),
-                                    ) != (int(cp_st.st_dev), int(cp_st.st_ino)):
+                                    cp_post_fstat_is_regular = bool(
+                                        stat.S_ISREG(cp_post_st.st_mode)
+                                    )
+                                    cp_post_fstat_dev = int(cp_post_st.st_dev)
+                                    cp_post_fstat_ino = int(cp_post_st.st_ino)
+                                    cp_post_fstat_size = int(cp_post_st.st_size)
+                                    if (
+                                        not cp_post_fstat_is_regular
+                                        or (
+                                            cp_post_fstat_dev,
+                                            cp_post_fstat_ino,
+                                        )
+                                        != (cp_initial_dev, cp_initial_ino)
+                                        or cp_post_fstat_size
+                                        != cp_pre_fstat_size
+                                        or cp_post_fstat_size != len(cp_bytes)
+                                    ):
                                         raise OSError(
                                             errno.ESTALE,
-                                            "Pre-execution checkpoint inode changed while reading descriptor",
+                                            (
+                                                "Pre-execution checkpoint inode, file type, or size changed while reading descriptor: "
+                                                f"expected regular file (dev={cp_initial_dev}, ino={cp_initial_ino}, "
+                                                f"initial_size={cp_initial_size}, pre_read_size={cp_pre_fstat_size}), "
+                                                f"observed (regular={cp_post_fstat_is_regular}, dev={cp_post_fstat_dev}, "
+                                                f"ino={cp_post_fstat_ino}, read_bytes={len(cp_bytes)}, size={cp_post_fstat_size})"
+                                            ),
                                             str(cp_path),
                                         )
                                     cp_post_fstat_verified = True
-                                    cp_bytes = b"".join(cp_chunks)
+                                    cp_leaf_phase = "leaf_post_read_stat"
+                                    cp_final_lookup_attempted = True
+                                    try:
+                                        cp_final_st = os.stat(
+                                            cp_leaf_name,
+                                            dir_fd=cp_parent_cap.fd,
+                                            follow_symlinks=False,
+                                        )
+                                    except OSError as final_stat_exc:
+                                        cp_final_lookup_succeeded = False
+                                        cp_final_lookup_verified = False
+                                        cp_final_lookup_err = (
+                                            f"{type(final_stat_exc).__name__}: {final_stat_exc}"
+                                        )
+                                        cp_final_lookup_exc_type = type(
+                                            final_stat_exc
+                                        ).__name__
+                                        cp_final_lookup_exc_msg = str(
+                                            final_stat_exc
+                                        )
+                                        cp_final_lookup_errno = getattr(
+                                            final_stat_exc, "errno", None
+                                        )
+                                        if (
+                                            isinstance(
+                                                final_stat_exc,
+                                                FileNotFoundError,
+                                            )
+                                            or cp_final_lookup_errno
+                                            == errno.ENOENT
+                                        ):
+                                            cp_final_exists = False
+                                            cp_final_is_symlink = False
+                                            cp_final_is_regular = False
+                                        raise
+                                    else:
+                                        cp_final_lookup_succeeded = True
+                                        cp_final_exists = True
+                                        cp_final_is_symlink = bool(
+                                            stat.S_ISLNK(cp_final_st.st_mode)
+                                        )
+                                        cp_final_is_regular = bool(
+                                            stat.S_ISREG(cp_final_st.st_mode)
+                                            and not cp_final_is_symlink
+                                        )
+                                        cp_final_dev = int(cp_final_st.st_dev)
+                                        cp_final_ino = int(cp_final_st.st_ino)
+                                        cp_final_size = int(cp_final_st.st_size)
+                                        cp_final_mode = int(
+                                            stat.S_IMODE(cp_final_st.st_mode)
+                                        )
+                                        if (
+                                            cp_final_is_symlink
+                                            or not cp_final_is_regular
+                                            or (cp_final_dev, cp_final_ino)
+                                            != (
+                                                cp_post_fstat_dev,
+                                                cp_post_fstat_ino,
+                                            )
+                                            or cp_final_size
+                                            != cp_post_fstat_size
+                                            or cp_final_size != len(cp_bytes)
+                                        ):
+                                            cp_final_mismatch_exc = OSError(
+                                                errno.ESTALE,
+                                                (
+                                                    "Pre-execution checkpoint final relative leaf binding or metadata changed after readback: "
+                                                    f"expected regular file (dev={cp_post_fstat_dev}, ino={cp_post_fstat_ino}, size={cp_post_fstat_size}), "
+                                                    f"observed (regular={cp_final_is_regular}, symlink={cp_final_is_symlink}, "
+                                                    f"dev={cp_final_dev}, ino={cp_final_ino}, size={cp_final_size})"
+                                                ),
+                                                str(cp_path),
+                                            )
+                                            cp_final_lookup_verified = False
+                                            cp_final_lookup_err = (
+                                                f"{type(cp_final_mismatch_exc).__name__}: {cp_final_mismatch_exc}"
+                                            )
+                                            cp_final_lookup_exc_type = type(
+                                                cp_final_mismatch_exc
+                                            ).__name__
+                                            cp_final_lookup_exc_msg = str(
+                                                cp_final_mismatch_exc
+                                            )
+                                            cp_final_lookup_errno = getattr(
+                                                cp_final_mismatch_exc,
+                                                "errno",
+                                                None,
+                                            )
+                                            raise cp_final_mismatch_exc
+                                        cp_final_lookup_verified = True
                                     cp_leaf_phase = "leaf_close"
                                     cp_leaf_closed = True
                                     cp_close_attempted = True
@@ -9377,6 +10601,22 @@ def _verify_immutable_baselines_post_run(
                                     if (obs_cp_size > 0 or cp_eof_reached)
                                     else None
                                 )
+                                cp_final_lookup_info: dict[str, Any] = {
+                                    "attempted": cp_final_lookup_attempted,
+                                    "succeeded": cp_final_lookup_succeeded,
+                                    "verified": cp_final_lookup_verified,
+                                    "exists": cp_final_exists,
+                                    "is_symlink": cp_final_is_symlink,
+                                    "is_regular_file": cp_final_is_regular,
+                                    "dev": cp_final_dev,
+                                    "ino": cp_final_ino,
+                                    "size_bytes": cp_final_size,
+                                    "mode": cp_final_mode,
+                                    "error": cp_final_lookup_err,
+                                    "exception_type": cp_final_lookup_exc_type,
+                                    "exception_message": cp_final_lookup_exc_msg,
+                                    "errno": cp_final_lookup_errno,
+                                }
                                 cp_err = f"{type(exc).__name__}: {exc}"
                                 cp_reason = (
                                     "Pre-execution checkpoint refmac_pre_execution_checkpoint.json "
@@ -9390,17 +10630,46 @@ def _verify_immutable_baselines_post_run(
                                     "is_symlink": False,
                                     "is_regular_file": True,
                                     "sha256": None,
-                                    "size_bytes": int(cp_st.st_size),
-                                    "stat_size_bytes": int(cp_st.st_size),
+                                    "size_bytes": cp_initial_size,
+                                    "stat_size_bytes": cp_initial_size,
+                                    "initial_leaf_lookup": dict(
+                                        cp_initial_lookup_info
+                                    ),
+                                    "initial_leaf_dev": cp_initial_dev,
+                                    "initial_leaf_ino": cp_initial_ino,
+                                    "initial_leaf_size_bytes": cp_initial_size,
+                                    "initial_leaf_mode": cp_initial_mode,
                                     "observed_read_bytes": obs_cp_size,
                                     "observed_read_sha256": obs_cp_sha256,
                                     "observed_eof": cp_eof_reached,
                                     "read_complete": bool(
                                         cp_eof_reached
-                                        and obs_cp_size == int(cp_st.st_size)
+                                        and obs_cp_size == cp_initial_size
                                     ),
+                                    "leaf_descriptor_opened": cp_descriptor_opened,
                                     "leaf_pre_fstat_verified": cp_pre_fstat_verified,
+                                    "leaf_pre_fstat_is_regular_file": cp_pre_fstat_is_regular,
+                                    "leaf_pre_fstat_dev": cp_pre_fstat_dev,
+                                    "leaf_pre_fstat_ino": cp_pre_fstat_ino,
+                                    "leaf_pre_fstat_size_bytes": cp_pre_fstat_size,
                                     "leaf_post_fstat_verified": cp_post_fstat_verified,
+                                    "leaf_post_fstat_is_regular_file": cp_post_fstat_is_regular,
+                                    "leaf_post_fstat_dev": cp_post_fstat_dev,
+                                    "leaf_post_fstat_ino": cp_post_fstat_ino,
+                                    "leaf_post_fstat_size_bytes": cp_post_fstat_size,
+                                    "final_leaf_lookup": dict(
+                                        cp_final_lookup_info
+                                    ),
+                                    "leaf_final_stat_attempted": cp_final_lookup_attempted,
+                                    "leaf_final_stat_succeeded": cp_final_lookup_succeeded,
+                                    "leaf_final_stat_verified": cp_final_lookup_verified,
+                                    "leaf_final_stat_exists": cp_final_exists,
+                                    "leaf_final_stat_is_symlink": cp_final_is_symlink,
+                                    "leaf_final_stat_is_regular_file": cp_final_is_regular,
+                                    "leaf_final_stat_dev": cp_final_dev,
+                                    "leaf_final_stat_ino": cp_final_ino,
+                                    "leaf_final_stat_size_bytes": cp_final_size,
+                                    "leaf_final_stat_mode": cp_final_mode,
                                     "leaf_close_attempted": cp_close_attempted,
                                     "leaf_close_succeeded": cp_close_succeeded,
                                     "cleanup_close_error": (
@@ -9450,7 +10719,7 @@ def _verify_immutable_baselines_post_run(
                                         "expected_sha256": expected_cp_sha256,
                                         "expected_size_bytes": expected_cp_size,
                                         "actual_sha256": None,
-                                        "actual_size_bytes": int(cp_st.st_size),
+                                        "actual_size_bytes": cp_initial_size,
                                         "exists_post_run": True,
                                         "is_symlink_post_run": False,
                                         "is_regular_file_post_run": True,
@@ -9464,6 +10733,22 @@ def _verify_immutable_baselines_post_run(
                             else:
                                 cp_sha256 = _sha256_bytes(cp_bytes)
                                 cp_size = len(cp_bytes)
+                                cp_final_lookup_info = {
+                                    "attempted": cp_final_lookup_attempted,
+                                    "succeeded": cp_final_lookup_succeeded,
+                                    "verified": cp_final_lookup_verified,
+                                    "exists": cp_final_exists,
+                                    "is_symlink": cp_final_is_symlink,
+                                    "is_regular_file": cp_final_is_regular,
+                                    "dev": cp_final_dev,
+                                    "ino": cp_final_ino,
+                                    "size_bytes": cp_final_size,
+                                    "mode": cp_final_mode,
+                                    "error": cp_final_lookup_err,
+                                    "exception_type": cp_final_lookup_exc_type,
+                                    "exception_message": cp_final_lookup_exc_msg,
+                                    "errno": cp_final_lookup_errno,
+                                }
                                 post_read_anc = _verify_admitted_ancestor_chain(
                                     cp_path, pre_execution_checkpoint_baseline
                                 )
@@ -9572,15 +10857,44 @@ def _verify_immutable_baselines_post_run(
                                         "is_regular_file": True,
                                         "sha256": None,
                                         "size_bytes": cp_size,
-                                        "stat_size_bytes": int(cp_st.st_size),
+                                        "stat_size_bytes": cp_initial_size,
+                                        "initial_leaf_lookup": dict(
+                                            cp_initial_lookup_info
+                                        ),
+                                        "initial_leaf_dev": cp_initial_dev,
+                                        "initial_leaf_ino": cp_initial_ino,
+                                        "initial_leaf_size_bytes": cp_initial_size,
+                                        "initial_leaf_mode": cp_initial_mode,
                                         "observed_read_bytes": cp_size,
                                         "observed_read_sha256": cp_sha256,
                                         "observed_eof": True,
                                         "read_complete": bool(
-                                            cp_size == int(cp_st.st_size)
+                                            cp_size == cp_initial_size
                                         ),
+                                        "leaf_descriptor_opened": True,
                                         "leaf_pre_fstat_verified": True,
+                                        "leaf_pre_fstat_is_regular_file": cp_pre_fstat_is_regular,
+                                        "leaf_pre_fstat_dev": cp_pre_fstat_dev,
+                                        "leaf_pre_fstat_ino": cp_pre_fstat_ino,
+                                        "leaf_pre_fstat_size_bytes": cp_pre_fstat_size,
                                         "leaf_post_fstat_verified": True,
+                                        "leaf_post_fstat_is_regular_file": cp_post_fstat_is_regular,
+                                        "leaf_post_fstat_dev": cp_post_fstat_dev,
+                                        "leaf_post_fstat_ino": cp_post_fstat_ino,
+                                        "leaf_post_fstat_size_bytes": cp_post_fstat_size,
+                                        "final_leaf_lookup": dict(
+                                            cp_final_lookup_info
+                                        ),
+                                        "leaf_final_stat_attempted": cp_final_lookup_attempted,
+                                        "leaf_final_stat_succeeded": cp_final_lookup_succeeded,
+                                        "leaf_final_stat_verified": cp_final_lookup_verified,
+                                        "leaf_final_stat_exists": cp_final_exists,
+                                        "leaf_final_stat_is_symlink": cp_final_is_symlink,
+                                        "leaf_final_stat_is_regular_file": cp_final_is_regular,
+                                        "leaf_final_stat_dev": cp_final_dev,
+                                        "leaf_final_stat_ino": cp_final_ino,
+                                        "leaf_final_stat_size_bytes": cp_final_size,
+                                        "leaf_final_stat_mode": cp_final_mode,
                                         "leaf_close_attempted": True,
                                         "leaf_close_succeeded": True,
                                         "parent_descriptor_opened": True,
@@ -9665,8 +10979,8 @@ def _verify_immutable_baselines_post_run(
                                         expected_cp_dev is None
                                         or expected_cp_ino is None
                                         or (
-                                            int(cp_st.st_dev),
-                                            int(cp_st.st_ino),
+                                            cp_initial_dev,
+                                            cp_initial_ino,
                                         )
                                         == (
                                             int(expected_cp_dev),
@@ -9717,13 +11031,42 @@ def _verify_immutable_baselines_post_run(
                                         "is_regular_file": True,
                                         "sha256": cp_sha256,
                                         "size_bytes": cp_size,
-                                        "stat_size_bytes": int(cp_st.st_size),
+                                        "stat_size_bytes": cp_initial_size,
+                                        "initial_leaf_lookup": dict(
+                                            cp_initial_lookup_info
+                                        ),
+                                        "initial_leaf_dev": cp_initial_dev,
+                                        "initial_leaf_ino": cp_initial_ino,
+                                        "initial_leaf_size_bytes": cp_initial_size,
+                                        "initial_leaf_mode": cp_initial_mode,
                                         "observed_read_bytes": cp_size,
                                         "observed_read_sha256": cp_sha256,
                                         "observed_eof": True,
                                         "read_complete": True,
+                                        "leaf_descriptor_opened": True,
                                         "leaf_pre_fstat_verified": True,
+                                        "leaf_pre_fstat_is_regular_file": cp_pre_fstat_is_regular,
+                                        "leaf_pre_fstat_dev": cp_pre_fstat_dev,
+                                        "leaf_pre_fstat_ino": cp_pre_fstat_ino,
+                                        "leaf_pre_fstat_size_bytes": cp_pre_fstat_size,
                                         "leaf_post_fstat_verified": True,
+                                        "leaf_post_fstat_is_regular_file": cp_post_fstat_is_regular,
+                                        "leaf_post_fstat_dev": cp_post_fstat_dev,
+                                        "leaf_post_fstat_ino": cp_post_fstat_ino,
+                                        "leaf_post_fstat_size_bytes": cp_post_fstat_size,
+                                        "final_leaf_lookup": dict(
+                                            cp_final_lookup_info
+                                        ),
+                                        "leaf_final_stat_attempted": cp_final_lookup_attempted,
+                                        "leaf_final_stat_succeeded": cp_final_lookup_succeeded,
+                                        "leaf_final_stat_verified": cp_final_lookup_verified,
+                                        "leaf_final_stat_exists": cp_final_exists,
+                                        "leaf_final_stat_is_symlink": cp_final_is_symlink,
+                                        "leaf_final_stat_is_regular_file": cp_final_is_regular,
+                                        "leaf_final_stat_dev": cp_final_dev,
+                                        "leaf_final_stat_ino": cp_final_ino,
+                                        "leaf_final_stat_size_bytes": cp_final_size,
+                                        "leaf_final_stat_mode": cp_final_mode,
                                         "leaf_close_attempted": True,
                                         "leaf_close_succeeded": True,
                                         "parent_descriptor_opened": True,
@@ -19124,6 +20467,20 @@ def run_refmac_rfactor_operation(
                 entry["temp_cleanup_succeeded"] = bool(
                     artifact_record["temp_cleanup_succeeded"]
                 )
+            if isinstance(artifact_record.get("temp_handling_policy"), str):
+                entry["temp_handling_policy"] = str(
+                    artifact_record["temp_handling_policy"]
+                )
+            if type(artifact_record.get("temp_handling_succeeded")) is bool:
+                entry["temp_handling_succeeded"] = artifact_record[
+                    "temp_handling_succeeded"
+                ]
+            if isinstance(
+                artifact_record.get("temp_handling_disposition"), str
+            ):
+                entry["temp_handling_disposition"] = str(
+                    artifact_record["temp_handling_disposition"]
+                )
             if isinstance(artifact_record.get("temp_cleanup_status"), Mapping):
                 entry["temp_cleanup_status"] = copy.deepcopy(
                     dict(artifact_record["temp_cleanup_status"])
@@ -19135,10 +20492,31 @@ def run_refmac_rfactor_operation(
                 entry["prior_collision_temp_cleanup_failures"] = copy.deepcopy(
                     artifact_record["prior_collision_temp_cleanup_failures"]
                 )
+            if isinstance(
+                artifact_record.get("prior_collision_temp_cleanup_statuses"),
+                list,
+            ):
+                entry["prior_collision_temp_cleanup_statuses"] = copy.deepcopy(
+                    artifact_record["prior_collision_temp_cleanup_statuses"]
+                )
+            if isinstance(
+                artifact_record.get("prior_collision_retained_temporaries"),
+                list,
+            ):
+                entry["prior_collision_retained_temporaries"] = copy.deepcopy(
+                    artifact_record["prior_collision_retained_temporaries"]
+                )
             if "sibling_temp_cleanup_succeeded" in artifact_record:
                 entry["sibling_temp_cleanup_succeeded"] = bool(
                     artifact_record["sibling_temp_cleanup_succeeded"]
                 )
+            if (
+                type(artifact_record.get("sibling_temp_handling_succeeded"))
+                is bool
+            ):
+                entry["sibling_temp_handling_succeeded"] = artifact_record[
+                    "sibling_temp_handling_succeeded"
+                ]
             if isinstance(
                 artifact_record.get("sibling_temp_cleanup_status"), Mapping
             ):
@@ -19969,7 +21347,9 @@ def run_refmac_rfactor_operation(
                     target_path,
                     root=target_dir,
                 )
-            if not bool(written.get("temp_cleanup_succeeded", True)):
+            if not _is_json_temp_handling_satisfied(
+                written, legacy_missing_receipt_default=True
+            ):
                 existing_ids = {id(c) for c in caught_persistence_exceptions}
                 for s_exc in selected_attempt_causes:
                     if id(s_exc) not in existing_ids:
@@ -20061,6 +21441,31 @@ def run_refmac_rfactor_operation(
                 raw_sel_prior_collision_cleanup = getattr(
                     exc, "prior_collision_temp_cleanup_failures", None
                 )
+            if isinstance(raw_sel_prior_collision_cleanup, list):
+                try:
+                    setattr(
+                        actual_sel_exc,
+                        "prior_collision_temp_cleanup_failures",
+                        copy.deepcopy(raw_sel_prior_collision_cleanup),
+                    )
+                except Exception:
+                    pass
+            for sel_attr_name in (
+                "prior_collision_temp_cleanup_statuses",
+                "prior_collision_retained_temporaries",
+            ):
+                raw_sel_attr = getattr(actual_sel_exc, sel_attr_name, None)
+                if not isinstance(raw_sel_attr, list):
+                    raw_sel_attr = getattr(exc, sel_attr_name, None)
+                if isinstance(raw_sel_attr, list):
+                    try:
+                        setattr(
+                            actual_sel_exc,
+                            sel_attr_name,
+                            copy.deepcopy(raw_sel_attr),
+                        )
+                    except Exception:
+                        pass
             raw_sel_close_err = getattr(
                 actual_sel_exc, "cleanup_close_error", None
             )
@@ -20441,7 +21846,9 @@ def run_refmac_rfactor_operation(
             not isinstance(artifact_record, Mapping)
             or not bool(artifact_record.get("persisted", True))
             or not isinstance(artifact_record.get("path"), str)
-            or bool(artifact_record.get("temp_cleanup_succeeded", True))
+            or _is_json_temp_handling_satisfied(
+                artifact_record, legacy_missing_receipt_default=True
+            )
         ):
             return False
         admitted_history_roots = tuple(
@@ -20554,21 +21961,20 @@ def run_refmac_rfactor_operation(
                         "temp_cleanup_error",
                         cleanup_err_list[-1],
                     )
-                if isinstance(
-                    artifact_record.get(
-                        "prior_collision_temp_cleanup_failures"
-                    ),
-                    list,
+                for prior_attr_name in (
+                    "prior_collision_temp_cleanup_failures",
+                    "prior_collision_temp_cleanup_statuses",
+                    "prior_collision_retained_temporaries",
                 ):
-                    setattr(
-                        err_obj,
-                        "prior_collision_temp_cleanup_failures",
-                        copy.deepcopy(
-                            artifact_record[
-                                "prior_collision_temp_cleanup_failures"
-                            ]
-                        ),
-                    )
+                    if isinstance(
+                        artifact_record.get(prior_attr_name),
+                        list,
+                    ):
+                        setattr(
+                            err_obj,
+                            prior_attr_name,
+                            copy.deepcopy(artifact_record[prior_attr_name]),
+                        )
             except Exception:
                 pass
         published_path_str = str(artifact_record.get("path"))

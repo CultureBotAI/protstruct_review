@@ -35,7 +35,7 @@ classifier is available.
   model `data/pdb_mtz/1sar_deposited.pdb` for PDB `1SAR` (`1.80 Å` per `REMARK 2 RESOLUTION. 1.80 ANGSTROMS.`
   and `REMARK 3 RESOLUTION RANGE HIGH (ANGSTROMS) : 1.80` at `data/pdb_mtz/1sar_deposited.pdb:30,37`),
   to confirm the tools agree on a model that *has* outliers. Keep that `1.80 Å` deposited reference
-  distinct from the archived `1SAR` co-scientist trajectory (`ref/research/1sar_rerun_2026_11_06_preregistration.md` §2),
+  distinct from the archived `1SAR` co-scientist trajectory (`ref/research/refinement_assessment_case_study_2026-10-18.md` `§1` and `§2.3`; `ref/research/1sar_rerun_2026_11_06_preregistration.md` `§2`),
   whose actual starting model is `archive#data/1sar.pdb` paired with the shared `49.972–2.500 Å` (`2.50 Å`)
   reflection dataset `data/1sar.mtz`; do not treat `data/pdb_mtz/1sar_deposited.pdb` as the agent starting model.
 

@@ -13,6 +13,7 @@ not the full sourced setup environment or scientific runner environments.
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import os
 import re
@@ -309,9 +310,93 @@ def _regular_file_sha256(path: Path) -> str:
         return hashlib.file_digest(source, "sha256").hexdigest()
 
 
+def _raw_path_parts(raw_path: str) -> tuple[str, ...]:
+    segments = [segment for segment in raw_path.split("/") if segment != ""]
+    if raw_path.endswith("/") and raw_path != "/":
+        segments.append(".")
+    return tuple(segments)
+
+
+def _require_directory(path: Path, context_target: Path | str) -> None:
+    info = os.lstat(path)
+    if not stat.S_ISDIR(info.st_mode):
+        raise NotADirectoryError(
+            errno.ENOTDIR,
+            f"PHENIX dispatcher path component is not a directory: {context_target}",
+            str(path),
+        )
+
+
+def _walk_directory_components(
+    base_dir: Path,
+    raw_target: str,
+    active_links: frozenset[Path] = frozenset(),
+    hops: int = 0,
+) -> Path:
+    if hops > 40:
+        raise ValueError(f"Symlink loop in PHENIX path: {raw_target}")
+    if not raw_target:
+        raise ValueError("Empty PHENIX directory path")
+    parts = _raw_path_parts(raw_target)
+    current = Path("/") if raw_target.startswith("/") else base_dir
+    _require_directory(current, raw_target)
+    for part in parts:
+        _require_directory(current, raw_target)
+        if part == ".":
+            continue
+        if part == "..":
+            current = current.parent
+            _require_directory(current, raw_target)
+            continue
+        candidate = current / part
+        info = os.lstat(candidate)
+        if stat.S_ISLNK(info.st_mode):
+            if candidate in active_links:
+                raise ValueError(f"Symlink loop in PHENIX path: {candidate}")
+            current = _walk_directory_components(
+                current,
+                os.readlink(candidate),
+                active_links | {candidate},
+                hops + 1,
+            )
+        else:
+            current = candidate
+        _require_directory(current, raw_target)
+    return current
+
+
+def _match_absolute_prefix_parts(
+    raw_parts: tuple[str, ...],
+    prefix: Path,
+    resolved_prefix: Path,
+) -> tuple[str, ...] | None:
+    if not prefix.is_absolute():
+        return None
+    prefix_parts = tuple(
+        part for part in _raw_path_parts(os.fspath(prefix)) if part != "."
+    )
+    prefix_index = 0
+    raw_index = 0
+    while prefix_index < len(prefix_parts) and raw_index < len(raw_parts):
+        part = raw_parts[raw_index]
+        if part == ".":
+            raw_index += 1
+            continue
+        if part != prefix_parts[prefix_index]:
+            return None
+        prefix_index += 1
+        raw_index += 1
+    if prefix_index != len(prefix_parts):
+        return None
+    matched_raw_prefix = "/" + "/".join(raw_parts[:raw_index])
+    if _walk_directory_components(Path("/"), matched_raw_prefix) != resolved_prefix:
+        return None
+    return raw_parts[raw_index:]
+
+
 def _resolve_within_prefix(
     base_dir: Path,
-    target: Path,
+    target: Path | str,
     configured_prefix: Path,
     resolved_prefix: Path,
     active_links: frozenset[Path] = frozenset(),
@@ -319,15 +404,24 @@ def _resolve_within_prefix(
 ) -> Path:
     if hops > 40:
         raise ValueError(f"Symlink loop in PHENIX dispatcher: {target}")
-    if target.is_absolute():
-        if target.is_relative_to(resolved_prefix):
-            parts = target.relative_to(resolved_prefix).parts
-        elif target.is_relative_to(configured_prefix):
-            parts = target.relative_to(configured_prefix).parts
-        else:
+    raw_target = os.fspath(target)
+    if not raw_target:
+        raise ValueError(f"Empty PHENIX dispatcher path: {target}")
+    raw_parts = _raw_path_parts(raw_target)
+    _require_directory(resolved_prefix, resolved_prefix)
+    if raw_target.startswith("/"):
+        matched_parts = _match_absolute_prefix_parts(
+            raw_parts, resolved_prefix, resolved_prefix
+        )
+        if matched_parts is None:
+            matched_parts = _match_absolute_prefix_parts(
+                raw_parts, configured_prefix, resolved_prefix
+            )
+        if matched_parts is None:
             raise ValueError(
                 f"PHENIX dispatcher symlink escapes installation prefix: {target}"
             )
+        parts = matched_parts
         current = resolved_prefix
     else:
         if not base_dir.is_relative_to(resolved_prefix):
@@ -335,9 +429,12 @@ def _resolve_within_prefix(
                 f"PHENIX dispatcher base directory escapes installation prefix: {base_dir}"
             )
         current = base_dir
-        parts = target.parts
-    for part in parts:
-        if part in ("", "."):
+        parts = raw_parts
+    _require_directory(current, target)
+    for index, part in enumerate(parts):
+        _require_directory(current, target)
+        has_remaining = index < len(parts) - 1
+        if part == ".":
             continue
         if part == "..":
             current = current.parent
@@ -345,6 +442,7 @@ def _resolve_within_prefix(
                 raise ValueError(
                     f"PHENIX dispatcher path escapes installation prefix: {target}"
                 )
+            _require_directory(current, target)
             continue
         candidate = current / part
         if not candidate.is_relative_to(resolved_prefix):
@@ -357,7 +455,7 @@ def _resolve_within_prefix(
                 raise ValueError(
                     f"Symlink loop in PHENIX dispatcher: {candidate}"
                 )
-            link_target = Path(os.readlink(candidate))
+            link_target = os.readlink(candidate)
             current = _resolve_within_prefix(
                 current,
                 link_target,
@@ -368,6 +466,8 @@ def _resolve_within_prefix(
             )
         else:
             current = candidate
+        if has_remaining:
+            _require_directory(current, target)
     if not current.is_relative_to(resolved_prefix):
         raise ValueError(
             f"PHENIX dispatcher path escapes installation prefix: {current}"
@@ -383,8 +483,12 @@ def _resolve_phenix_dispatcher(configured_bin: Path) -> tuple[Path, Path, Path]:
         raise ValueError(
             f"PHENIX binary directory or prefix must not be a symlink: {configured_bin}"
         )
+    walked_prefix = _walk_directory_components(Path("/"), os.fspath(configured_prefix))
+    walked_bin = _walk_directory_components(Path("/"), os.fspath(configured_bin))
     resolved_prefix = _strict_resolve(configured_prefix)
     resolved_bin = _strict_resolve(configured_bin)
+    if walked_prefix != resolved_prefix or walked_bin != resolved_bin:
+        raise ValueError(f"PHENIX directory resolution mismatch: {configured_bin}")
     if not resolved_prefix.is_dir() or not resolved_bin.is_dir():
         raise FileNotFoundError(f"PHENIX directory not found: {configured_bin}")
     if configured_bin == configured_prefix:

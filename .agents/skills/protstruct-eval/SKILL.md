@@ -80,7 +80,7 @@ Every oracle in this harness rests on assumptions that determine what it sees an
 - **Geometry-energy ratio** is computed against the library's expected distribution. Resolution-aware? No — the metric is library-aware, not data-aware.
 
 ### `phenix.find_peaks_holes`
-- **Peak threshold (σ cutoff)** controls what's reported. Default 4.0 σ; lowering surfaces noise, raising hides real peaks. A 1SAR run on the packaged round-4 model found 23 positive + 8 negative peaks at 4 σ, while the report described round 7 and listed 9. Because the models differ, that mismatch cannot identify a cutoff or reporting defect; it demonstrates why peak inventories must be bound to the exact subject.
+- **Peak threshold (σ cutoff)** controls what's reported. In PHENIX 2.0-5936, the CLI and high-level helper default is 3.0 σ (`mmtbx/command_line/find_peaks_holes.py:32,293`), whereas 4.0 σ is an explicitly selected study cutoff; lowering surfaces noise, raising hides real peaks. Always record the actual `map_cutoff` passed rather than assuming a 4.0 σ default. A 1SAR run on the packaged round-4 model found 23 positive + 8 negative peaks at 4 σ, while the report described round 7 and listed 9. Because the models differ, that mismatch cannot identify a cutoff or reporting defect; it demonstrates why peak inventories must be bound to the exact subject.
 - **Peak-merging radius** can collapse multi-atom features into one entry.
 - **Atom exclusion.** Peaks within X Å of modelled atoms are typically excluded. Describing peaks by a nearest atom does not establish the exclusion policy. Record the actual flags and radius; different exclusion settings produce different counts.
 

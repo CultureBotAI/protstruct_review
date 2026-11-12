@@ -1309,7 +1309,44 @@ def _verify_refmac_directory_post_run(
 
 
 def _write_new_regular_file_text(path: Path, content: str, *, root: Path) -> dict[str, Any]:
-    """Create a brand-new regular UTF-8 file without overwriting or following symlinks."""
+    """Create a brand-new regular UTF-8 file without overwriting, following symlinks, or unlinking on failure.
+
+    Retention contract (direct-leaf, distinct from JSON retained aliases):
+    - Created partial/direct leaves, preexisting leaves, and foreign replacements
+      are never mutated or deleted by failure cleanup (legitimate writes before an
+      error or interruption may already have left partial owned bytes in the
+      created leaf). Descriptor ownership does not imply current pathname ownership.
+    - Zero ``unlink`` or ``remove`` calls occur on any path, and no fabricated
+      cleanup-success or JSON temporary/history fields are emitted.
+
+    Descriptor lifecycle and close-error handling:
+    - Opens ``path`` with ``O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC``
+      (mode ``0o644``) without ``os.fdopen``, verifies via ``os.fstat`` and
+      pre-write ``os.lstat`` that the opened regular file descriptor's
+      ``(dev, ino)`` matches the observed non-symlink regular leaf binding before
+      writing, writes all UTF-8 bytes via an explicit ``os.write`` loop handling
+      partial writes and no-progress, flushes by complete writes, runs
+      ``os.fsync`` (tolerating only ``EINVAL`` and ``ENOTSUP``), and closes the
+      descriptor in ``finally``.
+    - Preserves the exact primary ``BaseException`` object across a secondary
+      ``os.close`` ``OSError`` (attaching the close error as
+      ``cleanup_close_error`` and ``close_error``), while a close-only
+      ``OSError`` propagates directly. Simultaneous secondary close
+      ``BaseException`` precedence is not redesigned here.
+
+    Point-in-time pathname verification scope:
+    - Keeps the existing root/ancestor path guard
+      (``_ensure_no_symlink_components_under_root``) and final pathname hash
+      helper (``_sha256_regular_file``), then compares a final no-follow
+      ``os.lstat`` (regular, non-symlink, original ``(dev, ino)``) against the
+      initially opened descriptor so an observed replacement inode cannot obtain
+      a successful receipt merely by matching bytes.
+    - These checks provide point-in-time pathname verification only—not atomic
+      publication, descriptor-bound parent traversal, whole-read no-follow or
+      nonblocking-read or original-fd digest verification, or a guarantee against
+      future replacement or a replacement temporarily swapped back between
+      observations.
+    """
     _ensure_no_symlink_components_under_root(path, root, check_leaf=False)
     try:
         os.lstat(path)
@@ -1319,30 +1356,90 @@ def _write_new_regular_file_text(path: Path, content: str, *, root: Path) -> dic
         raise FileExistsError(f"Refusing to overwrite existing file or symlink: {path}")
 
     raw_bytes = content.encode("utf-8")
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
-    created_file = False
+    flags = (
+        os.O_WRONLY
+        | os.O_CREAT
+        | os.O_EXCL
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_CLOEXEC", 0)
+    )
+    fd = os.open(path, flags, 0o644)
+    primary_exc: BaseException | None = None
+    expected_dev: int
+    expected_ino: int
     try:
-        fd = os.open(path, flags, 0o644)
-        created_file = True
-        with os.fdopen(fd, "wb") as handle:
-            handle.write(raw_bytes)
-            handle.flush()
-            try:
-                os.fsync(handle.fileno())
-            except OSError as exc:
-                if exc.errno not in (errno.EINVAL, errno.ENOTSUP):
-                    raise
-    except BaseException:
-        if created_file:
-            try:
-                path.unlink(missing_ok=True)
-            except OSError:
-                pass
+        fd_st = os.fstat(fd)
+        if not stat.S_ISREG(fd_st.st_mode):
+            raise ValueError(
+                f"Opened descriptor is not a regular file for {path}: "
+                f"mode={oct(fd_st.st_mode)}"
+            )
+        expected_dev = int(fd_st.st_dev)
+        expected_ino = int(fd_st.st_ino)
+
+        leaf_st = os.lstat(path)
+        if stat.S_ISLNK(leaf_st.st_mode) or not stat.S_ISREG(leaf_st.st_mode):
+            raise ValueError(
+                f"Observed leaf after open is not a regular non-symlink file for {path}: "
+                f"mode={oct(leaf_st.st_mode)}"
+            )
+        if (int(leaf_st.st_dev), int(leaf_st.st_ino)) != (expected_dev, expected_ino):
+            raise ValueError(
+                f"Observed leaf inode after open does not match opened descriptor for {path}: "
+                f"expected (dev={expected_dev}, ino={expected_ino}), "
+                f"observed (dev={int(leaf_st.st_dev)}, ino={int(leaf_st.st_ino)})"
+            )
+
+        view = memoryview(raw_bytes)
+        offset = 0
+        total = len(view)
+        while offset < total:
+            written = os.write(fd, view[offset:])
+            if written <= 0:
+                raise OSError(
+                    errno.EIO,
+                    f"os.write made no progress ({written}) while writing {path}",
+                    str(path),
+                )
+            offset += written
+
+        try:
+            os.fsync(fd)
+        except OSError as exc:
+            if exc.errno not in (errno.EINVAL, errno.ENOTSUP):
+                raise
+    except BaseException as exc:
+        primary_exc = exc
         raise
+    finally:
+        try:
+            os.close(fd)
+        except OSError as close_exc:
+            if primary_exc is not None:
+                try:
+                    setattr(close_exc, "_is_cleanup_close_error", True)
+                    setattr(primary_exc, "cleanup_close_error", close_exc)
+                    setattr(primary_exc, "close_error", close_exc)
+                    primary_exc.add_note(
+                        f"cleanup_close_error: {type(close_exc).__name__}: {close_exc}"
+                    )
+                except Exception:
+                    pass
+            else:
+                raise
 
     digest = _sha256_regular_file(path)
     if digest != _sha256_bytes(raw_bytes):
         raise ValueError(f"Written file digest mismatch for {path}")
+    final_st = os.lstat(path)
+    if stat.S_ISLNK(final_st.st_mode) or not stat.S_ISREG(final_st.st_mode):
+        raise ValueError(f"Regular non-symlink file required: {path}")
+    if (int(final_st.st_dev), int(final_st.st_ino)) != (expected_dev, expected_ino):
+        raise ValueError(
+            f"Written file inode mismatch for {path}: "
+            f"expected (dev={expected_dev}, ino={expected_ino}), "
+            f"observed (dev={int(final_st.st_dev)}, ino={int(final_st.st_ino)})"
+        )
     return {
         "path": str(path),
         "sha256": digest,
@@ -3524,7 +3621,106 @@ def _atomic_write_new_json_file(
                     setattr(readback_exc, "_from_non_collision_phase", True)
                 except Exception:
                     pass
-            cleanup_status_now = _finalize_temp_cleanup()
+            if eff_causes is not None:
+                existing_cause_ids = {id(c) for c in eff_causes}
+                if id(readback_exc) not in existing_cause_ids:
+                    eff_causes.append(readback_exc)
+                    existing_cause_ids.add(id(readback_exc))
+                if (
+                    readback_cleanup_close_exc is not None
+                    and readback_cleanup_close_exc is not readback_exc
+                    and id(readback_cleanup_close_exc) not in existing_cause_ids
+                ):
+                    eff_causes.append(readback_cleanup_close_exc)
+                    existing_cause_ids.add(id(readback_cleanup_close_exc))
+                for err_obj in cleanup_errors:
+                    if id(err_obj) not in existing_cause_ids:
+                        eff_causes.append(err_obj)
+                        existing_cause_ids.add(id(err_obj))
+            active_cleanup_sink = _ACTIVE_WRITE_CLEANUP_ERRORS_SINK_CTX.get()
+            if active_cleanup_sink is not None and cleanup_errors:
+                active_cleanup_sink.clear()
+                active_cleanup_sink.extend(cleanup_errors)
+            last_pre_cleanup_exc: OSError | None = (
+                cleanup_errors[-1] if cleanup_errors else None
+            )
+            pre_error_entries: list[dict[str, Any]] = [
+                {
+                    "attempt": idx + 1,
+                    "phase": phase_name,
+                    "exception_type": type(err_obj).__name__,
+                    "exception_message": str(err_obj),
+                    "errno": getattr(err_obj, "errno", None),
+                }
+                for idx, (phase_name, err_obj) in enumerate(
+                    cleanup_error_records
+                )
+            ]
+            pre_cleanup_status: dict[str, Any] = {
+                "temp_name": tmp_name,
+                "attempted_path": str(target_path),
+                "intended_lexical_path": str(target_path),
+                "target_name": target_name,
+                "published_link_created": published_link_created,
+                "readback_verified": False,
+                "temp_identity_known": (
+                    tmp_dev is not None and tmp_ino is not None
+                ),
+                "temp_handling_policy": JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+                "temp_handling_succeeded": None,
+                "temp_handling_disposition": None,
+                "temp_observation_phase": (
+                    "post_link_stat"
+                    if (post_link_temp_observed or cleanup_error_records)
+                    else None
+                ),
+                "post_link_temp_observed": post_link_temp_observed,
+                "final_cleanup_temp_observed": False,
+                "observed_temp_present": (
+                    False
+                    if post_link_temp_absent
+                    else (True if post_link_temp_observed else None)
+                ),
+                "observed_temp_is_regular_file": post_link_obs_is_regular,
+                "observed_temp_is_symlink": post_link_obs_is_symlink,
+                "observed_temp_mode": post_link_obs_mode,
+                "unlink_attempted": unlink_attempt_count > 0,
+                "unlink_attempt_count": unlink_attempt_count,
+                "unlinked": tmp_unlinked,
+                "cleanup_verified": False,
+                "temp_present_after_cleanup": None,
+                "reason": (
+                    f"temp_cleanup_stat_or_unlink_error: "
+                    f"{type(last_pre_cleanup_exc).__name__}: {last_pre_cleanup_exc}"
+                    if last_pre_cleanup_exc is not None
+                    else None
+                ),
+                "expected_temp_dev": tmp_dev,
+                "expected_temp_ino": tmp_ino,
+                "observed_temp_dev": post_link_obs_dev,
+                "observed_temp_ino": post_link_obs_ino,
+                "error": (
+                    f"{type(last_pre_cleanup_exc).__name__}: {last_pre_cleanup_exc}"
+                    if last_pre_cleanup_exc is not None
+                    else None
+                ),
+                "exception_type": (
+                    type(last_pre_cleanup_exc).__name__
+                    if last_pre_cleanup_exc is not None
+                    else None
+                ),
+                "exception_message": (
+                    str(last_pre_cleanup_exc)
+                    if last_pre_cleanup_exc is not None
+                    else None
+                ),
+                "errno": (
+                    getattr(last_pre_cleanup_exc, "errno", None)
+                    if last_pre_cleanup_exc is not None
+                    else None
+                ),
+                "errors": pre_error_entries,
+            }
             readback_partial_receipt: dict[str, Any] = {
                 "path": None,
                 "intended_lexical_path": str(target_path),
@@ -3577,40 +3773,83 @@ def _atomic_write_new_json_file(
                     else None
                 ),
                 "namespace_binding_error": None,
-                "temp_cleanup_succeeded": bool(
-                    cleanup_status_now.get("unlinked", False)
-                ),
-                "temp_handling_policy": cleanup_status_now[
-                    "temp_handling_policy"
-                ],
-                "temp_handling_succeeded": bool(
-                    cleanup_status_now.get("temp_handling_succeeded", False)
-                ),
-                "temp_handling_disposition": cleanup_status_now[
-                    "temp_handling_disposition"
-                ],
-                "temp_cleanup_status": copy.deepcopy(cleanup_status_now),
+                "temp_cleanup_succeeded": False,
+                "temp_handling_policy": JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+                "temp_handling_succeeded": None,
+                "temp_handling_disposition": None,
+                "temp_cleanup_status": copy.deepcopy(pre_cleanup_status),
             }
-            if eff_causes is not None:
-                existing_cause_ids = {id(c) for c in eff_causes}
-                if id(readback_exc) not in existing_cause_ids:
-                    eff_causes.append(readback_exc)
-                    existing_cause_ids.add(id(readback_exc))
-                if (
-                    readback_cleanup_close_exc is not None
-                    and readback_cleanup_close_exc is not readback_exc
-                    and id(readback_cleanup_close_exc) not in existing_cause_ids
-                ):
-                    eff_causes.append(readback_cleanup_close_exc)
-                    existing_cause_ids.add(id(readback_cleanup_close_exc))
-                if not _is_json_temp_status_handling_satisfied(
+            if eff_status_out is not None:
+                eff_status_out["write_error"] = (
+                    f"{type(readback_exc).__name__}: {readback_exc}"
+                )
+                eff_status_out["write_exception_type"] = type(
+                    readback_exc
+                ).__name__
+                eff_status_out["write_exception_message"] = str(readback_exc)
+                eff_status_out["write_errno"] = getattr(
+                    readback_exc, "errno", None
+                )
+                eff_status_out["published_receipt"] = copy.deepcopy(
+                    readback_partial_receipt
+                )
+                eff_status_out["temp_cleanup_status"] = copy.deepcopy(
+                    pre_cleanup_status
+                )
+            _attach_cleanup_metadata_to_exception(
+                readback_exc,
+                pre_cleanup_status,
+                receipt_snapshot=readback_partial_receipt,
+            )
+            if (
+                readback_cleanup_close_exc is not None
+                and readback_cleanup_close_exc is not readback_exc
+            ):
+                _attach_cleanup_metadata_to_exception(
+                    readback_cleanup_close_exc,
+                    pre_cleanup_status,
+                    receipt_snapshot=readback_partial_receipt,
+                )
+            try:
+                cleanup_status_now = _finalize_temp_cleanup()
+            except BaseException as finalizer_exc:
+                _attach_cleanup_metadata_to_exception(
+                    finalizer_exc,
+                    pre_cleanup_status,
+                    receipt_snapshot=readback_partial_receipt,
+                )
+                raise
+            readback_partial_receipt.update(
+                {
+                    "temp_cleanup_succeeded": bool(
+                        cleanup_status_now.get("unlinked", False)
+                    ),
+                    "temp_handling_policy": cleanup_status_now[
+                        "temp_handling_policy"
+                    ],
+                    "temp_handling_succeeded": bool(
+                        cleanup_status_now.get(
+                            "temp_handling_succeeded", False
+                        )
+                    ),
+                    "temp_handling_disposition": cleanup_status_now[
+                        "temp_handling_disposition"
+                    ],
+                    "temp_cleanup_status": copy.deepcopy(cleanup_status_now),
+                }
+            )
+            if (
+                eff_causes is not None
+                and not _is_json_temp_status_handling_satisfied(
                     cleanup_status_now,
                     legacy_missing_unlinked_default=False,
-                ):
-                    for err_obj in cleanup_errors:
-                        if id(err_obj) not in existing_cause_ids:
-                            eff_causes.append(err_obj)
-                            existing_cause_ids.add(id(err_obj))
+                )
+            ):
+                existing_cause_ids = {id(c) for c in eff_causes}
+                for err_obj in cleanup_errors:
+                    if id(err_obj) not in existing_cause_ids:
+                        eff_causes.append(err_obj)
+                        existing_cause_ids.add(id(err_obj))
             if eff_status_out is not None:
                 eff_status_out["published_receipt"] = copy.deepcopy(
                     readback_partial_receipt
@@ -3623,6 +3862,15 @@ def _atomic_write_new_json_file(
                 cleanup_status_now,
                 receipt_snapshot=readback_partial_receipt,
             )
+            if (
+                readback_cleanup_close_exc is not None
+                and readback_cleanup_close_exc is not readback_exc
+            ):
+                _attach_cleanup_metadata_to_exception(
+                    readback_cleanup_close_exc,
+                    cleanup_status_now,
+                    receipt_snapshot=readback_partial_receipt,
+                )
             raise
 
         post_leaf_present: bool | None = None
@@ -11759,6 +12007,13 @@ def _scan_refmac_directory_entries(
         obs_is_sym = raw_is_sym if isinstance(raw_is_sym, bool) else None
         raw_is_dir = status_map.get("is_directory")
         obs_is_dir = raw_is_dir if isinstance(raw_is_dir, bool) else None
+        raw_is_reg = status_map.get("is_regular_file")
+        if isinstance(raw_is_reg, bool):
+            obs_is_reg: bool | None = raw_is_reg
+        elif obs_exists is False or obs_is_sym is True or obs_is_dir is True:
+            obs_is_reg = False
+        else:
+            obs_is_reg = None
         raw_lookup_attempted = status_map.get("lookup_attempted")
         obs_lookup_attempted = (
             raw_lookup_attempted
@@ -11798,7 +12053,7 @@ def _scan_refmac_directory_entries(
             "exists": obs_exists,
             "is_symlink": obs_is_sym,
             "is_directory": obs_is_dir,
-            "is_regular_file": False,
+            "is_regular_file": obs_is_reg,
             "within_refmac_dir": False,
             "size_bytes": None,
             "error": err_msg,
@@ -11819,6 +12074,8 @@ def _scan_refmac_directory_entries(
             "mode_changed",
             "identity_verified",
             "writable_post_run",
+            "parent_observation",
+            "parent_lookup",
         ):
             if obs_key in status_map:
                 refusal_error[obs_key] = copy.deepcopy(status_map[obs_key])
@@ -11877,117 +12134,332 @@ def _scan_refmac_directory_entries(
         expected_scan_dev = int(chain_check["dev"])
         expected_scan_ino = int(chain_check["ino"])
     else:
+        parent_observation: dict[str, Any] | None = None
         if normalized_refmac_dir.parent != normalized_refmac_dir:
+            parent_dir = normalized_refmac_dir.parent
             try:
-                parent_st = os.lstat(normalized_refmac_dir.parent)
-                if stat.S_ISLNK(parent_st.st_mode) or not stat.S_ISDIR(
-                    parent_st.st_mode
-                ):
-                    raise ValueError(
-                        f"Evidence root directory is not a non-symlink directory: {normalized_refmac_dir.parent}"
-                    )
-                normalized_refmac_dir.parent.resolve(strict=True)
+                parent_st = os.lstat(parent_dir)
             except Exception as exc:
                 if caught_exceptions is not None:
                     caught_exceptions.append(exc)
-                if scandir_cause_out is not None:
-                    scandir_cause_out.append(exc)
-                scandir_error = {
-                    "output_key": "refmac_dir_scan",
-                    "path": str(refmac_dir),
-                    "exists": False,
-                    "is_symlink": False,
-                    "is_regular_file": False,
-                    "within_refmac_dir": False,
-                    "size_bytes": None,
-                    "error": f"Evidence root check failed before refmac_dir scan ({type(exc).__name__}): {exc}",
+                is_parent_absent = (
+                    isinstance(exc, FileNotFoundError)
+                    or getattr(exc, "errno", None) == errno.ENOENT
+                )
+                parent_err_msg = (
+                    f"Evidence root check failed before refmac_dir scan "
+                    f"({type(exc).__name__}): {exc}"
+                )
+                parent_observation = {
+                    "path": str(parent_dir),
+                    "resolved_path": None,
+                    "attempted": True,
+                    "succeeded": False,
+                    "lookup_attempted": True,
+                    "lookup_succeeded": False,
+                    "resolve_attempted": False,
+                    "resolve_succeeded": None,
+                    "exists": False if is_parent_absent else None,
+                    "is_symlink": False if is_parent_absent else None,
+                    "is_directory": False if is_parent_absent else None,
+                    "symlink_target": None,
+                    "dev": None,
+                    "ino": None,
+                    "mode": None,
+                    "verified": False,
+                    "failure_phase": "parent_dir_lstat",
+                    "error": parent_err_msg,
                     "exception_type": type(exc).__name__,
                     "exception_message": str(exc),
                     "errno": getattr(exc, "errno", None),
                 }
-                return {
-                    "additional_files": additional_files,
-                    "unexpected_symlinks": [],
-                    "inspection_errors": [scandir_error],
-                    "scandir_error": scandir_error,
+                return _build_scan_refusal_result(
+                    {
+                        "path": str(refmac_dir),
+                        "resolved_path": None,
+                        "lookup_attempted": False,
+                        "lookup_succeeded": None,
+                        "exists": None,
+                        "is_symlink": None,
+                        "is_directory": None,
+                        "is_regular_file": None,
+                        "symlink_target": None,
+                        "dev": None,
+                        "ino": None,
+                        "mode": None,
+                        "identity_verified": False,
+                        "failure_phase": "parent_dir_lstat",
+                        "error": parent_err_msg,
+                        "exception_type": type(exc).__name__,
+                        "exception_message": str(exc),
+                        "errno": getattr(exc, "errno", None),
+                        "parent_observation": parent_observation,
+                        "parent_lookup": parent_observation,
+                    },
+                    default_error=parent_err_msg,
+                    cause_obj=exc,
+                )
+
+            parent_is_symlink = bool(stat.S_ISLNK(parent_st.st_mode))
+            parent_is_dir = bool(stat.S_ISDIR(parent_st.st_mode))
+            parent_dev = int(parent_st.st_dev)
+            parent_ino = int(parent_st.st_ino)
+            parent_mode = int(stat.S_IMODE(parent_st.st_mode))
+
+            if parent_is_symlink or not parent_is_dir:
+                parent_failure_phase = (
+                    "parent_dir_symlink"
+                    if parent_is_symlink
+                    else "parent_dir_not_directory"
+                )
+                parent_err_msg = (
+                    f"Evidence root directory is not a non-symlink directory: {parent_dir}"
+                )
+                parent_observation = {
+                    "path": str(parent_dir),
+                    "resolved_path": None,
+                    "attempted": True,
+                    "succeeded": True,
+                    "lookup_attempted": True,
+                    "lookup_succeeded": True,
+                    "resolve_attempted": False,
+                    "resolve_succeeded": None,
+                    "exists": True,
+                    "is_symlink": parent_is_symlink,
+                    "is_directory": parent_is_dir,
+                    "symlink_target": None,
+                    "dev": parent_dev,
+                    "ino": parent_ino,
+                    "mode": parent_mode,
+                    "verified": False,
+                    "failure_phase": parent_failure_phase,
+                    "error": parent_err_msg,
+                    "exception_type": None,
+                    "exception_message": None,
+                    "errno": None,
                 }
+                return _build_scan_refusal_result(
+                    {
+                        "path": str(refmac_dir),
+                        "resolved_path": None,
+                        "lookup_attempted": False,
+                        "lookup_succeeded": None,
+                        "exists": None,
+                        "is_symlink": None,
+                        "is_directory": None,
+                        "is_regular_file": None,
+                        "symlink_target": None,
+                        "dev": None,
+                        "ino": None,
+                        "mode": None,
+                        "identity_verified": False,
+                        "failure_phase": parent_failure_phase,
+                        "error": parent_err_msg,
+                        "exception_type": None,
+                        "exception_message": None,
+                        "errno": None,
+                        "parent_observation": parent_observation,
+                        "parent_lookup": parent_observation,
+                    },
+                    default_error=parent_err_msg,
+                    cause_obj=None,
+                )
+
+            try:
+                resolved_parent = parent_dir.resolve(strict=True)
+            except Exception as exc:
+                if caught_exceptions is not None:
+                    caught_exceptions.append(exc)
+                parent_err_msg = (
+                    f"Evidence root check failed before refmac_dir scan "
+                    f"({type(exc).__name__}): {exc}"
+                )
+                parent_observation = {
+                    "path": str(parent_dir),
+                    "resolved_path": None,
+                    "attempted": True,
+                    "succeeded": True,
+                    "lookup_attempted": True,
+                    "lookup_succeeded": True,
+                    "resolve_attempted": True,
+                    "resolve_succeeded": False,
+                    "exists": True,
+                    "is_symlink": False,
+                    "is_directory": True,
+                    "symlink_target": None,
+                    "dev": parent_dev,
+                    "ino": parent_ino,
+                    "mode": parent_mode,
+                    "verified": False,
+                    "failure_phase": "parent_dir_resolve",
+                    "error": parent_err_msg,
+                    "exception_type": type(exc).__name__,
+                    "exception_message": str(exc),
+                    "errno": getattr(exc, "errno", None),
+                }
+                return _build_scan_refusal_result(
+                    {
+                        "path": str(refmac_dir),
+                        "resolved_path": None,
+                        "lookup_attempted": False,
+                        "lookup_succeeded": None,
+                        "exists": None,
+                        "is_symlink": None,
+                        "is_directory": None,
+                        "is_regular_file": None,
+                        "symlink_target": None,
+                        "dev": None,
+                        "ino": None,
+                        "mode": None,
+                        "identity_verified": False,
+                        "failure_phase": "parent_dir_resolve",
+                        "error": parent_err_msg,
+                        "exception_type": type(exc).__name__,
+                        "exception_message": str(exc),
+                        "errno": getattr(exc, "errno", None),
+                        "parent_observation": parent_observation,
+                        "parent_lookup": parent_observation,
+                    },
+                    default_error=parent_err_msg,
+                    cause_obj=exc,
+                )
+
+            parent_observation = {
+                "path": str(parent_dir),
+                "resolved_path": str(resolved_parent),
+                "attempted": True,
+                "succeeded": True,
+                "lookup_attempted": True,
+                "lookup_succeeded": True,
+                "resolve_attempted": True,
+                "resolve_succeeded": True,
+                "exists": True,
+                "is_symlink": False,
+                "is_directory": True,
+                "symlink_target": None,
+                "dev": parent_dev,
+                "ino": parent_ino,
+                "mode": parent_mode,
+                "verified": True,
+                "failure_phase": None,
+                "error": None,
+                "exception_type": None,
+                "exception_message": None,
+                "errno": None,
+            }
 
         try:
             refmac_st = os.lstat(refmac_dir)
         except OSError as exc:
             if caught_exceptions is not None:
                 caught_exceptions.append(exc)
-            if scandir_cause_out is not None:
-                scandir_cause_out.append(exc)
-            scandir_error = {
-                "output_key": "refmac_dir_scan",
+            is_child_absent = (
+                isinstance(exc, FileNotFoundError)
+                or getattr(exc, "errno", None) == errno.ENOENT
+            )
+            child_err_msg = (
+                f"Failed to stat refmac directory {refmac_dir} "
+                f"({type(exc).__name__}): {exc}"
+            )
+            child_lstat_status: dict[str, Any] = {
                 "path": str(refmac_dir),
-                "exists": False,
-                "is_symlink": False,
-                "is_regular_file": False,
-                "within_refmac_dir": False,
-                "size_bytes": None,
-                "error": f"Failed to stat refmac directory {refmac_dir} ({type(exc).__name__}): {exc}",
+                "resolved_path": None,
+                "lookup_attempted": True,
+                "lookup_succeeded": False,
+                "exists": False if is_child_absent else None,
+                "is_symlink": False if is_child_absent else None,
+                "is_directory": False if is_child_absent else None,
+                "is_regular_file": False if is_child_absent else None,
+                "symlink_target": None,
+                "dev": None,
+                "ino": None,
+                "mode": None,
+                "identity_verified": False,
+                "failure_phase": "refmac_dir_lstat",
+                "error": child_err_msg,
                 "exception_type": type(exc).__name__,
                 "exception_message": str(exc),
                 "errno": getattr(exc, "errno", None),
             }
-            return {
-                "additional_files": additional_files,
-                "unexpected_symlinks": unexpected_symlinks,
-                "inspection_errors": [scandir_error],
-                "scandir_error": scandir_error,
-            }
+            if parent_observation is not None:
+                child_lstat_status["parent_observation"] = parent_observation
+                child_lstat_status["parent_lookup"] = parent_observation
+            return _build_scan_refusal_result(
+                child_lstat_status,
+                default_error=child_err_msg,
+                cause_obj=exc,
+            )
 
-        if stat.S_ISLNK(refmac_st.st_mode):
+        obs_child_dev = int(refmac_st.st_dev)
+        obs_child_ino = int(refmac_st.st_ino)
+        obs_child_mode = int(stat.S_IMODE(refmac_st.st_mode))
+        obs_child_is_symlink = bool(stat.S_ISLNK(refmac_st.st_mode))
+        obs_child_is_dir = bool(stat.S_ISDIR(refmac_st.st_mode))
+        obs_child_is_regular = bool(stat.S_ISREG(refmac_st.st_mode))
+
+        if obs_child_is_symlink:
             err_msg = f"Refmac working directory was replaced by a symlink: {refmac_dir}"
-            if scandir_cause_out is not None:
-                scandir_cause_out.append(None)
-            scandir_error = {
-                "output_key": "refmac_dir_scan",
+            child_symlink_status: dict[str, Any] = {
                 "path": str(refmac_dir),
+                "resolved_path": None,
+                "lookup_attempted": True,
+                "lookup_succeeded": True,
                 "exists": True,
                 "is_symlink": True,
+                "is_directory": False,
                 "is_regular_file": False,
-                "within_refmac_dir": False,
-                "size_bytes": None,
+                "symlink_target": None,
+                "dev": obs_child_dev,
+                "ino": obs_child_ino,
+                "mode": obs_child_mode,
+                "identity_verified": False,
+                "failure_phase": "refmac_dir_symlink",
                 "error": err_msg,
-                "exception_type": "ValueError",
-                "exception_message": err_msg,
+                "exception_type": None,
+                "exception_message": None,
                 "errno": None,
             }
-            return {
-                "additional_files": additional_files,
-                "unexpected_symlinks": [str(refmac_dir)],
-                "inspection_errors": [scandir_error],
-                "scandir_error": scandir_error,
-            }
+            if parent_observation is not None:
+                child_symlink_status["parent_observation"] = parent_observation
+                child_symlink_status["parent_lookup"] = parent_observation
+            return _build_scan_refusal_result(
+                child_symlink_status,
+                default_error=err_msg,
+                cause_obj=None,
+            )
 
-        if not stat.S_ISDIR(refmac_st.st_mode):
+        if not obs_child_is_dir:
             err_msg = f"Refmac working directory path is not a directory: {refmac_dir}"
-            if scandir_cause_out is not None:
-                scandir_cause_out.append(None)
-            scandir_error = {
-                "output_key": "refmac_dir_scan",
+            child_not_dir_status: dict[str, Any] = {
                 "path": str(refmac_dir),
+                "resolved_path": None,
+                "lookup_attempted": True,
+                "lookup_succeeded": True,
                 "exists": True,
                 "is_symlink": False,
-                "is_regular_file": False,
-                "within_refmac_dir": False,
-                "size_bytes": None,
+                "is_directory": False,
+                "is_regular_file": obs_child_is_regular,
+                "symlink_target": None,
+                "dev": obs_child_dev,
+                "ino": obs_child_ino,
+                "mode": obs_child_mode,
+                "identity_verified": False,
+                "failure_phase": "refmac_dir_not_directory",
                 "error": err_msg,
-                "exception_type": "ValueError",
-                "exception_message": err_msg,
+                "exception_type": None,
+                "exception_message": None,
                 "errno": None,
             }
-            return {
-                "additional_files": additional_files,
-                "unexpected_symlinks": [],
-                "inspection_errors": [scandir_error],
-                "scandir_error": scandir_error,
-            }
-        expected_scan_dev = int(refmac_st.st_dev)
-        expected_scan_ino = int(refmac_st.st_ino)
+            if parent_observation is not None:
+                child_not_dir_status["parent_observation"] = parent_observation
+                child_not_dir_status["parent_lookup"] = parent_observation
+            return _build_scan_refusal_result(
+                child_not_dir_status,
+                default_error=err_msg,
+                cause_obj=None,
+            )
+        expected_scan_dev = obs_child_dev
+        expected_scan_ino = obs_child_ino
 
     scan_dir_fd: int | None = None
     dup_scan_fd: int | None = None

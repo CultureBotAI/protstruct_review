@@ -10892,7 +10892,7 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 res = orig_atomic_f2(
                     effective_payload, target_path, root=root
                 )
-                written_by_path_f2[str(res["path"])] = copy.deepcopy(res)
+                written_by_path_f2[str(res["path"])] = res
                 return res
 
             with patch.object(
@@ -10930,6 +10930,10 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
             )
             self.assertEqual(m1_disk_f2, dict(err_f2.manifest_payload or {}))
             self.assertEqual(
+                m1_disk_f2["diagnostics_json"],
+                written_by_path_f2[str(d1_parent_target_f2)],
+            )
+            self.assertEqual(
                 m1_disk_f2["diagnostics_json"]["path"],
                 str(d1_parent_target_f2),
             )
@@ -10940,6 +10944,12 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
             self.assertEqual(
                 m1_disk_f2["paths"]["manifest_json_path"],
                 str(m1_parent_target_f2),
+            )
+            self.assertEqual(
+                self._reopen_and_verify_json_artifact(
+                    m1_disk_f2["diagnostics_json"]
+                ),
+                d1_disk_f2,
             )
 
             hist_snaps_f2 = self._verify_publication_history_rows(
@@ -30702,6 +30712,8 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                         "target_lookup_eio",
                         "confirmed_enoent",
                         "actual_symlink",
+                        "replaced_directory",
+                        "replaced_non_directory_without_reg_bit",
                     ):
                         with self.subTest(branch=branch, case=case):
                             with tempfile.TemporaryDirectory(
@@ -30733,6 +30745,17 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                                 elif case == "actual_symlink":
                                     refmac_dir.rename(parked_refmac)
                                     refmac_dir.symlink_to(symlink_target)
+                                elif case == "replaced_directory":
+                                    refmac_dir.rename(parked_refmac)
+                                    refmac_dir.mkdir()
+                                elif (
+                                    case
+                                    == "replaced_non_directory_without_reg_bit"
+                                ):
+                                    refmac_dir.rename(parked_refmac)
+                                    refmac_dir.write_bytes(
+                                        b"not-a-directory-968\n"
+                                    )
 
                                 injected_lstat_exc: OSError | None = None
                                 if case == "target_lookup_eacces":
@@ -30864,7 +30887,6 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                                 self.assertEqual(
                                     sc_err["path"], str(refmac_dir)
                                 )
-                                self.assertIs(sc_err["is_regular_file"], False)
                                 self.assertIs(
                                     sc_err["within_refmac_dir"], False
                                 )
@@ -30885,6 +30907,7 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                                     self.assertIsNone(sc_err["exists"])
                                     self.assertIsNone(sc_err["is_symlink"])
                                     self.assertIsNone(sc_err["is_directory"])
+                                    self.assertIsNone(sc_err["is_regular_file"])
                                     self.assertEqual(
                                         res["unexpected_symlinks"], []
                                     )
@@ -30941,6 +30964,7 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                                     self.assertIsNone(sc_err["exists"])
                                     self.assertIsNone(sc_err["is_symlink"])
                                     self.assertIsNone(sc_err["is_directory"])
+                                    self.assertIsNone(sc_err["is_regular_file"])
                                     self.assertEqual(
                                         res["unexpected_symlinks"], []
                                     )
@@ -30966,6 +30990,9 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                                     self.assertIs(
                                         sc_err["is_directory"], False
                                     )
+                                    self.assertIs(
+                                        sc_err["is_regular_file"], False
+                                    )
                                     self.assertEqual(
                                         res["unexpected_symlinks"], []
                                     )
@@ -30988,6 +31015,9 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                                     self.assertIs(
                                         sc_err["is_directory"], False
                                     )
+                                    self.assertIs(
+                                        sc_err["is_regular_file"], False
+                                    )
                                     self.assertEqual(
                                         sc_err["symlink_target"],
                                         str(symlink_target),
@@ -30995,6 +31025,51 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                                     self.assertEqual(
                                         res["unexpected_symlinks"],
                                         [str(refmac_dir)],
+                                    )
+                                    self.assertEqual(
+                                        sc_err["exception_type"], "ValueError"
+                                    )
+                                    self.assertIsNone(sc_err["errno"])
+                                elif case == "replaced_directory":
+                                    self.assertIs(
+                                        sc_err["lookup_attempted"], True
+                                    )
+                                    self.assertIs(
+                                        sc_err["lookup_succeeded"], True
+                                    )
+                                    self.assertIs(sc_err["exists"], True)
+                                    self.assertIs(sc_err["is_symlink"], False)
+                                    self.assertIs(
+                                        sc_err["is_directory"], True
+                                    )
+                                    self.assertIs(
+                                        sc_err["is_regular_file"], False
+                                    )
+                                    self.assertEqual(
+                                        res["unexpected_symlinks"], []
+                                    )
+                                    self.assertEqual(
+                                        sc_err["exception_type"], "ValueError"
+                                    )
+                                    self.assertIsNone(sc_err["errno"])
+                                elif (
+                                    case
+                                    == "replaced_non_directory_without_reg_bit"
+                                ):
+                                    self.assertIs(
+                                        sc_err["lookup_attempted"], True
+                                    )
+                                    self.assertIs(
+                                        sc_err["lookup_succeeded"], True
+                                    )
+                                    self.assertIs(sc_err["exists"], True)
+                                    self.assertIs(sc_err["is_symlink"], False)
+                                    self.assertIs(
+                                        sc_err["is_directory"], False
+                                    )
+                                    self.assertIsNone(sc_err["is_regular_file"])
+                                    self.assertEqual(
+                                        res["unexpected_symlinks"], []
                                     )
                                     self.assertEqual(
                                         sc_err["exception_type"], "ValueError"
@@ -31126,6 +31201,7 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                             self.assertIsNone(sc_adm["exists"])
                             self.assertIsNone(sc_adm["is_symlink"])
                             self.assertIsNone(sc_adm["is_directory"])
+                            self.assertIsNone(sc_adm["is_regular_file"])
 
                             if adm_case == "post_open_ancestor_replaced":
                                 # Initial lookup and descriptor open/fstat succeeded, while descriptor["verified"] stays False because post-open namespace reverify failed on ancestor before target lstat (#1246).
@@ -31294,6 +31370,7 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                             self.assertIsNone(sc_min["exists"])
                             self.assertIsNone(sc_min["is_symlink"])
                             self.assertIsNone(sc_min["is_directory"])
+                            self.assertIsNone(sc_min["is_regular_file"])
                             self.assertIsNone(sc_min["exception_type"])
                             self.assertIsNone(sc_min["exception_message"])
                             self.assertIsNone(sc_min["errno"])
@@ -31375,6 +31452,1104 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                     )
 
                 # Verify unrelated sentinel descriptor and file identity/bytes remain untouched.
+                sentinel_st_after = real_lstat(sentinel_path)
+                self.assertEqual(
+                    (
+                        int(sentinel_st_after.st_dev),
+                        int(sentinel_st_after.st_ino),
+                    ),
+                    (
+                        int(sentinel_st_before.st_dev),
+                        int(sentinel_st_before.st_ino),
+                    ),
+                )
+                self.assertEqual(
+                    real_read(sentinel_fd, 256), sentinel_bytes
+                )
+            finally:
+                real_close(sentinel_fd)
+
+    def test_scan_refmac_directory_entries_no_baseline_observations(
+        self,
+    ) -> None:
+        """Direct no-baseline _scan_refmac_directory_entries separates parent vs child pre-open phases and preserves cause identity (#1050)."""
+        real_lstat = os.lstat
+        real_readlink = os.readlink
+        real_open = os.open
+        real_scandir = os.scandir
+        real_read = os.read
+        real_fstat = os.fstat
+        real_close = os.close
+        real_resolve = Path.resolve
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(strict=True)
+            sentinel_path = root / "unrelated_sentinel_1181.txt"
+            sentinel_bytes = b"sentinel-1181-untouched\n"
+            sentinel_path.write_bytes(sentinel_bytes)
+            sentinel_st_before = real_lstat(sentinel_path)
+            sentinel_fd = real_open(str(sentinel_path), os.O_RDONLY)
+            try:
+                parent_dir = root / "parent_box"
+                parent_dir.mkdir()
+                refmac_dir = parent_dir / "refmac"
+                refmac_dir.mkdir()
+                known_log = refmac_dir / "refmac.log"
+                known_payload = b"refmac-log-marker-1181\n"
+                known_log.write_bytes(known_payload)
+                known_st_before = real_lstat(known_log)
+                extra_file = refmac_dir / "extra_note.txt"
+                extra_payload = b"extra-artifact-payload-1181\n"
+                extra_file.write_bytes(extra_payload)
+                extra_st_before = real_lstat(extra_file)
+
+                parent_st_real = real_lstat(parent_dir)
+                parent_dev = int(parent_st_real.st_dev)
+                parent_ino = int(parent_st_real.st_ino)
+                parent_mode = int(stat.S_IMODE(parent_st_real.st_mode))
+                child_st_real = real_lstat(refmac_dir)
+                child_dev = int(child_st_real.st_dev)
+                child_ino = int(child_st_real.st_ino)
+                self.assertNotEqual(
+                    (parent_dev, parent_ino), (child_dev, child_ino)
+                )
+
+                def _run_traced_scan(
+                    *,
+                    target_refmac_dir: Path = refmac_dir,
+                    lstat_hook=None,
+                    resolve_hook=None,
+                ):
+                    events: list[tuple[str, str]] = []
+                    opened_fds: list[int] = []
+                    in_resolve_depth = 0
+                    owned_readlink_targets = {
+                        str(target_refmac_dir.parent),
+                        str(target_refmac_dir),
+                    }
+
+                    def _wrapped_lstat(target, *args, **kwargs):
+                        if isinstance(target, int) or in_resolve_depth > 0:
+                            return real_lstat(target, *args, **kwargs)
+                        norm = os.path.abspath(os.fspath(target))
+                        events.append(("lstat", norm))
+                        if lstat_hook is not None:
+                            return lstat_hook(norm, target, *args, **kwargs)
+                        return real_lstat(target, *args, **kwargs)
+
+                    def _wrapped_readlink(target, *args, **kwargs):
+                        if in_resolve_depth == 0 and not isinstance(
+                            target, int
+                        ):
+                            norm = os.path.abspath(os.fspath(target))
+                            if norm in owned_readlink_targets:
+                                events.append(("readlink", norm))
+                        return real_readlink(target, *args, **kwargs)
+
+                    def _wrapped_resolve(self_path, *args, **kwargs):
+                        nonlocal in_resolve_depth
+                        norm = os.path.abspath(os.fspath(self_path))
+                        events.append(("resolve", norm))
+                        if resolve_hook is not None:
+                            return resolve_hook(
+                                norm, self_path, *args, **kwargs
+                            )
+                        in_resolve_depth += 1
+                        try:
+                            return real_resolve(self_path, *args, **kwargs)
+                        finally:
+                            in_resolve_depth -= 1
+
+                    def _wrapped_open(path, flags, *args, **kwargs):
+                        norm = (
+                            f"dir_fd:{kwargs.get('dir_fd')}:"
+                            f"{os.fspath(path)}"
+                            if kwargs.get("dir_fd") is not None
+                            else os.path.abspath(os.fspath(path))
+                        )
+                        events.append(("open", norm))
+                        fd = real_open(path, flags, *args, **kwargs)
+                        opened_fds.append(fd)
+                        return fd
+
+                    def _wrapped_scandir(target=None):
+                        events.append(("scandir", str(target)))
+                        return real_scandir(target)
+
+                    def _wrapped_read(fd, n):
+                        events.append(("read", str(fd)))
+                        return real_read(fd, n)
+
+                    caught: list[Exception] = []
+                    scandir_causes: list[Exception | None] = []
+                    add_causes: dict[str, Exception | None] = {}
+                    with (
+                        patch.object(
+                            onesar_refmac.os,
+                            "lstat",
+                            side_effect=_wrapped_lstat,
+                        ),
+                        patch.object(
+                            onesar_refmac.os,
+                            "readlink",
+                            side_effect=_wrapped_readlink,
+                        ),
+                        patch.object(
+                            Path,
+                            "resolve",
+                            autospec=True,
+                            side_effect=_wrapped_resolve,
+                        ),
+                        patch.object(
+                            onesar_refmac.os,
+                            "open",
+                            side_effect=_wrapped_open,
+                        ),
+                        patch.object(
+                            onesar_refmac.os,
+                            "scandir",
+                            side_effect=_wrapped_scandir,
+                        ),
+                        patch.object(
+                            onesar_refmac.os,
+                            "read",
+                            side_effect=_wrapped_read,
+                        ),
+                    ):
+                        res = onesar_refmac._scan_refmac_directory_entries(
+                            target_refmac_dir,
+                            known_paths={"log": known_log},
+                            caught_exceptions=caught,
+                            expected_root_identity=None,
+                            refmac_dir_status=None,
+                            scandir_cause_out=scandir_causes,
+                            additional_file_causes_out=add_causes,
+                        )
+                    json.dumps(res)
+                    return res, caught, scandir_causes, add_causes, events, opened_fds
+
+                # 1. Parent lstat failures (EACCES, EIO, ENOENT).
+                parent_lstat_cases = [
+                    (
+                        "parent_eacces",
+                        PermissionError(
+                            errno.EACCES,
+                            "simulated parent lstat permission denied",
+                            str(parent_dir),
+                        ),
+                        (None, None, None),
+                    ),
+                    (
+                        "parent_eio",
+                        OSError(
+                            errno.EIO,
+                            "simulated parent lstat I/O error",
+                            str(parent_dir),
+                        ),
+                        (None, None, None),
+                    ),
+                    (
+                        "parent_enoent",
+                        FileNotFoundError(
+                            errno.ENOENT,
+                            "simulated parent lstat missing",
+                            str(parent_dir),
+                        ),
+                        (False, False, False),
+                    ),
+                ]
+                for (
+                    label,
+                    injected_exc,
+                    expected_parent_tri,
+                ) in parent_lstat_cases:
+                    with self.subTest(case=label):
+
+                        def _parent_lstat_fail(
+                            norm,
+                            target,
+                            *args,
+                            _exc=injected_exc,
+                            **kwargs,
+                        ):
+                            if norm == str(parent_dir):
+                                raise _exc
+                            return real_lstat(target, *args, **kwargs)
+
+                        (
+                            res,
+                            caught,
+                            scandir_causes,
+                            add_causes,
+                            events,
+                            opened_fds,
+                        ) = _run_traced_scan(lstat_hook=_parent_lstat_fail)
+
+                        self.assertEqual(
+                            events, [("lstat", str(parent_dir))]
+                        )
+                        self.assertEqual(opened_fds, [])
+                        self.assertEqual(res["additional_files"], {})
+                        self.assertEqual(res["unexpected_symlinks"], [])
+                        self.assertEqual(len(res["inspection_errors"]), 1)
+                        err = res["scandir_error"]
+                        self.assertIsNotNone(err)
+                        assert err is not None
+                        self.assertIs(res["inspection_errors"][0], err)
+
+                        self.assertEqual(err["output_key"], "refmac_dir_scan")
+                        self.assertEqual(err["path"], str(refmac_dir))
+                        self.assertIn("lookup_attempted", err)
+                        self.assertIs(err["lookup_attempted"], False)
+                        self.assertIsNone(err["lookup_succeeded"])
+                        self.assertIsNone(err["exists"])
+                        self.assertIsNone(err["is_symlink"])
+                        self.assertIsNone(err["is_directory"])
+                        self.assertIsNone(err["is_regular_file"])
+                        self.assertIs(err["within_refmac_dir"], False)
+                        self.assertIsNone(err["size_bytes"])
+                        self.assertIsNone(err["resolved_path"])
+                        self.assertIsNone(err["symlink_target"])
+                        self.assertIsNone(err["dev"])
+                        self.assertIsNone(err["ino"])
+                        self.assertIsNone(err["mode"])
+                        self.assertIs(err["identity_verified"], False)
+                        self.assertEqual(
+                            err["failure_phase"], "parent_dir_lstat"
+                        )
+                        self.assertEqual(
+                            err["exception_type"], type(injected_exc).__name__
+                        )
+                        self.assertEqual(
+                            err["exception_message"], str(injected_exc)
+                        )
+                        self.assertEqual(err["errno"], injected_exc.errno)
+
+                        p_obs = err["parent_observation"]
+                        self.assertEqual(err["parent_lookup"], p_obs)
+                        self.assertEqual(p_obs["path"], str(parent_dir))
+                        self.assertIsNone(p_obs["resolved_path"])
+                        self.assertIs(p_obs["attempted"], True)
+                        self.assertIs(p_obs["lookup_attempted"], True)
+                        self.assertIs(p_obs["succeeded"], False)
+                        self.assertIs(p_obs["lookup_succeeded"], False)
+                        self.assertIs(p_obs["resolve_attempted"], False)
+                        self.assertIsNone(p_obs["resolve_succeeded"])
+                        self.assertIs(
+                            p_obs["exists"], expected_parent_tri[0]
+                        )
+                        self.assertIs(
+                            p_obs["is_symlink"], expected_parent_tri[1]
+                        )
+                        self.assertIs(
+                            p_obs["is_directory"], expected_parent_tri[2]
+                        )
+                        self.assertIsNone(p_obs["symlink_target"])
+                        self.assertIsNone(p_obs["dev"])
+                        self.assertIsNone(p_obs["ino"])
+                        self.assertIsNone(p_obs["mode"])
+                        self.assertIs(p_obs["verified"], False)
+                        self.assertEqual(
+                            p_obs["failure_phase"], "parent_dir_lstat"
+                        )
+                        self.assertEqual(
+                            p_obs["exception_type"],
+                            type(injected_exc).__name__,
+                        )
+                        self.assertEqual(
+                            p_obs["exception_message"], str(injected_exc)
+                        )
+                        self.assertEqual(p_obs["errno"], injected_exc.errno)
+
+                        self.assertEqual(len(caught), 1)
+                        self.assertIs(caught[0], injected_exc)
+                        self.assertEqual(len(scandir_causes), 1)
+                        self.assertIs(scandir_causes[0], injected_exc)
+                        self.assertEqual(add_causes, {})
+
+                with self.subTest(case="parent_embedded_nul"):
+                    nul_parent_dir = Path(
+                        f"{root}/parent_nul_{chr(0)}_box"
+                    )
+                    nul_refmac_dir = nul_parent_dir / "refmac"
+                    (
+                        res,
+                        caught,
+                        scandir_causes,
+                        add_causes,
+                        events,
+                        opened_fds,
+                    ) = _run_traced_scan(target_refmac_dir=nul_refmac_dir)
+
+                    self.assertEqual(
+                        events, [("lstat", str(nul_parent_dir))]
+                    )
+                    self.assertEqual(opened_fds, [])
+                    self.assertEqual(res["additional_files"], {})
+                    self.assertEqual(res["unexpected_symlinks"], [])
+                    self.assertEqual(len(res["inspection_errors"]), 1)
+                    err = res["scandir_error"]
+                    self.assertIsNotNone(err)
+                    assert err is not None
+                    self.assertIs(res["inspection_errors"][0], err)
+
+                    self.assertEqual(err["output_key"], "refmac_dir_scan")
+                    self.assertEqual(err["path"], str(nul_refmac_dir))
+                    self.assertIn("lookup_attempted", err)
+                    self.assertIs(err["lookup_attempted"], False)
+                    self.assertIsNone(err["lookup_succeeded"])
+                    self.assertIsNone(err["exists"])
+                    self.assertIsNone(err["is_symlink"])
+                    self.assertIsNone(err["is_directory"])
+                    self.assertIsNone(err["is_regular_file"])
+                    self.assertIs(err["within_refmac_dir"], False)
+                    self.assertIsNone(err["size_bytes"])
+                    self.assertIsNone(err["resolved_path"])
+                    self.assertIsNone(err["symlink_target"])
+                    self.assertIsNone(err["dev"])
+                    self.assertIsNone(err["ino"])
+                    self.assertIsNone(err["mode"])
+                    self.assertIs(err["identity_verified"], False)
+                    self.assertEqual(
+                        err["failure_phase"], "parent_dir_lstat"
+                    )
+
+                    self.assertEqual(len(caught), 1)
+                    self.assertIsInstance(caught[0], ValueError)
+                    self.assertEqual(len(scandir_causes), 1)
+                    self.assertIs(scandir_causes[0], caught[0])
+                    self.assertEqual(add_causes, {})
+
+                    self.assertEqual(err["exception_type"], "ValueError")
+                    self.assertEqual(
+                        err["exception_message"], str(caught[0])
+                    )
+                    self.assertIsNone(err["errno"])
+
+                    p_obs = err["parent_observation"]
+                    self.assertEqual(err["parent_lookup"], p_obs)
+                    self.assertEqual(p_obs["path"], str(nul_parent_dir))
+                    self.assertIsNone(p_obs["resolved_path"])
+                    self.assertIs(p_obs["attempted"], True)
+                    self.assertIs(p_obs["lookup_attempted"], True)
+                    self.assertIs(p_obs["succeeded"], False)
+                    self.assertIs(p_obs["lookup_succeeded"], False)
+                    self.assertIs(p_obs["resolve_attempted"], False)
+                    self.assertIsNone(p_obs["resolve_succeeded"])
+                    self.assertIsNone(p_obs["exists"])
+                    self.assertIsNone(p_obs["is_symlink"])
+                    self.assertIsNone(p_obs["is_directory"])
+                    self.assertIsNone(p_obs["symlink_target"])
+                    self.assertIsNone(p_obs["dev"])
+                    self.assertIsNone(p_obs["ino"])
+                    self.assertIsNone(p_obs["mode"])
+                    self.assertIs(p_obs["verified"], False)
+                    self.assertEqual(
+                        p_obs["failure_phase"], "parent_dir_lstat"
+                    )
+                    self.assertEqual(p_obs["exception_type"], "ValueError")
+                    self.assertEqual(
+                        p_obs["exception_message"], str(caught[0])
+                    )
+                    self.assertIsNone(p_obs["errno"])
+
+                # 2. Parent semantic refusals (real symlink parent and real non-directory file parent).
+                parked_parent = root / "parked_parent_box"
+                os.rename(parent_dir, parked_parent)
+                try:
+                    with self.subTest(case="parent_symlink"):
+                        os.symlink(str(parked_parent), str(parent_dir))
+                        try:
+                            sym_parent_st = real_lstat(parent_dir)
+                            sym_parent_dev = int(sym_parent_st.st_dev)
+                            sym_parent_ino = int(sym_parent_st.st_ino)
+                            sym_parent_mode = int(
+                                stat.S_IMODE(sym_parent_st.st_mode)
+                            )
+                            self.assertNotEqual(
+                                (sym_parent_dev, sym_parent_ino),
+                                (parent_dev, parent_ino),
+                            )
+                            self.assertNotEqual(
+                                (sym_parent_dev, sym_parent_ino),
+                                (child_dev, child_ino),
+                            )
+                            (
+                                res,
+                                caught,
+                                scandir_causes,
+                                add_causes,
+                                events,
+                                opened_fds,
+                            ) = _run_traced_scan()
+
+                            self.assertEqual(
+                                events, [("lstat", str(parent_dir))]
+                            )
+                            self.assertNotIn(
+                                ("readlink", str(parent_dir)), events
+                            )
+                            self.assertNotIn(
+                                ("resolve", str(parent_dir)), events
+                            )
+                            self.assertEqual(opened_fds, [])
+                            self.assertEqual(res["additional_files"], {})
+                            self.assertEqual(res["unexpected_symlinks"], [])
+                            err = res["scandir_error"]
+                            self.assertIsNotNone(err)
+                            assert err is not None
+                            self.assertIn("lookup_attempted", err)
+                            self.assertIs(err["lookup_attempted"], False)
+                            self.assertIsNone(err["lookup_succeeded"])
+                            self.assertIsNone(err["exists"])
+                            self.assertIsNone(err["is_symlink"])
+                            self.assertIsNone(err["is_directory"])
+                            self.assertIsNone(err["is_regular_file"])
+                            self.assertIsNone(err["symlink_target"])
+                            self.assertIsNone(err["dev"])
+                            self.assertIsNone(err["ino"])
+                            self.assertIsNone(err["mode"])
+                            self.assertIs(err["identity_verified"], False)
+                            self.assertEqual(
+                                err["failure_phase"], "parent_dir_symlink"
+                            )
+                            self.assertIsNone(err["exception_type"])
+                            self.assertIsNone(err["exception_message"])
+                            self.assertIsNone(err["errno"])
+
+                            p_obs = err["parent_observation"]
+                            self.assertEqual(err["parent_lookup"], p_obs)
+                            self.assertEqual(p_obs["path"], str(parent_dir))
+                            self.assertIsNone(p_obs["resolved_path"])
+                            self.assertIs(p_obs["lookup_attempted"], True)
+                            self.assertIs(p_obs["lookup_succeeded"], True)
+                            self.assertIs(p_obs["resolve_attempted"], False)
+                            self.assertIsNone(p_obs["resolve_succeeded"])
+                            self.assertIs(p_obs["exists"], True)
+                            self.assertIs(p_obs["is_symlink"], True)
+                            self.assertIs(p_obs["is_directory"], False)
+                            self.assertIsNone(p_obs["symlink_target"])
+                            self.assertEqual(p_obs["dev"], sym_parent_dev)
+                            self.assertEqual(p_obs["ino"], sym_parent_ino)
+                            self.assertEqual(p_obs["mode"], sym_parent_mode)
+                            self.assertIs(p_obs["verified"], False)
+                            self.assertEqual(
+                                p_obs["failure_phase"], "parent_dir_symlink"
+                            )
+                            self.assertIsNone(p_obs["exception_type"])
+                            self.assertIsNone(p_obs["exception_message"])
+                            self.assertIsNone(p_obs["errno"])
+
+                            self.assertEqual(caught, [])
+                            self.assertEqual(scandir_causes, [None])
+                            self.assertEqual(add_causes, {})
+                        finally:
+                            if os.path.lexists(parent_dir):
+                                os.unlink(parent_dir)
+
+                    with self.subTest(case="parent_not_directory"):
+                        parent_dir.write_bytes(b"parent-is-regular-file\n")
+                        try:
+                            file_parent_st = real_lstat(parent_dir)
+                            file_parent_dev = int(file_parent_st.st_dev)
+                            file_parent_ino = int(file_parent_st.st_ino)
+                            file_parent_mode = int(
+                                stat.S_IMODE(file_parent_st.st_mode)
+                            )
+                            self.assertNotEqual(
+                                (file_parent_dev, file_parent_ino),
+                                (parent_dev, parent_ino),
+                            )
+                            self.assertNotEqual(
+                                (file_parent_dev, file_parent_ino),
+                                (child_dev, child_ino),
+                            )
+                            (
+                                res,
+                                caught,
+                                scandir_causes,
+                                add_causes,
+                                events,
+                                opened_fds,
+                            ) = _run_traced_scan()
+
+                            self.assertEqual(
+                                events, [("lstat", str(parent_dir))]
+                            )
+                            self.assertEqual(opened_fds, [])
+                            self.assertEqual(res["additional_files"], {})
+                            self.assertEqual(res["unexpected_symlinks"], [])
+                            err = res["scandir_error"]
+                            self.assertIsNotNone(err)
+                            assert err is not None
+                            self.assertIn("lookup_attempted", err)
+                            self.assertIs(err["lookup_attempted"], False)
+                            self.assertIsNone(err["lookup_succeeded"])
+                            self.assertIsNone(err["exists"])
+                            self.assertIsNone(err["is_symlink"])
+                            self.assertIsNone(err["is_directory"])
+                            self.assertIsNone(err["is_regular_file"])
+                            self.assertIsNone(err["symlink_target"])
+                            self.assertIsNone(err["dev"])
+                            self.assertIsNone(err["ino"])
+                            self.assertIsNone(err["mode"])
+                            self.assertIs(err["identity_verified"], False)
+                            self.assertEqual(
+                                err["failure_phase"],
+                                "parent_dir_not_directory",
+                            )
+                            self.assertIsNone(err["exception_type"])
+                            self.assertIsNone(err["exception_message"])
+                            self.assertIsNone(err["errno"])
+
+                            p_obs = err["parent_observation"]
+                            self.assertEqual(err["parent_lookup"], p_obs)
+                            self.assertEqual(p_obs["path"], str(parent_dir))
+                            self.assertIsNone(p_obs["resolved_path"])
+                            self.assertIs(p_obs["lookup_attempted"], True)
+                            self.assertIs(p_obs["lookup_succeeded"], True)
+                            self.assertIs(p_obs["resolve_attempted"], False)
+                            self.assertIsNone(p_obs["resolve_succeeded"])
+                            self.assertIs(p_obs["exists"], True)
+                            self.assertIs(p_obs["is_symlink"], False)
+                            self.assertIs(p_obs["is_directory"], False)
+                            self.assertIsNone(p_obs["symlink_target"])
+                            self.assertEqual(p_obs["dev"], file_parent_dev)
+                            self.assertEqual(p_obs["ino"], file_parent_ino)
+                            self.assertEqual(p_obs["mode"], file_parent_mode)
+                            self.assertIs(p_obs["verified"], False)
+                            self.assertEqual(
+                                p_obs["failure_phase"],
+                                "parent_dir_not_directory",
+                            )
+                            self.assertIsNone(p_obs["exception_type"])
+                            self.assertIsNone(p_obs["exception_message"])
+                            self.assertIsNone(p_obs["errno"])
+
+                            self.assertEqual(caught, [])
+                            self.assertEqual(scandir_causes, [None])
+                            self.assertEqual(add_causes, {})
+                        finally:
+                            if os.path.lexists(parent_dir):
+                                os.unlink(parent_dir)
+                finally:
+                    os.rename(parked_parent, parent_dir)
+
+                # 3. Successful parent lstat followed by owned Path.resolve EIO (parent_dir_resolve).
+                with self.subTest(case="parent_dir_resolve_eio"):
+                    injected_resolve_eio = OSError(
+                        errno.EIO,
+                        "simulated parent resolve I/O error",
+                        str(parent_dir),
+                    )
+
+                    def _parent_resolve_fail(
+                        norm, self_path, *args, **kwargs
+                    ):
+                        if norm == str(parent_dir):
+                            raise injected_resolve_eio
+                        return real_resolve(self_path, *args, **kwargs)
+
+                    (
+                        res,
+                        caught,
+                        scandir_causes,
+                        add_causes,
+                        events,
+                        opened_fds,
+                    ) = _run_traced_scan(resolve_hook=_parent_resolve_fail)
+
+                    self.assertEqual(
+                        events,
+                        [
+                            ("lstat", str(parent_dir)),
+                            ("resolve", str(parent_dir)),
+                        ],
+                    )
+                    self.assertEqual(opened_fds, [])
+                    self.assertEqual(res["additional_files"], {})
+                    self.assertEqual(res["unexpected_symlinks"], [])
+                    err = res["scandir_error"]
+                    self.assertIsNotNone(err)
+                    assert err is not None
+                    self.assertIn("lookup_attempted", err)
+                    self.assertIs(err["lookup_attempted"], False)
+                    self.assertIsNone(err["lookup_succeeded"])
+                    self.assertIsNone(err["exists"])
+                    self.assertIsNone(err["is_symlink"])
+                    self.assertIsNone(err["is_directory"])
+                    self.assertIsNone(err["is_regular_file"])
+                    self.assertIsNone(err["dev"])
+                    self.assertIsNone(err["ino"])
+                    self.assertIsNone(err["mode"])
+                    self.assertIs(err["identity_verified"], False)
+                    self.assertEqual(
+                        err["failure_phase"], "parent_dir_resolve"
+                    )
+                    self.assertEqual(err["exception_type"], "OSError")
+                    self.assertEqual(
+                        err["exception_message"], str(injected_resolve_eio)
+                    )
+                    self.assertEqual(err["errno"], errno.EIO)
+
+                    p_obs = err["parent_observation"]
+                    self.assertEqual(err["parent_lookup"], p_obs)
+                    self.assertEqual(p_obs["path"], str(parent_dir))
+                    self.assertIsNone(p_obs["resolved_path"])
+                    self.assertIs(p_obs["attempted"], True)
+                    self.assertIs(p_obs["lookup_attempted"], True)
+                    self.assertIs(p_obs["succeeded"], True)
+                    self.assertIs(p_obs["lookup_succeeded"], True)
+                    self.assertIs(p_obs["resolve_attempted"], True)
+                    self.assertIs(p_obs["resolve_succeeded"], False)
+                    self.assertIs(p_obs["exists"], True)
+                    self.assertIs(p_obs["is_symlink"], False)
+                    self.assertIs(p_obs["is_directory"], True)
+                    self.assertIsNone(p_obs["symlink_target"])
+                    self.assertEqual(p_obs["dev"], parent_dev)
+                    self.assertEqual(p_obs["ino"], parent_ino)
+                    self.assertEqual(p_obs["mode"], parent_mode)
+                    self.assertIs(p_obs["verified"], False)
+                    self.assertEqual(
+                        p_obs["failure_phase"], "parent_dir_resolve"
+                    )
+                    self.assertEqual(p_obs["exception_type"], "OSError")
+                    self.assertEqual(
+                        p_obs["exception_message"], str(injected_resolve_eio)
+                    )
+                    self.assertEqual(p_obs["errno"], errno.EIO)
+
+                    self.assertEqual(len(caught), 1)
+                    self.assertIs(caught[0], injected_resolve_eio)
+                    self.assertEqual(len(scandir_causes), 1)
+                    self.assertIs(scandir_causes[0], injected_resolve_eio)
+                    self.assertEqual(add_causes, {})
+
+                # 4. Child lstat failures (EACCES, EIO, ENOTDIR, ENOENT) after verified parent.
+                child_lstat_cases = [
+                    (
+                        "child_eacces",
+                        PermissionError(
+                            errno.EACCES,
+                            "simulated child lstat permission denied",
+                            str(refmac_dir),
+                        ),
+                        (None, None, None),
+                    ),
+                    (
+                        "child_eio",
+                        OSError(
+                            errno.EIO,
+                            "simulated child lstat I/O error",
+                            str(refmac_dir),
+                        ),
+                        (None, None, None),
+                    ),
+                    (
+                        "child_enotdir",
+                        NotADirectoryError(
+                            errno.ENOTDIR,
+                            "simulated child lstat not a directory",
+                            str(refmac_dir),
+                        ),
+                        (None, None, None),
+                    ),
+                    (
+                        "child_enoent",
+                        FileNotFoundError(
+                            errno.ENOENT,
+                            "simulated child lstat missing",
+                            str(refmac_dir),
+                        ),
+                        (False, False, False),
+                    ),
+                ]
+                for (
+                    label,
+                    injected_exc,
+                    expected_child_tri,
+                ) in child_lstat_cases:
+                    with self.subTest(case=label):
+
+                        def _child_lstat_fail(
+                            norm,
+                            target,
+                            *args,
+                            _exc=injected_exc,
+                            **kwargs,
+                        ):
+                            if norm == str(refmac_dir):
+                                raise _exc
+                            return real_lstat(target, *args, **kwargs)
+
+                        (
+                            res,
+                            caught,
+                            scandir_causes,
+                            add_causes,
+                            events,
+                            opened_fds,
+                        ) = _run_traced_scan(lstat_hook=_child_lstat_fail)
+
+                        self.assertEqual(
+                            events,
+                            [
+                                ("lstat", str(parent_dir)),
+                                ("resolve", str(parent_dir)),
+                                ("lstat", str(refmac_dir)),
+                            ],
+                        )
+                        self.assertEqual(opened_fds, [])
+                        self.assertEqual(res["additional_files"], {})
+                        self.assertEqual(res["unexpected_symlinks"], [])
+                        err = res["scandir_error"]
+                        self.assertIsNotNone(err)
+                        assert err is not None
+                        self.assertIn("lookup_attempted", err)
+                        self.assertIs(err["lookup_attempted"], True)
+                        self.assertIs(err["lookup_succeeded"], False)
+                        self.assertIs(err["exists"], expected_child_tri[0])
+                        self.assertIs(
+                            err["is_symlink"], expected_child_tri[1]
+                        )
+                        self.assertIs(
+                            err["is_directory"], expected_child_tri[2]
+                        )
+                        self.assertIs(
+                            err["is_regular_file"], expected_child_tri[2]
+                        )
+                        self.assertIs(err["within_refmac_dir"], False)
+                        self.assertIsNone(err["size_bytes"])
+                        self.assertIsNone(err["resolved_path"])
+                        self.assertIsNone(err["symlink_target"])
+                        self.assertIsNone(err["dev"])
+                        self.assertIsNone(err["ino"])
+                        self.assertIsNone(err["mode"])
+                        self.assertIs(err["identity_verified"], False)
+                        self.assertEqual(
+                            err["failure_phase"], "refmac_dir_lstat"
+                        )
+                        self.assertEqual(
+                            err["exception_type"], type(injected_exc).__name__
+                        )
+                        self.assertEqual(
+                            err["exception_message"], str(injected_exc)
+                        )
+                        self.assertEqual(err["errno"], injected_exc.errno)
+
+                        p_obs = err["parent_observation"]
+                        self.assertEqual(err["parent_lookup"], p_obs)
+                        self.assertEqual(p_obs["path"], str(parent_dir))
+                        self.assertEqual(
+                            p_obs["resolved_path"], str(parent_dir)
+                        )
+                        self.assertIs(p_obs["lookup_attempted"], True)
+                        self.assertIs(p_obs["lookup_succeeded"], True)
+                        self.assertIs(p_obs["resolve_attempted"], True)
+                        self.assertIs(p_obs["resolve_succeeded"], True)
+                        self.assertIs(p_obs["exists"], True)
+                        self.assertIs(p_obs["is_symlink"], False)
+                        self.assertIs(p_obs["is_directory"], True)
+                        self.assertEqual(p_obs["dev"], parent_dev)
+                        self.assertEqual(p_obs["ino"], parent_ino)
+                        self.assertEqual(p_obs["mode"], parent_mode)
+                        self.assertIs(p_obs["verified"], True)
+                        self.assertIsNone(p_obs["failure_phase"])
+                        self.assertIsNone(p_obs["error"])
+                        self.assertIsNone(p_obs["exception_type"])
+                        self.assertIsNone(p_obs["exception_message"])
+                        self.assertIsNone(p_obs["errno"])
+
+                        self.assertEqual(len(caught), 1)
+                        self.assertIs(caught[0], injected_exc)
+                        self.assertEqual(len(scandir_causes), 1)
+                        self.assertIs(scandir_causes[0], injected_exc)
+                        self.assertEqual(add_causes, {})
+
+                # 5. Real child symlink and real child non-directory file semantic refusals.
+                parked_child = root / "parked_refmac_dir"
+                os.rename(refmac_dir, parked_child)
+                try:
+                    with self.subTest(case="child_symlink"):
+                        os.symlink(str(parked_child), str(refmac_dir))
+                        try:
+                            sym_child_st = real_lstat(refmac_dir)
+                            sym_child_dev = int(sym_child_st.st_dev)
+                            sym_child_ino = int(sym_child_st.st_ino)
+                            sym_child_mode = int(
+                                stat.S_IMODE(sym_child_st.st_mode)
+                            )
+                            self.assertNotEqual(
+                                (sym_child_dev, sym_child_ino),
+                                (parent_dev, parent_ino),
+                            )
+                            self.assertNotEqual(
+                                (sym_child_dev, sym_child_ino),
+                                (child_dev, child_ino),
+                            )
+                            (
+                                res,
+                                caught,
+                                scandir_causes,
+                                add_causes,
+                                events,
+                                opened_fds,
+                            ) = _run_traced_scan()
+
+                            self.assertEqual(
+                                events,
+                                [
+                                    ("lstat", str(parent_dir)),
+                                    ("resolve", str(parent_dir)),
+                                    ("lstat", str(refmac_dir)),
+                                ],
+                            )
+                            self.assertNotIn(
+                                ("readlink", str(refmac_dir)), events
+                            )
+                            self.assertEqual(opened_fds, [])
+                            self.assertEqual(res["additional_files"], {})
+                            self.assertEqual(
+                                res["unexpected_symlinks"], [str(refmac_dir)]
+                            )
+                            err = res["scandir_error"]
+                            self.assertIsNotNone(err)
+                            assert err is not None
+                            self.assertIn("lookup_attempted", err)
+                            self.assertIs(err["lookup_attempted"], True)
+                            self.assertIs(err["lookup_succeeded"], True)
+                            self.assertIs(err["exists"], True)
+                            self.assertIs(err["is_symlink"], True)
+                            self.assertIs(err["is_directory"], False)
+                            self.assertIs(err["is_regular_file"], False)
+                            self.assertIsNone(err["symlink_target"])
+                            self.assertEqual(err["dev"], sym_child_dev)
+                            self.assertEqual(err["ino"], sym_child_ino)
+                            self.assertEqual(err["mode"], sym_child_mode)
+                            self.assertIs(err["identity_verified"], False)
+                            self.assertEqual(
+                                err["failure_phase"], "refmac_dir_symlink"
+                            )
+                            self.assertIsNone(err["exception_type"])
+                            self.assertIsNone(err["exception_message"])
+                            self.assertIsNone(err["errno"])
+                            self.assertIs(
+                                err["parent_observation"]["verified"], True
+                            )
+                            self.assertEqual(
+                                err["parent_observation"]["dev"], parent_dev
+                            )
+                            self.assertEqual(
+                                err["parent_observation"]["ino"], parent_ino
+                            )
+
+                            self.assertEqual(caught, [])
+                            self.assertEqual(scandir_causes, [None])
+                            self.assertEqual(add_causes, {})
+                        finally:
+                            if os.path.lexists(refmac_dir):
+                                os.unlink(refmac_dir)
+
+                    with self.subTest(case="child_not_directory"):
+                        refmac_dir.write_bytes(b"child-is-regular-file\n")
+                        try:
+                            file_child_st = real_lstat(refmac_dir)
+                            file_child_dev = int(file_child_st.st_dev)
+                            file_child_ino = int(file_child_st.st_ino)
+                            file_child_mode = int(
+                                stat.S_IMODE(file_child_st.st_mode)
+                            )
+                            self.assertNotEqual(
+                                (file_child_dev, file_child_ino),
+                                (parent_dev, parent_ino),
+                            )
+                            self.assertNotEqual(
+                                (file_child_dev, file_child_ino),
+                                (child_dev, child_ino),
+                            )
+                            (
+                                res,
+                                caught,
+                                scandir_causes,
+                                add_causes,
+                                events,
+                                opened_fds,
+                            ) = _run_traced_scan()
+
+                            self.assertEqual(
+                                events,
+                                [
+                                    ("lstat", str(parent_dir)),
+                                    ("resolve", str(parent_dir)),
+                                    ("lstat", str(refmac_dir)),
+                                ],
+                            )
+                            self.assertEqual(opened_fds, [])
+                            self.assertEqual(res["additional_files"], {})
+                            self.assertEqual(res["unexpected_symlinks"], [])
+                            err = res["scandir_error"]
+                            self.assertIsNotNone(err)
+                            assert err is not None
+                            self.assertIn("lookup_attempted", err)
+                            self.assertIs(err["lookup_attempted"], True)
+                            self.assertIs(err["lookup_succeeded"], True)
+                            self.assertIs(err["exists"], True)
+                            self.assertIs(err["is_symlink"], False)
+                            self.assertIs(err["is_directory"], False)
+                            self.assertIs(err["is_regular_file"], True)
+                            self.assertIsNone(err["symlink_target"])
+                            self.assertEqual(err["dev"], file_child_dev)
+                            self.assertEqual(err["ino"], file_child_ino)
+                            self.assertEqual(err["mode"], file_child_mode)
+                            self.assertIs(err["identity_verified"], False)
+                            self.assertEqual(
+                                err["failure_phase"],
+                                "refmac_dir_not_directory",
+                            )
+                            self.assertIsNone(err["exception_type"])
+                            self.assertIsNone(err["exception_message"])
+                            self.assertIsNone(err["errno"])
+                            self.assertIs(
+                                err["parent_observation"]["verified"], True
+                            )
+                            self.assertEqual(
+                                err["parent_observation"]["dev"], parent_dev
+                            )
+                            self.assertEqual(
+                                err["parent_observation"]["ino"], parent_ino
+                            )
+
+                            self.assertEqual(caught, [])
+                            self.assertEqual(scandir_causes, [None])
+                            self.assertEqual(add_causes, {})
+                        finally:
+                            if os.path.lexists(refmac_dir):
+                                os.unlink(refmac_dir)
+
+                    with self.subTest(
+                        case="child_non_regular_non_directory"
+                    ):
+                        os.mkfifo(str(refmac_dir), 0o644)
+                        try:
+                            fifo_child_st = real_lstat(refmac_dir)
+                            self.assertTrue(
+                                stat.S_ISFIFO(fifo_child_st.st_mode)
+                            )
+                            self.assertFalse(
+                                stat.S_ISREG(fifo_child_st.st_mode)
+                            )
+                            fifo_child_dev = int(fifo_child_st.st_dev)
+                            fifo_child_ino = int(fifo_child_st.st_ino)
+                            fifo_child_mode = int(
+                                stat.S_IMODE(fifo_child_st.st_mode)
+                            )
+                            (
+                                res,
+                                caught,
+                                scandir_causes,
+                                add_causes,
+                                events,
+                                opened_fds,
+                            ) = _run_traced_scan()
+
+                            self.assertEqual(
+                                events,
+                                [
+                                    ("lstat", str(parent_dir)),
+                                    ("resolve", str(parent_dir)),
+                                    ("lstat", str(refmac_dir)),
+                                ],
+                            )
+                            self.assertEqual(opened_fds, [])
+                            self.assertEqual(res["additional_files"], {})
+                            self.assertEqual(res["unexpected_symlinks"], [])
+                            err = res["scandir_error"]
+                            self.assertIsNotNone(err)
+                            assert err is not None
+                            self.assertIs(err["lookup_attempted"], True)
+                            self.assertIs(err["lookup_succeeded"], True)
+                            self.assertIs(err["exists"], True)
+                            self.assertIs(err["is_symlink"], False)
+                            self.assertIs(err["is_directory"], False)
+                            self.assertIs(err["is_regular_file"], False)
+                            self.assertIsNone(err["symlink_target"])
+                            self.assertEqual(err["dev"], fifo_child_dev)
+                            self.assertEqual(err["ino"], fifo_child_ino)
+                            self.assertEqual(err["mode"], fifo_child_mode)
+                            self.assertIs(err["identity_verified"], False)
+                            self.assertEqual(
+                                err["failure_phase"],
+                                "refmac_dir_not_directory",
+                            )
+                            self.assertIsNone(err["exception_type"])
+                            self.assertIsNone(err["exception_message"])
+                            self.assertIsNone(err["errno"])
+                            self.assertEqual(caught, [])
+                            self.assertEqual(scandir_causes, [None])
+                            self.assertEqual(add_causes, {})
+                        finally:
+                            if os.path.lexists(refmac_dir):
+                                os.unlink(refmac_dir)
+                finally:
+                    os.rename(parked_child, refmac_dir)
+
+                # 6. Healthy real no-baseline scan control.
+                with self.subTest(case="healthy_no_baseline_control"):
+                    (
+                        res_ok,
+                        caught_ok,
+                        scandir_causes_ok,
+                        add_causes_ok,
+                        events_ok,
+                        opened_fds_ok,
+                    ) = _run_traced_scan()
+
+                    json.dumps(res_ok)
+                    self.assertIsNone(res_ok["scandir_error"])
+                    self.assertEqual(res_ok["inspection_errors"], [])
+                    self.assertEqual(res_ok["unexpected_symlinks"], [])
+                    self.assertEqual(caught_ok, [])
+                    self.assertEqual(scandir_causes_ok, [])
+                    self.assertEqual(
+                        add_causes_ok, {"extra_note.txt": None}
+                    )
+                    self.assertEqual(
+                        set(res_ok["additional_files"].keys()),
+                        {"extra_note.txt"},
+                    )
+                    self.assertEqual(
+                        res_ok["additional_files"]["extra_note.txt"]["sha256"],
+                        hashlib.sha256(extra_payload).hexdigest(),
+                    )
+                    self.assertEqual(
+                        res_ok["additional_files"]["extra_note.txt"][
+                            "size_bytes"
+                        ],
+                        len(extra_payload),
+                    )
+                    self.assertGreaterEqual(len(opened_fds_ok), 2)
+                    for fd in set(opened_fds_ok):
+                        with self.assertRaises(OSError) as cm_closed:
+                            real_fstat(fd)
+                        self.assertEqual(
+                            cm_closed.exception.errno, errno.EBADF
+                        )
+
+                # Verify marker/known files and unrelated sentinel descriptor remain untouched.
+                known_st_after = real_lstat(known_log)
+                self.assertEqual(
+                    (int(known_st_after.st_dev), int(known_st_after.st_ino)),
+                    (int(known_st_before.st_dev), int(known_st_before.st_ino)),
+                )
+                self.assertEqual(known_log.read_bytes(), known_payload)
+
+                extra_st_after = real_lstat(extra_file)
+                self.assertEqual(
+                    (int(extra_st_after.st_dev), int(extra_st_after.st_ino)),
+                    (int(extra_st_before.st_dev), int(extra_st_before.st_ino)),
+                )
+                self.assertEqual(extra_file.read_bytes(), extra_payload)
+
                 sentinel_st_after = real_lstat(sentinel_path)
                 self.assertEqual(
                     (
@@ -33538,6 +34713,2769 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 )
             finally:
                 real_close(sentinel_fd)
+
+    def test_atomic_writer_readback_error_preserved_before_finalizer_interrupt(
+        self,
+    ) -> None:
+        """Task 1188 (#1273): preserve readback cause and pre-finalizer metadata when _finalize_temp_cleanup is interrupted."""
+        real_open = os.open
+        real_close = os.close
+        real_read = os.read
+        real_stat = os.stat
+        real_fstat = os.fstat
+        real_lstat = os.lstat
+        real_link = os.link
+        real_unlink = os.unlink
+        real_remove = os.remove
+
+        scenarios = (
+            "partial_read_eio_then_final_stat_interrupt",
+            "partial_read_eio_plus_readback_close_eacces_then_interrupt",
+            "readback_open_eio_then_final_stat_interrupt",
+            "partial_read_eio_then_interrupt_plus_parent_dir_close_eio",
+            "healthy_writer_control",
+        )
+
+        for scenario in scenarios:
+            with self.subTest(scenario=scenario):
+                with tempfile.TemporaryDirectory() as tmp_str:
+                    base = Path(tmp_str).resolve()
+                    parent_dir = base / "writer_root"
+                    parent_dir.mkdir()
+                    sentinel_path = parent_dir / "sentinel.txt"
+                    sentinel_bytes = b"sentinel-untouched-1188\n"
+                    sentinel_path.write_bytes(sentinel_bytes)
+                    sentinel_st_before = real_lstat(sentinel_path)
+                    sentinel_fd = real_open(sentinel_path, os.O_RDONLY)
+                    tracked_descriptors: list[tuple[int, tuple[int, int]]] = []
+                    try:
+                        baseline = (
+                            onesar_refmac._capture_directory_identity_baseline(
+                                parent_dir,
+                                evidence_root=base,
+                            )
+                        )
+                        expected_parent_identity = (
+                            int(baseline["dev"]),
+                            int(baseline["ino"]),
+                        )
+                        target_path = parent_dir / "out.json"
+                        target_name = target_path.name
+                        tmp_name = f".{target_name}.tmp.{os.getpid()}"
+                        tmp_path = parent_dir / tmp_name
+
+                        payload = {
+                            "items": ["alpha", "beta", "gamma"],
+                            "probe": "task1188_readback_interrupt",
+                            "scenario": scenario,
+                        }
+                        expected_bytes = (
+                            json.dumps(payload, indent=2, sort_keys=True) + "\n"
+                        ).encode("utf-8")
+                        expected_size = len(expected_bytes)
+                        expected_sha256 = _sha256_bytes(expected_bytes)
+                        prefix_len = 24
+                        self.assertGreater(expected_size, prefix_len)
+                        prefix_bytes = expected_bytes[:prefix_len]
+                        prefix_sha256 = _sha256_bytes(prefix_bytes)
+
+                        post_link_stat_eio = OSError(
+                            errno.EIO,
+                            f"simulated post_link_stat EIO ({scenario})",
+                            tmp_name,
+                        )
+                        readback_eio = OSError(
+                            errno.EIO,
+                            f"simulated readback partial read EIO ({scenario})",
+                            target_name,
+                        )
+                        readback_open_eio = OSError(
+                            errno.EIO,
+                            f"simulated readback open EIO ({scenario})",
+                            target_name,
+                        )
+                        readback_close_eacces = PermissionError(
+                            errno.EACCES,
+                            f"simulated readback close EACCES ({scenario})",
+                            target_name,
+                        )
+                        parent_close_eio = OSError(
+                            errno.EIO,
+                            f"simulated parent directory close EIO ({scenario})",
+                            str(parent_dir),
+                        )
+                        injected_interrupt = KeyboardInterrupt(
+                            f"simulated final_cleanup_stat interrupt ({scenario})"
+                        )
+
+                        stale_cause_1 = RuntimeError(
+                            f"preexisting cause 1 ({scenario})"
+                        )
+                        stale_cause_2 = ValueError(
+                            f"preexisting cause 2 ({scenario})"
+                        )
+                        if (
+                            scenario
+                            == "partial_read_eio_plus_readback_close_eacces_then_interrupt"
+                        ):
+                            initial_causes: list[Exception] = [
+                                stale_cause_1,
+                                stale_cause_2,
+                            ]
+                        elif (
+                            scenario
+                            == "partial_read_eio_then_final_stat_interrupt"
+                        ):
+                            initial_causes = [stale_cause_1]
+                        else:
+                            initial_causes = []
+                        causes: list[Exception] = list(initial_causes)
+                        status_out: dict[str, Any] = {}
+                        cleanup_sink: list[OSError] = []
+
+                        opened_fds: list[int] = []
+                        fd_roles: dict[int, str] = {}
+                        parent_dir_fd_box: list[int] = []
+                        tmp_fd_box: list[int] = []
+                        tmp_identity_box: list[tuple[int, int]] = []
+                        events: list[str] = []
+                        unlink_calls: list[Any] = []
+                        injection_counts = {
+                            "post_link_stat": 0,
+                            "readback_open": 0,
+                            "readback_read": 0,
+                            "readback_close": 0,
+                            "final_cleanup_stat": 0,
+                            "parent_dir_close": 0,
+                        }
+
+                        def _hooked_open(
+                            path_arg: Any,
+                            flags: int,
+                            *args: Any,
+                            **kwargs: Any,
+                        ) -> int:
+                            dir_fd = kwargs.get("dir_fd")
+                            decoded = os.fsdecode(path_arg)
+                            if (
+                                scenario
+                                == "readback_open_eio_then_final_stat_interrupt"
+                                and decoded == target_name
+                                and parent_dir_fd_box
+                                and dir_fd == parent_dir_fd_box[0]
+                                and not (flags & os.O_CREAT)
+                                and "post_link_stat_eio" in events
+                                and injection_counts["readback_open"] == 0
+                            ):
+                                injection_counts["readback_open"] += 1
+                                events.append("readback_open_eio")
+                                raise readback_open_eio
+
+                            fd = real_open(path_arg, flags, *args, **kwargs)
+                            try:
+                                fd_st = real_fstat(fd)
+                                fd_ident = (
+                                    int(fd_st.st_dev),
+                                    int(fd_st.st_ino),
+                                )
+                                tracked_descriptors.append((fd, fd_ident))
+                                opened_fds.append(fd)
+                                if decoded == str(parent_dir):
+                                    self.assertEqual(
+                                        fd_ident, expected_parent_identity
+                                    )
+                                    fd_roles[fd] = "parent_dir"
+                                    parent_dir_fd_box[:] = [fd]
+                                    events.append("parent_dir_open")
+                                elif (
+                                    decoded == tmp_name
+                                    and parent_dir_fd_box
+                                    and dir_fd == parent_dir_fd_box[0]
+                                ):
+                                    fd_roles[fd] = "tmp_write"
+                                    tmp_fd_box[:] = [fd]
+                                    tmp_identity_box[:] = [fd_ident]
+                                    events.append("tmp_open")
+                                elif (
+                                    decoded == target_name
+                                    and parent_dir_fd_box
+                                    and dir_fd == parent_dir_fd_box[0]
+                                    and not (flags & os.O_CREAT)
+                                ):
+                                    self.assertEqual(len(tmp_identity_box), 1)
+                                    self.assertEqual(
+                                        fd_ident, tmp_identity_box[0]
+                                    )
+                                    fd_roles[fd] = "verify_readback"
+                                    events.append("readback_open_ok")
+                            except BaseException:
+                                try:
+                                    real_close(fd)
+                                except OSError:
+                                    pass
+                                raise
+                            return fd
+
+                        def _hooked_link(
+                            src: Any,
+                            dst: Any,
+                            *args: Any,
+                            **kwargs: Any,
+                        ) -> None:
+                            real_link(src, dst, *args, **kwargs)
+                            if (
+                                os.fsdecode(src) == tmp_name
+                                and os.fsdecode(dst) == target_name
+                                and parent_dir_fd_box
+                                and kwargs.get("src_dir_fd")
+                                == parent_dir_fd_box[0]
+                                and kwargs.get("dst_dir_fd")
+                                == parent_dir_fd_box[0]
+                            ):
+                                events.append("link_published")
+
+                        def _hooked_stat(
+                            path_arg: Any,
+                            *args: Any,
+                            **kwargs: Any,
+                        ) -> os.stat_result:
+                            dir_fd = kwargs.get("dir_fd")
+                            follow_symlinks = kwargs.get(
+                                "follow_symlinks", True
+                            )
+                            decoded = (
+                                os.fsdecode(path_arg)
+                                if isinstance(
+                                    path_arg, (str, bytes, os.PathLike)
+                                )
+                                else None
+                            )
+                            if (
+                                decoded == tmp_name
+                                and parent_dir_fd_box
+                                and dir_fd == parent_dir_fd_box[0]
+                                and follow_symlinks is False
+                            ):
+                                if "link_published" not in events:
+                                    self.assertEqual(len(tmp_fd_box), 1)
+                                    with self.assertRaises(
+                                        OSError
+                                    ) as tmp_ebadf_cm:
+                                        real_fstat(tmp_fd_box[0])
+                                    self.assertEqual(
+                                        tmp_ebadf_cm.exception.errno,
+                                        errno.EBADF,
+                                    )
+                                    if (
+                                        fd_roles.get(tmp_fd_box[0])
+                                        == "tmp_write"
+                                    ):
+                                        del fd_roles[tmp_fd_box[0]]
+                                    events.append(
+                                        "tmp_fd_ebadf_at_pre_link_stat"
+                                    )
+                                    st = real_stat(path_arg, *args, **kwargs)
+                                    events.append("pre_link_temp_stat_ok")
+                                    return st
+                                if (
+                                    scenario != "healthy_writer_control"
+                                    and injection_counts["post_link_stat"] == 0
+                                ):
+                                    injection_counts["post_link_stat"] += 1
+                                    events.append("post_link_stat_eio")
+                                    raise post_link_stat_eio
+                                if (
+                                    scenario != "healthy_writer_control"
+                                    and (
+                                        "readback_read_eio" in events
+                                        or "readback_open_eio" in events
+                                    )
+                                    and injection_counts["final_cleanup_stat"]
+                                    == 0
+                                ):
+                                    injection_counts["final_cleanup_stat"] += 1
+                                    events.append(
+                                        "final_cleanup_stat_interrupt"
+                                    )
+                                    raise injected_interrupt
+                                st = real_stat(path_arg, *args, **kwargs)
+                                events.append("post_link_temp_stat_ok")
+                                return st
+                            return real_stat(path_arg, *args, **kwargs)
+
+                        def _hooked_read(fd: int, count: int) -> bytes:
+                            if (
+                                fd_roles.get(fd) == "verify_readback"
+                                and scenario != "healthy_writer_control"
+                            ):
+                                if "readback_prefix_read" not in events:
+                                    events.append("readback_prefix_read")
+                                    return real_read(fd, prefix_len)
+                                if injection_counts["readback_read"] == 0:
+                                    injection_counts["readback_read"] += 1
+                                    events.append("readback_read_eio")
+                                    raise readback_eio
+                            return real_read(fd, count)
+
+                        def _hooked_close(fd: int) -> None:
+                            role = fd_roles.pop(fd, None)
+                            real_close(fd)
+                            if role == "verify_readback":
+                                if (
+                                    scenario
+                                    == "partial_read_eio_plus_readback_close_eacces_then_interrupt"
+                                    and "readback_read_eio" in events
+                                    and injection_counts["readback_close"] == 0
+                                ):
+                                    injection_counts["readback_close"] += 1
+                                    events.append("readback_close_eacces")
+                                    raise readback_close_eacces
+                                events.append("readback_close_ok")
+                            elif role == "parent_dir":
+                                if (
+                                    scenario
+                                    == "partial_read_eio_then_interrupt_plus_parent_dir_close_eio"
+                                    and "final_cleanup_stat_interrupt" in events
+                                    and injection_counts["parent_dir_close"]
+                                    == 0
+                                ):
+                                    injection_counts["parent_dir_close"] += 1
+                                    events.append("parent_dir_close_eio")
+                                    raise parent_close_eio
+                                events.append("parent_dir_close_ok")
+
+                        def _hooked_unlink(
+                            path_arg: Any, *args: Any, **kwargs: Any
+                        ) -> None:
+                            unlink_calls.append(("unlink", path_arg, kwargs))
+                            real_unlink(path_arg, *args, **kwargs)
+
+                        def _hooked_remove(
+                            path_arg: Any, *args: Any, **kwargs: Any
+                        ) -> None:
+                            unlink_calls.append(("remove", path_arg, kwargs))
+                            real_remove(path_arg, *args, **kwargs)
+
+                        sink_token = onesar_refmac._ACTIVE_WRITE_CLEANUP_ERRORS_SINK_CTX.set(
+                            cleanup_sink
+                        )
+                        try:
+                            with (
+                                patch.object(
+                                    onesar_refmac.os,
+                                    "open",
+                                    side_effect=_hooked_open,
+                                ),
+                                patch.object(
+                                    onesar_refmac.os,
+                                    "link",
+                                    side_effect=_hooked_link,
+                                ),
+                                patch.object(
+                                    onesar_refmac.os,
+                                    "stat",
+                                    side_effect=_hooked_stat,
+                                ),
+                                patch.object(
+                                    onesar_refmac.os,
+                                    "read",
+                                    side_effect=_hooked_read,
+                                ),
+                                patch.object(
+                                    onesar_refmac.os,
+                                    "close",
+                                    side_effect=_hooked_close,
+                                ),
+                                patch.object(
+                                    onesar_refmac.os,
+                                    "unlink",
+                                    side_effect=_hooked_unlink,
+                                ),
+                                patch.object(
+                                    onesar_refmac.os,
+                                    "remove",
+                                    side_effect=_hooked_remove,
+                                ),
+                            ):
+                                if scenario == "healthy_writer_control":
+                                    receipt_ok = onesar_refmac._atomic_write_new_json_file(
+                                        payload,
+                                        target_path,
+                                        root=parent_dir,
+                                        dir_baseline=baseline,
+                                        dir_status_out=status_out,
+                                        caught_exceptions=causes,
+                                    )
+                                else:
+                                    with self.assertRaises(
+                                        KeyboardInterrupt
+                                    ) as cm_int:
+                                        onesar_refmac._atomic_write_new_json_file(
+                                            payload,
+                                            target_path,
+                                            root=parent_dir,
+                                            dir_baseline=baseline,
+                                            dir_status_out=status_out,
+                                            caught_exceptions=causes,
+                                        )
+                        finally:
+                            onesar_refmac._ACTIVE_WRITE_CLEANUP_ERRORS_SINK_CTX.reset(
+                                sink_token
+                            )
+
+                        self.assertEqual(unlink_calls, [])
+                        self.assertEqual(len(tmp_identity_box), 1)
+                        exp_tmp_dev, exp_tmp_ino = tmp_identity_box[0]
+
+                        for fd in set(opened_fds):
+                            with self.assertRaises(OSError) as ebadf_cm:
+                                real_fstat(fd)
+                            self.assertEqual(
+                                ebadf_cm.exception.errno, errno.EBADF
+                            )
+
+                        self.assertTrue(target_path.is_file())
+                        self.assertTrue(tmp_path.is_file())
+                        target_st = real_lstat(target_path)
+                        tmp_st = real_lstat(tmp_path)
+                        self.assertTrue(stat.S_ISREG(target_st.st_mode))
+                        self.assertTrue(stat.S_ISREG(tmp_st.st_mode))
+                        self.assertEqual(
+                            (int(target_st.st_dev), int(target_st.st_ino)),
+                            (exp_tmp_dev, exp_tmp_ino),
+                        )
+                        self.assertEqual(
+                            (int(tmp_st.st_dev), int(tmp_st.st_ino)),
+                            (exp_tmp_dev, exp_tmp_ino),
+                        )
+                        self.assertGreaterEqual(int(target_st.st_nlink), 2)
+                        self.assertGreaterEqual(int(tmp_st.st_nlink), 2)
+                        self.assertEqual(
+                            target_path.read_bytes(), expected_bytes
+                        )
+                        self.assertEqual(tmp_path.read_bytes(), expected_bytes)
+
+                        sentinel_st_after = real_lstat(sentinel_path)
+                        self.assertEqual(
+                            (
+                                int(sentinel_st_after.st_dev),
+                                int(sentinel_st_after.st_ino),
+                            ),
+                            (
+                                int(sentinel_st_before.st_dev),
+                                int(sentinel_st_before.st_ino),
+                            ),
+                        )
+                        self.assertEqual(
+                            real_read(sentinel_fd, 256), sentinel_bytes
+                        )
+
+                        if scenario == "healthy_writer_control":
+                            self.assertEqual(
+                                events,
+                                [
+                                    "parent_dir_open",
+                                    "tmp_open",
+                                    "tmp_fd_ebadf_at_pre_link_stat",
+                                    "pre_link_temp_stat_ok",
+                                    "link_published",
+                                    "post_link_temp_stat_ok",
+                                    "readback_open_ok",
+                                    "readback_close_ok",
+                                    "parent_dir_close_ok",
+                                ],
+                            )
+                            self.assertEqual(
+                                injection_counts,
+                                {
+                                    "post_link_stat": 0,
+                                    "readback_open": 0,
+                                    "readback_read": 0,
+                                    "readback_close": 0,
+                                    "final_cleanup_stat": 0,
+                                    "parent_dir_close": 0,
+                                },
+                            )
+                            self.assertEqual(causes, [])
+                            self.assertEqual(cleanup_sink, [])
+                            self.assertEqual(
+                                receipt_ok["path"], str(target_path)
+                            )
+                            self.assertEqual(
+                                receipt_ok["sha256"], expected_sha256
+                            )
+                            self.assertEqual(
+                                receipt_ok["size_bytes"], expected_size
+                            )
+                            self.assertIs(
+                                receipt_ok["temp_cleanup_succeeded"], False
+                            )
+                            self.assertEqual(
+                                receipt_ok["temp_handling_policy"],
+                                onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+                            )
+                            self.assertIs(
+                                receipt_ok["temp_handling_succeeded"], True
+                            )
+                            self.assertEqual(
+                                receipt_ok["temp_handling_disposition"],
+                                onesar_refmac.JSON_TEMP_DISPOSITION_RETAINED,
+                            )
+                            self.assertIs(
+                                receipt_ok["temp_cleanup_status"][
+                                    "published_link_created"
+                                ],
+                                True,
+                            )
+                            self.assertIs(
+                                receipt_ok["temp_cleanup_status"][
+                                    "readback_verified"
+                                ],
+                                True,
+                            )
+                            self.assertIs(
+                                onesar_refmac._is_json_temp_handling_satisfied(
+                                    receipt_ok
+                                ),
+                                True,
+                            )
+                            self.assertIs(
+                                onesar_refmac._is_json_temp_status_handling_satisfied(
+                                    receipt_ok["temp_cleanup_status"]
+                                ),
+                                True,
+                            )
+                            continue
+
+                        escaped_int = cm_int.exception
+                        self.assertIs(escaped_int, injected_interrupt)
+                        expected_primary: OSError = (
+                            readback_open_eio
+                            if scenario
+                            == "readback_open_eio_then_final_stat_interrupt"
+                            else readback_eio
+                        )
+                        self.assertIs(escaped_int.__context__, expected_primary)
+                        self.assertEqual(
+                            injection_counts["post_link_stat"], 1
+                        )
+                        self.assertEqual(
+                            injection_counts["final_cleanup_stat"], 1
+                        )
+                        self.assertEqual(len(cleanup_sink), 1)
+                        self.assertIs(cleanup_sink[0], post_link_stat_eio)
+
+                        if (
+                            scenario
+                            == "partial_read_eio_then_final_stat_interrupt"
+                        ):
+                            self.assertEqual(
+                                events,
+                                [
+                                    "parent_dir_open",
+                                    "tmp_open",
+                                    "tmp_fd_ebadf_at_pre_link_stat",
+                                    "pre_link_temp_stat_ok",
+                                    "link_published",
+                                    "post_link_stat_eio",
+                                    "readback_open_ok",
+                                    "readback_prefix_read",
+                                    "readback_read_eio",
+                                    "readback_close_ok",
+                                    "final_cleanup_stat_interrupt",
+                                    "parent_dir_close_ok",
+                                ],
+                            )
+                            self.assertEqual(
+                                injection_counts["readback_read"], 1
+                            )
+                            self.assertEqual(
+                                injection_counts["readback_close"], 0
+                            )
+                            self.assertEqual(
+                                injection_counts["parent_dir_close"], 0
+                            )
+                            expected_causes = [
+                                stale_cause_1,
+                                readback_eio,
+                                post_link_stat_eio,
+                            ]
+                        elif (
+                            scenario
+                            == "partial_read_eio_plus_readback_close_eacces_then_interrupt"
+                        ):
+                            self.assertEqual(
+                                events,
+                                [
+                                    "parent_dir_open",
+                                    "tmp_open",
+                                    "tmp_fd_ebadf_at_pre_link_stat",
+                                    "pre_link_temp_stat_ok",
+                                    "link_published",
+                                    "post_link_stat_eio",
+                                    "readback_open_ok",
+                                    "readback_prefix_read",
+                                    "readback_read_eio",
+                                    "readback_close_eacces",
+                                    "final_cleanup_stat_interrupt",
+                                    "parent_dir_close_ok",
+                                ],
+                            )
+                            self.assertEqual(
+                                injection_counts["readback_read"], 1
+                            )
+                            self.assertEqual(
+                                injection_counts["readback_close"], 1
+                            )
+                            self.assertEqual(
+                                injection_counts["parent_dir_close"], 0
+                            )
+                            expected_causes = [
+                                stale_cause_1,
+                                stale_cause_2,
+                                readback_eio,
+                                readback_close_eacces,
+                                post_link_stat_eio,
+                            ]
+                            self.assertIs(
+                                getattr(
+                                    readback_eio, "cleanup_close_error", None
+                                ),
+                                readback_close_eacces,
+                            )
+                            self.assertIs(
+                                getattr(
+                                    readback_eio, "readback_close_error", None
+                                ),
+                                readback_close_eacces,
+                            )
+                            self.assertIs(
+                                getattr(readback_eio, "close_error", None),
+                                readback_close_eacces,
+                            )
+                        elif (
+                            scenario
+                            == "readback_open_eio_then_final_stat_interrupt"
+                        ):
+                            self.assertEqual(
+                                events,
+                                [
+                                    "parent_dir_open",
+                                    "tmp_open",
+                                    "tmp_fd_ebadf_at_pre_link_stat",
+                                    "pre_link_temp_stat_ok",
+                                    "link_published",
+                                    "post_link_stat_eio",
+                                    "readback_open_eio",
+                                    "final_cleanup_stat_interrupt",
+                                    "parent_dir_close_ok",
+                                ],
+                            )
+                            self.assertEqual(
+                                injection_counts["readback_open"], 1
+                            )
+                            self.assertEqual(
+                                injection_counts["readback_read"], 0
+                            )
+                            self.assertEqual(
+                                injection_counts["readback_close"], 0
+                            )
+                            self.assertEqual(
+                                injection_counts["parent_dir_close"], 0
+                            )
+                            expected_causes = [
+                                readback_open_eio,
+                                post_link_stat_eio,
+                            ]
+                        else:
+                            self.assertEqual(
+                                events,
+                                [
+                                    "parent_dir_open",
+                                    "tmp_open",
+                                    "tmp_fd_ebadf_at_pre_link_stat",
+                                    "pre_link_temp_stat_ok",
+                                    "link_published",
+                                    "post_link_stat_eio",
+                                    "readback_open_ok",
+                                    "readback_prefix_read",
+                                    "readback_read_eio",
+                                    "readback_close_ok",
+                                    "final_cleanup_stat_interrupt",
+                                    "parent_dir_close_eio",
+                                ],
+                            )
+                            self.assertEqual(
+                                injection_counts["readback_read"], 1
+                            )
+                            self.assertEqual(
+                                injection_counts["readback_close"], 0
+                            )
+                            self.assertEqual(
+                                injection_counts["parent_dir_close"], 1
+                            )
+                            expected_causes = [
+                                readback_eio,
+                                post_link_stat_eio,
+                                parent_close_eio,
+                            ]
+
+                        self.assertEqual(len(causes), len(expected_causes))
+                        for obs_cause, exp_cause in zip(
+                            causes, expected_causes, strict=True
+                        ):
+                            self.assertIs(obs_cause, exp_cause)
+                        self.assertEqual(
+                            len({id(c) for c in causes}), len(causes)
+                        )
+
+                        self.assertEqual(
+                            status_out["write_error"],
+                            f"{type(expected_primary).__name__}: {expected_primary}",
+                        )
+                        self.assertEqual(
+                            status_out["write_exception_type"],
+                            type(expected_primary).__name__,
+                        )
+                        self.assertEqual(
+                            status_out["write_exception_message"],
+                            str(expected_primary),
+                        )
+                        self.assertEqual(status_out["write_errno"], errno.EIO)
+
+                        primary_receipt = getattr(
+                            expected_primary, "published_receipt", None
+                        )
+                        interrupt_receipt = getattr(
+                            escaped_int, "published_receipt", None
+                        )
+                        status_receipt = status_out.get("published_receipt")
+                        self.assertIsInstance(primary_receipt, Mapping)
+                        self.assertIsInstance(interrupt_receipt, Mapping)
+                        self.assertIsInstance(status_receipt, Mapping)
+                        assert isinstance(primary_receipt, Mapping)
+                        assert isinstance(interrupt_receipt, Mapping)
+                        assert isinstance(status_receipt, Mapping)
+
+                        for rec_carrier in (
+                            primary_receipt,
+                            interrupt_receipt,
+                            status_receipt,
+                        ):
+                            self.assertIsNone(rec_carrier["path"])
+                            self.assertEqual(
+                                rec_carrier["intended_lexical_path"],
+                                str(target_path),
+                            )
+                            self.assertEqual(
+                                rec_carrier["target_name"], target_name
+                            )
+                            self.assertIs(
+                                rec_carrier["published_link_created"], True
+                            )
+                            self.assertIs(
+                                rec_carrier["readback_verified"], False
+                            )
+                            self.assertIs(
+                                rec_carrier[
+                                    "post_publication_namespace_verified"
+                                ],
+                                False,
+                            )
+                            self.assertIsNone(
+                                rec_carrier["available_at_lexical_path"]
+                            )
+                            self.assertIsNone(
+                                rec_carrier["lexical_path_currently_bound"]
+                            )
+                            self.assertIsNone(
+                                rec_carrier["detached_from_lexical_path"]
+                            )
+                            self.assertIsNone(rec_carrier["sha256"])
+                            self.assertIsNone(rec_carrier["size_bytes"])
+                            self.assertEqual(
+                                rec_carrier["expected_sha256"], expected_sha256
+                            )
+                            self.assertEqual(
+                                rec_carrier["expected_size_bytes"],
+                                expected_size,
+                            )
+                            self.assertIsNone(rec_carrier["dev"])
+                            self.assertIsNone(rec_carrier["ino"])
+                            self.assertEqual(
+                                (
+                                    rec_carrier["source_tmp_dev"],
+                                    rec_carrier["source_tmp_ino"],
+                                ),
+                                (exp_tmp_dev, exp_tmp_ino),
+                            )
+                            self.assertEqual(
+                                (
+                                    rec_carrier["parent_dir_dev"],
+                                    rec_carrier["parent_dir_ino"],
+                                ),
+                                expected_parent_identity,
+                            )
+                            self.assertEqual(
+                                (
+                                    rec_carrier["dir_dev"],
+                                    rec_carrier["dir_ino"],
+                                ),
+                                expected_parent_identity,
+                            )
+                            self.assertEqual(
+                                rec_carrier["failure_phase"],
+                                "post_link_readback",
+                            )
+                            self.assertEqual(
+                                rec_carrier["readback_error"],
+                                f"{type(expected_primary).__name__}: {expected_primary}",
+                            )
+                            self.assertIsNone(
+                                rec_carrier["namespace_binding_error"]
+                            )
+                            self.assertIs(
+                                rec_carrier["temp_cleanup_succeeded"], False
+                            )
+                            self.assertEqual(
+                                rec_carrier["temp_handling_policy"],
+                                onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+                            )
+                            self.assertIsNone(
+                                rec_carrier["temp_handling_succeeded"]
+                            )
+                            self.assertIsNone(
+                                rec_carrier["temp_handling_disposition"]
+                            )
+                            self.assertIs(
+                                onesar_refmac._is_json_temp_handling_satisfied(
+                                    rec_carrier,
+                                    legacy_missing_receipt_default=True,
+                                ),
+                                False,
+                            )
+                            if (
+                                scenario
+                                == "readback_open_eio_then_final_stat_interrupt"
+                            ):
+                                self.assertIsNone(
+                                    rec_carrier["observed_target_dev"]
+                                )
+                                self.assertIsNone(
+                                    rec_carrier["observed_target_ino"]
+                                )
+                                self.assertIsNone(
+                                    rec_carrier["observed_readback_sha256"]
+                                )
+                                self.assertIsNone(
+                                    rec_carrier["observed_readback_size_bytes"]
+                                )
+                                self.assertIs(
+                                    rec_carrier["observed_readback_eof"], False
+                                )
+                                self.assertIs(
+                                    rec_carrier["readback_close_attempted"],
+                                    False,
+                                )
+                                self.assertIsNone(
+                                    rec_carrier["readback_close_succeeded"]
+                                )
+                            else:
+                                self.assertEqual(
+                                    (
+                                        rec_carrier["observed_target_dev"],
+                                        rec_carrier["observed_target_ino"],
+                                    ),
+                                    (exp_tmp_dev, exp_tmp_ino),
+                                )
+                                self.assertEqual(
+                                    rec_carrier["observed_readback_sha256"],
+                                    prefix_sha256,
+                                )
+                                self.assertEqual(
+                                    rec_carrier["observed_readback_size_bytes"],
+                                    prefix_len,
+                                )
+                                self.assertIs(
+                                    rec_carrier["observed_readback_eof"], False
+                                )
+                                self.assertIs(
+                                    rec_carrier["readback_close_attempted"],
+                                    True,
+                                )
+                                if (
+                                    scenario
+                                    == "partial_read_eio_plus_readback_close_eacces_then_interrupt"
+                                ):
+                                    self.assertIs(
+                                        rec_carrier["readback_close_succeeded"],
+                                        False,
+                                    )
+                                    self.assertEqual(
+                                        rec_carrier[
+                                            "cleanup_close_exception_type"
+                                        ],
+                                        "PermissionError",
+                                    )
+                                    self.assertEqual(
+                                        rec_carrier["cleanup_close_errno"],
+                                        errno.EACCES,
+                                    )
+                                else:
+                                    self.assertIs(
+                                        rec_carrier["readback_close_succeeded"],
+                                        True,
+                                    )
+
+                        for status_carrier in (
+                            getattr(
+                                expected_primary, "temp_cleanup_status", None
+                            ),
+                            getattr(escaped_int, "temp_cleanup_status", None),
+                            status_out.get("temp_cleanup_status"),
+                            primary_receipt.get("temp_cleanup_status"),
+                            interrupt_receipt.get("temp_cleanup_status"),
+                            status_receipt.get("temp_cleanup_status"),
+                        ):
+                            self.assertIsInstance(status_carrier, Mapping)
+                            assert isinstance(status_carrier, Mapping)
+                            self.assertEqual(
+                                status_carrier["temp_name"], tmp_name
+                            )
+                            self.assertEqual(
+                                status_carrier["target_name"], target_name
+                            )
+                            self.assertIs(
+                                status_carrier["published_link_created"], True
+                            )
+                            self.assertIs(
+                                status_carrier["readback_verified"], False
+                            )
+                            self.assertIs(
+                                status_carrier["temp_identity_known"], True
+                            )
+                            self.assertEqual(
+                                status_carrier["temp_handling_policy"],
+                                onesar_refmac.JSON_TEMP_HANDLING_POLICY_RETAIN_V1,
+                            )
+                            self.assertIsNone(
+                                status_carrier["temp_handling_succeeded"]
+                            )
+                            self.assertIsNone(
+                                status_carrier["temp_handling_disposition"]
+                            )
+                            self.assertEqual(
+                                status_carrier["temp_observation_phase"],
+                                "post_link_stat",
+                            )
+                            self.assertIs(
+                                status_carrier["post_link_temp_observed"],
+                                False,
+                            )
+                            self.assertIs(
+                                status_carrier["final_cleanup_temp_observed"],
+                                False,
+                            )
+                            self.assertIsNone(
+                                status_carrier["observed_temp_present"]
+                            )
+                            self.assertIsNone(
+                                status_carrier["temp_present_after_cleanup"]
+                            )
+                            self.assertIs(
+                                status_carrier["unlink_attempted"], False
+                            )
+                            self.assertEqual(
+                                status_carrier["unlink_attempt_count"], 0
+                            )
+                            self.assertIs(status_carrier["unlinked"], False)
+                            self.assertIs(
+                                status_carrier["cleanup_verified"], False
+                            )
+                            self.assertEqual(
+                                (
+                                    status_carrier["expected_temp_dev"],
+                                    status_carrier["expected_temp_ino"],
+                                ),
+                                (exp_tmp_dev, exp_tmp_ino),
+                            )
+                            self.assertIsNone(
+                                status_carrier["observed_temp_dev"]
+                            )
+                            self.assertIsNone(
+                                status_carrier["observed_temp_ino"]
+                            )
+                            self.assertEqual(
+                                status_carrier["errno"], errno.EIO
+                            )
+                            self.assertEqual(
+                                status_carrier["errors"],
+                                [
+                                    {
+                                        "attempt": 1,
+                                        "phase": "post_link_stat",
+                                        "exception_type": "OSError",
+                                        "exception_message": str(
+                                            post_link_stat_eio
+                                        ),
+                                        "errno": errno.EIO,
+                                    }
+                                ],
+                            )
+                            self.assertIs(
+                                onesar_refmac._is_json_temp_status_handling_satisfied(
+                                    status_carrier,
+                                    legacy_missing_unlinked_default=True,
+                                ),
+                                False,
+                            )
+
+                        for exc_carrier in (expected_primary, escaped_int):
+                            self.assertEqual(
+                                getattr(
+                                    exc_carrier, "temp_cleanup_errors", None
+                                ),
+                                [post_link_stat_eio],
+                            )
+                            self.assertIs(
+                                getattr(
+                                    exc_carrier, "temp_cleanup_error", None
+                                ),
+                                post_link_stat_eio,
+                            )
+
+                        if (
+                            scenario
+                            == "partial_read_eio_then_interrupt_plus_parent_dir_close_eio"
+                        ):
+                            self.assertIs(
+                                status_out["identity_verified"], False
+                            )
+                            self.assertIs(
+                                status_out["writable_post_run"], False
+                            )
+                            self.assertEqual(
+                                status_out["directory_close_errno"], errno.EIO
+                            )
+                            self.assertEqual(
+                                status_out["descriptor_close_errno"],
+                                errno.EIO,
+                            )
+                            self.assertIs(
+                                getattr(
+                                    escaped_int, "directory_close_error", None
+                                ),
+                                parent_close_eio,
+                            )
+                            self.assertIs(
+                                getattr(
+                                    escaped_int, "parent_close_error", None
+                                ),
+                                parent_close_eio,
+                            )
+                            self.assertIsNone(
+                                getattr(
+                                    readback_eio,
+                                    "directory_close_error",
+                                    None,
+                                )
+                            )
+                            self.assertNotIn(
+                                "parent_close_attempted", primary_receipt
+                            )
+                            self.assertIsNone(
+                                primary_receipt["cleanup_close_error"]
+                            )
+                            for enriched_rec in (
+                                interrupt_receipt,
+                                status_receipt,
+                            ):
+                                self.assertIs(
+                                    enriched_rec["parent_close_attempted"],
+                                    True,
+                                )
+                                self.assertIs(
+                                    enriched_rec["parent_close_succeeded"],
+                                    False,
+                                )
+                                self.assertEqual(
+                                    enriched_rec["parent_close_errno"],
+                                    errno.EIO,
+                                )
+                                self.assertEqual(
+                                    enriched_rec["directory_close_errno"],
+                                    errno.EIO,
+                                )
+                                self.assertEqual(
+                                    enriched_rec["cleanup_close_errno"],
+                                    errno.EIO,
+                                )
+                        else:
+                            self.assertIs(status_out["identity_verified"], True)
+                            self.assertIs(status_out["writable_post_run"], True)
+                            self.assertIs(
+                                status_out["descriptor"]["close_attempted"],
+                                True,
+                            )
+                            self.assertIs(
+                                status_out["descriptor"]["close_succeeded"],
+                                True,
+                            )
+                            self.assertEqual(
+                                dict(primary_receipt), dict(interrupt_receipt)
+                            )
+                            self.assertEqual(
+                                dict(primary_receipt), dict(status_receipt)
+                            )
+                    finally:
+                        for tracked_fd, tracked_ident in reversed(
+                            tracked_descriptors
+                        ):
+                            if tracked_fd == sentinel_fd:
+                                continue
+                            try:
+                                live_st = real_fstat(tracked_fd)
+                            except OSError:
+                                continue
+                            if (
+                                int(live_st.st_dev),
+                                int(live_st.st_ino),
+                            ) == tracked_ident:
+                                try:
+                                    real_close(tracked_fd)
+                                except OSError:
+                                    pass
+                        real_close(sentinel_fd)
+
+    def test_direct_text_writer_retains_owned_and_foreign_entries(self) -> None:
+        """Direct text writer (_write_new_regular_file_text) retains owned partial/created and foreign entries across failures (#1045)."""
+        pid = os.getpid()
+        real_open = os.open
+        real_write = os.write
+        real_fsync = os.fsync
+        real_close = os.close
+        real_fstat = os.fstat
+        real_lstat = os.lstat
+        real_replace = os.replace
+        real_unlink = os.unlink
+        real_remove = os.remove
+        real_path_unlink = Path.unlink
+
+        suite_root = (
+            self.repo_root / "runs" / f"case_direct_text_retention_{pid}"
+        )
+        suite_root.mkdir(parents=True, exist_ok=True)
+
+        def _assert_fd_closed(fd: int) -> None:
+            with self.assertRaises(OSError) as ebadf_cm:
+                real_fstat(fd)
+            self.assertEqual(ebadf_cm.exception.errno, errno.EBADF)
+
+        def _cleanup_tracked_fds(
+            tracked: Sequence[tuple[int, tuple[int, int]]],
+        ) -> None:
+            for tracked_fd, tracked_ident in reversed(tracked):
+                try:
+                    live_st = real_fstat(tracked_fd)
+                except OSError:
+                    continue
+                if (
+                    int(live_st.st_dev),
+                    int(live_st.st_ino),
+                ) == tracked_ident:
+                    try:
+                        real_close(tracked_fd)
+                    except OSError:
+                        pass
+
+        def _write_raw_file(path: Path, data: bytes) -> tuple[int, int]:
+            flags = (
+                os.O_WRONLY
+                | os.O_CREAT
+                | os.O_EXCL
+                | getattr(os, "O_NOFOLLOW", 0)
+                | getattr(os, "O_CLOEXEC", 0)
+            )
+            fd = real_open(path, flags, 0o644)
+            try:
+                view = memoryview(data)
+                off = 0
+                while off < len(view):
+                    n = real_write(fd, view[off:])
+                    if n <= 0:
+                        raise OSError(errno.EIO, "helper write failed")
+                    off += n
+                st_obj = real_fstat(fd)
+                return (int(st_obj.st_dev), int(st_obj.st_ino))
+            finally:
+                real_close(fd)
+
+        def _make_deletion_spies(
+            owned_root: Path, unlink_events: list[tuple[str, str]]
+        ) -> tuple[Callable[..., None], Callable[..., None], Callable[..., None]]:
+            owned_root_str = os.path.abspath(os.fspath(owned_root))
+
+            def _is_owned(p: Any) -> tuple[bool, str]:
+                try:
+                    p_str = os.path.abspath(os.fsdecode(os.fspath(p)))
+                except Exception:
+                    return (False, repr(p))
+                return (
+                    p_str == owned_root_str
+                    or p_str.startswith(owned_root_str + os.sep),
+                    p_str,
+                )
+
+            def _spy_unlink(
+                path: Any, *, dir_fd: int | None = None
+            ) -> None:
+                is_owned, p_str = _is_owned(path)
+                if is_owned or dir_fd is not None:
+                    unlink_events.append(("os.unlink", p_str))
+                if dir_fd is not None:
+                    real_unlink(path, dir_fd=dir_fd)
+                else:
+                    real_unlink(path)
+
+            def _spy_remove(path: Any) -> None:
+                is_owned, p_str = _is_owned(path)
+                if is_owned:
+                    unlink_events.append(("os.remove", p_str))
+                real_remove(path)
+
+            def _spy_path_unlink(
+                self_path: Path, missing_ok: bool = False
+            ) -> None:
+                is_owned, p_str = _is_owned(self_path)
+                if is_owned:
+                    unlink_events.append(("Path.unlink", p_str))
+                real_path_unlink(self_path, missing_ok=missing_ok)
+
+            return _spy_unlink, _spy_remove, _spy_path_unlink
+
+        # 1. Cross-version historical sensitivity witness: fsync renames original
+        # leaf to owned parked path, creates a distinct foreign marker at the
+        # original path, and raises exact EIO. Kept independent of new-only
+        # os.write/os.close hooks or O_CLOEXEC assertions so both historical
+        # os.fdopen and explicit-descriptor implementations reach creation,
+        # write, and fsync before testing foreign-marker retention.
+        with self.subTest(
+            scenario="fsync_leaf_replacement_foreign_marker_retained"
+        ):
+            sub_root = suite_root / "s1_fsync_foreign_marker"
+            sub_root.mkdir(parents=True, exist_ok=True)
+            target_path = sub_root / "refmac_keywords.txt"
+            parked_orig_path = sub_root / "refmac_keywords.parked_orig.txt"
+            orig_text = "NCYC 0\nLABIN FP=F-obs SIGFP=SIGF-obs FREE=R-free-flags\nEND\n"
+            orig_bytes = orig_text.encode("utf-8")
+            foreign_bytes = b"FOREIGN MARKER AT ORIGINAL PATH DO NOT UNLINK\n"
+            fsync_eio = OSError(
+                errno.EIO,
+                "simulated fsync EIO after leaf replacement",
+                str(target_path),
+            )
+
+            open_events: list[tuple[Path, int, int, int, tuple[int, int]]] = []
+            fsync_events: list[tuple[int, tuple[int, int], tuple[int, int]]] = []
+            unlink_events: list[tuple[str, str]] = []
+            tracked_fds: list[tuple[int, tuple[int, int]]] = []
+
+            def _open_s1(
+                path: Any,
+                flags: int,
+                mode: int = 0o777,
+                *,
+                dir_fd: int | None = None,
+            ) -> int:
+                fd = (
+                    real_open(path, flags, mode, dir_fd=dir_fd)
+                    if dir_fd is not None
+                    else real_open(path, flags, mode)
+                )
+                if dir_fd is None and Path(os.fsdecode(path)) == target_path:
+                    st_obj = real_fstat(fd)
+                    ident = (int(st_obj.st_dev), int(st_obj.st_ino))
+                    open_events.append(
+                        (
+                            Path(os.fsdecode(path)),
+                            int(flags),
+                            int(mode),
+                            fd,
+                            ident,
+                        )
+                    )
+                    tracked_fds.append((fd, ident))
+                return fd
+
+            def _fsync_s1(fd: int) -> None:
+                if open_events and fd == open_events[0][3]:
+                    expected_ident = open_events[0][4]
+                    fd_st_now = real_fstat(fd)
+                    self.assertEqual(
+                        (int(fd_st_now.st_dev), int(fd_st_now.st_ino)),
+                        expected_ident,
+                    )
+                    self.assertEqual(int(fd_st_now.st_size), len(orig_bytes))
+                    try:
+                        real_fsync(fd)
+                    except OSError as exc:
+                        if exc.errno not in (errno.EINVAL, errno.ENOTSUP):
+                            raise
+                    real_replace(target_path, parked_orig_path)
+                    foreign_ident = _write_raw_file(target_path, foreign_bytes)
+                    self.assertNotEqual(foreign_ident, expected_ident)
+                    fsync_events.append((fd, expected_ident, foreign_ident))
+                    raise fsync_eio
+                real_fsync(fd)
+
+            spy_unlink, spy_remove, spy_path_unlink = _make_deletion_spies(
+                sub_root, unlink_events
+            )
+            try:
+                with (
+                    patch.object(onesar_refmac.os, "open", _open_s1),
+                    patch.object(onesar_refmac.os, "fsync", _fsync_s1),
+                    patch.object(onesar_refmac.os, "unlink", spy_unlink),
+                    patch.object(onesar_refmac.os, "remove", spy_remove),
+                    patch.object(Path, "unlink", spy_path_unlink),
+                ):
+                    with self.assertRaises(OSError) as cm_s1:
+                        onesar_refmac._write_new_regular_file_text(
+                            target_path, orig_text, root=sub_root
+                        )
+
+                self.assertEqual(len(open_events), 1)
+                self.assertEqual(len(fsync_events), 1)
+                opened_path, req_flags, req_mode, opened_fd, orig_ident = (
+                    open_events[0]
+                )
+                _, recorded_orig_ident, foreign_ident = fsync_events[0]
+                self.assertEqual(opened_path, target_path)
+                self.assertEqual(req_mode, 0o644)
+                base_expected_flags = (
+                    os.O_WRONLY
+                    | os.O_CREAT
+                    | os.O_EXCL
+                    | getattr(os, "O_NOFOLLOW", 0)
+                )
+                self.assertEqual(
+                    req_flags & base_expected_flags, base_expected_flags
+                )
+                self.assertEqual(recorded_orig_ident, orig_ident)
+                self.assertIs(cm_s1.exception, fsync_eio)
+                _assert_fd_closed(opened_fd)
+
+                parked_st = real_lstat(parked_orig_path)
+                self.assertTrue(stat.S_ISREG(parked_st.st_mode))
+                self.assertFalse(stat.S_ISLNK(parked_st.st_mode))
+                self.assertEqual(
+                    (int(parked_st.st_dev), int(parked_st.st_ino)), orig_ident
+                )
+                self.assertEqual(parked_orig_path.read_bytes(), orig_bytes)
+
+                self.assertEqual(unlink_events, [])
+                self.assertTrue(os.path.lexists(target_path))
+                foreign_st = real_lstat(target_path)
+                self.assertTrue(stat.S_ISREG(foreign_st.st_mode))
+                self.assertFalse(stat.S_ISLNK(foreign_st.st_mode))
+                self.assertEqual(
+                    (int(foreign_st.st_dev), int(foreign_st.st_ino)),
+                    foreign_ident,
+                )
+                self.assertEqual(target_path.read_bytes(), foreign_bytes)
+            finally:
+                _cleanup_tracked_fds(tracked_fds)
+
+        # 2. Healthy ASCII, non-ASCII UTF-8, and empty content: exact bytes,
+        # SHA-256, size_bytes, original 3-key receipt shape, requested mode
+        # 0o644 and O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW|O_CLOEXEC flags, and
+        # descriptor closure.
+        with self.subTest(scenario="healthy_ascii_non_ascii_and_empty"):
+            sub_root = suite_root / "s2_healthy_variants"
+            sub_root.mkdir(parents=True, exist_ok=True)
+            cases = (
+                ("ascii_keywords.txt", "NCYC 0\nEND\n"),
+                (
+                    "non_ascii_utf8.txt",
+                    "REMARK αβγ — Ångström café 雪\nEND\n",
+                ),
+                ("empty_content.txt", ""),
+            )
+            for fname, text_val in cases:
+                target_path = sub_root / fname
+                expected_bytes = text_val.encode("utf-8")
+                expected_sha = _sha256_bytes(expected_bytes)
+                open_events = []
+                write_events: list[tuple[int, int, int]] = []
+                fsync_events_fd: list[int] = []
+                close_events_fd: list[int] = []
+                unlink_events = []
+                tracked_fds = []
+
+                def _open_s2(
+                    path: Any,
+                    flags: int,
+                    mode: int = 0o777,
+                    *,
+                    dir_fd: int | None = None,
+                ) -> int:
+                    fd = (
+                        real_open(path, flags, mode, dir_fd=dir_fd)
+                        if dir_fd is not None
+                        else real_open(path, flags, mode)
+                    )
+                    if (
+                        dir_fd is None
+                        and Path(os.fsdecode(path)) == target_path
+                    ):
+                        st_obj = real_fstat(fd)
+                        ident = (int(st_obj.st_dev), int(st_obj.st_ino))
+                        open_events.append(
+                            (
+                                Path(os.fsdecode(path)),
+                                int(flags),
+                                int(mode),
+                                fd,
+                                ident,
+                            )
+                        )
+                        tracked_fds.append((fd, ident))
+                    return fd
+
+                def _write_s2(fd: int, data: Any) -> int:
+                    n = real_write(fd, data)
+                    if open_events and fd == open_events[0][3]:
+                        write_events.append((fd, len(memoryview(data)), n))
+                    return n
+
+                def _fsync_s2(fd: int) -> None:
+                    if open_events and fd == open_events[0][3]:
+                        fsync_events_fd.append(fd)
+                    try:
+                        real_fsync(fd)
+                    except OSError as exc:
+                        if exc.errno not in (errno.EINVAL, errno.ENOTSUP):
+                            raise
+
+                def _close_s2(fd: int) -> None:
+                    if open_events and fd == open_events[0][3]:
+                        close_events_fd.append(fd)
+                    real_close(fd)
+
+                spy_unlink, spy_remove, spy_path_unlink = _make_deletion_spies(
+                    sub_root, unlink_events
+                )
+                try:
+                    with (
+                        patch.object(onesar_refmac.os, "open", _open_s2),
+                        patch.object(onesar_refmac.os, "write", _write_s2),
+                        patch.object(onesar_refmac.os, "fsync", _fsync_s2),
+                        patch.object(onesar_refmac.os, "close", _close_s2),
+                        patch.object(onesar_refmac.os, "unlink", spy_unlink),
+                        patch.object(onesar_refmac.os, "remove", spy_remove),
+                        patch.object(Path, "unlink", spy_path_unlink),
+                    ):
+                        receipt = onesar_refmac._write_new_regular_file_text(
+                            target_path, text_val, root=sub_root
+                        )
+
+                    self.assertEqual(len(open_events), 1)
+                    self.assertEqual(len(fsync_events_fd), 1)
+                    self.assertEqual(len(close_events_fd), 1)
+                    self.assertEqual(unlink_events, [])
+                    if expected_bytes:
+                        self.assertGreaterEqual(len(write_events), 1)
+                        self.assertEqual(
+                            sum(w[2] for w in write_events),
+                            len(expected_bytes),
+                        )
+                    else:
+                        self.assertEqual(write_events, [])
+
+                    opened_path, req_flags, req_mode, opened_fd, orig_ident = (
+                        open_events[0]
+                    )
+                    self.assertEqual(opened_path, target_path)
+                    self.assertEqual(req_mode, 0o644)
+                    expected_flags = (
+                        os.O_WRONLY
+                        | os.O_CREAT
+                        | os.O_EXCL
+                        | getattr(os, "O_NOFOLLOW", 0)
+                        | getattr(os, "O_CLOEXEC", 0)
+                    )
+                    self.assertEqual(
+                        req_flags & expected_flags, expected_flags
+                    )
+                    self.assertEqual(fsync_events_fd[0], opened_fd)
+                    self.assertEqual(close_events_fd[0], opened_fd)
+                    _assert_fd_closed(opened_fd)
+
+                    self.assertEqual(
+                        set(receipt.keys()), {"path", "sha256", "size_bytes"}
+                    )
+                    self.assertEqual(
+                        receipt,
+                        {
+                            "path": str(target_path),
+                            "sha256": expected_sha,
+                            "size_bytes": len(expected_bytes),
+                        },
+                    )
+                    final_st = real_lstat(target_path)
+                    self.assertTrue(stat.S_ISREG(final_st.st_mode))
+                    self.assertFalse(stat.S_ISLNK(final_st.st_mode))
+                    self.assertEqual(
+                        (int(final_st.st_dev), int(final_st.st_ino)),
+                        orig_ident,
+                    )
+                    self.assertEqual(
+                        int(final_st.st_size), len(expected_bytes)
+                    )
+                    self.assertEqual(target_path.read_bytes(), expected_bytes)
+                finally:
+                    _cleanup_tracked_fds(tracked_fds)
+
+        # 3. Preexisting regular, symlink, dangling symlink, hardlink, and
+        # race-to-O_EXCL entries refuse with FileExistsError without opening
+        # for mutation or unlinking; exact bytes and inodes are preserved.
+        with self.subTest(
+            scenario="preexisting_entries_refused_without_mutation"
+        ):
+            sub_root = suite_root / "s3_preexisting_entries"
+            sub_root.mkdir(parents=True, exist_ok=True)
+
+            reg_path = sub_root / "preexisting_regular.txt"
+            reg_bytes = b"PREEXISTING REGULAR CONTENT\n"
+            reg_ident = _write_raw_file(reg_path, reg_bytes)
+
+            sym_target = sub_root / "symlink_target.txt"
+            sym_target_bytes = b"SYMLINK TARGET CONTENT\n"
+            sym_target_ident = _write_raw_file(sym_target, sym_target_bytes)
+            live_sym = sub_root / "preexisting_live_symlink.txt"
+            os.symlink(sym_target.name, live_sym)
+            live_sym_st = real_lstat(live_sym)
+            live_sym_ident = (
+                int(live_sym_st.st_dev),
+                int(live_sym_st.st_ino),
+            )
+
+            dangling_sym = sub_root / "preexisting_dangling_symlink.txt"
+            os.symlink("missing_dangling_target.txt", dangling_sym)
+            dangling_st = real_lstat(dangling_sym)
+            dangling_ident = (
+                int(dangling_st.st_dev),
+                int(dangling_st.st_ino),
+            )
+
+            hl_source = sub_root / "hardlink_source.txt"
+            hl_bytes = b"SHARED HARDLINK CONTENT\n"
+            hl_ident = _write_raw_file(hl_source, hl_bytes)
+            hl_entry = sub_root / "preexisting_hardlink.txt"
+            os.link(hl_source, hl_entry)
+            self.assertEqual(real_lstat(hl_entry).st_nlink, 2)
+
+            for candidate_path in (
+                reg_path,
+                live_sym,
+                dangling_sym,
+                hl_entry,
+            ):
+                open_Write_attempts: list[Path] = []
+                write_attempts: list[int] = []
+                unlink_events = []
+
+                def _open_s3(
+                    path: Any,
+                    flags: int,
+                    mode: int = 0o777,
+                    *,
+                    dir_fd: int | None = None,
+                ) -> int:
+                    if dir_fd is None and Path(os.fsdecode(path)) == candidate_path:
+                        open_Write_attempts.append(Path(os.fsdecode(path)))
+                    return (
+                        real_open(path, flags, mode, dir_fd=dir_fd)
+                        if dir_fd is not None
+                        else real_open(path, flags, mode)
+                    )
+
+                def _write_s3(fd: int, data: Any) -> int:
+                    write_attempts.append(fd)
+                    return real_write(fd, data)
+
+                spy_unlink, spy_remove, spy_path_unlink = _make_deletion_spies(
+                    sub_root, unlink_events
+                )
+                with (
+                    patch.object(onesar_refmac.os, "open", _open_s3),
+                    patch.object(onesar_refmac.os, "write", _write_s3),
+                    patch.object(onesar_refmac.os, "unlink", spy_unlink),
+                    patch.object(onesar_refmac.os, "remove", spy_remove),
+                    patch.object(Path, "unlink", spy_path_unlink),
+                ):
+                    with self.assertRaises(FileExistsError):
+                        onesar_refmac._write_new_regular_file_text(
+                            candidate_path,
+                            "ATTEMPTED OVERWRITE\n",
+                            root=sub_root,
+                        )
+
+                self.assertEqual(open_Write_attempts, [])
+                self.assertEqual(write_attempts, [])
+                self.assertEqual(unlink_events, [])
+
+            # Also verify O_EXCL kernel refusal when leaf appears between pre-open lstat and os.open.
+            race_path = sub_root / "race_created_before_open.txt"
+            race_bytes = b"RACE CREATED REGULAR BYTES\n"
+            race_ident_holder: list[tuple[int, int]] = []
+            race_open_calls: list[int] = []
+            unlink_events = []
+
+            def _open_race(
+                path: Any,
+                flags: int,
+                mode: int = 0o777,
+                *,
+                dir_fd: int | None = None,
+            ) -> int:
+                if (
+                    dir_fd is None
+                    and Path(os.fsdecode(path)) == race_path
+                    and not race_ident_holder
+                ):
+                    race_ident_holder.append(
+                        _write_raw_file(race_path, race_bytes)
+                    )
+                    race_open_calls.append(int(flags))
+                return (
+                    real_open(path, flags, mode, dir_fd=dir_fd)
+                    if dir_fd is not None
+                    else real_open(path, flags, mode)
+                )
+
+            spy_unlink, spy_remove, spy_path_unlink = _make_deletion_spies(
+                sub_root, unlink_events
+            )
+            with (
+                patch.object(onesar_refmac.os, "open", _open_race),
+                patch.object(onesar_refmac.os, "unlink", spy_unlink),
+                patch.object(onesar_refmac.os, "remove", spy_remove),
+                patch.object(Path, "unlink", spy_path_unlink),
+            ):
+                with self.assertRaises(FileExistsError):
+                    onesar_refmac._write_new_regular_file_text(
+                        race_path, "ATTEMPTED RACE WRITE\n", root=sub_root
+                    )
+            self.assertEqual(len(race_open_calls), 1)
+            self.assertEqual(unlink_events, [])
+            race_st = real_lstat(race_path)
+            self.assertEqual(
+                (int(race_st.st_dev), int(race_st.st_ino)),
+                race_ident_holder[0],
+            )
+            self.assertEqual(race_path.read_bytes(), race_bytes)
+
+            # Verify all preexisting entries retain exact inodes, link counts, targets, and bytes.
+            reg_after = real_lstat(reg_path)
+            self.assertEqual(
+                (int(reg_after.st_dev), int(reg_after.st_ino)), reg_ident
+            )
+            self.assertEqual(reg_path.read_bytes(), reg_bytes)
+
+            sym_after = real_lstat(live_sym)
+            self.assertTrue(stat.S_ISLNK(sym_after.st_mode))
+            self.assertEqual(
+                (int(sym_after.st_dev), int(sym_after.st_ino)), live_sym_ident
+            )
+            self.assertEqual(os.readlink(live_sym), sym_target.name)
+            sym_t_after = real_lstat(sym_target)
+            self.assertEqual(
+                (int(sym_t_after.st_dev), int(sym_t_after.st_ino)),
+                sym_target_ident,
+            )
+            self.assertEqual(sym_target.read_bytes(), sym_target_bytes)
+
+            dang_after = real_lstat(dangling_sym)
+            self.assertTrue(stat.S_ISLNK(dang_after.st_mode))
+            self.assertEqual(
+                (int(dang_after.st_dev), int(dang_after.st_ino)),
+                dangling_ident,
+            )
+            self.assertEqual(
+                os.readlink(dangling_sym), "missing_dangling_target.txt"
+            )
+            self.assertFalse(
+                os.path.lexists(sub_root / "missing_dangling_target.txt")
+            )
+
+            hl_after = real_lstat(hl_entry)
+            hl_src_after = real_lstat(hl_source)
+            self.assertEqual(
+                (int(hl_after.st_dev), int(hl_after.st_ino)), hl_ident
+            )
+            self.assertEqual(
+                (int(hl_src_after.st_dev), int(hl_src_after.st_ino)), hl_ident
+            )
+            self.assertEqual(hl_after.st_nlink, 2)
+            self.assertEqual(hl_entry.read_bytes(), hl_bytes)
+            self.assertEqual(hl_source.read_bytes(), hl_bytes)
+
+        # 4. Owned partial os.write (chunked completion, partial write then EIO,
+        # and no-progress 0 return).
+        with self.subTest(
+            scenario="partial_write_then_eio_and_no_progress_write"
+        ):
+            sub_root = suite_root / "s4_partial_and_no_progress_writes"
+            sub_root.mkdir(parents=True, exist_ok=True)
+
+            # 4a. Multi-chunk partial os.write that completes cleanly.
+            chunked_path = sub_root / "chunked_complete.txt"
+            chunked_text = "NCYC 0\nREFMAC CHUNKED WRITE TEST\nEND\n"
+            chunked_bytes = chunked_text.encode("utf-8")
+            open_events = []
+            write_chunks: list[int] = []
+            close_events_fd = []
+            unlink_events = []
+            tracked_fds = []
+
+            def _open_s4a(
+                path: Any,
+                flags: int,
+                mode: int = 0o777,
+                *,
+                dir_fd: int | None = None,
+            ) -> int:
+                fd = (
+                    real_open(path, flags, mode, dir_fd=dir_fd)
+                    if dir_fd is not None
+                    else real_open(path, flags, mode)
+                )
+                if dir_fd is None and Path(os.fsdecode(path)) == chunked_path:
+                    st_obj = real_fstat(fd)
+                    ident = (int(st_obj.st_dev), int(st_obj.st_ino))
+                    open_events.append(
+                        (
+                            Path(os.fsdecode(path)),
+                            int(flags),
+                            int(mode),
+                            fd,
+                            ident,
+                        )
+                    )
+                    tracked_fds.append((fd, ident))
+                return fd
+
+            def _write_s4a(fd: int, data: Any) -> int:
+                if open_events and fd == open_events[0][3]:
+                    mv = memoryview(data)
+                    step = min(len(mv), 7)
+                    n = real_write(fd, mv[:step])
+                    write_chunks.append(n)
+                    return n
+                return real_write(fd, data)
+
+            def _close_s4a(fd: int) -> None:
+                if open_events and fd == open_events[0][3]:
+                    close_events_fd.append(fd)
+                real_close(fd)
+
+            spy_unlink, spy_remove, spy_path_unlink = _make_deletion_spies(
+                sub_root, unlink_events
+            )
+            try:
+                with (
+                    patch.object(onesar_refmac.os, "open", _open_s4a),
+                    patch.object(onesar_refmac.os, "write", _write_s4a),
+                    patch.object(onesar_refmac.os, "close", _close_s4a),
+                    patch.object(onesar_refmac.os, "unlink", spy_unlink),
+                    patch.object(onesar_refmac.os, "remove", spy_remove),
+                    patch.object(Path, "unlink", spy_path_unlink),
+                ):
+                    rec_4a = onesar_refmac._write_new_regular_file_text(
+                        chunked_path, chunked_text, root=sub_root
+                    )
+                self.assertEqual(len(open_events), 1)
+                self.assertGreater(len(write_chunks), 3)
+                self.assertEqual(sum(write_chunks), len(chunked_bytes))
+                self.assertEqual(len(close_events_fd), 1)
+                self.assertEqual(unlink_events, [])
+                _assert_fd_closed(open_events[0][3])
+                self.assertEqual(
+                    rec_4a,
+                    {
+                        "path": str(chunked_path),
+                        "sha256": _sha256_bytes(chunked_bytes),
+                        "size_bytes": len(chunked_bytes),
+                    },
+                )
+            finally:
+                _cleanup_tracked_fds(tracked_fds)
+
+            # 4b. Owned partial os.write followed by EIO preserves partial bytes,
+            # original error identity, and fd closure without unlink.
+            partial_path = sub_root / "partial_then_eio.txt"
+            partial_text = "NCYC 0\nPARTIAL WRITE BEFORE EIO\nEND\n"
+            partial_full_bytes = partial_text.encode("utf-8")
+            write_eio = OSError(
+                errno.EIO,
+                "simulated EIO on second os.write",
+                str(partial_path),
+            )
+            open_events = []
+            write_call_count = 0
+            close_events_fd = []
+            unlink_events = []
+            tracked_fds = []
+
+            def _open_s4b(
+                path: Any,
+                flags: int,
+                mode: int = 0o777,
+                *,
+                dir_fd: int | None = None,
+            ) -> int:
+                fd = (
+                    real_open(path, flags, mode, dir_fd=dir_fd)
+                    if dir_fd is not None
+                    else real_open(path, flags, mode)
+                )
+                if dir_fd is None and Path(os.fsdecode(path)) == partial_path:
+                    st_obj = real_fstat(fd)
+                    ident = (int(st_obj.st_dev), int(st_obj.st_ino))
+                    open_events.append(
+                        (
+                            Path(os.fsdecode(path)),
+                            int(flags),
+                            int(mode),
+                            fd,
+                            ident,
+                        )
+                    )
+                    tracked_fds.append((fd, ident))
+                return fd
+
+            def _write_s4b(fd: int, data: Any) -> int:
+                nonlocal write_call_count
+                if open_events and fd == open_events[0][3]:
+                    write_call_count += 1
+                    if write_call_count == 1:
+                        mv = memoryview(data)
+                        return real_write(fd, mv[:9])
+                    raise write_eio
+                return real_write(fd, data)
+
+            def _close_s4b(fd: int) -> None:
+                if open_events and fd == open_events[0][3]:
+                    close_events_fd.append(fd)
+                real_close(fd)
+
+            spy_unlink, spy_remove, spy_path_unlink = _make_deletion_spies(
+                sub_root, unlink_events
+            )
+            try:
+                with (
+                    patch.object(onesar_refmac.os, "open", _open_s4b),
+                    patch.object(onesar_refmac.os, "write", _write_s4b),
+                    patch.object(onesar_refmac.os, "close", _close_s4b),
+                    patch.object(onesar_refmac.os, "unlink", spy_unlink),
+                    patch.object(onesar_refmac.os, "remove", spy_remove),
+                    patch.object(Path, "unlink", spy_path_unlink),
+                ):
+                    with self.assertRaises(OSError) as cm_4b:
+                        onesar_refmac._write_new_regular_file_text(
+                            partial_path, partial_text, root=sub_root
+                        )
+
+                self.assertEqual(len(open_events), 1)
+                self.assertEqual(write_call_count, 2)
+                self.assertEqual(len(close_events_fd), 1)
+                self.assertEqual(unlink_events, [])
+                self.assertIs(cm_4b.exception, write_eio)
+                opened_fd = open_events[0][3]
+                orig_ident = open_events[0][4]
+                _assert_fd_closed(opened_fd)
+
+                st_4b = real_lstat(partial_path)
+                self.assertTrue(stat.S_ISREG(st_4b.st_mode))
+                self.assertEqual(
+                    (int(st_4b.st_dev), int(st_4b.st_ino)), orig_ident
+                )
+                self.assertEqual(
+                    partial_path.read_bytes(), partial_full_bytes[:9]
+                )
+            finally:
+                _cleanup_tracked_fds(tracked_fds)
+
+            # 4c. No-progress os.write (0 return) refuses without success receipt,
+            # retains partial prefix and inode, and closes fd.
+            zero_path = sub_root / "no_progress_zero_write.txt"
+            zero_text = "NCYC 0\nNO PROGRESS WRITE\nEND\n"
+            zero_full_bytes = zero_text.encode("utf-8")
+            open_events = []
+            zero_write_calls = 0
+            close_events_fd = []
+            unlink_events = []
+            tracked_fds = []
+
+            def _open_s4c(
+                path: Any,
+                flags: int,
+                mode: int = 0o777,
+                *,
+                dir_fd: int | None = None,
+            ) -> int:
+                fd = (
+                    real_open(path, flags, mode, dir_fd=dir_fd)
+                    if dir_fd is not None
+                    else real_open(path, flags, mode)
+                )
+                if dir_fd is None and Path(os.fsdecode(path)) == zero_path:
+                    st_obj = real_fstat(fd)
+                    ident = (int(st_obj.st_dev), int(st_obj.st_ino))
+                    open_events.append(
+                        (
+                            Path(os.fsdecode(path)),
+                            int(flags),
+                            int(mode),
+                            fd,
+                            ident,
+                        )
+                    )
+                    tracked_fds.append((fd, ident))
+                return fd
+
+            def _write_s4c(fd: int, data: Any) -> int:
+                nonlocal zero_write_calls
+                if open_events and fd == open_events[0][3]:
+                    zero_write_calls += 1
+                    if zero_write_calls == 1:
+                        mv = memoryview(data)
+                        return real_write(fd, mv[:5])
+                    return 0
+                return real_write(fd, data)
+
+            def _close_s4c(fd: int) -> None:
+                if open_events and fd == open_events[0][3]:
+                    close_events_fd.append(fd)
+                real_close(fd)
+
+            spy_unlink, spy_remove, spy_path_unlink = _make_deletion_spies(
+                sub_root, unlink_events
+            )
+            try:
+                with (
+                    patch.object(onesar_refmac.os, "open", _open_s4c),
+                    patch.object(onesar_refmac.os, "write", _write_s4c),
+                    patch.object(onesar_refmac.os, "close", _close_s4c),
+                    patch.object(onesar_refmac.os, "unlink", spy_unlink),
+                    patch.object(onesar_refmac.os, "remove", spy_remove),
+                    patch.object(Path, "unlink", spy_path_unlink),
+                ):
+                    with self.assertRaises(OSError) as cm_4c:
+                        onesar_refmac._write_new_regular_file_text(
+                            zero_path, zero_text, root=sub_root
+                        )
+
+                self.assertEqual(len(open_events), 1)
+                self.assertEqual(zero_write_calls, 2)
+                self.assertEqual(len(close_events_fd), 1)
+                self.assertEqual(unlink_events, [])
+                self.assertEqual(cm_4c.exception.errno, errno.EIO)
+                self.assertIn("no progress", str(cm_4c.exception))
+                opened_fd = open_events[0][3]
+                orig_ident = open_events[0][4]
+                _assert_fd_closed(opened_fd)
+
+                st_4c = real_lstat(zero_path)
+                self.assertEqual(
+                    (int(st_4c.st_dev), int(st_4c.st_ino)), orig_ident
+                )
+                self.assertEqual(zero_path.read_bytes(), zero_full_bytes[:5])
+            finally:
+                _cleanup_tracked_fds(tracked_fds)
+
+        # 5. Post-create KeyboardInterrupt retains created entry and exact
+        # interrupt object, and closes fd.
+        with self.subTest(
+            scenario="post_create_keyboard_interrupt_retains_entry_and_closes_fd"
+        ):
+            sub_root = suite_root / "s5_keyboard_interrupt"
+            sub_root.mkdir(parents=True, exist_ok=True)
+            ki_path = sub_root / "interrupted_keywords.txt"
+            ki_text = "NCYC 0\nINTERRUPTED WRITE\nEND\n"
+            ki_bytes = ki_text.encode("utf-8")
+            ki_exc = KeyboardInterrupt("simulated post-create interrupt")
+
+            open_events = []
+            ki_write_calls = 0
+            close_events_fd = []
+            unlink_events = []
+            tracked_fds = []
+
+            def _open_s5(
+                path: Any,
+                flags: int,
+                mode: int = 0o777,
+                *,
+                dir_fd: int | None = None,
+            ) -> int:
+                fd = (
+                    real_open(path, flags, mode, dir_fd=dir_fd)
+                    if dir_fd is not None
+                    else real_open(path, flags, mode)
+                )
+                if dir_fd is None and Path(os.fsdecode(path)) == ki_path:
+                    st_obj = real_fstat(fd)
+                    ident = (int(st_obj.st_dev), int(st_obj.st_ino))
+                    open_events.append(
+                        (
+                            Path(os.fsdecode(path)),
+                            int(flags),
+                            int(mode),
+                            fd,
+                            ident,
+                        )
+                    )
+                    tracked_fds.append((fd, ident))
+                return fd
+
+            def _write_s5(fd: int, data: Any) -> int:
+                nonlocal ki_write_calls
+                if open_events and fd == open_events[0][3]:
+                    ki_write_calls += 1
+                    if ki_write_calls == 1:
+                        mv = memoryview(data)
+                        return real_write(fd, mv[:6])
+                    raise ki_exc
+                return real_write(fd, data)
+
+            def _close_s5(fd: int) -> None:
+                if open_events and fd == open_events[0][3]:
+                    close_events_fd.append(fd)
+                real_close(fd)
+
+            spy_unlink, spy_remove, spy_path_unlink = _make_deletion_spies(
+                sub_root, unlink_events
+            )
+            try:
+                with (
+                    patch.object(onesar_refmac.os, "open", _open_s5),
+                    patch.object(onesar_refmac.os, "write", _write_s5),
+                    patch.object(onesar_refmac.os, "close", _close_s5),
+                    patch.object(onesar_refmac.os, "unlink", spy_unlink),
+                    patch.object(onesar_refmac.os, "remove", spy_remove),
+                    patch.object(Path, "unlink", spy_path_unlink),
+                ):
+                    with self.assertRaises(KeyboardInterrupt) as cm_s5:
+                        onesar_refmac._write_new_regular_file_text(
+                            ki_path, ki_text, root=sub_root
+                        )
+
+                self.assertEqual(len(open_events), 1)
+                self.assertEqual(ki_write_calls, 2)
+                self.assertEqual(len(close_events_fd), 1)
+                self.assertEqual(unlink_events, [])
+                self.assertIs(cm_s5.exception, ki_exc)
+                opened_fd = open_events[0][3]
+                orig_ident = open_events[0][4]
+                _assert_fd_closed(opened_fd)
+
+                st_s5 = real_lstat(ki_path)
+                self.assertTrue(stat.S_ISREG(st_s5.st_mode))
+                self.assertEqual(
+                    (int(st_s5.st_dev), int(st_s5.st_ino)), orig_ident
+                )
+                self.assertEqual(ki_path.read_bytes(), ki_bytes[:6])
+            finally:
+                _cleanup_tracked_fds(tracked_fds)
+
+        # 6. Write+close OSError preserves primary exception object and attaches
+        # actual secondary close_error; close-only OSError escapes. Close hook
+        # closes real fd first so no descriptor leaks.
+        with self.subTest(
+            scenario="write_plus_close_oserror_and_close_only_oserror"
+        ):
+            sub_root = suite_root / "s6_close_errors"
+            sub_root.mkdir(parents=True, exist_ok=True)
+
+            # 6a. Primary write OSError + secondary close OSError.
+            wc_path = sub_root / "write_and_close_error.txt"
+            wc_text = "NCYC 0\nWRITE AND CLOSE ERROR\nEND\n"
+            wc_bytes = wc_text.encode("utf-8")
+            primary_write_err = OSError(
+                errno.EIO, "simulated primary write EIO", str(wc_path)
+            )
+            secondary_close_err = OSError(
+                errno.EIO, "simulated secondary close EIO", str(wc_path)
+            )
+
+            open_events = []
+            wc_write_calls = 0
+            wc_close_calls = 0
+            unlink_events = []
+            tracked_fds = []
+
+            def _open_s6a(
+                path: Any,
+                flags: int,
+                mode: int = 0o777,
+                *,
+                dir_fd: int | None = None,
+            ) -> int:
+                fd = (
+                    real_open(path, flags, mode, dir_fd=dir_fd)
+                    if dir_fd is not None
+                    else real_open(path, flags, mode)
+                )
+                if dir_fd is None and Path(os.fsdecode(path)) == wc_path:
+                    st_obj = real_fstat(fd)
+                    ident = (int(st_obj.st_dev), int(st_obj.st_ino))
+                    open_events.append(
+                        (
+                            Path(os.fsdecode(path)),
+                            int(flags),
+                            int(mode),
+                            fd,
+                            ident,
+                        )
+                    )
+                    tracked_fds.append((fd, ident))
+                return fd
+
+            def _write_s6a(fd: int, data: Any) -> int:
+                nonlocal wc_write_calls
+                if open_events and fd == open_events[0][3]:
+                    wc_write_calls += 1
+                    mv = memoryview(data)
+                    real_write(fd, mv[:4])
+                    raise primary_write_err
+                return real_write(fd, data)
+
+            def _close_s6a(fd: int) -> None:
+                nonlocal wc_close_calls
+                real_close(fd)
+                if open_events and fd == open_events[0][3]:
+                    wc_close_calls += 1
+                    raise secondary_close_err
+
+            spy_unlink, spy_remove, spy_path_unlink = _make_deletion_spies(
+                sub_root, unlink_events
+            )
+            try:
+                with (
+                    patch.object(onesar_refmac.os, "open", _open_s6a),
+                    patch.object(onesar_refmac.os, "write", _write_s6a),
+                    patch.object(onesar_refmac.os, "close", _close_s6a),
+                    patch.object(onesar_refmac.os, "unlink", spy_unlink),
+                    patch.object(onesar_refmac.os, "remove", spy_remove),
+                    patch.object(Path, "unlink", spy_path_unlink),
+                ):
+                    with self.assertRaises(OSError) as cm_6a:
+                        onesar_refmac._write_new_regular_file_text(
+                            wc_path, wc_text, root=sub_root
+                        )
+
+                self.assertEqual(len(open_events), 1)
+                self.assertEqual(wc_write_calls, 1)
+                self.assertEqual(wc_close_calls, 1)
+                self.assertEqual(unlink_events, [])
+                self.assertIs(cm_6a.exception, primary_write_err)
+                self.assertIs(
+                    getattr(primary_write_err, "cleanup_close_error", None),
+                    secondary_close_err,
+                )
+                self.assertIs(
+                    getattr(primary_write_err, "close_error", None),
+                    secondary_close_err,
+                )
+                self.assertIs(
+                    getattr(
+                        secondary_close_err, "_is_cleanup_close_error", None
+                    ),
+                    True,
+                )
+                opened_fd = open_events[0][3]
+                orig_ident = open_events[0][4]
+                _assert_fd_closed(opened_fd)
+
+                st_6a = real_lstat(wc_path)
+                self.assertEqual(
+                    (int(st_6a.st_dev), int(st_6a.st_ino)), orig_ident
+                )
+                self.assertEqual(wc_path.read_bytes(), wc_bytes[:4])
+            finally:
+                _cleanup_tracked_fds(tracked_fds)
+
+            # 6b. Close-only OSError escapes without returning a receipt.
+            co_path = sub_root / "close_only_error.txt"
+            co_text = "NCYC 0\nCLOSE ONLY ERROR\nEND\n"
+            co_bytes = co_text.encode("utf-8")
+            close_only_err = OSError(
+                errno.EIO, "simulated close-only EIO", str(co_path)
+            )
+            open_events = []
+            co_close_calls = 0
+            unlink_events = []
+            tracked_fds = []
+
+            def _open_s6b(
+                path: Any,
+                flags: int,
+                mode: int = 0o777,
+                *,
+                dir_fd: int | None = None,
+            ) -> int:
+                fd = (
+                    real_open(path, flags, mode, dir_fd=dir_fd)
+                    if dir_fd is not None
+                    else real_open(path, flags, mode)
+                )
+                if dir_fd is None and Path(os.fsdecode(path)) == co_path:
+                    st_obj = real_fstat(fd)
+                    ident = (int(st_obj.st_dev), int(st_obj.st_ino))
+                    open_events.append(
+                        (
+                            Path(os.fsdecode(path)),
+                            int(flags),
+                            int(mode),
+                            fd,
+                            ident,
+                        )
+                    )
+                    tracked_fds.append((fd, ident))
+                return fd
+
+            def _close_s6b(fd: int) -> None:
+                nonlocal co_close_calls
+                real_close(fd)
+                if open_events and fd == open_events[0][3]:
+                    co_close_calls += 1
+                    raise close_only_err
+
+            spy_unlink, spy_remove, spy_path_unlink = _make_deletion_spies(
+                sub_root, unlink_events
+            )
+            try:
+                with (
+                    patch.object(onesar_refmac.os, "open", _open_s6b),
+                    patch.object(onesar_refmac.os, "close", _close_s6b),
+                    patch.object(onesar_refmac.os, "unlink", spy_unlink),
+                    patch.object(onesar_refmac.os, "remove", spy_remove),
+                    patch.object(Path, "unlink", spy_path_unlink),
+                ):
+                    with self.assertRaises(OSError) as cm_6b:
+                        onesar_refmac._write_new_regular_file_text(
+                            co_path, co_text, root=sub_root
+                        )
+
+                self.assertEqual(len(open_events), 1)
+                self.assertEqual(co_close_calls, 1)
+                self.assertEqual(unlink_events, [])
+                self.assertIs(cm_6b.exception, close_only_err)
+                opened_fd = open_events[0][3]
+                orig_ident = open_events[0][4]
+                _assert_fd_closed(opened_fd)
+
+                st_6b = real_lstat(co_path)
+                self.assertEqual(
+                    (int(st_6b.st_dev), int(st_6b.st_ino)), orig_ident
+                )
+                self.assertEqual(co_path.read_bytes(), co_bytes)
+            finally:
+                _cleanup_tracked_fds(tracked_fds)
+
+        # 7. fsync EINVAL/ENOTSUP remain tolerated while other fsync OSError
+        # values propagate without unlinking the created leaf.
+        with self.subTest(
+            scenario="fsync_einval_enotsup_tolerated_vs_other_oserror_propagated"
+        ):
+            sub_root = suite_root / "s7_fsync_errnos"
+            sub_root.mkdir(parents=True, exist_ok=True)
+            sample_text = "NCYC 0\nFSYNC ERRNO MATRIX\nEND\n"
+            sample_bytes = sample_text.encode("utf-8")
+            sample_sha = _sha256_bytes(sample_bytes)
+
+            for tol_name, tol_errno in (
+                ("einval", errno.EINVAL),
+                ("enotsup", errno.ENOTSUP),
+            ):
+                tol_path = sub_root / f"tolerated_{tol_name}.txt"
+                open_events = []
+                fsync_calls = 0
+                unlink_events = []
+                tracked_fds = []
+
+                def _open_tol(
+                    path: Any,
+                    flags: int,
+                    mode: int = 0o777,
+                    *,
+                    dir_fd: int | None = None,
+                ) -> int:
+                    fd = (
+                        real_open(path, flags, mode, dir_fd=dir_fd)
+                        if dir_fd is not None
+                        else real_open(path, flags, mode)
+                    )
+                    if dir_fd is None and Path(os.fsdecode(path)) == tol_path:
+                        st_obj = real_fstat(fd)
+                        ident = (int(st_obj.st_dev), int(st_obj.st_ino))
+                        open_events.append(
+                            (
+                                Path(os.fsdecode(path)),
+                                int(flags),
+                                int(mode),
+                                fd,
+                                ident,
+                            )
+                        )
+                        tracked_fds.append((fd, ident))
+                    return fd
+
+                def _fsync_tol(fd: int) -> None:
+                    nonlocal fsync_calls
+                    if open_events and fd == open_events[0][3]:
+                        fsync_calls += 1
+                        raise OSError(
+                            tol_errno, f"simulated tolerated {tol_name}"
+                        )
+                    real_fsync(fd)
+
+                spy_unlink, spy_remove, spy_path_unlink = _make_deletion_spies(
+                    sub_root, unlink_events
+                )
+                try:
+                    with (
+                        patch.object(onesar_refmac.os, "open", _open_tol),
+                        patch.object(onesar_refmac.os, "fsync", _fsync_tol),
+                        patch.object(onesar_refmac.os, "unlink", spy_unlink),
+                        patch.object(onesar_refmac.os, "remove", spy_remove),
+                        patch.object(Path, "unlink", spy_path_unlink),
+                    ):
+                        rec_tol = onesar_refmac._write_new_regular_file_text(
+                            tol_path, sample_text, root=sub_root
+                        )
+                    self.assertEqual(len(open_events), 1)
+                    self.assertEqual(fsync_calls, 1)
+                    self.assertEqual(unlink_events, [])
+                    _assert_fd_closed(open_events[0][3])
+                    self.assertEqual(
+                        rec_tol,
+                        {
+                            "path": str(tol_path),
+                            "sha256": sample_sha,
+                            "size_bytes": len(sample_bytes),
+                        },
+                    )
+                    self.assertEqual(tol_path.read_bytes(), sample_bytes)
+                finally:
+                    _cleanup_tracked_fds(tracked_fds)
+
+            untol_path = sub_root / "untolerated_erofs.txt"
+            untol_err = OSError(
+                errno.EROFS, "simulated untolerated EROFS", str(untol_path)
+            )
+            open_events = []
+            untol_fsync_calls = 0
+            unlink_events = []
+            tracked_fds = []
+
+            def _open_untol(
+                path: Any,
+                flags: int,
+                mode: int = 0o777,
+                *,
+                dir_fd: int | None = None,
+            ) -> int:
+                fd = (
+                    real_open(path, flags, mode, dir_fd=dir_fd)
+                    if dir_fd is not None
+                    else real_open(path, flags, mode)
+                )
+                if dir_fd is None and Path(os.fsdecode(path)) == untol_path:
+                    st_obj = real_fstat(fd)
+                    ident = (int(st_obj.st_dev), int(st_obj.st_ino))
+                    open_events.append(
+                        (
+                            Path(os.fsdecode(path)),
+                            int(flags),
+                            int(mode),
+                            fd,
+                            ident,
+                        )
+                    )
+                    tracked_fds.append((fd, ident))
+                return fd
+
+            def _fsync_untol(fd: int) -> None:
+                nonlocal untol_fsync_calls
+                if open_events and fd == open_events[0][3]:
+                    untol_fsync_calls += 1
+                    raise untol_err
+                real_fsync(fd)
+
+            spy_unlink, spy_remove, spy_path_unlink = _make_deletion_spies(
+                sub_root, unlink_events
+            )
+            try:
+                with (
+                    patch.object(onesar_refmac.os, "open", _open_untol),
+                    patch.object(onesar_refmac.os, "fsync", _fsync_untol),
+                    patch.object(onesar_refmac.os, "unlink", spy_unlink),
+                    patch.object(onesar_refmac.os, "remove", spy_remove),
+                    patch.object(Path, "unlink", spy_path_unlink),
+                ):
+                    with self.assertRaises(OSError) as cm_untol:
+                        onesar_refmac._write_new_regular_file_text(
+                            untol_path, sample_text, root=sub_root
+                        )
+                self.assertEqual(len(open_events), 1)
+                self.assertEqual(untol_fsync_calls, 1)
+                self.assertEqual(unlink_events, [])
+                self.assertIs(cm_untol.exception, untol_err)
+                opened_fd = open_events[0][3]
+                orig_ident = open_events[0][4]
+                _assert_fd_closed(opened_fd)
+                st_untol = real_lstat(untol_path)
+                self.assertEqual(
+                    (int(st_untol.st_dev), int(st_untol.st_ino)), orig_ident
+                )
+                self.assertEqual(untol_path.read_bytes(), sample_bytes)
+            finally:
+                _cleanup_tracked_fds(tracked_fds)
+
+        # 8. Point-in-time leaf replacement with identical bytes (pre-write lstat
+        # mismatch and post-close final lstat mismatch) refuses inode mismatch
+        # while retaining both original and replacement files.
+        with self.subTest(
+            scenario="point_in_time_leaf_replacement_identical_bytes_refused"
+        ):
+            sub_root = suite_root / "s8_inode_mismatch_guards"
+            sub_root.mkdir(parents=True, exist_ok=True)
+            guard_text = "NCYC 0\nIDENTICAL BYTES DIFFERENT INODE\nEND\n"
+            guard_bytes = guard_text.encode("utf-8")
+
+            # 8a. Pre-write leaf replacement between os.open and pre-write os.lstat.
+            pre_swap_path = sub_root / "pre_write_swap.txt"
+            parked_pre_orig = sub_root / "pre_write_swap.parked_orig.txt"
+            open_events = []
+            pre_write_calls: list[int] = []
+            pre_rep_ident_holder: list[tuple[int, int]] = []
+            unlink_events = []
+            tracked_fds = []
+
+            def _open_s8a(
+                path: Any,
+                flags: int,
+                mode: int = 0o777,
+                *,
+                dir_fd: int | None = None,
+            ) -> int:
+                fd = (
+                    real_open(path, flags, mode, dir_fd=dir_fd)
+                    if dir_fd is not None
+                    else real_open(path, flags, mode)
+                )
+                if dir_fd is None and Path(os.fsdecode(path)) == pre_swap_path:
+                    st_obj = real_fstat(fd)
+                    ident = (int(st_obj.st_dev), int(st_obj.st_ino))
+                    open_events.append(
+                        (
+                            Path(os.fsdecode(path)),
+                            int(flags),
+                            int(mode),
+                            fd,
+                            ident,
+                        )
+                    )
+                    tracked_fds.append((fd, ident))
+                    real_replace(pre_swap_path, parked_pre_orig)
+                    rep_ident = _write_raw_file(pre_swap_path, guard_bytes)
+                    pre_rep_ident_holder.append(rep_ident)
+                return fd
+
+            def _write_s8a(fd: int, data: Any) -> int:
+                if open_events and fd == open_events[0][3]:
+                    pre_write_calls.append(fd)
+                return real_write(fd, data)
+
+            spy_unlink, spy_remove, spy_path_unlink = _make_deletion_spies(
+                sub_root, unlink_events
+            )
+            try:
+                with (
+                    patch.object(onesar_refmac.os, "open", _open_s8a),
+                    patch.object(onesar_refmac.os, "write", _write_s8a),
+                    patch.object(onesar_refmac.os, "unlink", spy_unlink),
+                    patch.object(onesar_refmac.os, "remove", spy_remove),
+                    patch.object(Path, "unlink", spy_path_unlink),
+                ):
+                    with self.assertRaises(ValueError) as cm_8a:
+                        onesar_refmac._write_new_regular_file_text(
+                            pre_swap_path, guard_text, root=sub_root
+                        )
+                self.assertEqual(len(open_events), 1)
+                self.assertEqual(len(pre_rep_ident_holder), 1)
+                self.assertEqual(pre_write_calls, [])
+                self.assertEqual(unlink_events, [])
+                self.assertIn(
+                    "Observed leaf inode after open does not match opened descriptor",
+                    str(cm_8a.exception),
+                )
+                opened_fd = open_events[0][3]
+                orig_ident = open_events[0][4]
+                _assert_fd_closed(opened_fd)
+
+                parked_st_8a = real_lstat(parked_pre_orig)
+                self.assertEqual(
+                    (int(parked_st_8a.st_dev), int(parked_st_8a.st_ino)),
+                    orig_ident,
+                )
+                self.assertEqual(parked_pre_orig.read_bytes(), b"")
+
+                rep_st_8a = real_lstat(pre_swap_path)
+                self.assertEqual(
+                    (int(rep_st_8a.st_dev), int(rep_st_8a.st_ino)),
+                    pre_rep_ident_holder[0],
+                )
+                self.assertEqual(pre_swap_path.read_bytes(), guard_bytes)
+            finally:
+                _cleanup_tracked_fds(tracked_fds)
+
+            # 8b. Observed final leaf replacement with identical UTF-8 bytes after close.
+            final_swap_path = sub_root / "final_close_swap.txt"
+            parked_final_orig = sub_root / "final_close_swap.parked_orig.txt"
+            open_events = []
+            final_rep_ident_holder: list[tuple[int, int]] = []
+            unlink_events = []
+            tracked_fds = []
+
+            def _open_s8b(
+                path: Any,
+                flags: int,
+                mode: int = 0o777,
+                *,
+                dir_fd: int | None = None,
+            ) -> int:
+                fd = (
+                    real_open(path, flags, mode, dir_fd=dir_fd)
+                    if dir_fd is not None
+                    else real_open(path, flags, mode)
+                )
+                if (
+                    dir_fd is None
+                    and Path(os.fsdecode(path)) == final_swap_path
+                ):
+                    st_obj = real_fstat(fd)
+                    ident = (int(st_obj.st_dev), int(st_obj.st_ino))
+                    open_events.append(
+                        (
+                            Path(os.fsdecode(path)),
+                            int(flags),
+                            int(mode),
+                            fd,
+                            ident,
+                        )
+                    )
+                    tracked_fds.append((fd, ident))
+                return fd
+
+            def _close_s8b(fd: int) -> None:
+                real_close(fd)
+                if (
+                    open_events
+                    and fd == open_events[0][3]
+                    and not final_rep_ident_holder
+                ):
+                    real_replace(final_swap_path, parked_final_orig)
+                    rep_ident = _write_raw_file(final_swap_path, guard_bytes)
+                    final_rep_ident_holder.append(rep_ident)
+
+            spy_unlink, spy_remove, spy_path_unlink = _make_deletion_spies(
+                sub_root, unlink_events
+            )
+            try:
+                with (
+                    patch.object(onesar_refmac.os, "open", _open_s8b),
+                    patch.object(onesar_refmac.os, "close", _close_s8b),
+                    patch.object(onesar_refmac.os, "unlink", spy_unlink),
+                    patch.object(onesar_refmac.os, "remove", spy_remove),
+                    patch.object(Path, "unlink", spy_path_unlink),
+                ):
+                    with self.assertRaises(ValueError) as cm_8b:
+                        onesar_refmac._write_new_regular_file_text(
+                            final_swap_path, guard_text, root=sub_root
+                        )
+                self.assertEqual(len(open_events), 1)
+                self.assertEqual(len(final_rep_ident_holder), 1)
+                self.assertEqual(unlink_events, [])
+                self.assertIn(
+                    "Written file inode mismatch", str(cm_8b.exception)
+                )
+                opened_fd = open_events[0][3]
+                orig_ident = open_events[0][4]
+                self.assertNotEqual(final_rep_ident_holder[0], orig_ident)
+                _assert_fd_closed(opened_fd)
+
+                parked_st_8b = real_lstat(parked_final_orig)
+                self.assertEqual(
+                    (int(parked_st_8b.st_dev), int(parked_st_8b.st_ino)),
+                    orig_ident,
+                )
+                self.assertEqual(parked_final_orig.read_bytes(), guard_bytes)
+
+                rep_st_8b = real_lstat(final_swap_path)
+                self.assertEqual(
+                    (int(rep_st_8b.st_dev), int(rep_st_8b.st_ino)),
+                    final_rep_ident_holder[0],
+                )
+                self.assertEqual(final_swap_path.read_bytes(), guard_bytes)
+            finally:
+                _cleanup_tracked_fds(tracked_fds)
+
+        # 9. Fake collector control: keywords staging error escapes before
+        # supplied runner call with no native execution, retains partial
+        # refmac_keywords.txt leaf, and creates no pre-execution or D0/M0
+        # collector JSON records before collector state exists.
+        with self.subTest(
+            scenario="collector_keywords_staging_failure_before_runner_call"
+        ):
+            case_s9 = f"case_direct_text_collector_staging_{pid}"
+            ev_root_s9 = self.repo_root / "runs" / case_s9
+            refmac_dir_s9 = ev_root_s9 / "refmac"
+            keywords_path_s9 = refmac_dir_s9 / "refmac_keywords.txt"
+            staging_eio = OSError(
+                errno.EIO,
+                "simulated keywords staging EIO before runner launch",
+                str(keywords_path_s9),
+            )
+
+            open_events = []
+            s9_write_calls = 0
+            close_events_fd = []
+            unlink_events = []
+            runner_calls: list[Path] = []
+            tracked_fds = []
+
+            def _should_not_run_runner(
+                xyzin: Path,
+                hklin: Path,
+                xyzout: Path,
+                hklout: Path,
+                log_path: Path,
+                keywords: str,
+                *,
+                cwd: Path,
+                timeout: float,
+                xml_output: Path,
+                executable: Path,
+                env: Mapping[str, str],
+                ccp4: bool,
+            ) -> subprocess.CompletedProcess[str]:
+                runner_calls.append(cwd)
+                raise AssertionError(
+                    "Runner must not be invoked when keywords staging fails"
+                )
+
+            def _open_s9(
+                path: Any,
+                flags: int,
+                mode: int = 0o777,
+                *,
+                dir_fd: int | None = None,
+            ) -> int:
+                fd = (
+                    real_open(path, flags, mode, dir_fd=dir_fd)
+                    if dir_fd is not None
+                    else real_open(path, flags, mode)
+                )
+                if (
+                    dir_fd is None
+                    and Path(os.fsdecode(path)) == keywords_path_s9
+                ):
+                    st_obj = real_fstat(fd)
+                    ident = (int(st_obj.st_dev), int(st_obj.st_ino))
+                    open_events.append(
+                        (
+                            Path(os.fsdecode(path)),
+                            int(flags),
+                            int(mode),
+                            fd,
+                            ident,
+                        )
+                    )
+                    tracked_fds.append((fd, ident))
+                return fd
+
+            def _write_s9(fd: int, data: Any) -> int:
+                nonlocal s9_write_calls
+                if open_events and fd == open_events[0][3]:
+                    s9_write_calls += 1
+                    if s9_write_calls == 1:
+                        mv = memoryview(data)
+                        return real_write(fd, mv[:8])
+                    raise staging_eio
+                return real_write(fd, data)
+
+            def _close_s9(fd: int) -> None:
+                if open_events and fd == open_events[0][3]:
+                    close_events_fd.append(fd)
+                real_close(fd)
+
+            spy_unlink, spy_remove, spy_path_unlink = _make_deletion_spies(
+                refmac_dir_s9, unlink_events
+            )
+            try:
+                with (
+                    patch.object(onesar_refmac.os, "open", _open_s9),
+                    patch.object(onesar_refmac.os, "write", _write_s9),
+                    patch.object(onesar_refmac.os, "close", _close_s9),
+                    patch.object(onesar_refmac.os, "unlink", spy_unlink),
+                    patch.object(onesar_refmac.os, "remove", spy_remove),
+                    patch.object(Path, "unlink", spy_path_unlink),
+                ):
+                    with self.assertRaises(OSError) as cm_s9:
+                        self._run_with_fake_ccp4(
+                            case_s9, _should_not_run_runner
+                        )
+
+                self.assertEqual(runner_calls, [])
+                self.assertEqual(len(open_events), 1)
+                self.assertEqual(s9_write_calls, 2)
+                self.assertEqual(len(close_events_fd), 1)
+                self.assertEqual(unlink_events, [])
+                self.assertIs(cm_s9.exception, staging_eio)
+                opened_fd = open_events[0][3]
+                orig_ident = open_events[0][4]
+                _assert_fd_closed(opened_fd)
+
+                kw_st = real_lstat(keywords_path_s9)
+                self.assertTrue(stat.S_ISREG(kw_st.st_mode))
+                self.assertEqual(
+                    (int(kw_st.st_dev), int(kw_st.st_ino)), orig_ident
+                )
+                self.assertEqual(
+                    keywords_path_s9.read_bytes(),
+                    onesar_refmac.REFMAC_KEYWORDS.encode("utf-8")[:8],
+                )
+                self.assertFalse(
+                    os.path.lexists(
+                        refmac_dir_s9 / "refmac_pre_execution_checkpoint.json"
+                    )
+                )
+                self.assertFalse(
+                    os.path.lexists(
+                        refmac_dir_s9 / "refmac_diagnostics.json"
+                    )
+                )
+                self.assertFalse(
+                    os.path.lexists(
+                        refmac_dir_s9 / "refmac_operation_manifest.json"
+                    )
+                )
+            finally:
+                _cleanup_tracked_fds(tracked_fds)
 
 
 if __name__ == "__main__":

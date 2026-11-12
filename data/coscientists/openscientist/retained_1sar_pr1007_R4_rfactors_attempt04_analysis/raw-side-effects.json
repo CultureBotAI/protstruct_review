@@ -1,0 +1,1036 @@
+{
+  "at": "2026-11-09T09:14:13.215637+00:00",
+  "sources": {
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt04/inputs/original_data.mtz": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt04/inputs/original_data.mtz",
+      "sha256": "f36d5fe685a3e524e8809d17d19ce12073acdf339eba2cfd3b0347a818850ab2",
+      "size_bytes": 469312
+    },
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt04/inputs/projected_observations.mtz": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt04/inputs/projected_observations.mtz",
+      "sha256": "6edbe54b2ec7b815f30b6bd20a7264a7c978721189670e39e20d876d9b4fece7",
+      "size_bytes": 176592
+    },
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt04/refmac/refmac_hklout.mtz": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt04/refmac/refmac_hklout.mtz",
+      "sha256": "e21ce039b11e8b83c5deebfa3059fafeef7906cf1d10a1d3cf20b57f56b578e2",
+      "size_bytes": 497664
+    },
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt04/inputs/original_model.pdb": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt04/inputs/original_model.pdb",
+      "sha256": "8cbc1650f8be5a3833f98833fa514ec7d490c2c3bb9aa930413abac05e2a510b",
+      "size_bytes": 135240
+    },
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt04/refmac/refmac_xyzout.pdb": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt04/refmac/refmac_xyzout.pdb",
+      "sha256": "1c495e84880beb4b85bebd9f33095c4fed519a3cfaed9d8f76427f7784111ee6",
+      "size_bytes": 135253
+    },
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt04/inputs/input_hkl_ledger.json": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt04/inputs/input_hkl_ledger.json",
+      "sha256": "35543c5821665de8f65b5fbd153669556dfef766ac8b156dc001a0c5b667a51e",
+      "size_bytes": 6107091
+    },
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/check-attempt04-raw797.py": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/check-attempt04-raw797.py",
+      "sha256": "be504435cc2f353b076d6992f6d62dec198663f83cb91310e35e8f0c92ae9b44",
+      "size_bytes": 5776
+    }
+  },
+  "mtz_headers": [
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt04/inputs/original_data.mtz",
+      "names": [
+        "H",
+        "K",
+        "L",
+        "F-obs",
+        "SIGF-obs",
+        "R-free-flags",
+        "F-obs-filtered",
+        "SIGF-obs-filtered",
+        "F-model",
+        "PHIF-model",
+        "2FOFCWT",
+        "PH2FOFCWT",
+        "2FOFCWT_no_fill",
+        "PH2FOFCWT_no_fill",
+        "FOFCWT",
+        "PHFOFCWT"
+      ],
+      "columns": [
+        {
+          "label": "H",
+          "dataset_id": 1,
+          "header_offset": 464912
+        },
+        {
+          "label": "K",
+          "dataset_id": 1,
+          "header_offset": 465072
+        },
+        {
+          "label": "L",
+          "dataset_id": 1,
+          "header_offset": 465232
+        },
+        {
+          "label": "F-obs",
+          "dataset_id": 1,
+          "header_offset": 465392
+        },
+        {
+          "label": "SIGF-obs",
+          "dataset_id": 1,
+          "header_offset": 465552
+        },
+        {
+          "label": "R-free-flags",
+          "dataset_id": 1,
+          "header_offset": 465712
+        },
+        {
+          "label": "F-obs-filtered",
+          "dataset_id": 2,
+          "header_offset": 465872
+        },
+        {
+          "label": "SIGF-obs-filtered",
+          "dataset_id": 2,
+          "header_offset": 466032
+        },
+        {
+          "label": "F-model",
+          "dataset_id": 3,
+          "header_offset": 466192
+        },
+        {
+          "label": "PHIF-model",
+          "dataset_id": 3,
+          "header_offset": 466352
+        },
+        {
+          "label": "2FOFCWT",
+          "dataset_id": 4,
+          "header_offset": 466512
+        },
+        {
+          "label": "PH2FOFCWT",
+          "dataset_id": 4,
+          "header_offset": 466672
+        },
+        {
+          "label": "2FOFCWT_no_fill",
+          "dataset_id": 4,
+          "header_offset": 466832
+        },
+        {
+          "label": "PH2FOFCWT_no_fill",
+          "dataset_id": 4,
+          "header_offset": 466992
+        },
+        {
+          "label": "FOFCWT",
+          "dataset_id": 4,
+          "header_offset": 467152
+        },
+        {
+          "label": "PHFOFCWT",
+          "dataset_id": 4,
+          "header_offset": 467312
+        }
+      ],
+      "nrows": 7248,
+      "ncols": 16,
+      "extrema": [
+        {
+          "label": "H",
+          "header_offset": 464912,
+          "declared_min": "0",
+          "declared_max": "0",
+          "actual_min": 0.0,
+          "actual_max": 25.0
+        },
+        {
+          "label": "K",
+          "header_offset": 465072,
+          "declared_min": "0",
+          "declared_max": "0",
+          "actual_min": 0.0,
+          "actual_max": 31.0
+        },
+        {
+          "label": "L",
+          "header_offset": 465232,
+          "declared_min": "2",
+          "declared_max": "2",
+          "actual_min": 0.0,
+          "actual_max": 15.0
+        }
+      ]
+    },
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt04/inputs/projected_observations.mtz",
+      "names": [
+        "H",
+        "K",
+        "L",
+        "F-obs",
+        "SIGF-obs",
+        "R-free-flags"
+      ],
+      "columns": [
+        {
+          "label": "H",
+          "dataset_id": 1,
+          "header_offset": 174992
+        },
+        {
+          "label": "K",
+          "dataset_id": 1,
+          "header_offset": 175072
+        },
+        {
+          "label": "L",
+          "dataset_id": 1,
+          "header_offset": 175152
+        },
+        {
+          "label": "F-obs",
+          "dataset_id": 1,
+          "header_offset": 175232
+        },
+        {
+          "label": "SIGF-obs",
+          "dataset_id": 1,
+          "header_offset": 175312
+        },
+        {
+          "label": "R-free-flags",
+          "dataset_id": 1,
+          "header_offset": 175392
+        }
+      ],
+      "nrows": 7248,
+      "ncols": 6,
+      "extrema": [
+        {
+          "label": "H",
+          "header_offset": 174992,
+          "declared_min": "0",
+          "declared_max": "0",
+          "actual_min": 0.0,
+          "actual_max": 25.0
+        },
+        {
+          "label": "K",
+          "header_offset": 175072,
+          "declared_min": "0",
+          "declared_max": "0",
+          "actual_min": 0.0,
+          "actual_max": 31.0
+        },
+        {
+          "label": "L",
+          "header_offset": 175152,
+          "declared_min": "2",
+          "declared_max": "2",
+          "actual_min": 0.0,
+          "actual_max": 15.0
+        }
+      ]
+    },
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt04/refmac/refmac_hklout.mtz",
+      "names": [
+        "H",
+        "K",
+        "L",
+        "R-free-flags",
+        "F-obs",
+        "SIGF-obs",
+        "FC",
+        "PHIC",
+        "FC_ALL",
+        "PHIC_ALL",
+        "FWT",
+        "PHWT",
+        "DELFWT",
+        "PHDELWT",
+        "FOM",
+        "FC_ALL_LS",
+        "PHIC_ALL_LS"
+      ],
+      "columns": [
+        {
+          "label": "H",
+          "dataset_id": 0,
+          "header_offset": 493904
+        },
+        {
+          "label": "K",
+          "dataset_id": 0,
+          "header_offset": 494064
+        },
+        {
+          "label": "L",
+          "dataset_id": 0,
+          "header_offset": 494224
+        },
+        {
+          "label": "R-free-flags",
+          "dataset_id": 0,
+          "header_offset": 494384
+        },
+        {
+          "label": "F-obs",
+          "dataset_id": 1,
+          "header_offset": 494544
+        },
+        {
+          "label": "SIGF-obs",
+          "dataset_id": 1,
+          "header_offset": 494704
+        },
+        {
+          "label": "FC",
+          "dataset_id": 1,
+          "header_offset": 494864
+        },
+        {
+          "label": "PHIC",
+          "dataset_id": 1,
+          "header_offset": 495024
+        },
+        {
+          "label": "FC_ALL",
+          "dataset_id": 1,
+          "header_offset": 495184
+        },
+        {
+          "label": "PHIC_ALL",
+          "dataset_id": 1,
+          "header_offset": 495344
+        },
+        {
+          "label": "FWT",
+          "dataset_id": 1,
+          "header_offset": 495504
+        },
+        {
+          "label": "PHWT",
+          "dataset_id": 1,
+          "header_offset": 495664
+        },
+        {
+          "label": "DELFWT",
+          "dataset_id": 1,
+          "header_offset": 495824
+        },
+        {
+          "label": "PHDELWT",
+          "dataset_id": 1,
+          "header_offset": 495984
+        },
+        {
+          "label": "FOM",
+          "dataset_id": 1,
+          "header_offset": 496144
+        },
+        {
+          "label": "FC_ALL_LS",
+          "dataset_id": 1,
+          "header_offset": 496304
+        },
+        {
+          "label": "PHIC_ALL_LS",
+          "dataset_id": 1,
+          "header_offset": 496464
+        }
+      ],
+      "nrows": 7248,
+      "ncols": 17,
+      "extrema": [
+        {
+          "label": "H",
+          "header_offset": 493904,
+          "declared_min": "0",
+          "declared_max": "25",
+          "actual_min": 0.0,
+          "actual_max": 25.0
+        },
+        {
+          "label": "K",
+          "header_offset": 494064,
+          "declared_min": "0",
+          "declared_max": "31",
+          "actual_min": 0.0,
+          "actual_max": 31.0
+        },
+        {
+          "label": "L",
+          "header_offset": 494224,
+          "declared_min": "0",
+          "declared_max": "15",
+          "actual_min": 0.0,
+          "actual_max": 15.0
+        }
+      ]
+    }
+  ],
+  "projection_selected_words_identical": true,
+  "ledger_matches_projected_words": true,
+  "input_counts": {
+    "eligible_free": 723,
+    "eligible_negative_f": 0,
+    "eligible_total": 7228,
+    "eligible_work": 6505,
+    "eligible_zero_f": 11,
+    "ineligible_nonfinite_f": 20,
+    "ineligible_nonpositive_or_nonfinite_sigf": 0,
+    "ineligible_total": 20,
+    "ineligible_unassigned_flag": 20,
+    "raw_free": 723,
+    "raw_total": 7248,
+    "raw_unassigned": 20,
+    "raw_work": 6505
+  },
+  "invalidated_eligible": [
+    {
+      "input_row_index": 283,
+      "hkl": [
+        0,
+        20,
+        10
+      ],
+      "input_F_word": "00000000",
+      "output_F_word": "fffa5a5a",
+      "output_SIGF_word": "fffa5a5a"
+    },
+    {
+      "input_row_index": 306,
+      "hkl": [
+        0,
+        22,
+        11
+      ],
+      "input_F_word": "00000000",
+      "output_F_word": "fffa5a5a",
+      "output_SIGF_word": "fffa5a5a"
+    },
+    {
+      "input_row_index": 319,
+      "hkl": [
+        0,
+        24,
+        2
+      ],
+      "input_F_word": "00000000",
+      "output_F_word": "fffa5a5a",
+      "output_SIGF_word": "fffa5a5a"
+    },
+    {
+      "input_row_index": 770,
+      "hkl": [
+        1,
+        31,
+        0
+      ],
+      "input_F_word": "00000000",
+      "output_F_word": "fffa5a5a",
+      "output_SIGF_word": "fffa5a5a"
+    },
+    {
+      "input_row_index": 3060,
+      "hkl": [
+        7,
+        23,
+        5
+      ],
+      "input_F_word": "00000000",
+      "output_F_word": "fffa5a5a",
+      "output_SIGF_word": "fffa5a5a"
+    },
+    {
+      "input_row_index": 4175,
+      "hkl": [
+        10,
+        27,
+        0
+      ],
+      "input_F_word": "00000000",
+      "output_F_word": "fffa5a5a",
+      "output_SIGF_word": "fffa5a5a"
+    },
+    {
+      "input_row_index": 4669,
+      "hkl": [
+        12,
+        11,
+        0
+      ],
+      "input_F_word": "00000000",
+      "output_F_word": "fffa5a5a",
+      "output_SIGF_word": "fffa5a5a"
+    },
+    {
+      "input_row_index": 5469,
+      "hkl": [
+        15,
+        3,
+        0
+      ],
+      "input_F_word": "00000000",
+      "output_F_word": "fffa5a5a",
+      "output_SIGF_word": "fffa5a5a"
+    },
+    {
+      "input_row_index": 5682,
+      "hkl": [
+        15,
+        22,
+        0
+      ],
+      "input_F_word": "00000000",
+      "output_F_word": "fffa5a5a",
+      "output_SIGF_word": "fffa5a5a"
+    },
+    {
+      "input_row_index": 5835,
+      "hkl": [
+        16,
+        10,
+        7
+      ],
+      "input_F_word": "00000000",
+      "output_F_word": "fffa5a5a",
+      "output_SIGF_word": "fffa5a5a"
+    },
+    {
+      "input_row_index": 6853,
+      "hkl": [
+        21,
+        8,
+        7
+      ],
+      "input_F_word": "00000000",
+      "output_F_word": "fffa5a5a",
+      "output_SIGF_word": "fffa5a5a"
+    }
+  ],
+  "padding_flag_observations": [
+    {
+      "hkl": [
+        0,
+        1,
+        9
+      ],
+      "input_flag_word": "fffa5a5a",
+      "output_flag_word": "00000000"
+    },
+    {
+      "hkl": [
+        0,
+        3,
+        9
+      ],
+      "input_flag_word": "fffa5a5a",
+      "output_flag_word": "00000000"
+    },
+    {
+      "hkl": [
+        0,
+        7,
+        9
+      ],
+      "input_flag_word": "fffa5a5a",
+      "output_flag_word": "00000000"
+    },
+    {
+      "hkl": [
+        0,
+        12,
+        7
+      ],
+      "input_flag_word": "fffa5a5a",
+      "output_flag_word": "00000000"
+    },
+    {
+      "hkl": [
+        0,
+        17,
+        3
+      ],
+      "input_flag_word": "fffa5a5a",
+      "output_flag_word": "00000000"
+    },
+    {
+      "hkl": [
+        0,
+        19,
+        1
+      ],
+      "input_flag_word": "fffa5a5a",
+      "output_flag_word": "00000000"
+    },
+    {
+      "hkl": [
+        1,
+        4,
+        9
+      ],
+      "input_flag_word": "fffa5a5a",
+      "output_flag_word": "00000000"
+    },
+    {
+      "hkl": [
+        1,
+        18,
+        3
+      ],
+      "input_flag_word": "fffa5a5a",
+      "output_flag_word": "00000000"
+    },
+    {
+      "hkl": [
+        2,
+        7,
+        8
+      ],
+      "input_flag_word": "fffa5a5a",
+      "output_flag_word": "00000000"
+    },
+    {
+      "hkl": [
+        3,
+        0,
+        9
+      ],
+      "input_flag_word": "fffa5a5a",
+      "output_flag_word": "00000000"
+    },
+    {
+      "hkl": [
+        3,
+        8,
+        8
+      ],
+      "input_flag_word": "fffa5a5a",
+      "output_flag_word": "00000000"
+    },
+    {
+      "hkl": [
+        4,
+        7,
+        8
+      ],
+      "input_flag_word": "fffa5a5a",
+      "output_flag_word": "00000000"
+    },
+    {
+      "hkl": [
+        4,
+        18,
+        1
+      ],
+      "input_flag_word": "fffa5a5a",
+      "output_flag_word": "00000000"
+    },
+    {
+      "hkl": [
+        5,
+        4,
+        8
+      ],
+      "input_flag_word": "fffa5a5a",
+      "output_flag_word": "00000000"
+    },
+    {
+      "hkl": [
+        6,
+        13,
+        5
+      ],
+      "input_flag_word": "fffa5a5a",
+      "output_flag_word": "00000000"
+    },
+    {
+      "hkl": [
+        7,
+        16,
+        3
+      ],
+      "input_flag_word": "fffa5a5a",
+      "output_flag_word": "00000000"
+    },
+    {
+      "hkl": [
+        10,
+        14,
+        0
+      ],
+      "input_flag_word": "fffa5a5a",
+      "output_flag_word": "00000000"
+    },
+    {
+      "hkl": [
+        12,
+        0,
+        5
+      ],
+      "input_flag_word": "fffa5a5a",
+      "output_flag_word": "00000000"
+    },
+    {
+      "hkl": [
+        12,
+        11,
+        1
+      ],
+      "input_flag_word": "fffa5a5a",
+      "output_flag_word": "00000000"
+    },
+    {
+      "hkl": [
+        13,
+        11,
+        0
+      ],
+      "input_flag_word": "fffa5a5a",
+      "output_flag_word": "00000000"
+    }
+  ],
+  "usable_output_counts": {
+    "0": 6494,
+    "1": 723
+  },
+  "candidate_R_from_output_columns": {
+    "0": {
+      "exact_numerator_sum": "573914156947/2097152",
+      "exact_denominator_sum": "6771678021525/4194304",
+      "exact_ratio": "1147828313894/6771678021525",
+      "approximate_float": 0.16950426618711353
+    },
+    "1": {
+      "exact_numerator_sum": "38960352489/1048576",
+      "exact_denominator_sum": "91401113563/524288",
+      "exact_ratio": "38960352489/182802227126",
+      "approximate_float": 0.21312843449191576
+    }
+  },
+  "model": {
+    "input_count": 1641,
+    "output_count": 1641,
+    "same_key_set": true,
+    "same_key_order": false,
+    "field_differences": {
+      "record_type": {
+        "count": 5,
+        "examples": [
+          {
+            "key": [
+              "A",
+              "  97",
+              " ",
+              "SO4",
+              " O1 ",
+              " "
+            ],
+            "input_line": 863,
+            "output_line": 860,
+            "before": "ATOM  ",
+            "after": "HETATM"
+          },
+          {
+            "key": [
+              "A",
+              "  97",
+              " ",
+              "SO4",
+              " O2 ",
+              " "
+            ],
+            "input_line": 864,
+            "output_line": 861,
+            "before": "ATOM  ",
+            "after": "HETATM"
+          },
+          {
+            "key": [
+              "A",
+              "  97",
+              " ",
+              "SO4",
+              " O3 ",
+              " "
+            ],
+            "input_line": 865,
+            "output_line": 862,
+            "before": "ATOM  ",
+            "after": "HETATM"
+          },
+          {
+            "key": [
+              "A",
+              "  97",
+              " ",
+              "SO4",
+              " O4 ",
+              " "
+            ],
+            "input_line": 866,
+            "output_line": 863,
+            "before": "ATOM  ",
+            "after": "HETATM"
+          },
+          {
+            "key": [
+              "A",
+              "  97",
+              " ",
+              "SO4",
+              " S  ",
+              " "
+            ],
+            "input_line": 867,
+            "output_line": 859,
+            "before": "ATOM  ",
+            "after": "HETATM"
+          }
+        ]
+      },
+      "coordinates": {
+        "count": 0,
+        "examples": []
+      },
+      "occupancy": {
+        "count": 0,
+        "examples": []
+      },
+      "B": {
+        "count": 0,
+        "examples": []
+      },
+      "serial": {
+        "count": 877,
+        "examples": [
+          {
+            "key": [
+              "A",
+              "  97",
+              " ",
+              "SO4",
+              " O1 ",
+              " "
+            ],
+            "input_line": 863,
+            "output_line": 860,
+            "before": "  745",
+            "after": "  746"
+          },
+          {
+            "key": [
+              "A",
+              "  97",
+              " ",
+              "SO4",
+              " O2 ",
+              " "
+            ],
+            "input_line": 864,
+            "output_line": 861,
+            "before": "  746",
+            "after": "  747"
+          },
+          {
+            "key": [
+              "A",
+              "  97",
+              " ",
+              "SO4",
+              " O3 ",
+              " "
+            ],
+            "input_line": 865,
+            "output_line": 862,
+            "before": "  747",
+            "after": "  748"
+          },
+          {
+            "key": [
+              "A",
+              "  97",
+              " ",
+              "SO4",
+              " O4 ",
+              " "
+            ],
+            "input_line": 866,
+            "output_line": 863,
+            "before": "  748",
+            "after": "  749"
+          },
+          {
+            "key": [
+              "A",
+              "  97",
+              " ",
+              "SO4",
+              " S  ",
+              " "
+            ],
+            "input_line": 867,
+            "output_line": 859,
+            "before": "  749",
+            "after": "  745"
+          },
+          {
+            "key": [
+              "A",
+              "  98",
+              " ",
+              "CA ",
+              "CA  ",
+              " "
+            ],
+            "input_line": 1614,
+            "output_line": 1609,
+            "before": " 1494",
+            "after": " 1495"
+          },
+          {
+            "key": [
+              "B",
+              "   1",
+              " ",
+              "ASP",
+              " C  ",
+              " "
+            ],
+            "input_line": 871,
+            "output_line": 867,
+            "before": "  752",
+            "after": "  753"
+          },
+          {
+            "key": [
+              "B",
+              "   1",
+              " ",
+              "ASP",
+              " CA ",
+              " "
+            ],
+            "input_line": 870,
+            "output_line": 866,
+            "before": "  751",
+            "after": "  752"
+          },
+          {
+            "key": [
+              "B",
+              "   1",
+              " ",
+              "ASP",
+              " CB ",
+              " "
+            ],
+            "input_line": 873,
+            "output_line": 869,
+            "before": "  754",
+            "after": "  755"
+          },
+          {
+            "key": [
+              "B",
+              "   1",
+              " ",
+              "ASP",
+              " CG ",
+              " "
+            ],
+            "input_line": 874,
+            "output_line": 870,
+            "before": "  755",
+            "after": "  756"
+          }
+        ]
+      },
+      "segment": {
+        "count": 0,
+        "examples": []
+      },
+      "element": {
+        "count": 2,
+        "examples": [
+          {
+            "key": [
+              "A",
+              "  98",
+              " ",
+              "CA ",
+              "CA  ",
+              " "
+            ],
+            "input_line": 1614,
+            "output_line": 1609,
+            "before": "Ca",
+            "after": "CA"
+          },
+          {
+            "key": [
+              "B",
+              "  98",
+              " ",
+              "NA ",
+              "NA  ",
+              " "
+            ],
+            "input_line": 1739,
+            "output_line": 1734,
+            "before": "Na",
+            "after": "NA"
+          }
+        ]
+      },
+      "charge": {
+        "count": 2,
+        "examples": [
+          {
+            "key": [
+              "A",
+              "  98",
+              " ",
+              "CA ",
+              "CA  ",
+              " "
+            ],
+            "input_line": 1614,
+            "output_line": 1609,
+            "before": "2+",
+            "after": "+2"
+          },
+          {
+            "key": [
+              "B",
+              "  98",
+              " ",
+              "NA ",
+              "NA  ",
+              " "
+            ],
+            "input_line": 1739,
+            "output_line": 1734,
+            "before": "1+",
+            "after": "+1"
+          }
+        ]
+      }
+    },
+    "input_HD": 0,
+    "output_HD": 0
+  },
+  "scope": "independent raw-byte side effects; output-column R candidate is not native arithmetic or scientific admission",
+  "scientific_admission": false,
+  "sources_unchanged": true
+}

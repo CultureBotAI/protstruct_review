@@ -1,0 +1,4452 @@
+{
+  "schema_id": "protstruct_refmac_diagnostic_source_manifest_v1",
+  "preparation_only": true,
+  "native_execution_performed": false,
+  "source_verification_status": "verified_upstream_commit_tree",
+  "upstream_source": {
+    "expected_commit": "be25e793829952f4f177d7dfd0c10a1eb6bbd180",
+    "expected_tag": "5.8.0431",
+    "git_verification": {
+      "verified_via_git": true,
+      "verification_status": "verified_upstream_commit_tree",
+      "upstream_commit": "be25e793829952f4f177d7dfd0c10a1eb6bbd180",
+      "upstream_tag": "5.8.0431",
+      "tag_commit": "be25e793829952f4f177d7dfd0c10a1eb6bbd180",
+      "working_tree_clean": true,
+      "commit_tree_spec": "be25e793829952f4f177d7dfd0c10a1eb6bbd180^{tree}",
+      "all_tracked_blobs_verified": true,
+      "tracked_file_count": 264
+    },
+    "pinned_original_file_sha256": {
+      "CMakeLists.txt": "708473c90a8ab98a09a1d32cd2049cb0b0b84281859f698ddacb25bab13c97c2",
+      "ls_scaling_double.f": "7e5c5edf8d751861ebb325240e331f85e4d5deed21e9b360ca72d93d772959d5",
+      "refmac_completeness.f90": "ebd67e547eca2fa696047e443ebb4a23db0beca1a87b9ae2ee417ae4b1b788ef",
+      "refmac_xml.f": "baff00a370cd761caeba8838cdf8fd4246f7c223d78c87a6f520ef8f788baac8",
+      "subcf_scale1.f": "9cce606df4ef1bcdaf767f7fd16afa8027cef6fa062a231b18aaae9b55431f47"
+    }
+  },
+  "diagnostic_modules": {
+    "trace_writer.f90": {
+      "destination_path": "trace_writer.f90",
+      "size_bytes": 25436,
+      "sha256": "9539453a7137ae01c27f43441c0a3fcaadf3ffe211a71198d0df13e4412199dd",
+      "fortran_module": "protstruct_diagnostic_trace"
+    },
+    "trace_hooks.f90": {
+      "destination_path": "trace_hooks.f90",
+      "size_bytes": 66643,
+      "sha256": "fdfbfb3dbe46cd4a58547b9032036775b2ba698bc3b9d0cde4cc8eb44293cd95",
+      "fortran_module": "protstruct_diagnostic_hooks"
+    }
+  },
+  "modified_vendor_files": [
+    {
+      "path": "CMakeLists.txt",
+      "before_sha256": "708473c90a8ab98a09a1d32cd2049cb0b0b84281859f698ddacb25bab13c97c2",
+      "before_size_bytes": 4955,
+      "after_sha256": "1e35c801c940d9879467cb2f3dc62faebe29f01a9f25b53a62fbbdfe942359ce",
+      "after_size_bytes": 4988,
+      "original_line_count": 246,
+      "patched_line_count": 248,
+      "inserted_line_count": 2,
+      "hook_ids": [
+        "CMake_refmac5_sources"
+      ]
+    },
+    {
+      "path": "ls_scaling_double.f",
+      "before_sha256": "7e5c5edf8d751861ebb325240e331f85e4d5deed21e9b360ca72d93d772959d5",
+      "before_size_bytes": 37203,
+      "after_sha256": "e2bfc1eb1fe42d6c44e834bfe87279956907a55c4775ff2b035bfa7baf3c350c",
+      "after_size_bytes": 37506,
+      "original_line_count": 1182,
+      "patched_line_count": 1188,
+      "inserted_line_count": 6,
+      "hook_ids": [
+        "S_import",
+        "S0_sumsfs_ls_deriv"
+      ]
+    },
+    {
+      "path": "refmac_completeness.f90",
+      "before_sha256": "ebd67e547eca2fa696047e443ebb4a23db0beca1a87b9ae2ee417ae4b1b788ef",
+      "before_size_bytes": 7525,
+      "after_sha256": "2b10ae794bedfe5d08f140d20daf94d4f400b979df6df554d7a861eae44b6639",
+      "after_size_bytes": 8938,
+      "original_line_count": 266,
+      "patched_line_count": 294,
+      "inserted_line_count": 28,
+      "hook_ids": [
+        "C_import",
+        "C0",
+        "C1",
+        "C2",
+        "C3",
+        "C4",
+        "C5",
+        "C_end"
+      ]
+    },
+    {
+      "path": "refmac_xml.f",
+      "before_sha256": "baff00a370cd761caeba8838cdf8fd4246f7c223d78c87a6f520ef8f788baac8",
+      "before_size_bytes": 44242,
+      "after_sha256": "11bdc09f87ba49bdcc6f216108dd4b43d109c554baa1eeb7d2c528e96e697b9e",
+      "after_size_bytes": 44368,
+      "original_line_count": 1320,
+      "patched_line_count": 1323,
+      "inserted_line_count": 3,
+      "hook_ids": [
+        "T_import",
+        "T_close"
+      ]
+    },
+    {
+      "path": "subcf_scale1.f",
+      "before_sha256": "9cce606df4ef1bcdaf767f7fd16afa8027cef6fa062a231b18aaae9b55431f47",
+      "before_size_bytes": 58058,
+      "after_sha256": "adebc028aa790e96178f418b6cb55c067d86ed9064d4dd2b52a1ec56c74a66b7",
+      "after_size_bytes": 64214,
+      "original_line_count": 1653,
+      "patched_line_count": 1791,
+      "inserted_line_count": 138,
+      "hook_ids": [
+        "L_import",
+        "L0",
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5",
+        "L6a",
+        "L6b",
+        "L7",
+        "L8",
+        "L9_work",
+        "L9_free",
+        "final_carrier_work",
+        "final_carrier_free",
+        "L_end"
+      ]
+    }
+  ],
+  "hook_bindings": [
+    {
+      "source_hook_id": "CMake_refmac5_sources",
+      "namespace": "build",
+      "file": "CMakeLists.txt",
+      "original_line": 33,
+      "phase": "after",
+      "anchor_text": "add_executable(refmac5",
+      "patched_start_line": 34,
+      "patched_end_line": 35,
+      "inserted_line_count": 2,
+      "description": "Add trace_writer.f90 and trace_hooks.f90 to refmac5 target only."
+    },
+    {
+      "source_hook_id": "S_import",
+      "namespace": "residual_lsq",
+      "file": "ls_scaling_double.f",
+      "original_line": 520,
+      "phase": "after",
+      "anchor_text": "      use refi_flags",
+      "patched_start_line": 521,
+      "patched_end_line": 522,
+      "inserted_line_count": 2,
+      "description": "Import SUMSFS_LS_DERIV hook in ls_scaling_double.f."
+    },
+    {
+      "source_hook_id": "S0_sumsfs_ls_deriv",
+      "namespace": "residual_lsq",
+      "file": "ls_scaling_double.f",
+      "original_line": 631,
+      "phase": "after",
+      "anchor_text": "      DELTA  = YOS - YC_ALL",
+      "patched_start_line": 634,
+      "patched_end_line": 637,
+      "inserted_line_count": 4,
+      "description": "Capture assigned SUMSFS_LS_DERIV scale/structure-factor terms when called from active LSQ_COEF row."
+    },
+    {
+      "source_hook_id": "C_import",
+      "namespace": "reporting_completeness",
+      "file": "refmac_completeness.f90",
+      "original_line": 9,
+      "phase": "after",
+      "anchor_text": "    use refi_flags",
+      "patched_start_line": 10,
+      "patched_end_line": 14,
+      "inserted_line_count": 5,
+      "description": "Import completeness diagnostic hooks in calc_completeness."
+    },
+    {
+      "source_hook_id": "C0",
+      "namespace": "reporting_completeness",
+      "file": "refmac_completeness.f90",
+      "original_line": 123,
+      "phase": "after",
+      "anchor_text": "    call define_res_pars(cell_l,ast,bst,cst,cosast,cosbst,coscst)",
+      "patched_start_line": 129,
+      "patched_end_line": 131,
+      "inserted_line_count": 3,
+      "description": "Emit completeness_begin call header before ASU loop."
+    },
+    {
+      "source_hook_id": "C1",
+      "namespace": "reporting_completeness",
+      "file": "refmac_completeness.f90",
+      "original_line": 132,
+      "phase": "after",
+      "anchor_text": "       rho = sqrt(rsq/4.0)",
+      "patched_start_line": 141,
+      "patched_end_line": 143,
+      "inserted_line_count": 3,
+      "description": "Emit generated-ASU reflection row input in calc_completeness."
+    },
+    {
+      "source_hook_id": "C2",
+      "namespace": "reporting_completeness",
+      "file": "refmac_completeness.f90",
+      "original_line": 139,
+      "phase": "after",
+      "anchor_text": "             endif",
+      "patched_start_line": 151,
+      "patched_end_line": 152,
+      "inserted_line_count": 2,
+      "description": "Capture every matching shell increment in calc_completeness (preserving all-match shell semantics)."
+    },
+    {
+      "source_hook_id": "C3",
+      "namespace": "reporting_completeness",
+      "file": "refmac_completeness.f90",
+      "original_line": 146,
+      "phase": "after",
+      "anchor_text": "       endif",
+      "patched_start_line": 160,
+      "patched_end_line": 161,
+      "inserted_line_count": 2,
+      "description": "Capture separate overall (NB1) observed/missing increment in calc_completeness."
+    },
+    {
+      "source_hook_id": "C4",
+      "namespace": "reporting_completeness",
+      "file": "refmac_completeness.f90",
+      "original_line": 147,
+      "phase": "before",
+      "anchor_text": "    enddo",
+      "patched_start_line": 162,
+      "patched_end_line": 162,
+      "inserted_line_count": 1,
+      "description": "Emit per-ASU-row terminal outcome in calc_completeness."
+    },
+    {
+      "source_hook_id": "C5",
+      "namespace": "reporting_completeness",
+      "file": "refmac_completeness.f90",
+      "original_line": 174,
+      "phase": "after",
+      "anchor_text": "    endif",
+      "patched_start_line": 191,
+      "patched_end_line": 201,
+      "inserted_line_count": 11,
+      "description": "Emit completeness summary after harvest array assignments."
+    },
+    {
+      "source_hook_id": "C_end",
+      "namespace": "reporting_completeness",
+      "file": "refmac_completeness.f90",
+      "original_line": 177,
+      "phase": "before",
+      "anchor_text": "    deallocate(hkl_asym)",
+      "patched_start_line": 204,
+      "patched_end_line": 204,
+      "inserted_line_count": 1,
+      "description": "Emit mandatory completeness call end before deallocation."
+    },
+    {
+      "source_hook_id": "T_import",
+      "namespace": "lifecycle",
+      "file": "refmac_xml.f",
+      "original_line": 28,
+      "phase": "after",
+      "anchor_text": "      use hd_mixtures",
+      "patched_start_line": 29,
+      "patched_end_line": 30,
+      "inserted_line_count": 2,
+      "description": "Import normal termination wrapper in PROGRAM refmac5."
+    },
+    {
+      "source_hook_id": "T_close",
+      "namespace": "lifecycle",
+      "file": "refmac_xml.f",
+      "original_line": 297,
+      "phase": "after",
+      "anchor_text": "      CALL REFMAC_CLEAN_UP_FILES",
+      "patched_start_line": 300,
+      "patched_end_line": 300,
+      "inserted_line_count": 1,
+      "description": "Close native diagnostic trace on normal refmac5 termination path only."
+    },
+    {
+      "source_hook_id": "L_import",
+      "namespace": "residual_lsq",
+      "file": "subcf_scale1.f",
+      "original_line": 19,
+      "phase": "after",
+      "anchor_text": "      use consts",
+      "patched_start_line": 20,
+      "patched_end_line": 39,
+      "inserted_line_count": 20,
+      "description": "Import diagnostic hook procedures in LSQ_COEF."
+    },
+    {
+      "source_hook_id": "L0",
+      "namespace": "residual_lsq",
+      "file": "subcf_scale1.f",
+      "original_line": 94,
+      "phase": "after",
+      "anchor_text": "      CALL FIND_NREFINED_ATOMS(N_REFINED_ATOMS)",
+      "patched_start_line": 115,
+      "patched_end_line": 136,
+      "inserted_line_count": 22,
+      "description": "Emit LSQ_COEF call header with conditionally guarded scale state and bounds."
+    },
+    {
+      "source_hook_id": "L1",
+      "namespace": "residual_lsq",
+      "file": "subcf_scale1.f",
+      "original_line": 95,
+      "phase": "after",
+      "anchor_text": "      DO     I=1,NREF",
+      "patched_start_line": 138,
+      "patched_end_line": 138,
+      "inserted_line_count": 1,
+      "description": "Reset per-row trace-owned state at start of reflection loop iteration."
+    },
+    {
+      "source_hook_id": "L2",
+      "namespace": "residual_lsq",
+      "file": "subcf_scale1.f",
+      "original_line": 108,
+      "phase": "after",
+      "anchor_text": "        DY    = 0.0",
+      "patched_start_line": 152,
+      "patched_end_line": 158,
+      "inserted_line_count": 7,
+      "description": "Capture per-row input state in LSQ_COEF with FREER(I) guarded by FREER_FLAG."
+    },
+    {
+      "source_hook_id": "L3",
+      "namespace": "residual_lsq",
+      "file": "subcf_scale1.f",
+      "original_line": 123,
+      "phase": "after",
+      "anchor_text": "           WDY    = SQRTW*DY",
+      "patched_start_line": 174,
+      "patched_end_line": 175,
+      "inserted_line_count": 2,
+      "description": "Capture operand state inside actual SO > 0 branch."
+    },
+    {
+      "source_hook_id": "L4",
+      "namespace": "residual_lsq",
+      "file": "subcf_scale1.f",
+      "original_line": 136,
+      "phase": "before",
+      "anchor_text": "            IF(SO.LE.0.0)  GO TO 100",
+      "patched_start_line": 188,
+      "patched_end_line": 198,
+      "inserted_line_count": 11,
+      "description": "Capture matched shell J and pre-addition shell accumulators before sigma guard."
+    },
+    {
+      "source_hook_id": "L5",
+      "namespace": "residual_lsq",
+      "file": "subcf_scale1.f",
+      "original_line": 148,
+      "phase": "after",
+      "anchor_text": "            WFOFO(IFREE,J)  = WFOFO(IFREE,J)  + (SQRTW*YOS)**2",
+      "patched_start_line": 212,
+      "patched_end_line": 221,
+      "inserted_line_count": 10,
+      "description": "Capture post-addition shell accumulators, or latch call-wide invalidity if L3 did not run."
+    },
+    {
+      "source_hook_id": "L6a",
+      "namespace": "residual_lsq",
+      "file": "subcf_scale1.f",
+      "original_line": 171,
+      "phase": "before",
+      "anchor_text": "        AFOMFC(IFREE,NB1) = AFOMFC(IFREE,NB1) + ABS(DY)",
+      "patched_start_line": 244,
+      "patched_end_line": 254,
+      "inserted_line_count": 11,
+      "description": "Capture overall (NB1) pre-addition state guarded by L3 and call validity."
+    },
+    {
+      "source_hook_id": "L6b",
+      "namespace": "residual_lsq",
+      "file": "subcf_scale1.f",
+      "original_line": 185,
+      "phase": "after",
+      "anchor_text": "        WFOFO(IFREE,NB1)  = WFOFO(IFREE,NB1)  + (SQRTW*YOS)**2",
+      "patched_start_line": 270,
+      "patched_end_line": 280,
+      "inserted_line_count": 11,
+      "description": "Capture overall (NB1) post-addition state guarded by L3 and call validity."
+    },
+    {
+      "source_hook_id": "L7",
+      "namespace": "residual_lsq",
+      "file": "subcf_scale1.f",
+      "original_line": 209,
+      "phase": "after",
+      "anchor_text": " 101    CONTINUE",
+      "patched_start_line": 305,
+      "patched_end_line": 305,
+      "inserted_line_count": 1,
+      "description": "Emit terminal per-row outcome in LSQ_COEF from trace-owned branch flags only."
+    },
+    {
+      "source_hook_id": "L8",
+      "namespace": "residual_lsq",
+      "file": "subcf_scale1.f",
+      "original_line": 210,
+      "phase": "after",
+      "anchor_text": "      ENDDO",
+      "patched_start_line": 307,
+      "patched_end_line": 314,
+      "inserted_line_count": 8,
+      "description": "Capture raw 2xNB1 sums/counts before statistics divide AFO/AFC into means."
+    },
+    {
+      "source_hook_id": "L9_work",
+      "namespace": "residual_lsq",
+      "file": "subcf_scale1.f",
+      "original_line": 233,
+      "phase": "after",
+      "anchor_text": "          HRFAC_SHELL_WORK(I)  = AFOMFC(1,I)/AFO(1,I)",
+      "patched_start_line": 338,
+      "patched_end_line": 345,
+      "inserted_line_count": 8,
+      "description": "Capture fresh work-partition division inside NREFA_this(1,I) > 0 branch."
+    },
+    {
+      "source_hook_id": "L9_free",
+      "namespace": "residual_lsq",
+      "file": "subcf_scale1.f",
+      "original_line": 294,
+      "phase": "after",
+      "anchor_text": "          HRFAC_SHELL_FREE(I)  = AFOMFC(2,I)/AFO(2,I)",
+      "patched_start_line": 407,
+      "patched_end_line": 414,
+      "inserted_line_count": 8,
+      "description": "Capture fresh free-partition division inside NREFA_this(2,I) > 0 branch."
+    },
+    {
+      "source_hook_id": "final_carrier_work",
+      "namespace": "residual_lsq",
+      "file": "subcf_scale1.f",
+      "original_line": 384,
+      "phase": "after",
+      "anchor_text": "      RFACTOR_WORK      = HRFAC_SHELL_WORK(NB1)",
+      "patched_start_line": 505,
+      "patched_end_line": 513,
+      "inserted_line_count": 9,
+      "description": "Record RFACTOR_WORK carrier assignment guarded by current-call nrefa_this(1,NB1) > 0 and numeric validity."
+    },
+    {
+      "source_hook_id": "final_carrier_free",
+      "namespace": "residual_lsq",
+      "file": "subcf_scale1.f",
+      "original_line": 392,
+      "phase": "after",
+      "anchor_text": "         RFACTOR_FREE    = HRFAC_SHELL_FREE(NB1)",
+      "patched_start_line": 522,
+      "patched_end_line": 529,
+      "inserted_line_count": 8,
+      "description": "Record RFACTOR_FREE carrier assignment separately from fresh L9_free division."
+    },
+    {
+      "source_hook_id": "L_end",
+      "namespace": "residual_lsq",
+      "file": "subcf_scale1.f",
+      "original_line": 421,
+      "phase": "before",
+      "anchor_text": "      RETURN",
+      "patched_start_line": 558,
+      "patched_end_line": 558,
+      "inserted_line_count": 1,
+      "description": "Emit mandatory LSQ_COEF call end record and clear active invocation state."
+    }
+  ],
+  "unified_patch": {
+    "path": "refmac_diagnostic_hooks.patch",
+    "size_bytes": 13979,
+    "sha256": "f97907070ed061a87d64c85354cf97d987b3bc6a65d6c4eef97c1a8eb11e9f75"
+  },
+  "source_inventory": [
+    {
+      "path": "CIF_items_crd.fh",
+      "size_bytes": 13555,
+      "sha256": "87e9dfdda454c82be88d190f1988dace29874346ddd8bc7165657793ff81cf4f",
+      "git_blob_id": "8ab2c2697712b43c033001a06995560ee1165c8f",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "CIF_items_lib.fh",
+      "size_bytes": 5303,
+      "sha256": "2ba2756332d971b5185b971b859146f4bc6112703dd7aba0c0171756b5dc4c47",
+      "git_blob_id": "6eac86fef5e2c73253aee8229500600c6cc20c16",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "CMakeLists.txt",
+      "size_bytes": 4955,
+      "sha256": "708473c90a8ab98a09a1d32cd2049cb0b0b84281859f698ddacb25bab13c97c2",
+      "git_blob_id": "528050ef447b8ea98f41d6483a1f6f063e56dea9",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": true
+    },
+    {
+      "path": "GS_scale.f90",
+      "size_bytes": 30164,
+      "sha256": "0691f802ad1e16eed744c21ca3bb82fc692abca21569658d09af3a9ccac4583a",
+      "git_blob_id": "528539ececddd279055c1afea3ddf75a4d4e9dee",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "Gauss.h",
+      "size_bytes": 5973,
+      "sha256": "40b2b5b597ad0bb4561e726297b5693b0e9e848ce6ad3b985ccf5a8047e890a1",
+      "git_blob_id": "7d5f5ad1be4e5916cf1cac54bd671c19dc48ff5a",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "MultImp_collect.f90",
+      "size_bytes": 23889,
+      "sha256": "50cc2fdb43d630bf512a23b667cc8f0c660f7df4697327403d8f98d98e9be9e3",
+      "git_blob_id": "09c286b8596c0ec181ffc4587df79c86eb37f9c7",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "TwoCrystTwin.f90",
+      "size_bytes": 673,
+      "sha256": "c15d700f8984f46a8b13f8512a3ac126071366b16406b49a3d30d4b9b9174ace",
+      "git_blob_id": "8f47226450b26af89488c6598751a6dd60d491d1",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "additional_restraints.f90",
+      "size_bytes": 31197,
+      "sha256": "470cbd12f24aba9c048d6e7d3b4913b1a2ef82fda47f5d49abde0175b11aea0b",
+      "git_blob_id": "34e4afb00f3f34f8da2b383a23c8b10bfab29d28",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "agreem.f90",
+      "size_bytes": 2627,
+      "sha256": "90b8d338794a96891268b317b4df3b424014a4e52ef0e58013cfa22245678e52",
+      "git_blob_id": "1a2f74df3fe1b32c4888c0278982793a6acc587e",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "align_refmac.f90",
+      "size_bytes": 7634,
+      "sha256": "032c4d9067ef840e5990a39654bc8d3ef8bd8a2cdb5c2f3b15d7b455f64c2e1d",
+      "git_blob_id": "a04ee893917d4e5c81eb57e3db788f029a134d0c",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "align_refmac.f_save.f",
+      "size_bytes": 5223,
+      "sha256": "2199af4507701e64b0f598ad73c8fc673d9389793cd3c686f84875a87b73be54",
+      "git_blob_id": "03335f449d1025c3b8f0012338300da072030f92",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "all_elements.f90",
+      "size_bytes": 896,
+      "sha256": "c2d3d3b6cae6956c468462026e5c264ae8ad111847ef32726f727e3dc7fa648b",
+      "git_blob_id": "3607540089007d6c3d7da794f26685621b2153b9",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "all_elements.fh",
+      "size_bytes": 883,
+      "sha256": "ed688f85330d408b144dc31db2af0c0ef9b351e5b2cfea2a87d2ff5d7f376932",
+      "git_blob_id": "2d2755892cb5826b435d9d465ea42ada24b3a91a",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "analyse_all.f90",
+      "size_bytes": 1218,
+      "sha256": "60dde112c7d84b6cbbff66d19c968bec5f6d8e10e55671647ca3c86fb257c159",
+      "git_blob_id": "a498715387d2c8712cc471b2a395e0b0b9d611aa",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "analyse_results.f90",
+      "size_bytes": 165,
+      "sha256": "d745b3c6deb538c45752809c11bc6a3f1b4bbc333aa91a408a030e2dc808b4a8",
+      "git_blob_id": "f01502426c428520187bd9792206c7b9414d55ec",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "aniso_ref_eigen.f",
+      "size_bytes": 60568,
+      "sha256": "1252f60358d5c072ef4e929a49465c3cb82b9840f21549bb01d73a9ff9395244",
+      "git_blob_id": "0c17c50c5df438736e944d6611f21f8a5c0670a0",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "anom.fh",
+      "size_bytes": 3190,
+      "sha256": "bae377d3244b1757888cdf3e293b1644cd4db93c2383d1422db87d8ed6924502",
+      "git_blob_id": "d48e8dd2090e238b0d515070fad33abf79600e9e",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "asym_list.f",
+      "size_bytes": 20539,
+      "sha256": "64f2e4b900982059fa240e355012edb20ce79ef7e585b07e0ca639ffd74f4baf",
+      "git_blob_id": "d093b1aafc0d6a78e7c6ea61ddaf4f2d4f3ce218",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "asym_list_f90.f90",
+      "size_bytes": 18648,
+      "sha256": "1182906601219af151fe24515c75e9c32d87d71c03bdbf0644facedc8711b8f6",
+      "git_blob_id": "cde2d36d8f02a819dcc91e76c574b3dd35e21e8e",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "atom_com.f90",
+      "size_bytes": 38576,
+      "sha256": "72269e086560f64969fb28f6479ec2cb5bd4b09d327c8903dcafe6a08f8828d3",
+      "git_blob_id": "b314452f25e8c9ee6ddfd8de4b0f62bc0db11ecf",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "atom_com_str.f90",
+      "size_bytes": 1524,
+      "sha256": "2360f8a7938154ddbced6b919a3d41cae36dca4399510bb34d007ee98225ab2e",
+      "git_blob_id": "05406f6c06c2ff30a8a40757105fccbf9faa7d08",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "atom_grads.f90",
+      "size_bytes": 893,
+      "sha256": "bbcc14b70fc5051b3e52a0c63baba4019cd71c1ecb58be2060acf2add326ecdb",
+      "git_blob_id": "6ce7d1c58d7c298b3c2331a6bf6a0836cf26797a",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "atom_info.f90",
+      "size_bytes": 844,
+      "sha256": "96ab82fcf8f9cffd4ac3be804943299e323d86c5ee916f37734dd8e4e8a52360",
+      "git_blob_id": "0b1a271a9d27fc6edfb4fa0f3cb7ea79a165da50",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "atom_select.f90",
+      "size_bytes": 4879,
+      "sha256": "425e11e86ea983bb839fe8aff5a48d5754e06feb800dce2b448197a87ee54396",
+      "git_blob_id": "48e1897219d34088da645fa4d9a404459e8b625f",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "atomf77mod.f90",
+      "size_bytes": 19097,
+      "sha256": "a42e3db8ce9b403b8b7a48b30dcb4b1437c346f78d5406faa956d26dd3aacc4c",
+      "git_blob_id": "48778d87b5a9600b529516aadd63293a6086587d",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "automorphism.f90",
+      "size_bytes": 10794,
+      "sha256": "56682d57b5335cf84f33a21edbbad15bc02c66d88ff89bef13499304db630540",
+      "git_blob_id": "c8ce270eee3a085c4bbda0752fa477952cfaa85f",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "basepair_paralell.f90",
+      "size_bytes": 14361,
+      "sha256": "4c325bd57f1ac96a70ac1e3e9fe989d992ab64e9a58fe478565200d39b4d2570",
+      "git_blob_id": "783473cdfcab097f753d7486a9c67a2610072bcb",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "bit_arithmetics.f90",
+      "size_bytes": 1048,
+      "sha256": "60f4f45e5775dcb7d7031ab2d31d3e08da7246401e684674014d49a5302dab61",
+      "git_blob_id": "f555174c9fef30ecb90bde6a3cd62dbbbe002bb8",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "block_organization.f",
+      "size_bytes": 7038,
+      "sha256": "0c4b459770a506e88cf23e92bf7c5e615d10fdcd793394db9310242fd70dee6d",
+      "git_blob_id": "c609d5fae1be0200a292f1e202bb8e1abb742f09",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "bridge.cpp",
+      "size_bytes": 108935,
+      "sha256": "8c5723443ed5802ea49640d63b459b60027a9317b6f29aedeb2833e136d896a1",
+      "git_blob_id": "f236f1619bc208a255df400ba591e79c799d503a",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "bvalue_routines.f90",
+      "size_bytes": 3474,
+      "sha256": "302935f145135eb8b6a9beaef480eae7aa8e147f7079fc4e1e8ae47ffa70f539",
+      "git_blob_id": "42fac2d2a98954cf0fd46f809d184d09ace19157",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "calc_stats_twin.f",
+      "size_bytes": 32446,
+      "sha256": "025dfe590393f747e3541a09c706c9c060c3678640db2afa2429cb17a38f1466",
+      "git_blob_id": "05087919544c1953d232e736ebfa0a00448da462",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "cell_refine.f90",
+      "size_bytes": 35556,
+      "sha256": "dfe6e73547766de040f2f4d7216b229cce6fd3a86f2886199b9dc08b1c4e2935",
+      "git_blob_id": "63a735d4f1a7d9a4428331e2e1aaa72d2e043892",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "cell_symm_subrs.f",
+      "size_bytes": 76060,
+      "sha256": "80b1304c4387a312d0cc7030262f369c947e071312c6084ab20848086d6132c0",
+      "git_blob_id": "6f3ca622471ee6ece2f8ff77e003eae06e7ce9a7",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "celsym.f90",
+      "size_bytes": 7168,
+      "sha256": "fe083546966e0e8315e48f7e5d2888d21fec7cb37b10d862a1dd7b0bbdc40e4d",
+      "git_blob_id": "8df293a76241ef9fd610995e9a83be34cabf7cca",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "cg_sparse_megas.f",
+      "size_bytes": 8906,
+      "sha256": "b057b44c020c4ca61cf28b5d888b84e76b807dbd3f49a1d0305027c440f33d81",
+      "git_blob_id": "714d2a20926d2bcaddd403f305b1ffd62f3870a9",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "chbevl.c",
+      "size_bytes": 1692,
+      "sha256": "6c563580fd719cd8cc5ae560d951287d81b33b83aa5ad0ccf879b04eb1bc875d",
+      "git_blob_id": "00d0eee90c9d8b8d48645040a4cd3cead49225b1",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "cif_incl.fh",
+      "size_bytes": 387,
+      "sha256": "949caae1c1ed24c32de8716b0b3a091058d72e124382804540df885d79785a85",
+      "git_blob_id": "84249efc223803f5d0d4f582a41c167029687a4c",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "comcif_info.f90",
+      "size_bytes": 640,
+      "sha256": "d3a17bb688cda44a4190ba01e00b1ddca4ba1a968a2f9ebb90e85b19e5607ebf",
+      "git_blob_id": "866bf07c2f840ba8d6959a5c5085bf466177a6d9",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "conf_select.f90",
+      "size_bytes": 336,
+      "sha256": "b812d5eb60c0e55d3d2706fb5e537b0f407cfa0bc1aa42e9a30b3f4c3a19d301",
+      "git_blob_id": "c7dc0dc9b333652f0bd39e7c6e8537f3509a20de",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "conn_com.fh",
+      "size_bytes": 935,
+      "sha256": "3d886eedc2b55df35f4dcd5f918772c133545ec85c900b8a9b7d5ea23649cfd2",
+      "git_blob_id": "dc40e427968e4de15e35a87519fe433cf63c780b",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "const.f90",
+      "size_bytes": 1093,
+      "sha256": "b37702b29b5c92b8421af13b53aae64cdc10b22e2660c183fe02d6934938dfe7",
+      "git_blob_id": "b012d398107042a679b90761b233899b7da1dcc3",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "coord_utilities.f90",
+      "size_bytes": 804,
+      "sha256": "bbb66b0ee2b1319b2527030f66b90be3e1ee574d7d1876225d38f61884e7877a",
+      "git_blob_id": "95bfc6cbb71fcb7cb063daa4102d8500a59dcda9",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "coordinate_reader.f90",
+      "size_bytes": 740,
+      "sha256": "aec049ad3a72acf314bd80448c4acd37afa87b88a1444074350380e1aa0d2d5a",
+      "git_blob_id": "b8a6ab718bf1101e9a88938690fc1fee5272d417",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "coords.f90",
+      "size_bytes": 2601,
+      "sha256": "fe7ba6c38a9e8b65c6a25403cc2a863ec13009cd040693ea741bbb835ed7385a",
+      "git_blob_id": "36984c4881b98a372cc101b6553eded602bc2de1",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "copy_pdb_dict.f90",
+      "size_bytes": 563,
+      "sha256": "64f4c92bf94bbc3b550d58101c7bab56c38130f40c1fa79b79d1db4d8070b4d0",
+      "git_blob_id": "0f73b4a51e3f0dfd4a201efd01905da5e35ea642",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "covmat.h",
+      "size_bytes": 83423,
+      "sha256": "6d7b889f6d69ec3431117a4fc2fe5a91fedffdff7575db82b97798d1c345b308",
+      "git_blob_id": "7c2f0061886b907ec11093e658c9455c7e53c08d",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "crd_com.f90",
+      "size_bytes": 15827,
+      "sha256": "3ed91eecf1c22e1ed25f742cada40aaed99f496ec3d138ba172de193e2bac7c5",
+      "git_blob_id": "07e3f6f40790c91de223fd71e769bb141f4f6503",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "data/atomsf_electron.lib",
+      "size_bytes": 27083,
+      "sha256": "cabf528209fab31e55bd6aaa2f17edba9797b38af523bb9e1f7ee5a75db6dcdb",
+      "git_blob_id": "77bb9241b9d9d35641726b9e1a52a7820d3786b3",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "decide_twin_opers_0.f",
+      "size_bytes": 19708,
+      "sha256": "a58c6e59657f41ecbdf552e1e597a8cfe21fa57e72c281fffd69002384ef169b",
+      "git_blob_id": "e75226d97a16a22d37fef2e15737c5d07ce97b42",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "density_routines.f",
+      "size_bytes": 8010,
+      "sha256": "f32003498fa80c59fefdcabaac9c2a793a4d3d21f79aa6cdb0b83adf6415402c",
+      "git_blob_id": "57a08e9be64381774173d56f2c3bf66005aaf36c",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "derivs_form_all.f90",
+      "size_bytes": 20366,
+      "sha256": "7a1041fbb6bd3b1333465d9a949d2430f30406e92771251c5c9fef1e00e1f801",
+      "git_blob_id": "c1c0d7aab5870e6d947027cff784b5234dd2b1d0",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "dist_routines.f90",
+      "size_bytes": 1221,
+      "sha256": "872f9246b3d7aa9a9a44a0085e0e8d322b60f187e50089c06f287f17a8de06eb",
+      "git_blob_id": "864fe1dfc60d3ac0e8c533753d5da8108f0a3278",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "dna_rna_base.f90",
+      "size_bytes": 40087,
+      "sha256": "545b470db0f56829d29632a27d5f9d4107f6e6b62d275792b4a9c642e18dc142",
+      "git_blob_id": "8d0a2b60741b18cf8ce8182b67a2d5e138610990",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "docs/Dictionary/bug_fixes.html",
+      "size_bytes": 4698,
+      "sha256": "45d6245e2d6d3e885910f825e66f3b89574fae29b216f815c5b2da009284d137",
+      "git_blob_id": "6eb954067719e8aef508a2e79d79502254d7bb7b",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "docs/bug_fixes.html",
+      "size_bytes": 14474,
+      "sha256": "8932a7b9ef85063f5e603139ded6c23edfa71c0183031766e028fdbfbbe71803",
+      "git_blob_id": "9069bd7a05db25d11bc4725bbe36db1784c6cf1f",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "docs/changes_and_bug_fixes.html",
+      "size_bytes": 1528,
+      "sha256": "85010f716e90dbcef7774793d5ebe6f55631bc90befe4633a8c4c33cba7f4a4e",
+      "git_blob_id": "bd25406247608180deca953e2d03a4903df578c5",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "docs/features.html",
+      "size_bytes": 14284,
+      "sha256": "a71b998f589301037f80a2af0830a52f3abf3672e3ddbac9445d8d83bf8cf23a",
+      "git_blob_id": "ccce713975d4beb7c27f5468ee540e96bdca0c73",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "docs/refmac_faq.html",
+      "size_bytes": 574,
+      "sha256": "0b4c915789feb7dbac889aab32aa116dbe0c8a2a07323f380da70486c805d296",
+      "git_blob_id": "8dd309e77a7e2e03baeedb49e8b53196e49bd188",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "docs/refmac_keywords.html",
+      "size_bytes": 112893,
+      "sha256": "27cefb394e6eebac169e9f593930c5ea5dd82054fb10388c54127cdd8772a137",
+      "git_blob_id": "4ea661dbb0b4b119e6f4d319f4b8e7fae6c774d7",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "elements_module.f90",
+      "size_bytes": 1742,
+      "sha256": "365117113baed27607fcf13051ec5cc2af3e217d38967c2f32fad5651d28c22f",
+      "git_blob_id": "3eb20105aea6bfcae1728a6f7e29993b4d1f067b",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "emin.f",
+      "size_bytes": 184538,
+      "sha256": "d7538c06735ed734a26bf894a65f1223c3af37483465a794519231fc0367cb72",
+      "git_blob_id": "fc67586eb2f22e4fe0bc693202f31fc22a4e5586",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "emin_version.fh",
+      "size_bytes": 393,
+      "sha256": "5dcd2af1a639bc4d1ab8c97393c0fa9c059047949a9a51765566ba2822078974",
+      "git_blob_id": "e1ea2364a63c2ea981b3edd36f2188b36dc2f0c7",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "ener_com.fh",
+      "size_bytes": 2128,
+      "sha256": "d25341c651b96a31d51042d975f90800fdedd7d8100271cd70d25270d4a80e2b",
+      "git_blob_id": "0f72cd0e52afe5d99063aea98eddd783df5d1292",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "ener_pars.f90",
+      "size_bytes": 9776,
+      "sha256": "a5d0a4803ed62b84629f8bd020b0d14fd8b0f46f799b51ae6930b4b1e923bbd6",
+      "git_blob_id": "1502f15492a64ef7ef5bf9a9cbcfbfdbc19de501",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "errwrt.f",
+      "size_bytes": 787,
+      "sha256": "aa63dfc24ca7d6c84a811175569879cff19730f32b0fdbfd838cb13c66d410e9",
+      "git_blob_id": "4c732ff079ae7e1e4b8dedf18bf4303daba04525",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "expcost.fh",
+      "size_bytes": 1076,
+      "sha256": "6564682fd7840062070e53b9ee2ecb88044135c071249e19db41724031c44028",
+      "git_blob_id": "04afedd0a198f174677cc6259e19909f9e7d8d50",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "external_dist_restraints.f90",
+      "size_bytes": 9601,
+      "sha256": "acf1ed36f512c12c2f8e5c6185473c7f7cde7be580f5a91c3d07a7aa6024f6d7",
+      "git_blob_id": "dfa72e4a16378251b69fab170f10a05f79dff40e",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "extra_eigen.f",
+      "size_bytes": 47116,
+      "sha256": "31d13fb66d4b8223577effee32c4e70e034768158dadada95a513ef4a34bae07",
+      "git_blob_id": "3e4e45cbb1a783f7db504874ea8f4b3cbc3b8a13",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "fast_hessian_tabulation.f",
+      "size_bytes": 71603,
+      "sha256": "9104760779f75c22e66e57dcdf51f9a170ee87683232e65786a41b8afbb8bdd1",
+      "git_blob_id": "32172dd734799515316843a8f2db6dd5590600a0",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "fftw_constants.fh",
+      "size_bytes": 527,
+      "sha256": "912decf076a37f7c822980ebedbd34b25fe29a338622f97f0b71c1de913f3a44",
+      "git_blob_id": "69a29c604ec196792aac94683bced4a1f48f2765",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "files.fh",
+      "size_bytes": 257,
+      "sha256": "1f973e019a494646400fb2d38f288e729bea8b6b0350b4ec7028f24111e6ef7a",
+      "git_blob_id": "1ca75188e8f32704cfa39c313b3753f739fdde15",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "filter1.f",
+      "size_bytes": 1480,
+      "sha256": "95535fe0f7a50f408d76544bccdcebb86f752a6923b2941a2791ba8b292b391f",
+      "git_blob_id": "0fd1f3c52eb4ca37000fd6d8104508acdb074cc5",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "filter_params.f90",
+      "size_bytes": 7029,
+      "sha256": "24a42318cfd8032bcaa589f5f880d10c0ef44efc06c606ae93f1e9c6e4fe543f",
+      "git_blob_id": "a4f093a852b152f66d8b25167f05f6971207fd06",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "filters.f",
+      "size_bytes": 3600,
+      "sha256": "03c8e2e47eadd13fe426670c1e7f884968d2c43e3a473807af6ec24190a8351e",
+      "git_blob_id": "d47a76fd1320b5bbf416bd3856808b169591a4e0",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "form_factor_refine.f90",
+      "size_bytes": 11125,
+      "sha256": "a4fb6fa65cf0765e989fc71d9f86b56ee0a90d5e1e414dcbb0f96d739b6227a8",
+      "git_blob_id": "5ef5e25a3cad243a8884284a19039027575cf5a1",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "freer_twin.f90",
+      "size_bytes": 16921,
+      "sha256": "e447e8c9995293ba4df49e51cee860095d996fd698ae02a35df8d3a4d7b18339",
+      "git_blob_id": "9a873af1a92847e6249a7f73cd1e55ad8b878763",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "gauss_integrate_test.f90",
+      "size_bytes": 308,
+      "sha256": "3c99b7addfe46278215a492e3c8110ab04b8a5924f43062180e1503be049f1b5",
+      "git_blob_id": "69b5ba62b347d083aa7eb0832387ae1d122329c2",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "gauss_sample.f",
+      "size_bytes": 6246,
+      "sha256": "94d5b6a1bda42bfa4fee0c2cd978ec43334c4aa0fd54109bf7599585b3d7e85a",
+      "git_blob_id": "d72b1fd9d02867e551c18572a6826e9679598042",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "gaussian.fh",
+      "size_bytes": 465,
+      "sha256": "6e1087fef9e2bd06bd01357244d89efaa0733a16b08eea63432c5a3c644d2330",
+      "git_blob_id": "0c22af946e82188fc172a0d56415aea96cb89c8a",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "gaussian_int.f",
+      "size_bytes": 6621,
+      "sha256": "145360dbce72d4614c30cb2f016b4165efa8b76cfd1133eee9f8aac4c33d65ba",
+      "git_blob_id": "57614779bab6d0f243b680c5ecd2c49baca659aa",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "gaussq.f",
+      "size_bytes": 13102,
+      "sha256": "b6dbad8cc335932843be9cbf91c5c537ebe14243a8e87d8e5924e304acf46a52",
+      "git_blob_id": "87955e9dc904c99f983e4ee1b5f24794ecc89b61",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "generate_external_restraints.f90",
+      "size_bytes": 2551,
+      "sha256": "f11cf8d1a8993ba9de8b08fa1f3bf468001035a5d417e77283cbf65518660bc0",
+      "git_blob_id": "172b5b12882cdffebeecff57f6f862bf1a3a64d2",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "gibbs_gm_sampler.f90",
+      "size_bytes": 17028,
+      "sha256": "32e0cf57d816d45f105e5ee1cea656064ab52c80ed32146ed7e6c68d8e06b3c1",
+      "git_blob_id": "ec980f797bf4dbb12cecfc66e783c27b6f052ecb",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "hd_mixture_refine.f90",
+      "size_bytes": 15185,
+      "sha256": "df503a6de40188b44b0ee7a0e307448ddfb0cb140f00d099b9f6072c5e3f0536",
+      "git_blob_id": "c026fa55a258dd9e12c44885f3874f826d5a349d",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "header2matr.f90",
+      "size_bytes": 11238,
+      "sha256": "1d4d11d1382c3dc46b721644222001ad971cf0e38a6ad8ae22d6d14f63d0640f",
+      "git_blob_id": "39c7a6d2d37798cdeec49545961954afc21692b2",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "hessian_impl.f90",
+      "size_bytes": 2102,
+      "sha256": "eace9ed7aa2a6b43b24fccdb4028f53497cf703aef926d3287f11a04e76e3bbd",
+      "git_blob_id": "a4bb94fc5bf6efe38cb7581d19fe0d14cb557332",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "hkl_pack.f90",
+      "size_bytes": 79,
+      "sha256": "ee0ced860222bee8123a4666844cab28f8f894fae3513cdd48032e08ed24cffc",
+      "git_blob_id": "f213e26678406c3daa1f3422b5ee87feea377e8e",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "hkon_secder_tch.f",
+      "size_bytes": 207056,
+      "sha256": "54b9c9bcbfdaf4476ffc5098a9f900a62ba90fb4ed4d97e016cd1fbaab06ce42",
+      "git_blob_id": "05d13d388a2706eac45a3fcfbcc131150040b5a5",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "i0.c",
+      "size_bytes": 9094,
+      "sha256": "7962134dedeb152a056c91a6730c5b38559bea67acaa128a4601f4ccfcf15116",
+      "git_blob_id": "474299df9fb1118bfd4267c36aa2fbf4f00856a7",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "i1.c",
+      "size_bytes": 9118,
+      "sha256": "ac09c4f1c5c7ddadd4c11fac3f8c7e7295296a1ed3da36cbf81b30003ac4fdc4",
+      "git_blob_id": "4ce837ee20ac59a31a655042624a83c0cb866e1b",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "iheap_sort.f",
+      "size_bytes": 18047,
+      "sha256": "0f526ebc37c1f2dcfd09d63c56f0a1ebd51de33fe86887556366459767dd9a2e",
+      "git_blob_id": "ce5794aeb44571a2bab6acf291a7b597aa1a099e",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "ind_com.fh",
+      "size_bytes": 1008,
+      "sha256": "690f2207e527920f3a045def1b8d48a2c75ca2c539f0e1461678e95bdbd782af",
+      "git_blob_id": "16608ff1098b45247db590b2a270d721d5453903",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "inout_routines.f",
+      "size_bytes": 5633,
+      "sha256": "1413953efcac44099547fd11fed57d953c3dbfe473d6195b6142a81aaba9d904",
+      "git_blob_id": "12a02dcb5f5eb03271758df58626b0ee6b7a7992",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "integrate.f90",
+      "size_bytes": 7839,
+      "sha256": "6b7dfe3308446a4c202f87a7ffb246ffbb84701bfdb1f83f9a8f03441a2f3c6b",
+      "git_blob_id": "5ace3cf6bff5deb259a55ecae4827623f8fa7325",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "intensity_scale_random_generate.f90",
+      "size_bytes": 28066,
+      "sha256": "c7ae8c0cbbda97e1739c54dbbb9b18fdb671d4c60a3f67b6f8180f1a2dcac429",
+      "git_blob_id": "b546b565b70a43849737ca47d9fde2b9b5cffb6a",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "internal_patterns.f90",
+      "size_bytes": 2965,
+      "sha256": "c198401136e81312d74809c9cf1077a2b26153751320349a58b28145d29bcc27",
+      "git_blob_id": "a18c42a52e4983c816c684f3bfa6bd21e13ddffe",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "interpolate_mod.f",
+      "size_bytes": 22548,
+      "sha256": "3259efa48e3ddc09186d771b0224c2f0c2bafd0df58c15c5c966422082019d7a",
+      "git_blob_id": "bf97e8f2423e1482dde31aae9a788e7885736d65",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "libT.f",
+      "size_bytes": 37752,
+      "sha256": "10c450c7250c9f15a7514335fd42b89e14e849d116f4de5ac206bdda914f7c5d",
+      "git_blob_id": "daa37d3e0889f6567d13d934922d22b47c167c6e",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "lib_com.f90",
+      "size_bytes": 68578,
+      "sha256": "76854e23dcaecef446cc187f13623d01cba6d14a72b58e859775d42308a06320",
+      "git_blob_id": "0a4c804f50cba7434f5b9d7e1b57d606f913d07d",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "libcheck.f",
+      "size_bytes": 253562,
+      "sha256": "00efc7a922502364301a32e0dcd022f2fbec908b1a155531b8efac61684e0b44",
+      "git_blob_id": "5fb907915f58bb5074a6678f3510e69dae4a4db2",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "libcheck_min.f",
+      "size_bytes": 42393,
+      "sha256": "39af4282bf3840ac1d34b97f7fe58e4712e19b3f3f9a2358817d6dc80f37d1f7",
+      "git_blob_id": "ced8f239e379d1952957b89f23087341cc2709ff",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "libcheck_version.fh",
+      "size_bytes": 398,
+      "sha256": "6aee820f772ba75dd87e1f1afcd8e11fbd2212aa7a51940624cc34aa0fabf2ea",
+      "git_blob_id": "33c2c81c7a77ec680c8777d4661bd8a3dfe58d9e",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "libcomf77mod.f",
+      "size_bytes": 58,
+      "sha256": "4e07e8699f425049e614966767dfd4700ce6927731a1945908b9198709dbed44",
+      "git_blob_id": "5a0d5aa5b39200a7428855dbb6007aa6823a60a0",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "linalgebra.f",
+      "size_bytes": 71511,
+      "sha256": "8e0bcdc851e1a5c6365fd9f0e08636b3d7813e2fa52a2a046b0d875284855d5a",
+      "git_blob_id": "bb948c64c204b73c3dace24ba64042613d33a58a",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "linalgebra_f90.f90",
+      "size_bytes": 9413,
+      "sha256": "c05cc8729168cafb40bf7b8ffd4ea92f4a512fe484d38718e7dba94a29eba32f",
+      "git_blob_id": "52d4b5492c00389d7ab83716cd20350f4be6a011",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "linalgebra_refmac.f90",
+      "size_bytes": 2567,
+      "sha256": "b2a04e674d67e78c3106d8f4e6648c365248e0460fd02c39fa35e256f2a78d19",
+      "git_blob_id": "71639a9705cdba31e9c26941d4dadcaefaf63f75",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "link_com.fh",
+      "size_bytes": 1954,
+      "sha256": "a683f09c8f36fbd9dfe465fc15067e76bca5216c5e37abc36604787c358f909b",
+      "git_blob_id": "154828c14f8994599fcdcd18391ac0633ffe0761",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "llhood.h",
+      "size_bytes": 165276,
+      "sha256": "395e9b764191d8d2f617f78150e96363598598977a39a1afac846650670a567b",
+      "git_blob_id": "c55a36453f34a10bf3ab828e00bf3e50c5f9571d",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "lnumrec.f",
+      "size_bytes": 1590,
+      "sha256": "e705e3bac968b2f2bb81a9509a1aef0daad5a31d78896713374662ddb05af113",
+      "git_blob_id": "c4f9e066ea1e0be3566dcd8b44e86a9a7df3253b",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "local_tls.f90",
+      "size_bytes": 25037,
+      "sha256": "33137302970b4f9831d1b93d964e6005a5a23e6d6d436763759d778fb116f59f",
+      "git_blob_id": "2404f26e5152f91200a78e713d0118ac2127080c",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "low_level_routines.f90",
+      "size_bytes": 1959,
+      "sha256": "075785e5dd9fcee01248ecb12b1fa95cb5cb1aa8023621036373bcdecc02d09d",
+      "git_blob_id": "e5556f928aa7518c7c9d717e13758dc66baa8113",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "ls_params_save.fh",
+      "size_bytes": 414,
+      "sha256": "6b4c9021c4fceb22940229f511892a3d89027c7b7270ed48c4fed6f5bc252481",
+      "git_blob_id": "302b41c50dd2b65607479e6f35791e6a1f943b25",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "ls_scaling_double.f",
+      "size_bytes": 37203,
+      "sha256": "7e5c5edf8d751861ebb325240e331f85e4d5deed21e9b360ca72d93d772959d5",
+      "git_blob_id": "5a00636b025410b692f4556faee9a9cdb257ab4c",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": true
+    },
+    {
+      "path": "ls_scaling_twin_save.f",
+      "size_bytes": 36087,
+      "sha256": "b822ceabb2e5795026573a8e7d65c0d1f58eb51733ed7e2a8366fb9b74988669",
+      "git_blob_id": "e09c1113a3a9006f631fd1f505bd84410f23c364",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "lsq_exp2.f",
+      "size_bytes": 313201,
+      "sha256": "c07836b7da35d05ba1cdc700604edfb7687044d1b471261a4f557e5edda3ed46",
+      "git_blob_id": "cbe7f395f902cc38a0cbe1444d9ea6a084114209",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "machine_.h",
+      "size_bytes": 13522,
+      "sha256": "97b8bd785359b35593a6755beba1c10dfaf2d4f17e1883984e18fa733d2aac23",
+      "git_blob_id": "600379b832de1eb99dccdd133b91d10e282c3171",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "main_emin.f",
+      "size_bytes": 6835,
+      "sha256": "52c070d58bbf79743b08d4211660d31b721345d7920fc9e92ee9688f9502a402",
+      "git_blob_id": "038b6a62403e58926daab76a360df4d2cfa9cca0",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "main_libcheck.f",
+      "size_bytes": 9123,
+      "sha256": "81f003f06f1f5c0e98c04d0b799752238cd704b5a84fb50a4dd371a111d4dbb1",
+      "git_blob_id": "935b2efd05c083c080f2314d3482f186a309055e",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "main_libcheck_sdf.f",
+      "size_bytes": 8503,
+      "sha256": "fff4af40752cb82acbed60617c097d74b04c6b1b6468bb123f741efee6c33321",
+      "git_blob_id": "bdbe225f161f4ae563e650e7f3a713f07497a89b",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "main_makecif.f",
+      "size_bytes": 10679,
+      "sha256": "ef6e29dd4c8a6f9257fc17c8d88746ce073c82f8439b13b9a36e7fabdef9b3c3",
+      "git_blob_id": "f65b0903aea32c1240b68fcd30e5dbee51d73d09",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "make_CIF.f",
+      "size_bytes": 319289,
+      "sha256": "0eaabdcd0cd29dedd6a1524775654d06e7c8a4d2e47577728653163ffff3270b",
+      "git_blob_id": "7895e592c9a2a2e69665fd51102dae61e3bc2acf",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "make_CSD.f",
+      "size_bytes": 11988,
+      "sha256": "0bf7ea476eaebf3152506f7b214ab4a9d12a4a8bfb5e626c65e0f60a8f8a483c",
+      "git_blob_id": "02d02a7b4de4776791971c2e4ee042c315b78c59",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "make_PDB.f",
+      "size_bytes": 129879,
+      "sha256": "ca043464fe91d74c0779576af28e693943aa05f1be38e30e3d639c4dc04b262b",
+      "git_blob_id": "f2ef3368ab3f0cca501e86fcfa642ead0a5dd207",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "make_crd1.f",
+      "size_bytes": 261726,
+      "sha256": "9762afe337f6ebdb6baadc6d09eec07892e6754751556de79f4d0080d9e41bd7",
+      "git_blob_id": "d906fe7c76d8c9ddd6c4fc3290b48bbdddeeffde",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "make_crd2.f",
+      "size_bytes": 221829,
+      "sha256": "c6d0d400b234716b5d152ed9c09e7031efbccabb147eeb8050e6f03a7b89d6cd",
+      "git_blob_id": "3ba85fd2ee50e0d6f773b5ab075f1787db3c5de3",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "make_lib11.f",
+      "size_bytes": 88312,
+      "sha256": "fbdd053bfd0916182c99b154c050abd53f2a09671121f983cf316ad8b03ace21",
+      "git_blob_id": "200a14003e8e308005df4c501b9c75969265e5af",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "make_lib12.f",
+      "size_bytes": 110857,
+      "sha256": "71a153690006e4c92e25b85cabf3a2ebafbdfab3d0400d2fd537be9b2b726982",
+      "git_blob_id": "e652ac7ed5f2e9e265177b26146b8b55d6722586",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "make_lib2.f",
+      "size_bytes": 232754,
+      "sha256": "9ba59efa59d45497f7ea0a1caa0703ae3fea5ed25e79dfd1dc5d033a8d5071e5",
+      "git_blob_id": "6c5c3b5330925e897d6707a8e079279cf50ef443",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "make_new1.f",
+      "size_bytes": 209046,
+      "sha256": "8a62bd2c6824465b6f589f92dc6e3c256fb90281243065363c3927b9fcb9c7d5",
+      "git_blob_id": "ca6b7c224331326d0e4052022ac55400e7c52f93",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "make_new2.f",
+      "size_bytes": 200159,
+      "sha256": "bcd19b43931cf885376e84a7564db80efd0c56cf5dea69a269f2c84e177ab4ff",
+      "git_blob_id": "60fb2d2fbae46b1544be8d8c15c78697780f2959",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "make_refmac_dummy.f",
+      "size_bytes": 47456,
+      "sha256": "1a91286f73044ed2eeb9f2b1d6986930f06d2b260d179debef5df35f2d94d24c",
+      "git_blob_id": "9bf7c94dae2fa1d32e54667378b9a1087d4220da",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "make_rst1.f",
+      "size_bytes": 209235,
+      "sha256": "4da79e5edc13d348f1b36c98228908f46e700bd5aea39923b4bcb2bb500fe6cc",
+      "git_blob_id": "df7c764f8de64b8670ba375b6df7d81e65703236",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "make_rst2.f",
+      "size_bytes": 318555,
+      "sha256": "dc094b0350e643cd4b63db7441875df6a231f0d2531c16f496d1161216fdd18f",
+      "git_blob_id": "59d529ec07b07b71bacfb9fb44dfe96bd355b92a",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "make_subr.f",
+      "size_bytes": 160841,
+      "sha256": "0b83d931820bb88916f53616a7f3d4555211ceac0d9fae8a947f500da551a930",
+      "git_blob_id": "94b9081778c3a9524a8155815c5766829b3db9aa",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "make_subr_2.f",
+      "size_bytes": 351363,
+      "sha256": "04843685e9408c6e781473b786747a1d0f2acbf8a65c4a604a2db123b78a7509",
+      "git_blob_id": "147d831dbd1a9be09a24843e9c3f9d659bec825a",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "make_subr_3.f",
+      "size_bytes": 31947,
+      "sha256": "f6d4e5608355df44dd26781a6984f3583889ddd94a43d5e1bb257a498ada3520",
+      "git_blob_id": "84ddf6404fbf74e2898ae9d8c3897a4bca22c3e8",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "make_subr_refmac.f",
+      "size_bytes": 14267,
+      "sha256": "e55f9df2a9246eace6771d8393cac377a50ce85e108c4abbbb74e73f105a4fef",
+      "git_blob_id": "bc9457be26b807da9842eabd8904370852564f0d",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "make_unix.f",
+      "size_bytes": 2861,
+      "sha256": "46ba97e481b6458ef10aac0aea491656bbb926559cfbe3028ed04b3a4a7ecc0c",
+      "git_blob_id": "b46c1431747fb39d713b85557a9c404cc1e1e068",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "make_unix_ccp4.f",
+      "size_bytes": 3491,
+      "sha256": "484f67e2111074723a20ff2f533f472a0aa9e05638ba6e95c1070d0aa391a7aa",
+      "git_blob_id": "ef8fa78fac1dc340f5f898a255183f3908b2fc44",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "makecif.f",
+      "size_bytes": 36682,
+      "sha256": "898e375f2d46ecb3b66b080e9dc4af10294ccd12806dd9df618b64733c695ff0",
+      "git_blob_id": "cc03271f39b9177eeebd3bbce78fb2c4e206c4d7",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "makecif_pars.f90",
+      "size_bytes": 908,
+      "sha256": "01a78f00f76fb764aa2d356268bb4c0d1f41b2d48f4cd92604d193292f458164",
+      "git_blob_id": "9c2664d2c5eff9cb110f9ab55bb21d277ffa846e",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "makecif_version.f90",
+      "size_bytes": 904,
+      "sha256": "896bae0aa9c53a6597f44049d465b3b1d800a254db2804c21e924c3080882c56",
+      "git_blob_id": "2f5cfe11e65861197438e207ad6a2575b84e7024",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "makefile",
+      "size_bytes": 143925,
+      "sha256": "1b3efbd66a7cebccd2d9a96553848fe8dc327546d62a8de20e7e06b0fb42e9b4",
+      "git_blob_id": "33377d3038362d178495f26aaf1556c5c5180d8e",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "makefile_gcc45",
+      "size_bytes": 1454,
+      "sha256": "e2c00216764bc30921678542d88a1c1b731c063cb157caf666e17298976e0bb2",
+      "git_blob_id": "8ef06179fc82b51fcae6d7973964bb4c625d4967",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "makefile_gccc45",
+      "size_bytes": 1380,
+      "sha256": "6e11ae9453d55a4bc11f604873969dd61873795485d6ec652cf88afe14a78bd0",
+      "git_blob_id": "8ea8f1655531ff2af9ebab2f43bd10898ee7a8e2",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "makefile_gfortran",
+      "size_bytes": 1264,
+      "sha256": "c1032a564e9941f327c5386d358b39c9e4bf00a3fd79ff1f9e0679849bfd6020",
+      "git_blob_id": "419d06e2bbe913cc282c1813287b04799c078734",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "makefile_gfortran_save",
+      "size_bytes": 1442,
+      "sha256": "a6e11de7adf4f3f080de18d1c7fa733fd501eaa4a242c4a860e111a761b04859",
+      "git_blob_id": "e4cc57c16d8ddf6b3ee443cb86f23b2739fecc2e",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "makefile_ibmmac",
+      "size_bytes": 560,
+      "sha256": "03e2e2cad2de96e8a5744303dd9280610e6a08f38f4d1ef56f74fa45dffe96a4",
+      "git_blob_id": "dcb68a94bed6273537fa761fd10eeb00b11ec03f",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "makefile_ibmmac1",
+      "size_bytes": 479,
+      "sha256": "3cf3e5e083cf3c8d6cd9e024ae082df5c4505f64a35d45202131434bcb1d0bed",
+      "git_blob_id": "006176f9dc1873baec8d133627ac64edab8c05a5",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "makefile_linintel",
+      "size_bytes": 417,
+      "sha256": "e20601c8cec0cec2e138657c060369e1c6c827c75a30a30a16e91c43983339e3",
+      "git_blob_id": "96960b5c1dd994db60ae81e08b402383a92d5bd0",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "makefile_linuxgfortran",
+      "size_bytes": 596,
+      "sha256": "acf09d975b21e3fe0b16edbd3269d2e35bd8902e7f50d1ba5c03649034b2c993",
+      "git_blob_id": "38df1ce7fd21ac12e34c69c2dd9f198f2003f4c6",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "makefile_macgfortran",
+      "size_bytes": 750,
+      "sha256": "10d9e7be3e20b85582e55b96064409cab174386b2ad866931fdd48d3e26e1634",
+      "git_blob_id": "43b3e1439cfa26ff1cd63a8d6428c43dc77412e4",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "makefile_refmac.inc1",
+      "size_bytes": 38428,
+      "sha256": "bb2116aadc317c48036ba8197d71bd8c7c212a0eb161f3d342e217d88b935c6d",
+      "git_blob_id": "138376ff9cdfb5033ecd252f8f7c5321c3b33dbb",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "makefile_refmac_new.inc1",
+      "size_bytes": 4859,
+      "sha256": "920861e609db7387dfc903174824e919e4412c5d7f1765b53fa8bce7c3fe8f4e",
+      "git_blob_id": "90f245fabb74d3c7fc3763a5b949e83516746873",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "makefile_refmac_save.inc1",
+      "size_bytes": 14311,
+      "sha256": "9c9bd23dc287f57b206431225babae4008584fdd4f48c6b379a5c8bc34524808",
+      "git_blob_id": "0f8bd63661c06ec675f9d9aa229d7c7e3b1b91bb",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "map_improve.f90",
+      "size_bytes": 15801,
+      "sha256": "ed15c99370c14735e1fe8dc3aa17b40bb252286decc4d48b87de813c0b997aab",
+      "git_blob_id": "19d086a493b85aebc1e2c0bcf84a1e17274951f7",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "map_prepare.f90",
+      "size_bytes": 40060,
+      "sha256": "eb1636a797e2427a95e696f4213aa617ea168e0bde3ef8f2498db27ae3e0048e",
+      "git_blob_id": "57208f46c3bfaf3214c735a68f3e7f4f9b6fceed",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "map_reader.f90",
+      "size_bytes": 12638,
+      "sha256": "18e4dc492b43f1f9ae1992cd43833a939c41e3ca24570436f4905504902ffe99",
+      "git_blob_id": "1d0cb46f4b19b3f1162c5b8aaf142312ac13973b",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "map_stats.f90",
+      "size_bytes": 4036,
+      "sha256": "78322436fca7d9df791e6d56bdaaad3dba3a8071dfc985c823be2733b82c8628",
+      "git_blob_id": "75c0ebda0946912dccfc56153af66ba9abcb3e31",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "math_refmac.f",
+      "size_bytes": 6178,
+      "sha256": "fa68a3f32f25629111b8f2d47f677197461665c2f5598ff5bde4e8ba6dfc0a0f",
+      "git_blob_id": "301b09438d3c73eda65c94aadc82e2a6453c37aa",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "max_with_ints.f",
+      "size_bytes": 53467,
+      "sha256": "5741089d92ee6101339d02672a22ea9c67632412ba255de14c310a3fca197838",
+      "git_blob_id": "0f8d3ed2acf3a6add40ff0497942e8ad0afcd0d5",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "mconf.h",
+      "size_bytes": 5442,
+      "sha256": "a6c6c15272a6f6f05089036580e86467ff3580ae227d7d99f33cabf7fa42fed2",
+      "git_blob_id": "83539f9bc661f3182dd17e0e4512acb575db8e86",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "md_randomise.f90",
+      "size_bytes": 610,
+      "sha256": "5753803140234594aad295f3bbcb3f8198d652da801180c7645df515ef1288f1",
+      "git_blob_id": "494f2b7bd000d13bcd568d32bafa24bd2e6681f7",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "merohedr_twin.f",
+      "size_bytes": 7046,
+      "sha256": "41536976799456c5cbcb930d45ff98e609c0dba5a4c342f5d0ba94d770cfc708",
+      "git_blob_id": "6bf0c15eaeffbaa135fe17a2db6ffff2d9575860",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "messy_pdb.f",
+      "size_bytes": 10842,
+      "sha256": "d0d7320120cb2e07f0bdadd2c568665fdedf475636941da0b039ec4a91f44173",
+      "git_blob_id": "8441e3442ede2fe0a62402771c05fee03422fb73",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "metal.fh",
+      "size_bytes": 765,
+      "sha256": "bf5be8a8f57f9e3787b0cd6e411c23009ff0444fd8d997d0e6c6bfe1dc1e5c43",
+      "git_blob_id": "ee6ffbc52218be26827e07cbb80ebef98a0e1824",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "mi_generate.f90",
+      "size_bytes": 16725,
+      "sha256": "71bb1a5237eff8a51070fc8069334d171d64520c10fe9c92714984b09c6119ff",
+      "git_blob_id": "7b9d76c49f60b69a7fb10f0574856126061c6f34",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "ml_params_refine.f",
+      "size_bytes": 36446,
+      "sha256": "a701fb52ea335dc32395cf74e1be15c519a23d871e8e81571abdbad9616a7bbd",
+      "git_blob_id": "6f19daf52579dbfbd4b5839ffea241fa7a20cea8",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "ml_scaling_double.f",
+      "size_bytes": 171075,
+      "sha256": "140635ef400167a1393db1f0d4603e81154afeb1a2588b467d92cd2caca9355d",
+      "git_blob_id": "f253bb2aedd42d6be3045f72c5636ca433df503c",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "mmcif_reader.f90",
+      "size_bytes": 4921,
+      "sha256": "77aee9ad899da0abd629c365703ce35a78f8a2319e747067daa59a625341bdb5",
+      "git_blob_id": "e2f29fe88435e861d48564fe0ba0eb203a7772dd",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "mod_subr.f",
+      "size_bytes": 11181,
+      "sha256": "126635e8e10f0ec223200dba0aa91e05ca29e658a77bd957891507b772225b3c",
+      "git_blob_id": "4a3bba90a865218a29c7615e3b3b16dc1a7bd3f2",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "models.f90",
+      "size_bytes": 1610,
+      "sha256": "91f78c4b33e7579c71ea9073317154cca751b7b94b8d66353a1d34ccfb40fae1",
+      "git_blob_id": "2451e15d43039fc624bf9b06a79631e0c4d18cb4",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "mol2_file.f",
+      "size_bytes": 22609,
+      "sha256": "a99163dd3ef97a349470b0f61d300179bbc3824ccffbdc36b18aae6944c50dd1",
+      "git_blob_id": "ad0371a3659fc631f26f1df4fcfdf6a08dc7dd94",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "monitor.f90",
+      "size_bytes": 1172,
+      "sha256": "29f74870c512972734ac8e6af09e8bc7ab44bd3a9af7f5ff0e3a8d80c6ec5f81",
+      "git_blob_id": "847925a521bccb66b3f43ca2e2c8794a05384741",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "mtz_for_ints.f90",
+      "size_bytes": 912,
+      "sha256": "3e03f03629cd184f32121353825d7703c315b401413acd63aaceacc643c111f8",
+      "git_blob_id": "314903fc4f92424b7720b53053f7e84d6c66d5a9",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "mtz_things.f90",
+      "size_bytes": 3086,
+      "sha256": "5c0be5413a8e29efbf77734c8ace0444bdf7dd70d71f9adec175be9dd1450cec",
+      "git_blob_id": "61d6d63d4b2d443168199e56bb737dbd5c0f9c14",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "mtz_write_twin.f",
+      "size_bytes": 31526,
+      "sha256": "4b3d132f21fbf45b44fcec845e43b86fe62d6e82d237c4a0b9f850b6fe28a036",
+      "git_blob_id": "e0ea5dd770eff1406591e5f1e7aca5a267e269fa",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "ncs_aver_refmac.f",
+      "size_bytes": 5705,
+      "sha256": "9d839ea29a23f56bc43f50c82f6b71f58eae71e0fa0fc968a6816082affa10c3",
+      "git_blob_id": "6b903e087394dd332e527a7e65ee0ad9a67b78a5",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "ncs_constr.f90",
+      "size_bytes": 19749,
+      "sha256": "7eb63452d0527bb586d91131070bcd704b040faff0a75881be2a36e7731b71f3",
+      "git_blob_id": "ce1e7f2dca1cda3dbefcb6ec97e578e25656247e",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "ncs_ncs_generate.f90",
+      "size_bytes": 31777,
+      "sha256": "cd7a5209cffd50d25be3c83bef127fa90522f5a364aaed62b3ce050995392156",
+      "git_blob_id": "68d5529c68a89ef9b1c428d05716280aa058bf4e",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "ncs_rest.f",
+      "size_bytes": 20091,
+      "sha256": "32e89e49157ae89ffd9d8fc235c79d1c0731e0931c69758e825f568d4d714ea7",
+      "git_blob_id": "371f7e2775835c7b4b60685fd57eb7c933539a22",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "ncs_rest_mod.f90",
+      "size_bytes": 1900,
+      "sha256": "222bbb766db06779bb9716eb668f1520a15a27e1e08940e1848b03ad5ed97c8b",
+      "git_blob_id": "ad9286c805a3831d6fdd18a788087c38bae2b2e4",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "ncs_simil.f90",
+      "size_bytes": 20603,
+      "sha256": "24980f77604b4a29bb2ecc023515c2beb8f7808d17c1aae5111734176a6a74ec",
+      "git_blob_id": "ec143c6a3e935d6bbe17ee4192df6fe67abd543b",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "netlib_routines.f",
+      "size_bytes": 2730,
+      "sha256": "93415288257939f23c9fc03920bd8427807b9931af985e74cc397062e5015549",
+      "git_blob_id": "601d3420e81b7a849f3842913e966e1eb7854c7a",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "newentry_idealise.f",
+      "size_bytes": 5261,
+      "sha256": "314072e587038a4a05f655391c5e98dfeb4ca1383aa0fd7b2811e3b690cd86f2",
+      "git_blob_id": "4bc46f4650984e77053c0ab83f0344b6665bb595",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "nmr_targets.f90",
+      "size_bytes": 312160,
+      "sha256": "3748b3e05749a0d8a60c50eaaf129f43ae63b5064e0f306aab324f86aac5eb19",
+      "git_blob_id": "cc9597a762dc5388ec8a28eaac8d0e307b793045",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "non_mero_reorginise.f90",
+      "size_bytes": 14009,
+      "sha256": "560ba0ce103e5f85a4683daf84308bd8e34f1f723efa0bf143c86f72e3a88441",
+      "git_blob_id": "e192e2b95d92e32ae5baacaf067216347f9e510a",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "numerical_kl_derivs.f",
+      "size_bytes": 358,
+      "sha256": "1f723597aa3f6052fbde98f89895dae02790eaed8e92815de28c3978af2e39e3",
+      "git_blob_id": "1cb1d4a944f9e1c0d9b3977f9f5f5ff21d19eeb5",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "occupancy_only_refine.f",
+      "size_bytes": 10749,
+      "sha256": "bb3500ba7ca44bdc21390b0313784bc88d52bf2624639bac9d67bca177b573af",
+      "git_blob_id": "764a5eca66760d6bf958266717ddfa6908e881db",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "occupancy_params.fh",
+      "size_bytes": 2150,
+      "sha256": "281c4c07cbbedd8611c5f44eeb8f17bc6f56659023d095b217f77530fad7bf0c",
+      "git_blob_id": "596f64f873e5565831c0cc4da8ab3f16a3ddf7a5",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "odb_files.f90",
+      "size_bytes": 24077,
+      "sha256": "094cab02e0492f71f62f179c7548f5323d3d58a946497b84c35963128d22ea39",
+      "git_blob_id": "941932491e3726dcb2c653b20c8c2aedcd5f037f",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "oppro_allocate.f",
+      "size_bytes": 226230,
+      "sha256": "b1a3f42fb4d1a2a4959b7edd840a0522ad46971e16bd49b5768aa84742b9b3e3",
+      "git_blob_id": "4508ccfe455d0afde259f99629ae4ac839dba449",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "optimise_solvent_all.f90",
+      "size_bytes": 15515,
+      "sha256": "b5ddf4ab9fa088735ea7234b679439103841ee28209625233c72eef6c3793cfe",
+      "git_blob_id": "260db00dc6462c3a91dcfd60cf4ebb29d9ae9e73",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "overal_params.f90",
+      "size_bytes": 284,
+      "sha256": "0cc2f27acbb5675ca4978797d0796e5209fda4e575e689016479d79b32584362",
+      "git_blob_id": "1f5206d98f9e29bc3383cfe00ded9d4c996ed4bd",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "parser_things.f90",
+      "size_bytes": 262,
+      "sha256": "3c92ed9705c4c8b6a889d8981592eacd2bce30d84af3bee3c7e356560549145b",
+      "git_blob_id": "ee199f658a431344c3e764fcf743edafd7420071",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "pdb2libcheck.f90",
+      "size_bytes": 54361,
+      "sha256": "c4829b9e505f17199d6dfff25336c774809f128b6da0c44c46cde70f243993a4",
+      "git_blob_id": "fd844b2e914efd2106f9d6e2e26aff12093287bc",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "pdb2mmcif_mod.f90",
+      "size_bytes": 3739,
+      "sha256": "205ae2a2d091da6da3597c15e8b2f3fb8a4435e5d6e78267449051df9da47325",
+      "git_blob_id": "7dcc3adc397db6daa4022e0286afcd4cb2ae6cc2",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "pdb_v223.f90",
+      "size_bytes": 2634,
+      "sha256": "f61f027a5d094db32ed0ac1fd9af620339c7db2b3479d3e5ac31de35c773b43c",
+      "git_blob_id": "082572c4d7b8434b4234a01c5a58acf2df7f8bcb",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "pretab.fh",
+      "size_bytes": 857,
+      "sha256": "29a4d992583947e3723f860dfab09c3e66f9c8a59dcbcdb344bbd4fc86a424b3",
+      "git_blob_id": "385b8f5932320dfef06982e3369a7783e7869b7c",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "print_geom_params.f90",
+      "size_bytes": 9001,
+      "sha256": "7b8068a6b84ca0006ad90f8df63ad9d6cf27c06b319737a1f8bd1b7ed6e3f239",
+      "git_blob_id": "98345efd5254928c1b659cd19a32c89da5bfe8aa",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "puckers_rotamers_etc.f90",
+      "size_bytes": 13619,
+      "sha256": "0ec11e614f32c7da3a126f31f69c806f9a4983c366543600c594b0433ca18e6b",
+      "git_blob_id": "b16b2000a52f3f4625feeada1c001266a30655aa",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "qnorm.f",
+      "size_bytes": 8701,
+      "sha256": "c181041ffbf18ed106a4d8885af67007c8b622d1d1b9ef60e8507fe3e65d0f3a",
+      "git_blob_id": "25166c4b37c6ab962d9f0ef6c792474b94e2b4eb",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "quasy_gauss_ll.f90",
+      "size_bytes": 1082,
+      "sha256": "f37829dd0d8a76b7c3b70dcf084f632f80f70356c149c78d92856ffee4c51e1b",
+      "git_blob_id": "aa382cc71e11bdb783fa1cb121cf9fe17cd7793e",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "rando_n.f90",
+      "size_bytes": 345,
+      "sha256": "f7a43de11c1c475bf5c149b91ed87a64b92479ef0977db83ad28d7fd1ac7e4e2",
+      "git_blob_id": "a96c41df6c6e865a3ade78afae4ba939ee0db1c5",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "random.f90",
+      "size_bytes": 49306,
+      "sha256": "87da518d717037281128ddc3ac2b9098de2dd2d5a0b4445c8f5152ff3e577e01",
+      "git_blob_id": "8e256e743c03e1942bef75e0463faf0a7246a10e",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "rcard_tor1.f",
+      "size_bytes": 305271,
+      "sha256": "6bf362de66b26bfdf3f32b6cbe41d10275d637e20aaff57a478880f590a3573a",
+      "git_blob_id": "04b74435f1d5120d963ca28bd6f1521e799da3ae",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "read_crd.f90",
+      "size_bytes": 3539,
+      "sha256": "07a5dff26cebaa1018d4bdbf3f12dcd8f4754b57015cb49b4afef581aa1cf664",
+      "git_blob_id": "4f66259f5cfcaa426b5815254d6bf65b49cde8a5",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "read_data.f",
+      "size_bytes": 3042,
+      "sha256": "109991a75adeb2d78ae75cf3f1864fb1aeb907d2870759ae103e4afd78aae4cb",
+      "git_blob_id": "72cadfa74f7e3483ccc5c632a63bf3eb6921bdcd",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "read_extra_restraints.f",
+      "size_bytes": 144159,
+      "sha256": "f6ba7265f76a6b94c2f303a89f48463c652cc568c8b4615827b9eaf07e1195b6",
+      "git_blob_id": "3a79fb209405b00507a481efad908a0eadbb8d0a",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "read_residue_pairs.f90",
+      "size_bytes": 3617,
+      "sha256": "fc0a76a4db57929888d92317650b272eaf60f7649a241b9abf0b060c2809ec7e",
+      "git_blob_id": "05d737ab6f28d22dd0f22370bef9b76e0f47b466",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "ref_com.fh",
+      "size_bytes": 1483,
+      "sha256": "eb5a4a2330887dd9a92f47d740bd9c39ec36f56d77a4d2bcfaceae0d103bad37",
+      "git_blob_id": "21e5065d3ba0626a595ddb6da38a1f780f03daa8",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "ref_com_str.fh",
+      "size_bytes": 1887,
+      "sha256": "c55f304d8be2e9a41a8387e5b2379ce2a7c4cda6db149b8f82b2e65c1a2fe955",
+      "git_blob_id": "5788c4733c082ad2f50568e0b401beb864fbc8ef",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "refall_twin.f",
+      "size_bytes": 41475,
+      "sha256": "1c83a8c9a195d000821c699a42f1b81bf8f14ea78310e7a352283afedfd3e630",
+      "git_blob_id": "f43add6b807f6b38e5ae5e6c811367446c00eaa9",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "refi_flags.f90",
+      "size_bytes": 4876,
+      "sha256": "7d4df566a0b170277d3532aad115f0dd6c5743c878be5d8fd49e1b9778ec5aac",
+      "git_blob_id": "0176e773963131dc2bcef64467be1de1ef1ce6d3",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "refi_flagsf77mod.f",
+      "size_bytes": 64,
+      "sha256": "85a32fb26b5439ed057441af1f05d0c184ff50e9a151fa9c32c0d80691fb61c1",
+      "git_blob_id": "0686015e911bc8070998852d5585f7e01011a9d7",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "refine_group_props.f90",
+      "size_bytes": 3013,
+      "sha256": "ea7a5cbce99a31a953fc0e42c1521af908c80a75ee9bc55f09a5dcfd5dfa1ea9",
+      "git_blob_id": "7714385812f2e6789c6bf6d67638b9fcdc19f79a",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "refmac_completeness.f90",
+      "size_bytes": 7525,
+      "sha256": "ebd67e547eca2fa696047e443ebb4a23db0beca1a87b9ae2ee417ae4b1b788ef",
+      "git_blob_id": "1dd107e92c8233ff5f35cd6a0f4353802aa1d20e",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": true
+    },
+    {
+      "path": "refmac_derivatives.f90",
+      "size_bytes": 17130,
+      "sha256": "f8776abc284ad0709eb2811197357d3a78842b16806ba16c10d3a09bdeba1820",
+      "git_blob_id": "e83464cff4852e6ec080c07d5299a4ae9ff0fca2",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "refmac_histograms.f90",
+      "size_bytes": 2582,
+      "sha256": "3b3f522d3a81a7a7c7b8b45af4ca58b5c11abb7b11752d8ca81f2428d445daba",
+      "git_blob_id": "99c92682ed2d4f43ae64a8ea15bb34e09c203202",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "refmac_signals.f90",
+      "size_bytes": 4497,
+      "sha256": "90a09367f5a4a36d19bdad55caf8d2fe24e0674349bee58ef312b78aa0c39d66",
+      "git_blob_id": "6cab1af22db0fa6a6718a15cc17fb48bba11baa8",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "refmac_sparse_matrix.f",
+      "size_bytes": 2454,
+      "sha256": "a29d807bfb8cd21d48e7882d6f142903f582f0b1e405ec6275daa14d565b22e0",
+      "git_blob_id": "e0b1585373046479ba0e770f976bfccffd3aa878",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "refmac_xml.f",
+      "size_bytes": 44242,
+      "sha256": "baff00a370cd761caeba8838cdf8fd4246f7c223d78c87a6f520ef8f788baac8",
+      "git_blob_id": "049606f82b4cc94a6b5f0f96a1cd07482180b778",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": true
+    },
+    {
+      "path": "refpre_twin.f",
+      "size_bytes": 35789,
+      "sha256": "199e5715183bd28d63ac4dfc0dd15b1031a60bb471ae009e7c95dbfbc3c5ab99",
+      "git_blob_id": "670e564b82a10bacd2ffd8ca94364593b0d10488",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "residue_pairs_module.f90",
+      "size_bytes": 829,
+      "sha256": "ec1b70963063f2e8641062542f0cd1ed4b9a86aa61fe8ca368545b3d23f17ac4",
+      "git_blob_id": "8a2a433ca729b5764f71607fcf5221d85a6d586f",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "restr_files.f90",
+      "size_bytes": 1479,
+      "sha256": "146f9f7d9b2be78e4af2aab578ec29ab4f1fc767f68188f8cd2d9f0d8e1ed363",
+      "git_blob_id": "414eee7db73968b5033b921031765530d83da9db",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "restr_params.f90",
+      "size_bytes": 4400,
+      "sha256": "b5208e8c498a98201a6507a08453f6b423468da857c0a39fbeda9a7ce49978c1",
+      "git_blob_id": "f1140cf8d1156a05ec127b1ec35a87b76aa85fe6",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "rharvest_mod.f90",
+      "size_bytes": 2652,
+      "sha256": "bc8d32f21dbb60e2aba8a4f86bc4da35ff600b59fa61c3a71c5c225a5819d1b0",
+      "git_blob_id": "dc6cb3285dcaf9b3d2235e94b45cf41d19d4d61a",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "rharvest_subr.f",
+      "size_bytes": 30589,
+      "sha256": "03e1401d31095bc8b40cc7dde8a1b316426f7ca9270e0ebb1d4df4ab42aa6460",
+      "git_blob_id": "18516ed1abb523f37bc46144987d1900ed4076a4",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "rharvestf77mod.f",
+      "size_bytes": 60,
+      "sha256": "ca49317af28644bff2edbb695167ee46f3d6b3b5033baeb911d8b3143a830595",
+      "git_blob_id": "3f7ad3396423ca192f76b9892f18eda45f9cd047",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "ridge.f90",
+      "size_bytes": 24382,
+      "sha256": "6b09568675b17f8241731ff55b8b9787e8d2d58a43b9495a29e12e94b314c0b0",
+      "git_blob_id": "01b2a7c8add914e13b48be3859fc5b4453126887",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "rigid_allocate.f",
+      "size_bytes": 24530,
+      "sha256": "7fc6ef9c09ef1dbe2adc1c17546d11ed0fc753854a89e1dcd5ba19e9e176a03b",
+      "git_blob_id": "e1a0272aafa74fb4c7d184f2642eb066a7a2cd77",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "rigid_body.f90",
+      "size_bytes": 1609,
+      "sha256": "a9b819d377581d251894159bfbf5465ddec579b1931f00204bf72c0ede08a2dd",
+      "git_blob_id": "cf08dbb0519c8ddbc098293384f2f9048440b213",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "rotation_and_others.f90",
+      "size_bytes": 26527,
+      "sha256": "56fae492bf86e4dc1abe7671525265e8b0709c0f149322d4833be1e26fa520c8",
+      "git_blob_id": "eed5c7091eb60d7a857d5e57cb97ca209a00943a",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "rstr_com.f90",
+      "size_bytes": 5158,
+      "sha256": "5fb61f7b7f7914083ad49f0443f238cb2ff13c135029f59b53f1515f67c2c2ea",
+      "git_blob_id": "4323fc6c0dd387bc032e0e218cac2fd407f3104b",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "save_all_params.fh",
+      "size_bytes": 1028,
+      "sha256": "df6ad63b6458d456efcbf86c3cd2e7af949639b87d68c2d80f9555065ec3cc08",
+      "git_blob_id": "c6784ea4d10c4a4acc5b9a01218308e4cc5bb728",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "sdf_files.f",
+      "size_bytes": 15358,
+      "sha256": "4d559e15580435c8babeb8bc1ca37e308c8c32826700ce7745de293f6cf5ca3f",
+      "git_blob_id": "bd758794f643850ce18051d89727e032cabe14ea",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "set_num.f",
+      "size_bytes": 19169,
+      "sha256": "8984f0b3d42db49cb3137c28f764071bad21e83f1462b4af75a8a2ed6e130d97",
+      "git_blob_id": "472ce7d86f61dc1e2f94922422c5c1561b2a538f",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "sfcalc_refmac.f90",
+      "size_bytes": 119945,
+      "sha256": "58e5e81464c12b02fbd285a6bf841d145312212f1284a8cd9411a4ab5202ed2a",
+      "git_blob_id": "acdf37a6b12a6359e7fb820c4e9b737df2e9c61b",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "sfread_ng.f90",
+      "size_bytes": 8452,
+      "sha256": "916ebe6505519f7cd4da124b2e39e96bced1d23ceb548e05034d9b14480c847a",
+      "git_blob_id": "60f5382e7397d4b90f745481ba801bcd5d7158cc",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "smiles2cif.f90",
+      "size_bytes": 37901,
+      "sha256": "448fa4e75c4d9a3a5e4b6e0ce67c2d7a22f728b729529ad010386d46cf953409",
+      "git_blob_id": "d48a5dfbf87838c477e3d53a377add287e9bfe34",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "solvent_contr_mask.f",
+      "size_bytes": 54760,
+      "sha256": "671f295d201c099fb4a986e7152864811100aba689727f5ecbaa1d41f5ccbe41",
+      "git_blob_id": "10c3c1689d871eee12335dafd463d277e9eff00a",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "standard_residue.fh",
+      "size_bytes": 935,
+      "sha256": "a6cdad9a5ba294f35701f53297f03f55d879ac4d47514885602bb404e9083e4f",
+      "git_blob_id": "ec8c31ad80dd8c6ca7db9f150d2f6f8223b5f74a",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "stats_calc.f90",
+      "size_bytes": 2482,
+      "sha256": "4a12fe556ba57c56b2a7431d3585e12c6a36486e62aed7cb8209bfb381a09570",
+      "git_blob_id": "13e2f44c7a912f2ac1bfc92858e40d7b7765d352",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "subag_scale_hessian.f",
+      "size_bytes": 124962,
+      "sha256": "8414dc617d5d773587db7148cb0ef024771119389e55ad00d3667e805eecf330",
+      "git_blob_id": "fbd69af86a662eb65ac02916ca8f32dd4ead62a2",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "subcf_scale1.f",
+      "size_bytes": 58058,
+      "sha256": "9cce606df4ef1bcdaf767f7fd16afa8027cef6fa062a231b18aaae9b55431f47",
+      "git_blob_id": "41fc8048257e566b70e5132937564a432b774d7f",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": true
+    },
+    {
+      "path": "subnumrec.f",
+      "size_bytes": 87048,
+      "sha256": "cd1847b4ba7c0f9ae0a7ee596fefe7d7040efcd86384345506c6109abc44c431",
+      "git_blob_id": "7bd0abb0c17ad77be532d0386f31fae488811e56",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "subvag.f",
+      "size_bytes": 18766,
+      "sha256": "1f4c1908d7108f6eed57e58e01a764b71b250c7feaef88ca2e880683affda5e6",
+      "git_blob_id": "f906babf8c5502d9a9e370440145ab73333e9c48",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "subvag1.f",
+      "size_bytes": 19590,
+      "sha256": "6c6916a4c102d1ba16bf1b4d148afd8f0451c48789181427badbacc883112d90",
+      "git_blob_id": "7c5015bbdeaea53e2b82476e87e04d64e96e9f52",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "tabfunc.h",
+      "size_bytes": 81192,
+      "sha256": "6f6c14384448beeacb53fdc6eec99242c196717e6088695cda701bc4d0069fb2",
+      "git_blob_id": "488e6aa4532b2aafa788d3ad6a552dd4e0b89d78",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "tensor_derivatives.f90",
+      "size_bytes": 12339,
+      "sha256": "798ee910b2011fa5a018e030b6fc71320d164a5dfdbc2bd8386faaafba980ebe",
+      "git_blob_id": "232b04025b42d8878294127790c4febe02dfff0b",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "things_for_parser.f90",
+      "size_bytes": 255,
+      "sha256": "a02d0c28c1d825d83644372b861d8e200a334e25bce3a2560242f6208310bd8d",
+      "git_blob_id": "6f7457a348a74b5c7f9017202894ed4ea9081379",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "tls.f90",
+      "size_bytes": 1847,
+      "sha256": "d38a4b9956447ea93c776db97164f2678aa729f67ad095ebd2571ead60564a54",
+      "git_blob_id": "9217837af692970e6d620a530e70d6fcee014b7b",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "tls_allocate.f",
+      "size_bytes": 76319,
+      "sha256": "58e4fe792c772bcb655061b4946482776cd9edb6c0b22801c1df51de031c6ef5",
+      "git_blob_id": "442979e52148e9e696f84a12ddb9e7d10aaf96da",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "twin_refmac.f90",
+      "size_bytes": 999,
+      "sha256": "bdf6ef7275b453fd00a9694bd6b66125aec6af3bca7a429a7a700fe8bbc42baf",
+      "git_blob_id": "b0ca42247e5bed6c509a26491901421bdf1ae4b9",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "unique.cpp",
+      "size_bytes": 26,
+      "sha256": "d077c7601f5cad0f82618c406c13d7f16667580a81b90f613c12a33542e230db",
+      "git_blob_id": "52450bab033e4a002ebd6fdec6b256e3157c0597",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "vdw_and_contacts.f",
+      "size_bytes": 91484,
+      "sha256": "615794940b87dc7345c205f6f36656ad0f0edb291c25dd5ba41d699a8c22d3d6",
+      "git_blob_id": "9e2264058dfecf8f8487e9b76afdc3f3f7df7885",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "vdw_flexible.f",
+      "size_bytes": 44186,
+      "sha256": "1c537f3c507bafae8d500cb9131df87fe5c0c3cda2c2f6e94421d33496de25a5",
+      "git_blob_id": "ad206073110b425a4d21101918e93e241004386d",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "vdw_nosymm.f90",
+      "size_bytes": 14051,
+      "sha256": "1365149b48f4d44763809b3e34bbe85db6adfe69e7c610139e14f6fed0631609",
+      "git_blob_id": "cee642e1b1bfbf078db46379c680ec6d42a8442c",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "vitals.f90",
+      "size_bytes": 362,
+      "sha256": "e7b05f80e77006c143b58970f83d502cdd5582d5907779b7cf9b7695c80af777",
+      "git_blob_id": "e91c145316fc401dd12d7de4b12d73c5fbf7c2fc",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "wave2f2prime.f",
+      "size_bytes": 23957,
+      "sha256": "5a526a885efa9ab04a3aed3d176f3616096e69ac4c7c6cc0de7e607598c0d453",
+      "git_blob_id": "8854abb26b3750b50927beeaf4f153271934e40b",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "weights.f90",
+      "size_bytes": 4044,
+      "sha256": "b536fe4560f3b67799c0e33b537c2b7796c6ea30c1e0ddccf21f0f8f285580d6",
+      "git_blob_id": "22f82bb534d9dcd509415642467e3296770c555e",
+      "git_mode": "100755",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "write_atoms_mmcif.f90",
+      "size_bytes": 127902,
+      "sha256": "755c44153ff05729ae597c44fb2bbd84c8cc493144616895fa3181cf8f3d0029",
+      "git_blob_id": "5b1fce8606f21d1da5d3e2994caafe0e93c352a6",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    },
+    {
+      "path": "xml_writer.f",
+      "size_bytes": 3107,
+      "sha256": "a81795968e8ce29501e65cbdc6957d94b8f21e35763b22333f457365310bf375",
+      "git_blob_id": "70706e2ecaa502bc3093c4e837b9d86178e12f06",
+      "git_mode": "100644",
+      "commit_blob_verified": true,
+      "is_pinned_target": false
+    }
+  ],
+  "output_source_inventory": [
+    {
+      "path": "CIF_items_crd.fh",
+      "size_bytes": 13555,
+      "sha256": "87e9dfdda454c82be88d190f1988dace29874346ddd8bc7165657793ff81cf4f",
+      "modified": false
+    },
+    {
+      "path": "CIF_items_lib.fh",
+      "size_bytes": 5303,
+      "sha256": "2ba2756332d971b5185b971b859146f4bc6112703dd7aba0c0171756b5dc4c47",
+      "modified": false
+    },
+    {
+      "path": "CMakeLists.txt",
+      "size_bytes": 4988,
+      "sha256": "1e35c801c940d9879467cb2f3dc62faebe29f01a9f25b53a62fbbdfe942359ce",
+      "modified": true
+    },
+    {
+      "path": "GS_scale.f90",
+      "size_bytes": 30164,
+      "sha256": "0691f802ad1e16eed744c21ca3bb82fc692abca21569658d09af3a9ccac4583a",
+      "modified": false
+    },
+    {
+      "path": "Gauss.h",
+      "size_bytes": 5973,
+      "sha256": "40b2b5b597ad0bb4561e726297b5693b0e9e848ce6ad3b985ccf5a8047e890a1",
+      "modified": false
+    },
+    {
+      "path": "MultImp_collect.f90",
+      "size_bytes": 23889,
+      "sha256": "50cc2fdb43d630bf512a23b667cc8f0c660f7df4697327403d8f98d98e9be9e3",
+      "modified": false
+    },
+    {
+      "path": "TwoCrystTwin.f90",
+      "size_bytes": 673,
+      "sha256": "c15d700f8984f46a8b13f8512a3ac126071366b16406b49a3d30d4b9b9174ace",
+      "modified": false
+    },
+    {
+      "path": "additional_restraints.f90",
+      "size_bytes": 31197,
+      "sha256": "470cbd12f24aba9c048d6e7d3b4913b1a2ef82fda47f5d49abde0175b11aea0b",
+      "modified": false
+    },
+    {
+      "path": "agreem.f90",
+      "size_bytes": 2627,
+      "sha256": "90b8d338794a96891268b317b4df3b424014a4e52ef0e58013cfa22245678e52",
+      "modified": false
+    },
+    {
+      "path": "align_refmac.f90",
+      "size_bytes": 7634,
+      "sha256": "032c4d9067ef840e5990a39654bc8d3ef8bd8a2cdb5c2f3b15d7b455f64c2e1d",
+      "modified": false
+    },
+    {
+      "path": "align_refmac.f_save.f",
+      "size_bytes": 5223,
+      "sha256": "2199af4507701e64b0f598ad73c8fc673d9389793cd3c686f84875a87b73be54",
+      "modified": false
+    },
+    {
+      "path": "all_elements.f90",
+      "size_bytes": 896,
+      "sha256": "c2d3d3b6cae6956c468462026e5c264ae8ad111847ef32726f727e3dc7fa648b",
+      "modified": false
+    },
+    {
+      "path": "all_elements.fh",
+      "size_bytes": 883,
+      "sha256": "ed688f85330d408b144dc31db2af0c0ef9b351e5b2cfea2a87d2ff5d7f376932",
+      "modified": false
+    },
+    {
+      "path": "analyse_all.f90",
+      "size_bytes": 1218,
+      "sha256": "60dde112c7d84b6cbbff66d19c968bec5f6d8e10e55671647ca3c86fb257c159",
+      "modified": false
+    },
+    {
+      "path": "analyse_results.f90",
+      "size_bytes": 165,
+      "sha256": "d745b3c6deb538c45752809c11bc6a3f1b4bbc333aa91a408a030e2dc808b4a8",
+      "modified": false
+    },
+    {
+      "path": "aniso_ref_eigen.f",
+      "size_bytes": 60568,
+      "sha256": "1252f60358d5c072ef4e929a49465c3cb82b9840f21549bb01d73a9ff9395244",
+      "modified": false
+    },
+    {
+      "path": "anom.fh",
+      "size_bytes": 3190,
+      "sha256": "bae377d3244b1757888cdf3e293b1644cd4db93c2383d1422db87d8ed6924502",
+      "modified": false
+    },
+    {
+      "path": "asym_list.f",
+      "size_bytes": 20539,
+      "sha256": "64f2e4b900982059fa240e355012edb20ce79ef7e585b07e0ca639ffd74f4baf",
+      "modified": false
+    },
+    {
+      "path": "asym_list_f90.f90",
+      "size_bytes": 18648,
+      "sha256": "1182906601219af151fe24515c75e9c32d87d71c03bdbf0644facedc8711b8f6",
+      "modified": false
+    },
+    {
+      "path": "atom_com.f90",
+      "size_bytes": 38576,
+      "sha256": "72269e086560f64969fb28f6479ec2cb5bd4b09d327c8903dcafe6a08f8828d3",
+      "modified": false
+    },
+    {
+      "path": "atom_com_str.f90",
+      "size_bytes": 1524,
+      "sha256": "2360f8a7938154ddbced6b919a3d41cae36dca4399510bb34d007ee98225ab2e",
+      "modified": false
+    },
+    {
+      "path": "atom_grads.f90",
+      "size_bytes": 893,
+      "sha256": "bbcc14b70fc5051b3e52a0c63baba4019cd71c1ecb58be2060acf2add326ecdb",
+      "modified": false
+    },
+    {
+      "path": "atom_info.f90",
+      "size_bytes": 844,
+      "sha256": "96ab82fcf8f9cffd4ac3be804943299e323d86c5ee916f37734dd8e4e8a52360",
+      "modified": false
+    },
+    {
+      "path": "atom_select.f90",
+      "size_bytes": 4879,
+      "sha256": "425e11e86ea983bb839fe8aff5a48d5754e06feb800dce2b448197a87ee54396",
+      "modified": false
+    },
+    {
+      "path": "atomf77mod.f90",
+      "size_bytes": 19097,
+      "sha256": "a42e3db8ce9b403b8b7a48b30dcb4b1437c346f78d5406faa956d26dd3aacc4c",
+      "modified": false
+    },
+    {
+      "path": "automorphism.f90",
+      "size_bytes": 10794,
+      "sha256": "56682d57b5335cf84f33a21edbbad15bc02c66d88ff89bef13499304db630540",
+      "modified": false
+    },
+    {
+      "path": "basepair_paralell.f90",
+      "size_bytes": 14361,
+      "sha256": "4c325bd57f1ac96a70ac1e3e9fe989d992ab64e9a58fe478565200d39b4d2570",
+      "modified": false
+    },
+    {
+      "path": "bit_arithmetics.f90",
+      "size_bytes": 1048,
+      "sha256": "60f4f45e5775dcb7d7031ab2d31d3e08da7246401e684674014d49a5302dab61",
+      "modified": false
+    },
+    {
+      "path": "block_organization.f",
+      "size_bytes": 7038,
+      "sha256": "0c4b459770a506e88cf23e92bf7c5e615d10fdcd793394db9310242fd70dee6d",
+      "modified": false
+    },
+    {
+      "path": "bridge.cpp",
+      "size_bytes": 108935,
+      "sha256": "8c5723443ed5802ea49640d63b459b60027a9317b6f29aedeb2833e136d896a1",
+      "modified": false
+    },
+    {
+      "path": "bvalue_routines.f90",
+      "size_bytes": 3474,
+      "sha256": "302935f145135eb8b6a9beaef480eae7aa8e147f7079fc4e1e8ae47ffa70f539",
+      "modified": false
+    },
+    {
+      "path": "calc_stats_twin.f",
+      "size_bytes": 32446,
+      "sha256": "025dfe590393f747e3541a09c706c9c060c3678640db2afa2429cb17a38f1466",
+      "modified": false
+    },
+    {
+      "path": "cell_refine.f90",
+      "size_bytes": 35556,
+      "sha256": "dfe6e73547766de040f2f4d7216b229cce6fd3a86f2886199b9dc08b1c4e2935",
+      "modified": false
+    },
+    {
+      "path": "cell_symm_subrs.f",
+      "size_bytes": 76060,
+      "sha256": "80b1304c4387a312d0cc7030262f369c947e071312c6084ab20848086d6132c0",
+      "modified": false
+    },
+    {
+      "path": "celsym.f90",
+      "size_bytes": 7168,
+      "sha256": "fe083546966e0e8315e48f7e5d2888d21fec7cb37b10d862a1dd7b0bbdc40e4d",
+      "modified": false
+    },
+    {
+      "path": "cg_sparse_megas.f",
+      "size_bytes": 8906,
+      "sha256": "b057b44c020c4ca61cf28b5d888b84e76b807dbd3f49a1d0305027c440f33d81",
+      "modified": false
+    },
+    {
+      "path": "chbevl.c",
+      "size_bytes": 1692,
+      "sha256": "6c563580fd719cd8cc5ae560d951287d81b33b83aa5ad0ccf879b04eb1bc875d",
+      "modified": false
+    },
+    {
+      "path": "cif_incl.fh",
+      "size_bytes": 387,
+      "sha256": "949caae1c1ed24c32de8716b0b3a091058d72e124382804540df885d79785a85",
+      "modified": false
+    },
+    {
+      "path": "comcif_info.f90",
+      "size_bytes": 640,
+      "sha256": "d3a17bb688cda44a4190ba01e00b1ddca4ba1a968a2f9ebb90e85b19e5607ebf",
+      "modified": false
+    },
+    {
+      "path": "conf_select.f90",
+      "size_bytes": 336,
+      "sha256": "b812d5eb60c0e55d3d2706fb5e537b0f407cfa0bc1aa42e9a30b3f4c3a19d301",
+      "modified": false
+    },
+    {
+      "path": "conn_com.fh",
+      "size_bytes": 935,
+      "sha256": "3d886eedc2b55df35f4dcd5f918772c133545ec85c900b8a9b7d5ea23649cfd2",
+      "modified": false
+    },
+    {
+      "path": "const.f90",
+      "size_bytes": 1093,
+      "sha256": "b37702b29b5c92b8421af13b53aae64cdc10b22e2660c183fe02d6934938dfe7",
+      "modified": false
+    },
+    {
+      "path": "coord_utilities.f90",
+      "size_bytes": 804,
+      "sha256": "bbb66b0ee2b1319b2527030f66b90be3e1ee574d7d1876225d38f61884e7877a",
+      "modified": false
+    },
+    {
+      "path": "coordinate_reader.f90",
+      "size_bytes": 740,
+      "sha256": "aec049ad3a72acf314bd80448c4acd37afa87b88a1444074350380e1aa0d2d5a",
+      "modified": false
+    },
+    {
+      "path": "coords.f90",
+      "size_bytes": 2601,
+      "sha256": "fe7ba6c38a9e8b65c6a25403cc2a863ec13009cd040693ea741bbb835ed7385a",
+      "modified": false
+    },
+    {
+      "path": "copy_pdb_dict.f90",
+      "size_bytes": 563,
+      "sha256": "64f4c92bf94bbc3b550d58101c7bab56c38130f40c1fa79b79d1db4d8070b4d0",
+      "modified": false
+    },
+    {
+      "path": "covmat.h",
+      "size_bytes": 83423,
+      "sha256": "6d7b889f6d69ec3431117a4fc2fe5a91fedffdff7575db82b97798d1c345b308",
+      "modified": false
+    },
+    {
+      "path": "crd_com.f90",
+      "size_bytes": 15827,
+      "sha256": "3ed91eecf1c22e1ed25f742cada40aaed99f496ec3d138ba172de193e2bac7c5",
+      "modified": false
+    },
+    {
+      "path": "data/atomsf_electron.lib",
+      "size_bytes": 27083,
+      "sha256": "cabf528209fab31e55bd6aaa2f17edba9797b38af523bb9e1f7ee5a75db6dcdb",
+      "modified": false
+    },
+    {
+      "path": "decide_twin_opers_0.f",
+      "size_bytes": 19708,
+      "sha256": "a58c6e59657f41ecbdf552e1e597a8cfe21fa57e72c281fffd69002384ef169b",
+      "modified": false
+    },
+    {
+      "path": "density_routines.f",
+      "size_bytes": 8010,
+      "sha256": "f32003498fa80c59fefdcabaac9c2a793a4d3d21f79aa6cdb0b83adf6415402c",
+      "modified": false
+    },
+    {
+      "path": "derivs_form_all.f90",
+      "size_bytes": 20366,
+      "sha256": "7a1041fbb6bd3b1333465d9a949d2430f30406e92771251c5c9fef1e00e1f801",
+      "modified": false
+    },
+    {
+      "path": "dist_routines.f90",
+      "size_bytes": 1221,
+      "sha256": "872f9246b3d7aa9a9a44a0085e0e8d322b60f187e50089c06f287f17a8de06eb",
+      "modified": false
+    },
+    {
+      "path": "dna_rna_base.f90",
+      "size_bytes": 40087,
+      "sha256": "545b470db0f56829d29632a27d5f9d4107f6e6b62d275792b4a9c642e18dc142",
+      "modified": false
+    },
+    {
+      "path": "docs/Dictionary/bug_fixes.html",
+      "size_bytes": 4698,
+      "sha256": "45d6245e2d6d3e885910f825e66f3b89574fae29b216f815c5b2da009284d137",
+      "modified": false
+    },
+    {
+      "path": "docs/bug_fixes.html",
+      "size_bytes": 14474,
+      "sha256": "8932a7b9ef85063f5e603139ded6c23edfa71c0183031766e028fdbfbbe71803",
+      "modified": false
+    },
+    {
+      "path": "docs/changes_and_bug_fixes.html",
+      "size_bytes": 1528,
+      "sha256": "85010f716e90dbcef7774793d5ebe6f55631bc90befe4633a8c4c33cba7f4a4e",
+      "modified": false
+    },
+    {
+      "path": "docs/features.html",
+      "size_bytes": 14284,
+      "sha256": "a71b998f589301037f80a2af0830a52f3abf3672e3ddbac9445d8d83bf8cf23a",
+      "modified": false
+    },
+    {
+      "path": "docs/refmac_faq.html",
+      "size_bytes": 574,
+      "sha256": "0b4c915789feb7dbac889aab32aa116dbe0c8a2a07323f380da70486c805d296",
+      "modified": false
+    },
+    {
+      "path": "docs/refmac_keywords.html",
+      "size_bytes": 112893,
+      "sha256": "27cefb394e6eebac169e9f593930c5ea5dd82054fb10388c54127cdd8772a137",
+      "modified": false
+    },
+    {
+      "path": "elements_module.f90",
+      "size_bytes": 1742,
+      "sha256": "365117113baed27607fcf13051ec5cc2af3e217d38967c2f32fad5651d28c22f",
+      "modified": false
+    },
+    {
+      "path": "emin.f",
+      "size_bytes": 184538,
+      "sha256": "d7538c06735ed734a26bf894a65f1223c3af37483465a794519231fc0367cb72",
+      "modified": false
+    },
+    {
+      "path": "emin_version.fh",
+      "size_bytes": 393,
+      "sha256": "5dcd2af1a639bc4d1ab8c97393c0fa9c059047949a9a51765566ba2822078974",
+      "modified": false
+    },
+    {
+      "path": "ener_com.fh",
+      "size_bytes": 2128,
+      "sha256": "d25341c651b96a31d51042d975f90800fdedd7d8100271cd70d25270d4a80e2b",
+      "modified": false
+    },
+    {
+      "path": "ener_pars.f90",
+      "size_bytes": 9776,
+      "sha256": "a5d0a4803ed62b84629f8bd020b0d14fd8b0f46f799b51ae6930b4b1e923bbd6",
+      "modified": false
+    },
+    {
+      "path": "errwrt.f",
+      "size_bytes": 787,
+      "sha256": "aa63dfc24ca7d6c84a811175569879cff19730f32b0fdbfd838cb13c66d410e9",
+      "modified": false
+    },
+    {
+      "path": "expcost.fh",
+      "size_bytes": 1076,
+      "sha256": "6564682fd7840062070e53b9ee2ecb88044135c071249e19db41724031c44028",
+      "modified": false
+    },
+    {
+      "path": "external_dist_restraints.f90",
+      "size_bytes": 9601,
+      "sha256": "acf1ed36f512c12c2f8e5c6185473c7f7cde7be580f5a91c3d07a7aa6024f6d7",
+      "modified": false
+    },
+    {
+      "path": "extra_eigen.f",
+      "size_bytes": 47116,
+      "sha256": "31d13fb66d4b8223577effee32c4e70e034768158dadada95a513ef4a34bae07",
+      "modified": false
+    },
+    {
+      "path": "fast_hessian_tabulation.f",
+      "size_bytes": 71603,
+      "sha256": "9104760779f75c22e66e57dcdf51f9a170ee87683232e65786a41b8afbb8bdd1",
+      "modified": false
+    },
+    {
+      "path": "fftw_constants.fh",
+      "size_bytes": 527,
+      "sha256": "912decf076a37f7c822980ebedbd34b25fe29a338622f97f0b71c1de913f3a44",
+      "modified": false
+    },
+    {
+      "path": "files.fh",
+      "size_bytes": 257,
+      "sha256": "1f973e019a494646400fb2d38f288e729bea8b6b0350b4ec7028f24111e6ef7a",
+      "modified": false
+    },
+    {
+      "path": "filter1.f",
+      "size_bytes": 1480,
+      "sha256": "95535fe0f7a50f408d76544bccdcebb86f752a6923b2941a2791ba8b292b391f",
+      "modified": false
+    },
+    {
+      "path": "filter_params.f90",
+      "size_bytes": 7029,
+      "sha256": "24a42318cfd8032bcaa589f5f880d10c0ef44efc06c606ae93f1e9c6e4fe543f",
+      "modified": false
+    },
+    {
+      "path": "filters.f",
+      "size_bytes": 3600,
+      "sha256": "03c8e2e47eadd13fe426670c1e7f884968d2c43e3a473807af6ec24190a8351e",
+      "modified": false
+    },
+    {
+      "path": "form_factor_refine.f90",
+      "size_bytes": 11125,
+      "sha256": "a4fb6fa65cf0765e989fc71d9f86b56ee0a90d5e1e414dcbb0f96d739b6227a8",
+      "modified": false
+    },
+    {
+      "path": "freer_twin.f90",
+      "size_bytes": 16921,
+      "sha256": "e447e8c9995293ba4df49e51cee860095d996fd698ae02a35df8d3a4d7b18339",
+      "modified": false
+    },
+    {
+      "path": "gauss_integrate_test.f90",
+      "size_bytes": 308,
+      "sha256": "3c99b7addfe46278215a492e3c8110ab04b8a5924f43062180e1503be049f1b5",
+      "modified": false
+    },
+    {
+      "path": "gauss_sample.f",
+      "size_bytes": 6246,
+      "sha256": "94d5b6a1bda42bfa4fee0c2cd978ec43334c4aa0fd54109bf7599585b3d7e85a",
+      "modified": false
+    },
+    {
+      "path": "gaussian.fh",
+      "size_bytes": 465,
+      "sha256": "6e1087fef9e2bd06bd01357244d89efaa0733a16b08eea63432c5a3c644d2330",
+      "modified": false
+    },
+    {
+      "path": "gaussian_int.f",
+      "size_bytes": 6621,
+      "sha256": "145360dbce72d4614c30cb2f016b4165efa8b76cfd1133eee9f8aac4c33d65ba",
+      "modified": false
+    },
+    {
+      "path": "gaussq.f",
+      "size_bytes": 13102,
+      "sha256": "b6dbad8cc335932843be9cbf91c5c537ebe14243a8e87d8e5924e304acf46a52",
+      "modified": false
+    },
+    {
+      "path": "generate_external_restraints.f90",
+      "size_bytes": 2551,
+      "sha256": "f11cf8d1a8993ba9de8b08fa1f3bf468001035a5d417e77283cbf65518660bc0",
+      "modified": false
+    },
+    {
+      "path": "gibbs_gm_sampler.f90",
+      "size_bytes": 17028,
+      "sha256": "32e0cf57d816d45f105e5ee1cea656064ab52c80ed32146ed7e6c68d8e06b3c1",
+      "modified": false
+    },
+    {
+      "path": "hd_mixture_refine.f90",
+      "size_bytes": 15185,
+      "sha256": "df503a6de40188b44b0ee7a0e307448ddfb0cb140f00d099b9f6072c5e3f0536",
+      "modified": false
+    },
+    {
+      "path": "header2matr.f90",
+      "size_bytes": 11238,
+      "sha256": "1d4d11d1382c3dc46b721644222001ad971cf0e38a6ad8ae22d6d14f63d0640f",
+      "modified": false
+    },
+    {
+      "path": "hessian_impl.f90",
+      "size_bytes": 2102,
+      "sha256": "eace9ed7aa2a6b43b24fccdb4028f53497cf703aef926d3287f11a04e76e3bbd",
+      "modified": false
+    },
+    {
+      "path": "hkl_pack.f90",
+      "size_bytes": 79,
+      "sha256": "ee0ced860222bee8123a4666844cab28f8f894fae3513cdd48032e08ed24cffc",
+      "modified": false
+    },
+    {
+      "path": "hkon_secder_tch.f",
+      "size_bytes": 207056,
+      "sha256": "54b9c9bcbfdaf4476ffc5098a9f900a62ba90fb4ed4d97e016cd1fbaab06ce42",
+      "modified": false
+    },
+    {
+      "path": "i0.c",
+      "size_bytes": 9094,
+      "sha256": "7962134dedeb152a056c91a6730c5b38559bea67acaa128a4601f4ccfcf15116",
+      "modified": false
+    },
+    {
+      "path": "i1.c",
+      "size_bytes": 9118,
+      "sha256": "ac09c4f1c5c7ddadd4c11fac3f8c7e7295296a1ed3da36cbf81b30003ac4fdc4",
+      "modified": false
+    },
+    {
+      "path": "iheap_sort.f",
+      "size_bytes": 18047,
+      "sha256": "0f526ebc37c1f2dcfd09d63c56f0a1ebd51de33fe86887556366459767dd9a2e",
+      "modified": false
+    },
+    {
+      "path": "ind_com.fh",
+      "size_bytes": 1008,
+      "sha256": "690f2207e527920f3a045def1b8d48a2c75ca2c539f0e1461678e95bdbd782af",
+      "modified": false
+    },
+    {
+      "path": "inout_routines.f",
+      "size_bytes": 5633,
+      "sha256": "1413953efcac44099547fd11fed57d953c3dbfe473d6195b6142a81aaba9d904",
+      "modified": false
+    },
+    {
+      "path": "integrate.f90",
+      "size_bytes": 7839,
+      "sha256": "6b7dfe3308446a4c202f87a7ffb246ffbb84701bfdb1f83f9a8f03441a2f3c6b",
+      "modified": false
+    },
+    {
+      "path": "intensity_scale_random_generate.f90",
+      "size_bytes": 28066,
+      "sha256": "c7ae8c0cbbda97e1739c54dbbb9b18fdb671d4c60a3f67b6f8180f1a2dcac429",
+      "modified": false
+    },
+    {
+      "path": "internal_patterns.f90",
+      "size_bytes": 2965,
+      "sha256": "c198401136e81312d74809c9cf1077a2b26153751320349a58b28145d29bcc27",
+      "modified": false
+    },
+    {
+      "path": "interpolate_mod.f",
+      "size_bytes": 22548,
+      "sha256": "3259efa48e3ddc09186d771b0224c2f0c2bafd0df58c15c5c966422082019d7a",
+      "modified": false
+    },
+    {
+      "path": "libT.f",
+      "size_bytes": 37752,
+      "sha256": "10c450c7250c9f15a7514335fd42b89e14e849d116f4de5ac206bdda914f7c5d",
+      "modified": false
+    },
+    {
+      "path": "lib_com.f90",
+      "size_bytes": 68578,
+      "sha256": "76854e23dcaecef446cc187f13623d01cba6d14a72b58e859775d42308a06320",
+      "modified": false
+    },
+    {
+      "path": "libcheck.f",
+      "size_bytes": 253562,
+      "sha256": "00efc7a922502364301a32e0dcd022f2fbec908b1a155531b8efac61684e0b44",
+      "modified": false
+    },
+    {
+      "path": "libcheck_min.f",
+      "size_bytes": 42393,
+      "sha256": "39af4282bf3840ac1d34b97f7fe58e4712e19b3f3f9a2358817d6dc80f37d1f7",
+      "modified": false
+    },
+    {
+      "path": "libcheck_version.fh",
+      "size_bytes": 398,
+      "sha256": "6aee820f772ba75dd87e1f1afcd8e11fbd2212aa7a51940624cc34aa0fabf2ea",
+      "modified": false
+    },
+    {
+      "path": "libcomf77mod.f",
+      "size_bytes": 58,
+      "sha256": "4e07e8699f425049e614966767dfd4700ce6927731a1945908b9198709dbed44",
+      "modified": false
+    },
+    {
+      "path": "linalgebra.f",
+      "size_bytes": 71511,
+      "sha256": "8e0bcdc851e1a5c6365fd9f0e08636b3d7813e2fa52a2a046b0d875284855d5a",
+      "modified": false
+    },
+    {
+      "path": "linalgebra_f90.f90",
+      "size_bytes": 9413,
+      "sha256": "c05cc8729168cafb40bf7b8ffd4ea92f4a512fe484d38718e7dba94a29eba32f",
+      "modified": false
+    },
+    {
+      "path": "linalgebra_refmac.f90",
+      "size_bytes": 2567,
+      "sha256": "b2a04e674d67e78c3106d8f4e6648c365248e0460fd02c39fa35e256f2a78d19",
+      "modified": false
+    },
+    {
+      "path": "link_com.fh",
+      "size_bytes": 1954,
+      "sha256": "a683f09c8f36fbd9dfe465fc15067e76bca5216c5e37abc36604787c358f909b",
+      "modified": false
+    },
+    {
+      "path": "llhood.h",
+      "size_bytes": 165276,
+      "sha256": "395e9b764191d8d2f617f78150e96363598598977a39a1afac846650670a567b",
+      "modified": false
+    },
+    {
+      "path": "lnumrec.f",
+      "size_bytes": 1590,
+      "sha256": "e705e3bac968b2f2bb81a9509a1aef0daad5a31d78896713374662ddb05af113",
+      "modified": false
+    },
+    {
+      "path": "local_tls.f90",
+      "size_bytes": 25037,
+      "sha256": "33137302970b4f9831d1b93d964e6005a5a23e6d6d436763759d778fb116f59f",
+      "modified": false
+    },
+    {
+      "path": "low_level_routines.f90",
+      "size_bytes": 1959,
+      "sha256": "075785e5dd9fcee01248ecb12b1fa95cb5cb1aa8023621036373bcdecc02d09d",
+      "modified": false
+    },
+    {
+      "path": "ls_params_save.fh",
+      "size_bytes": 414,
+      "sha256": "6b4c9021c4fceb22940229f511892a3d89027c7b7270ed48c4fed6f5bc252481",
+      "modified": false
+    },
+    {
+      "path": "ls_scaling_double.f",
+      "size_bytes": 37506,
+      "sha256": "e2bfc1eb1fe42d6c44e834bfe87279956907a55c4775ff2b035bfa7baf3c350c",
+      "modified": true
+    },
+    {
+      "path": "ls_scaling_twin_save.f",
+      "size_bytes": 36087,
+      "sha256": "b822ceabb2e5795026573a8e7d65c0d1f58eb51733ed7e2a8366fb9b74988669",
+      "modified": false
+    },
+    {
+      "path": "lsq_exp2.f",
+      "size_bytes": 313201,
+      "sha256": "c07836b7da35d05ba1cdc700604edfb7687044d1b471261a4f557e5edda3ed46",
+      "modified": false
+    },
+    {
+      "path": "machine_.h",
+      "size_bytes": 13522,
+      "sha256": "97b8bd785359b35593a6755beba1c10dfaf2d4f17e1883984e18fa733d2aac23",
+      "modified": false
+    },
+    {
+      "path": "main_emin.f",
+      "size_bytes": 6835,
+      "sha256": "52c070d58bbf79743b08d4211660d31b721345d7920fc9e92ee9688f9502a402",
+      "modified": false
+    },
+    {
+      "path": "main_libcheck.f",
+      "size_bytes": 9123,
+      "sha256": "81f003f06f1f5c0e98c04d0b799752238cd704b5a84fb50a4dd371a111d4dbb1",
+      "modified": false
+    },
+    {
+      "path": "main_libcheck_sdf.f",
+      "size_bytes": 8503,
+      "sha256": "fff4af40752cb82acbed60617c097d74b04c6b1b6468bb123f741efee6c33321",
+      "modified": false
+    },
+    {
+      "path": "main_makecif.f",
+      "size_bytes": 10679,
+      "sha256": "ef6e29dd4c8a6f9257fc17c8d88746ce073c82f8439b13b9a36e7fabdef9b3c3",
+      "modified": false
+    },
+    {
+      "path": "make_CIF.f",
+      "size_bytes": 319289,
+      "sha256": "0eaabdcd0cd29dedd6a1524775654d06e7c8a4d2e47577728653163ffff3270b",
+      "modified": false
+    },
+    {
+      "path": "make_CSD.f",
+      "size_bytes": 11988,
+      "sha256": "0bf7ea476eaebf3152506f7b214ab4a9d12a4a8bfb5e626c65e0f60a8f8a483c",
+      "modified": false
+    },
+    {
+      "path": "make_PDB.f",
+      "size_bytes": 129879,
+      "sha256": "ca043464fe91d74c0779576af28e693943aa05f1be38e30e3d639c4dc04b262b",
+      "modified": false
+    },
+    {
+      "path": "make_crd1.f",
+      "size_bytes": 261726,
+      "sha256": "9762afe337f6ebdb6baadc6d09eec07892e6754751556de79f4d0080d9e41bd7",
+      "modified": false
+    },
+    {
+      "path": "make_crd2.f",
+      "size_bytes": 221829,
+      "sha256": "c6d0d400b234716b5d152ed9c09e7031efbccabb147eeb8050e6f03a7b89d6cd",
+      "modified": false
+    },
+    {
+      "path": "make_lib11.f",
+      "size_bytes": 88312,
+      "sha256": "fbdd053bfd0916182c99b154c050abd53f2a09671121f983cf316ad8b03ace21",
+      "modified": false
+    },
+    {
+      "path": "make_lib12.f",
+      "size_bytes": 110857,
+      "sha256": "71a153690006e4c92e25b85cabf3a2ebafbdfab3d0400d2fd537be9b2b726982",
+      "modified": false
+    },
+    {
+      "path": "make_lib2.f",
+      "size_bytes": 232754,
+      "sha256": "9ba59efa59d45497f7ea0a1caa0703ae3fea5ed25e79dfd1dc5d033a8d5071e5",
+      "modified": false
+    },
+    {
+      "path": "make_new1.f",
+      "size_bytes": 209046,
+      "sha256": "8a62bd2c6824465b6f589f92dc6e3c256fb90281243065363c3927b9fcb9c7d5",
+      "modified": false
+    },
+    {
+      "path": "make_new2.f",
+      "size_bytes": 200159,
+      "sha256": "bcd19b43931cf885376e84a7564db80efd0c56cf5dea69a269f2c84e177ab4ff",
+      "modified": false
+    },
+    {
+      "path": "make_refmac_dummy.f",
+      "size_bytes": 47456,
+      "sha256": "1a91286f73044ed2eeb9f2b1d6986930f06d2b260d179debef5df35f2d94d24c",
+      "modified": false
+    },
+    {
+      "path": "make_rst1.f",
+      "size_bytes": 209235,
+      "sha256": "4da79e5edc13d348f1b36c98228908f46e700bd5aea39923b4bcb2bb500fe6cc",
+      "modified": false
+    },
+    {
+      "path": "make_rst2.f",
+      "size_bytes": 318555,
+      "sha256": "dc094b0350e643cd4b63db7441875df6a231f0d2531c16f496d1161216fdd18f",
+      "modified": false
+    },
+    {
+      "path": "make_subr.f",
+      "size_bytes": 160841,
+      "sha256": "0b83d931820bb88916f53616a7f3d4555211ceac0d9fae8a947f500da551a930",
+      "modified": false
+    },
+    {
+      "path": "make_subr_2.f",
+      "size_bytes": 351363,
+      "sha256": "04843685e9408c6e781473b786747a1d0f2acbf8a65c4a604a2db123b78a7509",
+      "modified": false
+    },
+    {
+      "path": "make_subr_3.f",
+      "size_bytes": 31947,
+      "sha256": "f6d4e5608355df44dd26781a6984f3583889ddd94a43d5e1bb257a498ada3520",
+      "modified": false
+    },
+    {
+      "path": "make_subr_refmac.f",
+      "size_bytes": 14267,
+      "sha256": "e55f9df2a9246eace6771d8393cac377a50ce85e108c4abbbb74e73f105a4fef",
+      "modified": false
+    },
+    {
+      "path": "make_unix.f",
+      "size_bytes": 2861,
+      "sha256": "46ba97e481b6458ef10aac0aea491656bbb926559cfbe3028ed04b3a4a7ecc0c",
+      "modified": false
+    },
+    {
+      "path": "make_unix_ccp4.f",
+      "size_bytes": 3491,
+      "sha256": "484f67e2111074723a20ff2f533f472a0aa9e05638ba6e95c1070d0aa391a7aa",
+      "modified": false
+    },
+    {
+      "path": "makecif.f",
+      "size_bytes": 36682,
+      "sha256": "898e375f2d46ecb3b66b080e9dc4af10294ccd12806dd9df618b64733c695ff0",
+      "modified": false
+    },
+    {
+      "path": "makecif_pars.f90",
+      "size_bytes": 908,
+      "sha256": "01a78f00f76fb764aa2d356268bb4c0d1f41b2d48f4cd92604d193292f458164",
+      "modified": false
+    },
+    {
+      "path": "makecif_version.f90",
+      "size_bytes": 904,
+      "sha256": "896bae0aa9c53a6597f44049d465b3b1d800a254db2804c21e924c3080882c56",
+      "modified": false
+    },
+    {
+      "path": "makefile",
+      "size_bytes": 143925,
+      "sha256": "1b3efbd66a7cebccd2d9a96553848fe8dc327546d62a8de20e7e06b0fb42e9b4",
+      "modified": false
+    },
+    {
+      "path": "makefile_gcc45",
+      "size_bytes": 1454,
+      "sha256": "e2c00216764bc30921678542d88a1c1b731c063cb157caf666e17298976e0bb2",
+      "modified": false
+    },
+    {
+      "path": "makefile_gccc45",
+      "size_bytes": 1380,
+      "sha256": "6e11ae9453d55a4bc11f604873969dd61873795485d6ec652cf88afe14a78bd0",
+      "modified": false
+    },
+    {
+      "path": "makefile_gfortran",
+      "size_bytes": 1264,
+      "sha256": "c1032a564e9941f327c5386d358b39c9e4bf00a3fd79ff1f9e0679849bfd6020",
+      "modified": false
+    },
+    {
+      "path": "makefile_gfortran_save",
+      "size_bytes": 1442,
+      "sha256": "a6e11de7adf4f3f080de18d1c7fa733fd501eaa4a242c4a860e111a761b04859",
+      "modified": false
+    },
+    {
+      "path": "makefile_ibmmac",
+      "size_bytes": 560,
+      "sha256": "03e2e2cad2de96e8a5744303dd9280610e6a08f38f4d1ef56f74fa45dffe96a4",
+      "modified": false
+    },
+    {
+      "path": "makefile_ibmmac1",
+      "size_bytes": 479,
+      "sha256": "3cf3e5e083cf3c8d6cd9e024ae082df5c4505f64a35d45202131434bcb1d0bed",
+      "modified": false
+    },
+    {
+      "path": "makefile_linintel",
+      "size_bytes": 417,
+      "sha256": "e20601c8cec0cec2e138657c060369e1c6c827c75a30a30a16e91c43983339e3",
+      "modified": false
+    },
+    {
+      "path": "makefile_linuxgfortran",
+      "size_bytes": 596,
+      "sha256": "acf09d975b21e3fe0b16edbd3269d2e35bd8902e7f50d1ba5c03649034b2c993",
+      "modified": false
+    },
+    {
+      "path": "makefile_macgfortran",
+      "size_bytes": 750,
+      "sha256": "10d9e7be3e20b85582e55b96064409cab174386b2ad866931fdd48d3e26e1634",
+      "modified": false
+    },
+    {
+      "path": "makefile_refmac.inc1",
+      "size_bytes": 38428,
+      "sha256": "bb2116aadc317c48036ba8197d71bd8c7c212a0eb161f3d342e217d88b935c6d",
+      "modified": false
+    },
+    {
+      "path": "makefile_refmac_new.inc1",
+      "size_bytes": 4859,
+      "sha256": "920861e609db7387dfc903174824e919e4412c5d7f1765b53fa8bce7c3fe8f4e",
+      "modified": false
+    },
+    {
+      "path": "makefile_refmac_save.inc1",
+      "size_bytes": 14311,
+      "sha256": "9c9bd23dc287f57b206431225babae4008584fdd4f48c6b379a5c8bc34524808",
+      "modified": false
+    },
+    {
+      "path": "map_improve.f90",
+      "size_bytes": 15801,
+      "sha256": "ed15c99370c14735e1fe8dc3aa17b40bb252286decc4d48b87de813c0b997aab",
+      "modified": false
+    },
+    {
+      "path": "map_prepare.f90",
+      "size_bytes": 40060,
+      "sha256": "eb1636a797e2427a95e696f4213aa617ea168e0bde3ef8f2498db27ae3e0048e",
+      "modified": false
+    },
+    {
+      "path": "map_reader.f90",
+      "size_bytes": 12638,
+      "sha256": "18e4dc492b43f1f9ae1992cd43833a939c41e3ca24570436f4905504902ffe99",
+      "modified": false
+    },
+    {
+      "path": "map_stats.f90",
+      "size_bytes": 4036,
+      "sha256": "78322436fca7d9df791e6d56bdaaad3dba3a8071dfc985c823be2733b82c8628",
+      "modified": false
+    },
+    {
+      "path": "math_refmac.f",
+      "size_bytes": 6178,
+      "sha256": "fa68a3f32f25629111b8f2d47f677197461665c2f5598ff5bde4e8ba6dfc0a0f",
+      "modified": false
+    },
+    {
+      "path": "max_with_ints.f",
+      "size_bytes": 53467,
+      "sha256": "5741089d92ee6101339d02672a22ea9c67632412ba255de14c310a3fca197838",
+      "modified": false
+    },
+    {
+      "path": "mconf.h",
+      "size_bytes": 5442,
+      "sha256": "a6c6c15272a6f6f05089036580e86467ff3580ae227d7d99f33cabf7fa42fed2",
+      "modified": false
+    },
+    {
+      "path": "md_randomise.f90",
+      "size_bytes": 610,
+      "sha256": "5753803140234594aad295f3bbcb3f8198d652da801180c7645df515ef1288f1",
+      "modified": false
+    },
+    {
+      "path": "merohedr_twin.f",
+      "size_bytes": 7046,
+      "sha256": "41536976799456c5cbcb930d45ff98e609c0dba5a4c342f5d0ba94d770cfc708",
+      "modified": false
+    },
+    {
+      "path": "messy_pdb.f",
+      "size_bytes": 10842,
+      "sha256": "d0d7320120cb2e07f0bdadd2c568665fdedf475636941da0b039ec4a91f44173",
+      "modified": false
+    },
+    {
+      "path": "metal.fh",
+      "size_bytes": 765,
+      "sha256": "bf5be8a8f57f9e3787b0cd6e411c23009ff0444fd8d997d0e6c6bfe1dc1e5c43",
+      "modified": false
+    },
+    {
+      "path": "mi_generate.f90",
+      "size_bytes": 16725,
+      "sha256": "71bb1a5237eff8a51070fc8069334d171d64520c10fe9c92714984b09c6119ff",
+      "modified": false
+    },
+    {
+      "path": "ml_params_refine.f",
+      "size_bytes": 36446,
+      "sha256": "a701fb52ea335dc32395cf74e1be15c519a23d871e8e81571abdbad9616a7bbd",
+      "modified": false
+    },
+    {
+      "path": "ml_scaling_double.f",
+      "size_bytes": 171075,
+      "sha256": "140635ef400167a1393db1f0d4603e81154afeb1a2588b467d92cd2caca9355d",
+      "modified": false
+    },
+    {
+      "path": "mmcif_reader.f90",
+      "size_bytes": 4921,
+      "sha256": "77aee9ad899da0abd629c365703ce35a78f8a2319e747067daa59a625341bdb5",
+      "modified": false
+    },
+    {
+      "path": "mod_subr.f",
+      "size_bytes": 11181,
+      "sha256": "126635e8e10f0ec223200dba0aa91e05ca29e658a77bd957891507b772225b3c",
+      "modified": false
+    },
+    {
+      "path": "models.f90",
+      "size_bytes": 1610,
+      "sha256": "91f78c4b33e7579c71ea9073317154cca751b7b94b8d66353a1d34ccfb40fae1",
+      "modified": false
+    },
+    {
+      "path": "mol2_file.f",
+      "size_bytes": 22609,
+      "sha256": "a99163dd3ef97a349470b0f61d300179bbc3824ccffbdc36b18aae6944c50dd1",
+      "modified": false
+    },
+    {
+      "path": "monitor.f90",
+      "size_bytes": 1172,
+      "sha256": "29f74870c512972734ac8e6af09e8bc7ab44bd3a9af7f5ff0e3a8d80c6ec5f81",
+      "modified": false
+    },
+    {
+      "path": "mtz_for_ints.f90",
+      "size_bytes": 912,
+      "sha256": "3e03f03629cd184f32121353825d7703c315b401413acd63aaceacc643c111f8",
+      "modified": false
+    },
+    {
+      "path": "mtz_things.f90",
+      "size_bytes": 3086,
+      "sha256": "5c0be5413a8e29efbf77734c8ace0444bdf7dd70d71f9adec175be9dd1450cec",
+      "modified": false
+    },
+    {
+      "path": "mtz_write_twin.f",
+      "size_bytes": 31526,
+      "sha256": "4b3d132f21fbf45b44fcec845e43b86fe62d6e82d237c4a0b9f850b6fe28a036",
+      "modified": false
+    },
+    {
+      "path": "ncs_aver_refmac.f",
+      "size_bytes": 5705,
+      "sha256": "9d839ea29a23f56bc43f50c82f6b71f58eae71e0fa0fc968a6816082affa10c3",
+      "modified": false
+    },
+    {
+      "path": "ncs_constr.f90",
+      "size_bytes": 19749,
+      "sha256": "7eb63452d0527bb586d91131070bcd704b040faff0a75881be2a36e7731b71f3",
+      "modified": false
+    },
+    {
+      "path": "ncs_ncs_generate.f90",
+      "size_bytes": 31777,
+      "sha256": "cd7a5209cffd50d25be3c83bef127fa90522f5a364aaed62b3ce050995392156",
+      "modified": false
+    },
+    {
+      "path": "ncs_rest.f",
+      "size_bytes": 20091,
+      "sha256": "32e89e49157ae89ffd9d8fc235c79d1c0731e0931c69758e825f568d4d714ea7",
+      "modified": false
+    },
+    {
+      "path": "ncs_rest_mod.f90",
+      "size_bytes": 1900,
+      "sha256": "222bbb766db06779bb9716eb668f1520a15a27e1e08940e1848b03ad5ed97c8b",
+      "modified": false
+    },
+    {
+      "path": "ncs_simil.f90",
+      "size_bytes": 20603,
+      "sha256": "24980f77604b4a29bb2ecc023515c2beb8f7808d17c1aae5111734176a6a74ec",
+      "modified": false
+    },
+    {
+      "path": "netlib_routines.f",
+      "size_bytes": 2730,
+      "sha256": "93415288257939f23c9fc03920bd8427807b9931af985e74cc397062e5015549",
+      "modified": false
+    },
+    {
+      "path": "newentry_idealise.f",
+      "size_bytes": 5261,
+      "sha256": "314072e587038a4a05f655391c5e98dfeb4ca1383aa0fd7b2811e3b690cd86f2",
+      "modified": false
+    },
+    {
+      "path": "nmr_targets.f90",
+      "size_bytes": 312160,
+      "sha256": "3748b3e05749a0d8a60c50eaaf129f43ae63b5064e0f306aab324f86aac5eb19",
+      "modified": false
+    },
+    {
+      "path": "non_mero_reorginise.f90",
+      "size_bytes": 14009,
+      "sha256": "560ba0ce103e5f85a4683daf84308bd8e34f1f723efa0bf143c86f72e3a88441",
+      "modified": false
+    },
+    {
+      "path": "numerical_kl_derivs.f",
+      "size_bytes": 358,
+      "sha256": "1f723597aa3f6052fbde98f89895dae02790eaed8e92815de28c3978af2e39e3",
+      "modified": false
+    },
+    {
+      "path": "occupancy_only_refine.f",
+      "size_bytes": 10749,
+      "sha256": "bb3500ba7ca44bdc21390b0313784bc88d52bf2624639bac9d67bca177b573af",
+      "modified": false
+    },
+    {
+      "path": "occupancy_params.fh",
+      "size_bytes": 2150,
+      "sha256": "281c4c07cbbedd8611c5f44eeb8f17bc6f56659023d095b217f77530fad7bf0c",
+      "modified": false
+    },
+    {
+      "path": "odb_files.f90",
+      "size_bytes": 24077,
+      "sha256": "094cab02e0492f71f62f179c7548f5323d3d58a946497b84c35963128d22ea39",
+      "modified": false
+    },
+    {
+      "path": "oppro_allocate.f",
+      "size_bytes": 226230,
+      "sha256": "b1a3f42fb4d1a2a4959b7edd840a0522ad46971e16bd49b5768aa84742b9b3e3",
+      "modified": false
+    },
+    {
+      "path": "optimise_solvent_all.f90",
+      "size_bytes": 15515,
+      "sha256": "b5ddf4ab9fa088735ea7234b679439103841ee28209625233c72eef6c3793cfe",
+      "modified": false
+    },
+    {
+      "path": "overal_params.f90",
+      "size_bytes": 284,
+      "sha256": "0cc2f27acbb5675ca4978797d0796e5209fda4e575e689016479d79b32584362",
+      "modified": false
+    },
+    {
+      "path": "parser_things.f90",
+      "size_bytes": 262,
+      "sha256": "3c92ed9705c4c8b6a889d8981592eacd2bce30d84af3bee3c7e356560549145b",
+      "modified": false
+    },
+    {
+      "path": "pdb2libcheck.f90",
+      "size_bytes": 54361,
+      "sha256": "c4829b9e505f17199d6dfff25336c774809f128b6da0c44c46cde70f243993a4",
+      "modified": false
+    },
+    {
+      "path": "pdb2mmcif_mod.f90",
+      "size_bytes": 3739,
+      "sha256": "205ae2a2d091da6da3597c15e8b2f3fb8a4435e5d6e78267449051df9da47325",
+      "modified": false
+    },
+    {
+      "path": "pdb_v223.f90",
+      "size_bytes": 2634,
+      "sha256": "f61f027a5d094db32ed0ac1fd9af620339c7db2b3479d3e5ac31de35c773b43c",
+      "modified": false
+    },
+    {
+      "path": "pretab.fh",
+      "size_bytes": 857,
+      "sha256": "29a4d992583947e3723f860dfab09c3e66f9c8a59dcbcdb344bbd4fc86a424b3",
+      "modified": false
+    },
+    {
+      "path": "print_geom_params.f90",
+      "size_bytes": 9001,
+      "sha256": "7b8068a6b84ca0006ad90f8df63ad9d6cf27c06b319737a1f8bd1b7ed6e3f239",
+      "modified": false
+    },
+    {
+      "path": "puckers_rotamers_etc.f90",
+      "size_bytes": 13619,
+      "sha256": "0ec11e614f32c7da3a126f31f69c806f9a4983c366543600c594b0433ca18e6b",
+      "modified": false
+    },
+    {
+      "path": "qnorm.f",
+      "size_bytes": 8701,
+      "sha256": "c181041ffbf18ed106a4d8885af67007c8b622d1d1b9ef60e8507fe3e65d0f3a",
+      "modified": false
+    },
+    {
+      "path": "quasy_gauss_ll.f90",
+      "size_bytes": 1082,
+      "sha256": "f37829dd0d8a76b7c3b70dcf084f632f80f70356c149c78d92856ffee4c51e1b",
+      "modified": false
+    },
+    {
+      "path": "rando_n.f90",
+      "size_bytes": 345,
+      "sha256": "f7a43de11c1c475bf5c149b91ed87a64b92479ef0977db83ad28d7fd1ac7e4e2",
+      "modified": false
+    },
+    {
+      "path": "random.f90",
+      "size_bytes": 49306,
+      "sha256": "87da518d717037281128ddc3ac2b9098de2dd2d5a0b4445c8f5152ff3e577e01",
+      "modified": false
+    },
+    {
+      "path": "rcard_tor1.f",
+      "size_bytes": 305271,
+      "sha256": "6bf362de66b26bfdf3f32b6cbe41d10275d637e20aaff57a478880f590a3573a",
+      "modified": false
+    },
+    {
+      "path": "read_crd.f90",
+      "size_bytes": 3539,
+      "sha256": "07a5dff26cebaa1018d4bdbf3f12dcd8f4754b57015cb49b4afef581aa1cf664",
+      "modified": false
+    },
+    {
+      "path": "read_data.f",
+      "size_bytes": 3042,
+      "sha256": "109991a75adeb2d78ae75cf3f1864fb1aeb907d2870759ae103e4afd78aae4cb",
+      "modified": false
+    },
+    {
+      "path": "read_extra_restraints.f",
+      "size_bytes": 144159,
+      "sha256": "f6ba7265f76a6b94c2f303a89f48463c652cc568c8b4615827b9eaf07e1195b6",
+      "modified": false
+    },
+    {
+      "path": "read_residue_pairs.f90",
+      "size_bytes": 3617,
+      "sha256": "fc0a76a4db57929888d92317650b272eaf60f7649a241b9abf0b060c2809ec7e",
+      "modified": false
+    },
+    {
+      "path": "ref_com.fh",
+      "size_bytes": 1483,
+      "sha256": "eb5a4a2330887dd9a92f47d740bd9c39ec36f56d77a4d2bcfaceae0d103bad37",
+      "modified": false
+    },
+    {
+      "path": "ref_com_str.fh",
+      "size_bytes": 1887,
+      "sha256": "c55f304d8be2e9a41a8387e5b2379ce2a7c4cda6db149b8f82b2e65c1a2fe955",
+      "modified": false
+    },
+    {
+      "path": "refall_twin.f",
+      "size_bytes": 41475,
+      "sha256": "1c83a8c9a195d000821c699a42f1b81bf8f14ea78310e7a352283afedfd3e630",
+      "modified": false
+    },
+    {
+      "path": "refi_flags.f90",
+      "size_bytes": 4876,
+      "sha256": "7d4df566a0b170277d3532aad115f0dd6c5743c878be5d8fd49e1b9778ec5aac",
+      "modified": false
+    },
+    {
+      "path": "refi_flagsf77mod.f",
+      "size_bytes": 64,
+      "sha256": "85a32fb26b5439ed057441af1f05d0c184ff50e9a151fa9c32c0d80691fb61c1",
+      "modified": false
+    },
+    {
+      "path": "refine_group_props.f90",
+      "size_bytes": 3013,
+      "sha256": "ea7a5cbce99a31a953fc0e42c1521af908c80a75ee9bc55f09a5dcfd5dfa1ea9",
+      "modified": false
+    },
+    {
+      "path": "refmac_completeness.f90",
+      "size_bytes": 8938,
+      "sha256": "2b10ae794bedfe5d08f140d20daf94d4f400b979df6df554d7a861eae44b6639",
+      "modified": true
+    },
+    {
+      "path": "refmac_derivatives.f90",
+      "size_bytes": 17130,
+      "sha256": "f8776abc284ad0709eb2811197357d3a78842b16806ba16c10d3a09bdeba1820",
+      "modified": false
+    },
+    {
+      "path": "refmac_histograms.f90",
+      "size_bytes": 2582,
+      "sha256": "3b3f522d3a81a7a7c7b8b45af4ca58b5c11abb7b11752d8ca81f2428d445daba",
+      "modified": false
+    },
+    {
+      "path": "refmac_signals.f90",
+      "size_bytes": 4497,
+      "sha256": "90a09367f5a4a36d19bdad55caf8d2fe24e0674349bee58ef312b78aa0c39d66",
+      "modified": false
+    },
+    {
+      "path": "refmac_sparse_matrix.f",
+      "size_bytes": 2454,
+      "sha256": "a29d807bfb8cd21d48e7882d6f142903f582f0b1e405ec6275daa14d565b22e0",
+      "modified": false
+    },
+    {
+      "path": "refmac_xml.f",
+      "size_bytes": 44368,
+      "sha256": "11bdc09f87ba49bdcc6f216108dd4b43d109c554baa1eeb7d2c528e96e697b9e",
+      "modified": true
+    },
+    {
+      "path": "refpre_twin.f",
+      "size_bytes": 35789,
+      "sha256": "199e5715183bd28d63ac4dfc0dd15b1031a60bb471ae009e7c95dbfbc3c5ab99",
+      "modified": false
+    },
+    {
+      "path": "residue_pairs_module.f90",
+      "size_bytes": 829,
+      "sha256": "ec1b70963063f2e8641062542f0cd1ed4b9a86aa61fe8ca368545b3d23f17ac4",
+      "modified": false
+    },
+    {
+      "path": "restr_files.f90",
+      "size_bytes": 1479,
+      "sha256": "146f9f7d9b2be78e4af2aab578ec29ab4f1fc767f68188f8cd2d9f0d8e1ed363",
+      "modified": false
+    },
+    {
+      "path": "restr_params.f90",
+      "size_bytes": 4400,
+      "sha256": "b5208e8c498a98201a6507a08453f6b423468da857c0a39fbeda9a7ce49978c1",
+      "modified": false
+    },
+    {
+      "path": "rharvest_mod.f90",
+      "size_bytes": 2652,
+      "sha256": "bc8d32f21dbb60e2aba8a4f86bc4da35ff600b59fa61c3a71c5c225a5819d1b0",
+      "modified": false
+    },
+    {
+      "path": "rharvest_subr.f",
+      "size_bytes": 30589,
+      "sha256": "03e1401d31095bc8b40cc7dde8a1b316426f7ca9270e0ebb1d4df4ab42aa6460",
+      "modified": false
+    },
+    {
+      "path": "rharvestf77mod.f",
+      "size_bytes": 60,
+      "sha256": "ca49317af28644bff2edbb695167ee46f3d6b3b5033baeb911d8b3143a830595",
+      "modified": false
+    },
+    {
+      "path": "ridge.f90",
+      "size_bytes": 24382,
+      "sha256": "6b09568675b17f8241731ff55b8b9787e8d2d58a43b9495a29e12e94b314c0b0",
+      "modified": false
+    },
+    {
+      "path": "rigid_allocate.f",
+      "size_bytes": 24530,
+      "sha256": "7fc6ef9c09ef1dbe2adc1c17546d11ed0fc753854a89e1dcd5ba19e9e176a03b",
+      "modified": false
+    },
+    {
+      "path": "rigid_body.f90",
+      "size_bytes": 1609,
+      "sha256": "a9b819d377581d251894159bfbf5465ddec579b1931f00204bf72c0ede08a2dd",
+      "modified": false
+    },
+    {
+      "path": "rotation_and_others.f90",
+      "size_bytes": 26527,
+      "sha256": "56fae492bf86e4dc1abe7671525265e8b0709c0f149322d4833be1e26fa520c8",
+      "modified": false
+    },
+    {
+      "path": "rstr_com.f90",
+      "size_bytes": 5158,
+      "sha256": "5fb61f7b7f7914083ad49f0443f238cb2ff13c135029f59b53f1515f67c2c2ea",
+      "modified": false
+    },
+    {
+      "path": "save_all_params.fh",
+      "size_bytes": 1028,
+      "sha256": "df6ad63b6458d456efcbf86c3cd2e7af949639b87d68c2d80f9555065ec3cc08",
+      "modified": false
+    },
+    {
+      "path": "sdf_files.f",
+      "size_bytes": 15358,
+      "sha256": "4d559e15580435c8babeb8bc1ca37e308c8c32826700ce7745de293f6cf5ca3f",
+      "modified": false
+    },
+    {
+      "path": "set_num.f",
+      "size_bytes": 19169,
+      "sha256": "8984f0b3d42db49cb3137c28f764071bad21e83f1462b4af75a8a2ed6e130d97",
+      "modified": false
+    },
+    {
+      "path": "sfcalc_refmac.f90",
+      "size_bytes": 119945,
+      "sha256": "58e5e81464c12b02fbd285a6bf841d145312212f1284a8cd9411a4ab5202ed2a",
+      "modified": false
+    },
+    {
+      "path": "sfread_ng.f90",
+      "size_bytes": 8452,
+      "sha256": "916ebe6505519f7cd4da124b2e39e96bced1d23ceb548e05034d9b14480c847a",
+      "modified": false
+    },
+    {
+      "path": "smiles2cif.f90",
+      "size_bytes": 37901,
+      "sha256": "448fa4e75c4d9a3a5e4b6e0ce67c2d7a22f728b729529ad010386d46cf953409",
+      "modified": false
+    },
+    {
+      "path": "solvent_contr_mask.f",
+      "size_bytes": 54760,
+      "sha256": "671f295d201c099fb4a986e7152864811100aba689727f5ecbaa1d41f5ccbe41",
+      "modified": false
+    },
+    {
+      "path": "standard_residue.fh",
+      "size_bytes": 935,
+      "sha256": "a6cdad9a5ba294f35701f53297f03f55d879ac4d47514885602bb404e9083e4f",
+      "modified": false
+    },
+    {
+      "path": "stats_calc.f90",
+      "size_bytes": 2482,
+      "sha256": "4a12fe556ba57c56b2a7431d3585e12c6a36486e62aed7cb8209bfb381a09570",
+      "modified": false
+    },
+    {
+      "path": "subag_scale_hessian.f",
+      "size_bytes": 124962,
+      "sha256": "8414dc617d5d773587db7148cb0ef024771119389e55ad00d3667e805eecf330",
+      "modified": false
+    },
+    {
+      "path": "subcf_scale1.f",
+      "size_bytes": 64214,
+      "sha256": "adebc028aa790e96178f418b6cb55c067d86ed9064d4dd2b52a1ec56c74a66b7",
+      "modified": true
+    },
+    {
+      "path": "subnumrec.f",
+      "size_bytes": 87048,
+      "sha256": "cd1847b4ba7c0f9ae0a7ee596fefe7d7040efcd86384345506c6109abc44c431",
+      "modified": false
+    },
+    {
+      "path": "subvag.f",
+      "size_bytes": 18766,
+      "sha256": "1f4c1908d7108f6eed57e58e01a764b71b250c7feaef88ca2e880683affda5e6",
+      "modified": false
+    },
+    {
+      "path": "subvag1.f",
+      "size_bytes": 19590,
+      "sha256": "6c6916a4c102d1ba16bf1b4d148afd8f0451c48789181427badbacc883112d90",
+      "modified": false
+    },
+    {
+      "path": "tabfunc.h",
+      "size_bytes": 81192,
+      "sha256": "6f6c14384448beeacb53fdc6eec99242c196717e6088695cda701bc4d0069fb2",
+      "modified": false
+    },
+    {
+      "path": "tensor_derivatives.f90",
+      "size_bytes": 12339,
+      "sha256": "798ee910b2011fa5a018e030b6fc71320d164a5dfdbc2bd8386faaafba980ebe",
+      "modified": false
+    },
+    {
+      "path": "things_for_parser.f90",
+      "size_bytes": 255,
+      "sha256": "a02d0c28c1d825d83644372b861d8e200a334e25bce3a2560242f6208310bd8d",
+      "modified": false
+    },
+    {
+      "path": "tls.f90",
+      "size_bytes": 1847,
+      "sha256": "d38a4b9956447ea93c776db97164f2678aa729f67ad095ebd2571ead60564a54",
+      "modified": false
+    },
+    {
+      "path": "tls_allocate.f",
+      "size_bytes": 76319,
+      "sha256": "58e4fe792c772bcb655061b4946482776cd9edb6c0b22801c1df51de031c6ef5",
+      "modified": false
+    },
+    {
+      "path": "twin_refmac.f90",
+      "size_bytes": 999,
+      "sha256": "bdf6ef7275b453fd00a9694bd6b66125aec6af3bca7a429a7a700fe8bbc42baf",
+      "modified": false
+    },
+    {
+      "path": "unique.cpp",
+      "size_bytes": 26,
+      "sha256": "d077c7601f5cad0f82618c406c13d7f16667580a81b90f613c12a33542e230db",
+      "modified": false
+    },
+    {
+      "path": "vdw_and_contacts.f",
+      "size_bytes": 91484,
+      "sha256": "615794940b87dc7345c205f6f36656ad0f0edb291c25dd5ba41d699a8c22d3d6",
+      "modified": false
+    },
+    {
+      "path": "vdw_flexible.f",
+      "size_bytes": 44186,
+      "sha256": "1c537f3c507bafae8d500cb9131df87fe5c0c3cda2c2f6e94421d33496de25a5",
+      "modified": false
+    },
+    {
+      "path": "vdw_nosymm.f90",
+      "size_bytes": 14051,
+      "sha256": "1365149b48f4d44763809b3e34bbe85db6adfe69e7c610139e14f6fed0631609",
+      "modified": false
+    },
+    {
+      "path": "vitals.f90",
+      "size_bytes": 362,
+      "sha256": "e7b05f80e77006c143b58970f83d502cdd5582d5907779b7cf9b7695c80af777",
+      "modified": false
+    },
+    {
+      "path": "wave2f2prime.f",
+      "size_bytes": 23957,
+      "sha256": "5a526a885efa9ab04a3aed3d176f3616096e69ac4c7c6cc0de7e607598c0d453",
+      "modified": false
+    },
+    {
+      "path": "weights.f90",
+      "size_bytes": 4044,
+      "sha256": "b536fe4560f3b67799c0e33b537c2b7796c6ea30c1e0ddccf21f0f8f285580d6",
+      "modified": false
+    },
+    {
+      "path": "write_atoms_mmcif.f90",
+      "size_bytes": 127902,
+      "sha256": "755c44153ff05729ae597c44fb2bbd84c8cc493144616895fa3181cf8f3d0029",
+      "modified": false
+    },
+    {
+      "path": "xml_writer.f",
+      "size_bytes": 3107,
+      "sha256": "a81795968e8ce29501e65cbdc6957d94b8f21e35763b22333f457365310bf375",
+      "modified": false
+    }
+  ]
+}

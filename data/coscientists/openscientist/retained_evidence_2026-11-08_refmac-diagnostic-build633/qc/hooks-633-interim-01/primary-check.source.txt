@@ -1,0 +1,135 @@
+"""PRIMARY focused checks; synthetic fixtures only, never native REFMAC."""
+import argparse
+from datetime import datetime, timezone
+import hashlib
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+
+NAMES = ('scripts/prepare_refmac_diagnostic.py',
+         'scripts/test_prepare_refmac_diagnostic.py',
+         'scripts/refmac_diagnostic/trace_hooks.f90',
+         'scripts/refmac_diagnostic/trace_writer.f90')
+def now():
+    return datetime.now(timezone.utc).isoformat()
+def digest(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+def pin(path):
+    path = Path(path)
+    return {'path': str(path), 'resolved': str(path.resolve(strict=True)),
+            'sha256': digest(path), 'size_bytes': path.stat().st_size}
+def error(exc, stage):
+    return {'stage':stage,'type':type(exc).__name__,'message':str(exc),
+            'errno':getattr(exc,'errno',None)}
+def obtainable_pin(path):
+    try:
+        return pin(path)
+    except BaseException as exc:
+        return {'path':str(path),'error':error(exc,'post_pin')}
+def source_hashes(root):
+    result = {}
+    for name in NAMES:
+        try:
+            result[name] = digest(root/name)
+        except BaseException as exc:
+            result[name] = {'error':error(exc,'post_source_hash')}
+    return result
+def write_json(path, value):
+    path.write_text(json.dumps(value,indent=2)+'\n')
+
+def run_checks(output, wt, *, runner=subprocess.run, compiler_resolver=shutil.which):
+    """Bounded orchestration helper; injected callables are for PRIMARY self-tests only."""
+    if sys.flags.optimize:
+        raise RuntimeError('Optimized Python is not allowed for focused checks')
+    output.mkdir()
+    state = {'started_at':now(),'passed':False,'runs':[],
+             'native_refmac_executed':False,'synthetic_hook_fixture_only':True}
+    before = {}
+    stage = 'initial_receipt'
+    try:
+        write_json(output/'started.json',state)
+        stage = 'freeze_sources'
+        for name in NAMES:
+            dest = output/name
+            dest.parent.mkdir(parents=True,exist_ok=True)
+            shutil.copyfile(wt/name,dest)
+            before[name] = digest(dest)
+        write_json(output/'source-hashes.json',before)
+        shutil.copyfile(__file__,output/'primary-check.py')
+        interpreter = wt/'.venv/bin/python'
+        for label, path in [('pure','/usr/bin:/bin:/usr/sbin:/sbin'),
+                            ('fortran','/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin')]:
+            stage = 'check_'+label
+            env = dict(os.environ)
+            env.update(PATH=path,PYTHONDONTWRITEBYTECODE='1')
+            env.pop('PYTHONOPTIMIZE',None)
+            argv = [str(interpreter),str(output/NAMES[1])]
+            record = {'started_at':now(),'argv':argv,'cwd':str(output),'PATH':path,
+                      'source_hashes':before,'returncode':None,'child_completed':False,
+                      'passed':False,'native_refmac_executed':False,
+                      'synthetic_hook_fixture_only':True}
+            try:
+                record['interpreter_before'] = pin(interpreter)
+                if label == 'fortran':
+                    selected = compiler_resolver('gfortran',path=path)
+                    if selected is None:
+                        raise FileNotFoundError('Fortran coverage requires gfortran on the exact run PATH')
+                    record['compiler_before'] = pin(selected)
+                write_json(output/(label+'-started.json'),record)
+                with (output/(label+'.stdout')).open('wb') as stdout, (output/(label+'.stderr')).open('wb') as stderr:
+                    proc = runner(argv,cwd=output,env=env,stdout=stdout,stderr=stderr)
+                record.update(returncode=proc.returncode,child_completed=True)
+            except BaseException as exc:
+                record['error'] = error(exc,stage)
+            finally:
+                record['finished_at'] = now()
+                record['stdout'] = obtainable_pin(output/(label+'.stdout'))
+                record['stderr'] = obtainable_pin(output/(label+'.stderr'))
+                record['interpreter_after'] = obtainable_pin(interpreter)
+                if 'compiler_before' in record:
+                    record['compiler_after'] = obtainable_pin(record['compiler_before']['path'])
+                identities_ok = record.get('interpreter_before') == record['interpreter_after']
+                if label == 'fortran':
+                    identities_ok = (identities_ok and 'compiler_before' in record and
+                        record['compiler_before'] == record.get('compiler_after'))
+                record['passed'] = bool(record['child_completed'] and record['returncode'] == 0 and
+                    'error' not in record and identities_ok and
+                    'error' not in record['stdout'] and 'error' not in record['stderr'])
+                write_json(output/(label+'-result.json'),record)
+                state['runs'].append({'label':label,'passed':record['passed'],
+                                      'returncode':record['returncode']})
+                print(label,record['returncode'],record['passed'],flush=True)
+    except BaseException as exc:
+        state['error'] = error(exc,stage)
+    finally:
+        state['finished_at'] = now()
+        state['source_hashes_before'] = before
+        state['worktree_source_hashes_after'] = source_hashes(wt)
+        state['snapshot_source_hashes_after'] = source_hashes(output)
+        complete = set(before) == set(NAMES)
+        state['worktree_sources_unchanged'] = complete and before == state['worktree_source_hashes_after']
+        state['snapshot_sources_unchanged'] = complete and before == state['snapshot_source_hashes_after']
+        state['tests_passed'] = len(state['runs']) == 2 and all(r['passed'] for r in state['runs'])
+        state['passed'] = bool(state['tests_passed'] and state['worktree_sources_unchanged'] and
+                               state['snapshot_sources_unchanged'] and 'error' not in state)
+        write_json(output/'result.json',state)
+    return state
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--output',required=True,type=Path)
+    args = parser.parse_args()
+    here = Path(__file__).resolve().parent
+    repo = here.parents[2]
+    output = args.output.absolute()
+    if output.parent != here or output.exists() or output.is_symlink():
+        raise ValueError('Fresh direct evidence child required')
+    state = run_checks(output,repo.parent/'protstruct_review-wt-078')
+    print(json.dumps({'passed':state['passed'],'output':str(output)}),flush=True)
+    return 0 if state['passed'] else 1
+
+if __name__ == '__main__':
+    sys.exit(main())

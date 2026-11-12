@@ -1,0 +1,1999 @@
+{
+  "crystallographic_context": {
+    "cell_representation_policy": {
+      "dcell_comparisons": [
+        {
+          "dataset_setid": "0",
+          "errors": [],
+          "exact_decimal_tuple_match": true,
+          "exact_token_tuple_match": true,
+          "float32_word_tuple_match": true,
+          "input_normalized_exact_decimals": [
+            "64.897",
+            "78.323",
+            "38.792",
+            "9E+1",
+            "9E+1",
+            "9E+1"
+          ],
+          "input_raw_tokens": [
+            "64.8970",
+            "78.3230",
+            "38.7920",
+            "90.0000",
+            "90.0000",
+            "90.0000"
+          ],
+          "label": "DCELL[0] vs HKLIN primary_CELL (cmtzlib.c:451-453, 2838-2856)",
+          "matches_output_primary_cell_exact_decimal": true,
+          "max_abs_exact_decimal_diff": 0.0,
+          "max_abs_exact_decimal_diff_available": true,
+          "max_abs_exact_decimal_diff_str": "0",
+          "max_abs_exact_decimal_diff_str_available": true,
+          "max_abs_exact_decimal_diff_str_unavailable_reason": null,
+          "max_abs_exact_decimal_diff_unavailable_reason": null,
+          "normalized_exact_decimal_tuple_match": true,
+          "output_normalized_exact_decimals": [
+            "64.897",
+            "78.323",
+            "38.792",
+            "9E+1",
+            "9E+1",
+            "9E+1"
+          ],
+          "output_raw_tokens": [
+            "64.8970",
+            "78.3230",
+            "38.7920",
+            "90.0000",
+            "90.0000",
+            "90.0000"
+          ],
+          "parameter_comparisons": [
+            {
+              "abs_exact_decimal_diff": 0.0,
+              "abs_exact_decimal_diff_available": true,
+              "abs_exact_decimal_diff_str": "0",
+              "abs_exact_decimal_diff_str_available": true,
+              "abs_exact_decimal_diff_str_unavailable_reason": null,
+              "abs_exact_decimal_diff_unavailable_reason": null,
+              "error": null,
+              "exact_decimal_match": true,
+              "exact_token_match": true,
+              "float32_word_match": true,
+              "input_normalized_exact_decimal": "64.897",
+              "input_raw_token": "64.8970",
+              "input_representation": {
+                "c_printf_4f_normalized_exact_decimal": "64.897",
+                "c_printf_4f_repacked_word_hex": "0x4281cb44",
+                "c_printf_4f_token": "64.8970",
+                "exact_decimal_str": "64.8970",
+                "float32_4dp_is_halfway_tie": false,
+                "float32_exact_decimal_str": "64.897003173828125",
+                "float32_lower_4dp_token": "64.8970",
+                "float32_nearest_4dp_token": "64.8970",
+                "float32_upper_4dp_token": "64.8971",
+                "float32_value": 64.89700317382812,
+                "float32_word_hex": "0x4281cb44",
+                "normalized_exact_decimal": "64.897",
+                "parameter": "a",
+                "raw_token": "64.8970",
+                "valid": true
+              },
+              "normalized_exact_decimal_match": true,
+              "output_matches_input_float32_4f_emission": true,
+              "output_normalized_exact_decimal": "64.897",
+              "output_raw_token": "64.8970",
+              "output_representation": {
+                "c_printf_4f_normalized_exact_decimal": "64.897",
+                "c_printf_4f_repacked_word_hex": "0x4281cb44",
+                "c_printf_4f_token": "64.8970",
+                "exact_decimal_str": "64.8970",
+                "float32_4dp_is_halfway_tie": false,
+                "float32_exact_decimal_str": "64.897003173828125",
+                "float32_lower_4dp_token": "64.8970",
+                "float32_nearest_4dp_token": "64.8970",
+                "float32_upper_4dp_token": "64.8971",
+                "float32_value": 64.89700317382812,
+                "float32_word_hex": "0x4281cb44",
+                "normalized_exact_decimal": "64.897",
+                "parameter": "a",
+                "raw_token": "64.8970",
+                "valid": true
+              },
+              "parameter": "a",
+              "representation_status": "exact_token_match",
+              "valid": true
+            },
+            {
+              "abs_exact_decimal_diff": 0.0,
+              "abs_exact_decimal_diff_available": true,
+              "abs_exact_decimal_diff_str": "0",
+              "abs_exact_decimal_diff_str_available": true,
+              "abs_exact_decimal_diff_str_unavailable_reason": null,
+              "abs_exact_decimal_diff_unavailable_reason": null,
+              "error": null,
+              "exact_decimal_match": true,
+              "exact_token_match": true,
+              "float32_word_match": true,
+              "input_normalized_exact_decimal": "78.323",
+              "input_raw_token": "78.3230",
+              "input_representation": {
+                "c_printf_4f_normalized_exact_decimal": "78.323",
+                "c_printf_4f_repacked_word_hex": "0x429ca560",
+                "c_printf_4f_token": "78.3230",
+                "exact_decimal_str": "78.3230",
+                "float32_4dp_is_halfway_tie": false,
+                "float32_exact_decimal_str": "78.322998046875",
+                "float32_lower_4dp_token": "78.3229",
+                "float32_nearest_4dp_token": "78.3230",
+                "float32_upper_4dp_token": "78.3230",
+                "float32_value": 78.322998046875,
+                "float32_word_hex": "0x429ca560",
+                "normalized_exact_decimal": "78.323",
+                "parameter": "b",
+                "raw_token": "78.3230",
+                "valid": true
+              },
+              "normalized_exact_decimal_match": true,
+              "output_matches_input_float32_4f_emission": true,
+              "output_normalized_exact_decimal": "78.323",
+              "output_raw_token": "78.3230",
+              "output_representation": {
+                "c_printf_4f_normalized_exact_decimal": "78.323",
+                "c_printf_4f_repacked_word_hex": "0x429ca560",
+                "c_printf_4f_token": "78.3230",
+                "exact_decimal_str": "78.3230",
+                "float32_4dp_is_halfway_tie": false,
+                "float32_exact_decimal_str": "78.322998046875",
+                "float32_lower_4dp_token": "78.3229",
+                "float32_nearest_4dp_token": "78.3230",
+                "float32_upper_4dp_token": "78.3230",
+                "float32_value": 78.322998046875,
+                "float32_word_hex": "0x429ca560",
+                "normalized_exact_decimal": "78.323",
+                "parameter": "b",
+                "raw_token": "78.3230",
+                "valid": true
+              },
+              "parameter": "b",
+              "representation_status": "exact_token_match",
+              "valid": true
+            },
+            {
+              "abs_exact_decimal_diff": 0.0,
+              "abs_exact_decimal_diff_available": true,
+              "abs_exact_decimal_diff_str": "0",
+              "abs_exact_decimal_diff_str_available": true,
+              "abs_exact_decimal_diff_str_unavailable_reason": null,
+              "abs_exact_decimal_diff_unavailable_reason": null,
+              "error": null,
+              "exact_decimal_match": true,
+              "exact_token_match": true,
+              "float32_word_match": true,
+              "input_normalized_exact_decimal": "38.792",
+              "input_raw_token": "38.7920",
+              "input_representation": {
+                "c_printf_4f_normalized_exact_decimal": "38.792",
+                "c_printf_4f_repacked_word_hex": "0x421b2b02",
+                "c_printf_4f_token": "38.7920",
+                "exact_decimal_str": "38.7920",
+                "float32_4dp_is_halfway_tie": false,
+                "float32_exact_decimal_str": "38.79199981689453125",
+                "float32_lower_4dp_token": "38.7919",
+                "float32_nearest_4dp_token": "38.7920",
+                "float32_upper_4dp_token": "38.7920",
+                "float32_value": 38.79199981689453,
+                "float32_word_hex": "0x421b2b02",
+                "normalized_exact_decimal": "38.792",
+                "parameter": "c",
+                "raw_token": "38.7920",
+                "valid": true
+              },
+              "normalized_exact_decimal_match": true,
+              "output_matches_input_float32_4f_emission": true,
+              "output_normalized_exact_decimal": "38.792",
+              "output_raw_token": "38.7920",
+              "output_representation": {
+                "c_printf_4f_normalized_exact_decimal": "38.792",
+                "c_printf_4f_repacked_word_hex": "0x421b2b02",
+                "c_printf_4f_token": "38.7920",
+                "exact_decimal_str": "38.7920",
+                "float32_4dp_is_halfway_tie": false,
+                "float32_exact_decimal_str": "38.79199981689453125",
+                "float32_lower_4dp_token": "38.7919",
+                "float32_nearest_4dp_token": "38.7920",
+                "float32_upper_4dp_token": "38.7920",
+                "float32_value": 38.79199981689453,
+                "float32_word_hex": "0x421b2b02",
+                "normalized_exact_decimal": "38.792",
+                "parameter": "c",
+                "raw_token": "38.7920",
+                "valid": true
+              },
+              "parameter": "c",
+              "representation_status": "exact_token_match",
+              "valid": true
+            },
+            {
+              "abs_exact_decimal_diff": 0.0,
+              "abs_exact_decimal_diff_available": true,
+              "abs_exact_decimal_diff_str": "0",
+              "abs_exact_decimal_diff_str_available": true,
+              "abs_exact_decimal_diff_str_unavailable_reason": null,
+              "abs_exact_decimal_diff_unavailable_reason": null,
+              "error": null,
+              "exact_decimal_match": true,
+              "exact_token_match": true,
+              "float32_word_match": true,
+              "input_normalized_exact_decimal": "9E+1",
+              "input_raw_token": "90.0000",
+              "input_representation": {
+                "c_printf_4f_normalized_exact_decimal": "9E+1",
+                "c_printf_4f_repacked_word_hex": "0x42b40000",
+                "c_printf_4f_token": "90.0000",
+                "exact_decimal_str": "90.0000",
+                "float32_4dp_is_halfway_tie": false,
+                "float32_exact_decimal_str": "90",
+                "float32_lower_4dp_token": "90.0000",
+                "float32_nearest_4dp_token": "90.0000",
+                "float32_upper_4dp_token": "90.0001",
+                "float32_value": 90.0,
+                "float32_word_hex": "0x42b40000",
+                "normalized_exact_decimal": "9E+1",
+                "parameter": "alpha",
+                "raw_token": "90.0000",
+                "valid": true
+              },
+              "normalized_exact_decimal_match": true,
+              "output_matches_input_float32_4f_emission": true,
+              "output_normalized_exact_decimal": "9E+1",
+              "output_raw_token": "90.0000",
+              "output_representation": {
+                "c_printf_4f_normalized_exact_decimal": "9E+1",
+                "c_printf_4f_repacked_word_hex": "0x42b40000",
+                "c_printf_4f_token": "90.0000",
+                "exact_decimal_str": "90.0000",
+                "float32_4dp_is_halfway_tie": false,
+                "float32_exact_decimal_str": "90",
+                "float32_lower_4dp_token": "90.0000",
+                "float32_nearest_4dp_token": "90.0000",
+                "float32_upper_4dp_token": "90.0001",
+                "float32_value": 90.0,
+                "float32_word_hex": "0x42b40000",
+                "normalized_exact_decimal": "9E+1",
+                "parameter": "alpha",
+                "raw_token": "90.0000",
+                "valid": true
+              },
+              "parameter": "alpha",
+              "representation_status": "exact_token_match",
+              "valid": true
+            },
+            {
+              "abs_exact_decimal_diff": 0.0,
+              "abs_exact_decimal_diff_available": true,
+              "abs_exact_decimal_diff_str": "0",
+              "abs_exact_decimal_diff_str_available": true,
+              "abs_exact_decimal_diff_str_unavailable_reason": null,
+              "abs_exact_decimal_diff_unavailable_reason": null,
+              "error": null,
+              "exact_decimal_match": true,
+              "exact_token_match": true,
+              "float32_word_match": true,
+              "input_normalized_exact_decimal": "9E+1",
+              "input_raw_token": "90.0000",
+              "input_representation": {
+                "c_printf_4f_normalized_exact_decimal": "9E+1",
+                "c_printf_4f_repacked_word_hex": "0x42b40000",
+                "c_printf_4f_token": "90.0000",
+                "exact_decimal_str": "90.0000",
+                "float32_4dp_is_halfway_tie": false,
+                "float32_exact_decimal_str": "90",
+                "float32_lower_4dp_token": "90.0000",
+                "float32_nearest_4dp_token": "90.0000",
+                "float32_upper_4dp_token": "90.0001",
+                "float32_value": 90.0,
+                "float32_word_hex": "0x42b40000",
+                "normalized_exact_decimal": "9E+1",
+                "parameter": "beta",
+                "raw_token": "90.0000",
+                "valid": true
+              },
+              "normalized_exact_decimal_match": true,
+              "output_matches_input_float32_4f_emission": true,
+              "output_normalized_exact_decimal": "9E+1",
+              "output_raw_token": "90.0000",
+              "output_representation": {
+                "c_printf_4f_normalized_exact_decimal": "9E+1",
+                "c_printf_4f_repacked_word_hex": "0x42b40000",
+                "c_printf_4f_token": "90.0000",
+                "exact_decimal_str": "90.0000",
+                "float32_4dp_is_halfway_tie": false,
+                "float32_exact_decimal_str": "90",
+                "float32_lower_4dp_token": "90.0000",
+                "float32_nearest_4dp_token": "90.0000",
+                "float32_upper_4dp_token": "90.0001",
+                "float32_value": 90.0,
+                "float32_word_hex": "0x42b40000",
+                "normalized_exact_decimal": "9E+1",
+                "parameter": "beta",
+                "raw_token": "90.0000",
+                "valid": true
+              },
+              "parameter": "beta",
+              "representation_status": "exact_token_match",
+              "valid": true
+            },
+            {
+              "abs_exact_decimal_diff": 0.0,
+              "abs_exact_decimal_diff_available": true,
+              "abs_exact_decimal_diff_str": "0",
+              "abs_exact_decimal_diff_str_available": true,
+              "abs_exact_decimal_diff_str_unavailable_reason": null,
+              "abs_exact_decimal_diff_unavailable_reason": null,
+              "error": null,
+              "exact_decimal_match": true,
+              "exact_token_match": true,
+              "float32_word_match": true,
+              "input_normalized_exact_decimal": "9E+1",
+              "input_raw_token": "90.0000",
+              "input_representation": {
+                "c_printf_4f_normalized_exact_decimal": "9E+1",
+                "c_printf_4f_repacked_word_hex": "0x42b40000",
+                "c_printf_4f_token": "90.0000",
+                "exact_decimal_str": "90.0000",
+                "float32_4dp_is_halfway_tie": false,
+                "float32_exact_decimal_str": "90",
+                "float32_lower_4dp_token": "90.0000",
+                "float32_nearest_4dp_token": "90.0000",
+                "float32_upper_4dp_token": "90.0001",
+                "float32_value": 90.0,
+                "float32_word_hex": "0x42b40000",
+                "normalized_exact_decimal": "9E+1",
+                "parameter": "gamma",
+                "raw_token": "90.0000",
+                "valid": true
+              },
+              "normalized_exact_decimal_match": true,
+              "output_matches_input_float32_4f_emission": true,
+              "output_normalized_exact_decimal": "9E+1",
+              "output_raw_token": "90.0000",
+              "output_representation": {
+                "c_printf_4f_normalized_exact_decimal": "9E+1",
+                "c_printf_4f_repacked_word_hex": "0x42b40000",
+                "c_printf_4f_token": "90.0000",
+                "exact_decimal_str": "90.0000",
+                "float32_4dp_is_halfway_tie": false,
+                "float32_exact_decimal_str": "90",
+                "float32_lower_4dp_token": "90.0000",
+                "float32_nearest_4dp_token": "90.0000",
+                "float32_upper_4dp_token": "90.0001",
+                "float32_value": 90.0,
+                "float32_word_hex": "0x42b40000",
+                "normalized_exact_decimal": "9E+1",
+                "parameter": "gamma",
+                "raw_token": "90.0000",
+                "valid": true
+              },
+              "parameter": "gamma",
+              "representation_status": "exact_token_match",
+              "valid": true
+            }
+          ],
+          "reference_source": "HKLIN primary_CELL",
+          "valid": true
+        },
+        {
+          "dataset_setid": "1",
+          "errors": [],
+          "exact_decimal_tuple_match": true,
+          "exact_token_tuple_match": true,
+          "float32_word_tuple_match": true,
+          "input_normalized_exact_decimals": [
+            "64.897",
+            "78.323",
+            "38.792",
+            "9E+1",
+            "9E+1",
+            "9E+1"
+          ],
+          "input_raw_tokens": [
+            "64.8970",
+            "78.3230",
+            "38.7920",
+            "90.0000",
+            "90.0000",
+            "90.0000"
+          ],
+          "label": "DCELL[1] vs HKLIN DCELL[1] (cmtzlib.c:451-453, 2838-2856)",
+          "matches_output_primary_cell_exact_decimal": true,
+          "max_abs_exact_decimal_diff": 0.0,
+          "max_abs_exact_decimal_diff_available": true,
+          "max_abs_exact_decimal_diff_str": "0",
+          "max_abs_exact_decimal_diff_str_available": true,
+          "max_abs_exact_decimal_diff_str_unavailable_reason": null,
+          "max_abs_exact_decimal_diff_unavailable_reason": null,
+          "normalized_exact_decimal_tuple_match": true,
+          "output_normalized_exact_decimals": [
+            "64.897",
+            "78.323",
+            "38.792",
+            "9E+1",
+            "9E+1",
+            "9E+1"
+          ],
+          "output_raw_tokens": [
+            "64.8970",
+            "78.3230",
+            "38.7920",
+            "90.0000",
+            "90.0000",
+            "90.0000"
+          ],
+          "parameter_comparisons": [
+            {
+              "abs_exact_decimal_diff": 0.0,
+              "abs_exact_decimal_diff_available": true,
+              "abs_exact_decimal_diff_str": "0",
+              "abs_exact_decimal_diff_str_available": true,
+              "abs_exact_decimal_diff_str_unavailable_reason": null,
+              "abs_exact_decimal_diff_unavailable_reason": null,
+              "error": null,
+              "exact_decimal_match": true,
+              "exact_token_match": true,
+              "float32_word_match": true,
+              "input_normalized_exact_decimal": "64.897",
+              "input_raw_token": "64.8970",
+              "input_representation": {
+                "c_printf_4f_normalized_exact_decimal": "64.897",
+                "c_printf_4f_repacked_word_hex": "0x4281cb44",
+                "c_printf_4f_token": "64.8970",
+                "exact_decimal_str": "64.8970",
+                "float32_4dp_is_halfway_tie": false,
+                "float32_exact_decimal_str": "64.897003173828125",
+                "float32_lower_4dp_token": "64.8970",
+                "float32_nearest_4dp_token": "64.8970",
+                "float32_upper_4dp_token": "64.8971",
+                "float32_value": 64.89700317382812,
+                "float32_word_hex": "0x4281cb44",
+                "normalized_exact_decimal": "64.897",
+                "parameter": "a",
+                "raw_token": "64.8970",
+                "valid": true
+              },
+              "normalized_exact_decimal_match": true,
+              "output_matches_input_float32_4f_emission": true,
+              "output_normalized_exact_decimal": "64.897",
+              "output_raw_token": "64.8970",
+              "output_representation": {
+                "c_printf_4f_normalized_exact_decimal": "64.897",
+                "c_printf_4f_repacked_word_hex": "0x4281cb44",
+                "c_printf_4f_token": "64.8970",
+                "exact_decimal_str": "64.8970",
+                "float32_4dp_is_halfway_tie": false,
+                "float32_exact_decimal_str": "64.897003173828125",
+                "float32_lower_4dp_token": "64.8970",
+                "float32_nearest_4dp_token": "64.8970",
+                "float32_upper_4dp_token": "64.8971",
+                "float32_value": 64.89700317382812,
+                "float32_word_hex": "0x4281cb44",
+                "normalized_exact_decimal": "64.897",
+                "parameter": "a",
+                "raw_token": "64.8970",
+                "valid": true
+              },
+              "parameter": "a",
+              "representation_status": "exact_token_match",
+              "valid": true
+            },
+            {
+              "abs_exact_decimal_diff": 0.0,
+              "abs_exact_decimal_diff_available": true,
+              "abs_exact_decimal_diff_str": "0",
+              "abs_exact_decimal_diff_str_available": true,
+              "abs_exact_decimal_diff_str_unavailable_reason": null,
+              "abs_exact_decimal_diff_unavailable_reason": null,
+              "error": null,
+              "exact_decimal_match": true,
+              "exact_token_match": true,
+              "float32_word_match": true,
+              "input_normalized_exact_decimal": "78.323",
+              "input_raw_token": "78.3230",
+              "input_representation": {
+                "c_printf_4f_normalized_exact_decimal": "78.323",
+                "c_printf_4f_repacked_word_hex": "0x429ca560",
+                "c_printf_4f_token": "78.3230",
+                "exact_decimal_str": "78.3230",
+                "float32_4dp_is_halfway_tie": false,
+                "float32_exact_decimal_str": "78.322998046875",
+                "float32_lower_4dp_token": "78.3229",
+                "float32_nearest_4dp_token": "78.3230",
+                "float32_upper_4dp_token": "78.3230",
+                "float32_value": 78.322998046875,
+                "float32_word_hex": "0x429ca560",
+                "normalized_exact_decimal": "78.323",
+                "parameter": "b",
+                "raw_token": "78.3230",
+                "valid": true
+              },
+              "normalized_exact_decimal_match": true,
+              "output_matches_input_float32_4f_emission": true,
+              "output_normalized_exact_decimal": "78.323",
+              "output_raw_token": "78.3230",
+              "output_representation": {
+                "c_printf_4f_normalized_exact_decimal": "78.323",
+                "c_printf_4f_repacked_word_hex": "0x429ca560",
+                "c_printf_4f_token": "78.3230",
+                "exact_decimal_str": "78.3230",
+                "float32_4dp_is_halfway_tie": false,
+                "float32_exact_decimal_str": "78.322998046875",
+                "float32_lower_4dp_token": "78.3229",
+                "float32_nearest_4dp_token": "78.3230",
+                "float32_upper_4dp_token": "78.3230",
+                "float32_value": 78.322998046875,
+                "float32_word_hex": "0x429ca560",
+                "normalized_exact_decimal": "78.323",
+                "parameter": "b",
+                "raw_token": "78.3230",
+                "valid": true
+              },
+              "parameter": "b",
+              "representation_status": "exact_token_match",
+              "valid": true
+            },
+            {
+              "abs_exact_decimal_diff": 0.0,
+              "abs_exact_decimal_diff_available": true,
+              "abs_exact_decimal_diff_str": "0",
+              "abs_exact_decimal_diff_str_available": true,
+              "abs_exact_decimal_diff_str_unavailable_reason": null,
+              "abs_exact_decimal_diff_unavailable_reason": null,
+              "error": null,
+              "exact_decimal_match": true,
+              "exact_token_match": true,
+              "float32_word_match": true,
+              "input_normalized_exact_decimal": "38.792",
+              "input_raw_token": "38.7920",
+              "input_representation": {
+                "c_printf_4f_normalized_exact_decimal": "38.792",
+                "c_printf_4f_repacked_word_hex": "0x421b2b02",
+                "c_printf_4f_token": "38.7920",
+                "exact_decimal_str": "38.7920",
+                "float32_4dp_is_halfway_tie": false,
+                "float32_exact_decimal_str": "38.79199981689453125",
+                "float32_lower_4dp_token": "38.7919",
+                "float32_nearest_4dp_token": "38.7920",
+                "float32_upper_4dp_token": "38.7920",
+                "float32_value": 38.79199981689453,
+                "float32_word_hex": "0x421b2b02",
+                "normalized_exact_decimal": "38.792",
+                "parameter": "c",
+                "raw_token": "38.7920",
+                "valid": true
+              },
+              "normalized_exact_decimal_match": true,
+              "output_matches_input_float32_4f_emission": true,
+              "output_normalized_exact_decimal": "38.792",
+              "output_raw_token": "38.7920",
+              "output_representation": {
+                "c_printf_4f_normalized_exact_decimal": "38.792",
+                "c_printf_4f_repacked_word_hex": "0x421b2b02",
+                "c_printf_4f_token": "38.7920",
+                "exact_decimal_str": "38.7920",
+                "float32_4dp_is_halfway_tie": false,
+                "float32_exact_decimal_str": "38.79199981689453125",
+                "float32_lower_4dp_token": "38.7919",
+                "float32_nearest_4dp_token": "38.7920",
+                "float32_upper_4dp_token": "38.7920",
+                "float32_value": 38.79199981689453,
+                "float32_word_hex": "0x421b2b02",
+                "normalized_exact_decimal": "38.792",
+                "parameter": "c",
+                "raw_token": "38.7920",
+                "valid": true
+              },
+              "parameter": "c",
+              "representation_status": "exact_token_match",
+              "valid": true
+            },
+            {
+              "abs_exact_decimal_diff": 0.0,
+              "abs_exact_decimal_diff_available": true,
+              "abs_exact_decimal_diff_str": "0",
+              "abs_exact_decimal_diff_str_available": true,
+              "abs_exact_decimal_diff_str_unavailable_reason": null,
+              "abs_exact_decimal_diff_unavailable_reason": null,
+              "error": null,
+              "exact_decimal_match": true,
+              "exact_token_match": true,
+              "float32_word_match": true,
+              "input_normalized_exact_decimal": "9E+1",
+              "input_raw_token": "90.0000",
+              "input_representation": {
+                "c_printf_4f_normalized_exact_decimal": "9E+1",
+                "c_printf_4f_repacked_word_hex": "0x42b40000",
+                "c_printf_4f_token": "90.0000",
+                "exact_decimal_str": "90.0000",
+                "float32_4dp_is_halfway_tie": false,
+                "float32_exact_decimal_str": "90",
+                "float32_lower_4dp_token": "90.0000",
+                "float32_nearest_4dp_token": "90.0000",
+                "float32_upper_4dp_token": "90.0001",
+                "float32_value": 90.0,
+                "float32_word_hex": "0x42b40000",
+                "normalized_exact_decimal": "9E+1",
+                "parameter": "alpha",
+                "raw_token": "90.0000",
+                "valid": true
+              },
+              "normalized_exact_decimal_match": true,
+              "output_matches_input_float32_4f_emission": true,
+              "output_normalized_exact_decimal": "9E+1",
+              "output_raw_token": "90.0000",
+              "output_representation": {
+                "c_printf_4f_normalized_exact_decimal": "9E+1",
+                "c_printf_4f_repacked_word_hex": "0x42b40000",
+                "c_printf_4f_token": "90.0000",
+                "exact_decimal_str": "90.0000",
+                "float32_4dp_is_halfway_tie": false,
+                "float32_exact_decimal_str": "90",
+                "float32_lower_4dp_token": "90.0000",
+                "float32_nearest_4dp_token": "90.0000",
+                "float32_upper_4dp_token": "90.0001",
+                "float32_value": 90.0,
+                "float32_word_hex": "0x42b40000",
+                "normalized_exact_decimal": "9E+1",
+                "parameter": "alpha",
+                "raw_token": "90.0000",
+                "valid": true
+              },
+              "parameter": "alpha",
+              "representation_status": "exact_token_match",
+              "valid": true
+            },
+            {
+              "abs_exact_decimal_diff": 0.0,
+              "abs_exact_decimal_diff_available": true,
+              "abs_exact_decimal_diff_str": "0",
+              "abs_exact_decimal_diff_str_available": true,
+              "abs_exact_decimal_diff_str_unavailable_reason": null,
+              "abs_exact_decimal_diff_unavailable_reason": null,
+              "error": null,
+              "exact_decimal_match": true,
+              "exact_token_match": true,
+              "float32_word_match": true,
+              "input_normalized_exact_decimal": "9E+1",
+              "input_raw_token": "90.0000",
+              "input_representation": {
+                "c_printf_4f_normalized_exact_decimal": "9E+1",
+                "c_printf_4f_repacked_word_hex": "0x42b40000",
+                "c_printf_4f_token": "90.0000",
+                "exact_decimal_str": "90.0000",
+                "float32_4dp_is_halfway_tie": false,
+                "float32_exact_decimal_str": "90",
+                "float32_lower_4dp_token": "90.0000",
+                "float32_nearest_4dp_token": "90.0000",
+                "float32_upper_4dp_token": "90.0001",
+                "float32_value": 90.0,
+                "float32_word_hex": "0x42b40000",
+                "normalized_exact_decimal": "9E+1",
+                "parameter": "beta",
+                "raw_token": "90.0000",
+                "valid": true
+              },
+              "normalized_exact_decimal_match": true,
+              "output_matches_input_float32_4f_emission": true,
+              "output_normalized_exact_decimal": "9E+1",
+              "output_raw_token": "90.0000",
+              "output_representation": {
+                "c_printf_4f_normalized_exact_decimal": "9E+1",
+                "c_printf_4f_repacked_word_hex": "0x42b40000",
+                "c_printf_4f_token": "90.0000",
+                "exact_decimal_str": "90.0000",
+                "float32_4dp_is_halfway_tie": false,
+                "float32_exact_decimal_str": "90",
+                "float32_lower_4dp_token": "90.0000",
+                "float32_nearest_4dp_token": "90.0000",
+                "float32_upper_4dp_token": "90.0001",
+                "float32_value": 90.0,
+                "float32_word_hex": "0x42b40000",
+                "normalized_exact_decimal": "9E+1",
+                "parameter": "beta",
+                "raw_token": "90.0000",
+                "valid": true
+              },
+              "parameter": "beta",
+              "representation_status": "exact_token_match",
+              "valid": true
+            },
+            {
+              "abs_exact_decimal_diff": 0.0,
+              "abs_exact_decimal_diff_available": true,
+              "abs_exact_decimal_diff_str": "0",
+              "abs_exact_decimal_diff_str_available": true,
+              "abs_exact_decimal_diff_str_unavailable_reason": null,
+              "abs_exact_decimal_diff_unavailable_reason": null,
+              "error": null,
+              "exact_decimal_match": true,
+              "exact_token_match": true,
+              "float32_word_match": true,
+              "input_normalized_exact_decimal": "9E+1",
+              "input_raw_token": "90.0000",
+              "input_representation": {
+                "c_printf_4f_normalized_exact_decimal": "9E+1",
+                "c_printf_4f_repacked_word_hex": "0x42b40000",
+                "c_printf_4f_token": "90.0000",
+                "exact_decimal_str": "90.0000",
+                "float32_4dp_is_halfway_tie": false,
+                "float32_exact_decimal_str": "90",
+                "float32_lower_4dp_token": "90.0000",
+                "float32_nearest_4dp_token": "90.0000",
+                "float32_upper_4dp_token": "90.0001",
+                "float32_value": 90.0,
+                "float32_word_hex": "0x42b40000",
+                "normalized_exact_decimal": "9E+1",
+                "parameter": "gamma",
+                "raw_token": "90.0000",
+                "valid": true
+              },
+              "normalized_exact_decimal_match": true,
+              "output_matches_input_float32_4f_emission": true,
+              "output_normalized_exact_decimal": "9E+1",
+              "output_raw_token": "90.0000",
+              "output_representation": {
+                "c_printf_4f_normalized_exact_decimal": "9E+1",
+                "c_printf_4f_repacked_word_hex": "0x42b40000",
+                "c_printf_4f_token": "90.0000",
+                "exact_decimal_str": "90.0000",
+                "float32_4dp_is_halfway_tie": false,
+                "float32_exact_decimal_str": "90",
+                "float32_lower_4dp_token": "90.0000",
+                "float32_nearest_4dp_token": "90.0000",
+                "float32_upper_4dp_token": "90.0001",
+                "float32_value": 90.0,
+                "float32_word_hex": "0x42b40000",
+                "normalized_exact_decimal": "9E+1",
+                "parameter": "gamma",
+                "raw_token": "90.0000",
+                "valid": true
+              },
+              "parameter": "gamma",
+              "representation_status": "exact_token_match",
+              "valid": true
+            }
+          ],
+          "reference_source": "HKLIN DCELL[1]",
+          "valid": true
+        }
+      ],
+      "errors": [],
+      "executable_cmtzlib_linkage_proven": false,
+      "fixed_tolerance_removed": true,
+      "input_dcell_matches_input_cell": true,
+      "native_crystal_or_dataset_selection_proven": false,
+      "output_dcell_matches_output_cell": true,
+      "policy_id": "ccp4_mtz_float32_cell_and_4f_header_representation_v1",
+      "primary_cell_comparison": {
+        "errors": [],
+        "exact_decimal_tuple_match": true,
+        "exact_token_tuple_match": true,
+        "float32_word_tuple_match": true,
+        "input_normalized_exact_decimals": [
+          "64.897",
+          "78.323",
+          "38.792",
+          "9E+1",
+          "9E+1",
+          "9E+1"
+        ],
+        "input_raw_tokens": [
+          "64.8970",
+          "78.3230",
+          "38.7920",
+          "90.0000",
+          "90.0000",
+          "90.0000"
+        ],
+        "label": "primary_CELL (cmtzlib.c:526-537, 2671-2697)",
+        "max_abs_exact_decimal_diff": 0.0,
+        "max_abs_exact_decimal_diff_available": true,
+        "max_abs_exact_decimal_diff_str": "0",
+        "max_abs_exact_decimal_diff_str_available": true,
+        "max_abs_exact_decimal_diff_str_unavailable_reason": null,
+        "max_abs_exact_decimal_diff_unavailable_reason": null,
+        "normalized_exact_decimal_tuple_match": true,
+        "output_normalized_exact_decimals": [
+          "64.897",
+          "78.323",
+          "38.792",
+          "9E+1",
+          "9E+1",
+          "9E+1"
+        ],
+        "output_raw_tokens": [
+          "64.8970",
+          "78.3230",
+          "38.7920",
+          "90.0000",
+          "90.0000",
+          "90.0000"
+        ],
+        "parameter_comparisons": [
+          {
+            "abs_exact_decimal_diff": 0.0,
+            "abs_exact_decimal_diff_available": true,
+            "abs_exact_decimal_diff_str": "0",
+            "abs_exact_decimal_diff_str_available": true,
+            "abs_exact_decimal_diff_str_unavailable_reason": null,
+            "abs_exact_decimal_diff_unavailable_reason": null,
+            "error": null,
+            "exact_decimal_match": true,
+            "exact_token_match": true,
+            "float32_word_match": true,
+            "input_normalized_exact_decimal": "64.897",
+            "input_raw_token": "64.8970",
+            "input_representation": {
+              "c_printf_4f_normalized_exact_decimal": "64.897",
+              "c_printf_4f_repacked_word_hex": "0x4281cb44",
+              "c_printf_4f_token": "64.8970",
+              "exact_decimal_str": "64.8970",
+              "float32_4dp_is_halfway_tie": false,
+              "float32_exact_decimal_str": "64.897003173828125",
+              "float32_lower_4dp_token": "64.8970",
+              "float32_nearest_4dp_token": "64.8970",
+              "float32_upper_4dp_token": "64.8971",
+              "float32_value": 64.89700317382812,
+              "float32_word_hex": "0x4281cb44",
+              "normalized_exact_decimal": "64.897",
+              "parameter": "a",
+              "raw_token": "64.8970",
+              "valid": true
+            },
+            "normalized_exact_decimal_match": true,
+            "output_matches_input_float32_4f_emission": true,
+            "output_normalized_exact_decimal": "64.897",
+            "output_raw_token": "64.8970",
+            "output_representation": {
+              "c_printf_4f_normalized_exact_decimal": "64.897",
+              "c_printf_4f_repacked_word_hex": "0x4281cb44",
+              "c_printf_4f_token": "64.8970",
+              "exact_decimal_str": "64.8970",
+              "float32_4dp_is_halfway_tie": false,
+              "float32_exact_decimal_str": "64.897003173828125",
+              "float32_lower_4dp_token": "64.8970",
+              "float32_nearest_4dp_token": "64.8970",
+              "float32_upper_4dp_token": "64.8971",
+              "float32_value": 64.89700317382812,
+              "float32_word_hex": "0x4281cb44",
+              "normalized_exact_decimal": "64.897",
+              "parameter": "a",
+              "raw_token": "64.8970",
+              "valid": true
+            },
+            "parameter": "a",
+            "representation_status": "exact_token_match",
+            "valid": true
+          },
+          {
+            "abs_exact_decimal_diff": 0.0,
+            "abs_exact_decimal_diff_available": true,
+            "abs_exact_decimal_diff_str": "0",
+            "abs_exact_decimal_diff_str_available": true,
+            "abs_exact_decimal_diff_str_unavailable_reason": null,
+            "abs_exact_decimal_diff_unavailable_reason": null,
+            "error": null,
+            "exact_decimal_match": true,
+            "exact_token_match": true,
+            "float32_word_match": true,
+            "input_normalized_exact_decimal": "78.323",
+            "input_raw_token": "78.3230",
+            "input_representation": {
+              "c_printf_4f_normalized_exact_decimal": "78.323",
+              "c_printf_4f_repacked_word_hex": "0x429ca560",
+              "c_printf_4f_token": "78.3230",
+              "exact_decimal_str": "78.3230",
+              "float32_4dp_is_halfway_tie": false,
+              "float32_exact_decimal_str": "78.322998046875",
+              "float32_lower_4dp_token": "78.3229",
+              "float32_nearest_4dp_token": "78.3230",
+              "float32_upper_4dp_token": "78.3230",
+              "float32_value": 78.322998046875,
+              "float32_word_hex": "0x429ca560",
+              "normalized_exact_decimal": "78.323",
+              "parameter": "b",
+              "raw_token": "78.3230",
+              "valid": true
+            },
+            "normalized_exact_decimal_match": true,
+            "output_matches_input_float32_4f_emission": true,
+            "output_normalized_exact_decimal": "78.323",
+            "output_raw_token": "78.3230",
+            "output_representation": {
+              "c_printf_4f_normalized_exact_decimal": "78.323",
+              "c_printf_4f_repacked_word_hex": "0x429ca560",
+              "c_printf_4f_token": "78.3230",
+              "exact_decimal_str": "78.3230",
+              "float32_4dp_is_halfway_tie": false,
+              "float32_exact_decimal_str": "78.322998046875",
+              "float32_lower_4dp_token": "78.3229",
+              "float32_nearest_4dp_token": "78.3230",
+              "float32_upper_4dp_token": "78.3230",
+              "float32_value": 78.322998046875,
+              "float32_word_hex": "0x429ca560",
+              "normalized_exact_decimal": "78.323",
+              "parameter": "b",
+              "raw_token": "78.3230",
+              "valid": true
+            },
+            "parameter": "b",
+            "representation_status": "exact_token_match",
+            "valid": true
+          },
+          {
+            "abs_exact_decimal_diff": 0.0,
+            "abs_exact_decimal_diff_available": true,
+            "abs_exact_decimal_diff_str": "0",
+            "abs_exact_decimal_diff_str_available": true,
+            "abs_exact_decimal_diff_str_unavailable_reason": null,
+            "abs_exact_decimal_diff_unavailable_reason": null,
+            "error": null,
+            "exact_decimal_match": true,
+            "exact_token_match": true,
+            "float32_word_match": true,
+            "input_normalized_exact_decimal": "38.792",
+            "input_raw_token": "38.7920",
+            "input_representation": {
+              "c_printf_4f_normalized_exact_decimal": "38.792",
+              "c_printf_4f_repacked_word_hex": "0x421b2b02",
+              "c_printf_4f_token": "38.7920",
+              "exact_decimal_str": "38.7920",
+              "float32_4dp_is_halfway_tie": false,
+              "float32_exact_decimal_str": "38.79199981689453125",
+              "float32_lower_4dp_token": "38.7919",
+              "float32_nearest_4dp_token": "38.7920",
+              "float32_upper_4dp_token": "38.7920",
+              "float32_value": 38.79199981689453,
+              "float32_word_hex": "0x421b2b02",
+              "normalized_exact_decimal": "38.792",
+              "parameter": "c",
+              "raw_token": "38.7920",
+              "valid": true
+            },
+            "normalized_exact_decimal_match": true,
+            "output_matches_input_float32_4f_emission": true,
+            "output_normalized_exact_decimal": "38.792",
+            "output_raw_token": "38.7920",
+            "output_representation": {
+              "c_printf_4f_normalized_exact_decimal": "38.792",
+              "c_printf_4f_repacked_word_hex": "0x421b2b02",
+              "c_printf_4f_token": "38.7920",
+              "exact_decimal_str": "38.7920",
+              "float32_4dp_is_halfway_tie": false,
+              "float32_exact_decimal_str": "38.79199981689453125",
+              "float32_lower_4dp_token": "38.7919",
+              "float32_nearest_4dp_token": "38.7920",
+              "float32_upper_4dp_token": "38.7920",
+              "float32_value": 38.79199981689453,
+              "float32_word_hex": "0x421b2b02",
+              "normalized_exact_decimal": "38.792",
+              "parameter": "c",
+              "raw_token": "38.7920",
+              "valid": true
+            },
+            "parameter": "c",
+            "representation_status": "exact_token_match",
+            "valid": true
+          },
+          {
+            "abs_exact_decimal_diff": 0.0,
+            "abs_exact_decimal_diff_available": true,
+            "abs_exact_decimal_diff_str": "0",
+            "abs_exact_decimal_diff_str_available": true,
+            "abs_exact_decimal_diff_str_unavailable_reason": null,
+            "abs_exact_decimal_diff_unavailable_reason": null,
+            "error": null,
+            "exact_decimal_match": true,
+            "exact_token_match": true,
+            "float32_word_match": true,
+            "input_normalized_exact_decimal": "9E+1",
+            "input_raw_token": "90.0000",
+            "input_representation": {
+              "c_printf_4f_normalized_exact_decimal": "9E+1",
+              "c_printf_4f_repacked_word_hex": "0x42b40000",
+              "c_printf_4f_token": "90.0000",
+              "exact_decimal_str": "90.0000",
+              "float32_4dp_is_halfway_tie": false,
+              "float32_exact_decimal_str": "90",
+              "float32_lower_4dp_token": "90.0000",
+              "float32_nearest_4dp_token": "90.0000",
+              "float32_upper_4dp_token": "90.0001",
+              "float32_value": 90.0,
+              "float32_word_hex": "0x42b40000",
+              "normalized_exact_decimal": "9E+1",
+              "parameter": "alpha",
+              "raw_token": "90.0000",
+              "valid": true
+            },
+            "normalized_exact_decimal_match": true,
+            "output_matches_input_float32_4f_emission": true,
+            "output_normalized_exact_decimal": "9E+1",
+            "output_raw_token": "90.0000",
+            "output_representation": {
+              "c_printf_4f_normalized_exact_decimal": "9E+1",
+              "c_printf_4f_repacked_word_hex": "0x42b40000",
+              "c_printf_4f_token": "90.0000",
+              "exact_decimal_str": "90.0000",
+              "float32_4dp_is_halfway_tie": false,
+              "float32_exact_decimal_str": "90",
+              "float32_lower_4dp_token": "90.0000",
+              "float32_nearest_4dp_token": "90.0000",
+              "float32_upper_4dp_token": "90.0001",
+              "float32_value": 90.0,
+              "float32_word_hex": "0x42b40000",
+              "normalized_exact_decimal": "9E+1",
+              "parameter": "alpha",
+              "raw_token": "90.0000",
+              "valid": true
+            },
+            "parameter": "alpha",
+            "representation_status": "exact_token_match",
+            "valid": true
+          },
+          {
+            "abs_exact_decimal_diff": 0.0,
+            "abs_exact_decimal_diff_available": true,
+            "abs_exact_decimal_diff_str": "0",
+            "abs_exact_decimal_diff_str_available": true,
+            "abs_exact_decimal_diff_str_unavailable_reason": null,
+            "abs_exact_decimal_diff_unavailable_reason": null,
+            "error": null,
+            "exact_decimal_match": true,
+            "exact_token_match": true,
+            "float32_word_match": true,
+            "input_normalized_exact_decimal": "9E+1",
+            "input_raw_token": "90.0000",
+            "input_representation": {
+              "c_printf_4f_normalized_exact_decimal": "9E+1",
+              "c_printf_4f_repacked_word_hex": "0x42b40000",
+              "c_printf_4f_token": "90.0000",
+              "exact_decimal_str": "90.0000",
+              "float32_4dp_is_halfway_tie": false,
+              "float32_exact_decimal_str": "90",
+              "float32_lower_4dp_token": "90.0000",
+              "float32_nearest_4dp_token": "90.0000",
+              "float32_upper_4dp_token": "90.0001",
+              "float32_value": 90.0,
+              "float32_word_hex": "0x42b40000",
+              "normalized_exact_decimal": "9E+1",
+              "parameter": "beta",
+              "raw_token": "90.0000",
+              "valid": true
+            },
+            "normalized_exact_decimal_match": true,
+            "output_matches_input_float32_4f_emission": true,
+            "output_normalized_exact_decimal": "9E+1",
+            "output_raw_token": "90.0000",
+            "output_representation": {
+              "c_printf_4f_normalized_exact_decimal": "9E+1",
+              "c_printf_4f_repacked_word_hex": "0x42b40000",
+              "c_printf_4f_token": "90.0000",
+              "exact_decimal_str": "90.0000",
+              "float32_4dp_is_halfway_tie": false,
+              "float32_exact_decimal_str": "90",
+              "float32_lower_4dp_token": "90.0000",
+              "float32_nearest_4dp_token": "90.0000",
+              "float32_upper_4dp_token": "90.0001",
+              "float32_value": 90.0,
+              "float32_word_hex": "0x42b40000",
+              "normalized_exact_decimal": "9E+1",
+              "parameter": "beta",
+              "raw_token": "90.0000",
+              "valid": true
+            },
+            "parameter": "beta",
+            "representation_status": "exact_token_match",
+            "valid": true
+          },
+          {
+            "abs_exact_decimal_diff": 0.0,
+            "abs_exact_decimal_diff_available": true,
+            "abs_exact_decimal_diff_str": "0",
+            "abs_exact_decimal_diff_str_available": true,
+            "abs_exact_decimal_diff_str_unavailable_reason": null,
+            "abs_exact_decimal_diff_unavailable_reason": null,
+            "error": null,
+            "exact_decimal_match": true,
+            "exact_token_match": true,
+            "float32_word_match": true,
+            "input_normalized_exact_decimal": "9E+1",
+            "input_raw_token": "90.0000",
+            "input_representation": {
+              "c_printf_4f_normalized_exact_decimal": "9E+1",
+              "c_printf_4f_repacked_word_hex": "0x42b40000",
+              "c_printf_4f_token": "90.0000",
+              "exact_decimal_str": "90.0000",
+              "float32_4dp_is_halfway_tie": false,
+              "float32_exact_decimal_str": "90",
+              "float32_lower_4dp_token": "90.0000",
+              "float32_nearest_4dp_token": "90.0000",
+              "float32_upper_4dp_token": "90.0001",
+              "float32_value": 90.0,
+              "float32_word_hex": "0x42b40000",
+              "normalized_exact_decimal": "9E+1",
+              "parameter": "gamma",
+              "raw_token": "90.0000",
+              "valid": true
+            },
+            "normalized_exact_decimal_match": true,
+            "output_matches_input_float32_4f_emission": true,
+            "output_normalized_exact_decimal": "9E+1",
+            "output_raw_token": "90.0000",
+            "output_representation": {
+              "c_printf_4f_normalized_exact_decimal": "9E+1",
+              "c_printf_4f_repacked_word_hex": "0x42b40000",
+              "c_printf_4f_token": "90.0000",
+              "exact_decimal_str": "90.0000",
+              "float32_4dp_is_halfway_tie": false,
+              "float32_exact_decimal_str": "90",
+              "float32_lower_4dp_token": "90.0000",
+              "float32_nearest_4dp_token": "90.0000",
+              "float32_upper_4dp_token": "90.0001",
+              "float32_value": 90.0,
+              "float32_word_hex": "0x42b40000",
+              "normalized_exact_decimal": "9E+1",
+              "parameter": "gamma",
+              "raw_token": "90.0000",
+              "valid": true
+            },
+            "parameter": "gamma",
+            "representation_status": "exact_token_match",
+            "valid": true
+          }
+        ],
+        "valid": true
+      },
+      "primary_cell_exact_decimal_tuple_match": true,
+      "primary_cell_exact_token_tuple_match": true,
+      "primary_cell_float32_word_tuple_match": true,
+      "source_citations": [
+        "ccp4/mtzdata.h:82-90 (MTZXTAL float cell[6])",
+        "ccp4/cmtzlib.c:451-453 (MtzGet DCELL assigns/casts (float) token[i+2].value into mtz->xtal[jxtalin[iiset]]->cell[i])",
+        "ccp4/cmtzlib.c:526-537 (MtzGet CELL assigns/casts (float) token[i+1].value into totcell[i] and copies to mtz->xtal[i]->cell when cell[0] < 0.01)",
+        "ccp4/cmtzlib.c:1240-1249 (ccp4_lrcell copies xtl->cell[i] for caller-supplied MTZXTAL *xtl)",
+        "ccp4/cmtzlib.c:2671-2697 (MtzPut CELL %9.4f header formatting)",
+        "ccp4/cmtzlib.c:2838-2856 (MtzPut PROJECT/CRYSTAL/DATASET/DCELL %7d %10.4f formatting keyed by dataset setid)"
+      ],
+      "valid": true
+    },
+    "cell_representation_valid": true,
+    "exact_cell_tuple_match": true,
+    "exact_context_dictionary_equality": true,
+    "exact_context_equality_note": "Original HKLIN/HKLOUT header tokens (input_raw_header_context / output_raw_header_context) and normalized exact-decimal crystallographic contexts (input_context / output_context) are preserved separately and evaluated via the explicit mtzdata.h:82-90 float cell[6] and cmtzlib.c:451-453, 526-537, 1240-1249, 2671-2697, 2838-2856 %.4f representation policy.",
+    "exact_raw_cell_token_tuple_match": true,
+    "hklin_ancestor_chain_verified": true,
+    "hklin_baseline_sha256": "6edbe54b2ec7b815f30b6bd20a7264a7c978721189670e39e20d876d9b4fece7",
+    "hklin_baseline_size_bytes": 176592,
+    "hklin_post_run_sha256": "6edbe54b2ec7b815f30b6bd20a7264a7c978721189670e39e20d876d9b4fece7",
+    "hklin_post_run_size_bytes": 176592,
+    "hklin_verification_error": null,
+    "hklin_verified_post_run": true,
+    "input_context": {
+      "cell_a_b_c_alpha_beta_gamma": [
+        "64.897",
+        "78.323",
+        "38.792",
+        "9E+1",
+        "9E+1",
+        "9E+1"
+      ],
+      "resolution_limits_inverse_a2": [
+        "0.0004004509537481",
+        "0.1599971801042557"
+      ],
+      "symmetry": {
+        "lattice": "P",
+        "operator_count": 4,
+        "operators_xyz": [
+          "-X+1/2,-Y,Z+1/2",
+          "-X,Y+1/2,-Z+1/2",
+          "X+1/2,-Y+1/2,-Z",
+          "X,Y,Z"
+        ],
+        "point_group": "222",
+        "primitive_operator_count": 4,
+        "space_group_number": 19,
+        "space_group_symbol": "P212121"
+      }
+    },
+    "input_context_error": null,
+    "input_header_byte_offset": 174032,
+    "input_headers_error": null,
+    "input_raw_header_context": {
+      "cell_normalized_exact_decimals": [
+        "64.897",
+        "78.323",
+        "38.792",
+        "9E+1",
+        "9E+1",
+        "9E+1"
+      ],
+      "cell_raw_record": "CELL    64.8970   78.3230   38.7920   90.0000   90.0000   90.0000",
+      "cell_raw_tokens": [
+        "64.8970",
+        "78.3230",
+        "38.7920",
+        "90.0000",
+        "90.0000",
+        "90.0000"
+      ],
+      "dcell_records": [
+        {
+          "crystal": "crystal",
+          "dataset": "Original-experimental-data-mapped-to-asu",
+          "dataset_setid": "1",
+          "dcell_normalized_exact_decimals": [
+            "64.897",
+            "78.323",
+            "38.792",
+            "9E+1",
+            "9E+1",
+            "9E+1"
+          ],
+          "dcell_raw_tokens": [
+            "64.8970",
+            "78.3230",
+            "38.7920",
+            "90.0000",
+            "90.0000",
+            "90.0000"
+          ],
+          "dwav_keyword": "DWAVEL",
+          "dwav_raw_record": "DWAVEL        1    1.00000",
+          "dwav_tokens": [
+            "1.00000"
+          ],
+          "dwavel_tokens": [
+            "1.00000"
+          ],
+          "matches_primary_cell_exact_decimal": true,
+          "ordinal": 0,
+          "project": "project",
+          "raw_record": "DCELL         1    64.8970   78.3230   38.7920   90.0000   90.0000   90.0000",
+          "wavelength_present": true
+        }
+      ],
+      "dwav_records": [
+        {
+          "dataset_setid": "1",
+          "dwav_tokens": [
+            "1.00000"
+          ],
+          "dwavel_tokens": [
+            "1.00000"
+          ],
+          "keyword": "DWAVEL",
+          "ordinal": 0,
+          "raw_record": "DWAVEL        1    1.00000",
+          "wavelength_present": true
+        }
+      ],
+      "errors": [],
+      "header_byte_offset": 174032,
+      "header_order_dcell_observation": {
+        "all_dcell_records_match_primary_cell_exact_decimal": true,
+        "dataset_setids_in_header_order": [
+          "1"
+        ],
+        "dcell_record_count": 1,
+        "executable_cmtzlib_linkage_proven": false,
+        "first_dcell_dataset_setid": "1",
+        "first_non_zero_setid_dcell_dataset_setid": "1",
+        "native_crystal_or_dataset_selection_proven": false,
+        "selection_boundary_note": "ccp4/cmtzlib.c:1240-1249 (ccp4_lrcell) copies xtl->cell[i] for a caller-supplied MTZXTAL *xtl rather than selecting a crystal or dataset from MTZ headers; ccp4/cmtzlib.c:2838-2856 (MtzPut) writes PROJECT/CRYSTAL/DATASET/DCELL keyed by dataset setid. Which crystal/dataset cell a native consumer selects is not proven from header order alone."
+      },
+      "internal_dcell_matches_cell": true,
+      "label": "HKLIN",
+      "reso_raw_record": "RESO 0.0004004509537481   0.1599971801042557",
+      "reso_raw_tokens": [
+        "0.0004004509537481",
+        "0.1599971801042557"
+      ],
+      "valid": true
+    },
+    "input_reso_tokens": [
+      "0.0004004509537481",
+      "0.1599971801042557"
+    ],
+    "max_abs_cell_parameter_diff": 0.0,
+    "max_abs_cell_parameter_diff_available": true,
+    "max_abs_cell_parameter_diff_str": "0",
+    "max_abs_cell_parameter_diff_str_available": true,
+    "max_abs_cell_parameter_diff_str_unavailable_reason": null,
+    "max_abs_cell_parameter_diff_unavailable_reason": null,
+    "max_abs_reso_diff": 0.0,
+    "max_abs_reso_diff_available": true,
+    "max_abs_reso_diff_str": "0",
+    "max_abs_reso_diff_str_available": true,
+    "max_abs_reso_diff_str_unavailable_reason": null,
+    "max_abs_reso_diff_unavailable_reason": null,
+    "output_context": {
+      "cell_a_b_c_alpha_beta_gamma": [
+        "64.897",
+        "78.323",
+        "38.792",
+        "9E+1",
+        "9E+1",
+        "9E+1"
+      ],
+      "resolution_limits_inverse_a2": [
+        "0.0004004509537481",
+        "0.1599971801042557"
+      ],
+      "symmetry": {
+        "lattice": "P",
+        "operator_count": 4,
+        "operators_xyz": [
+          "-X+1/2,-Y,Z+1/2",
+          "-X,Y+1/2,-Z+1/2",
+          "X+1/2,-Y+1/2,-Z",
+          "X,Y,Z"
+        ],
+        "point_group": "222",
+        "primitive_operator_count": 4,
+        "space_group_number": 19,
+        "space_group_symbol": "P212121"
+      }
+    },
+    "output_context_error": null,
+    "output_dcell_matches_output_cell": true,
+    "output_layout_error": null,
+    "output_raw_header_context": {
+      "cell_normalized_exact_decimals": [
+        "64.897",
+        "78.323",
+        "38.792",
+        "9E+1",
+        "9E+1",
+        "9E+1"
+      ],
+      "cell_raw_record": "CELL    64.8970   78.3230   38.7920   90.0000   90.0000   90.0000",
+      "cell_raw_tokens": [
+        "64.8970",
+        "78.3230",
+        "38.7920",
+        "90.0000",
+        "90.0000",
+        "90.0000"
+      ],
+      "dcell_records": [
+        {
+          "crystal": "HKL_base",
+          "dataset": "HKL_base",
+          "dataset_setid": "0",
+          "dcell_normalized_exact_decimals": [
+            "64.897",
+            "78.323",
+            "38.792",
+            "9E+1",
+            "9E+1",
+            "9E+1"
+          ],
+          "dcell_raw_tokens": [
+            "64.8970",
+            "78.3230",
+            "38.7920",
+            "90.0000",
+            "90.0000",
+            "90.0000"
+          ],
+          "dwav_keyword": "DWAVEL",
+          "dwav_raw_record": "DWAVEL        0    0.00000",
+          "dwav_tokens": [
+            "0.00000"
+          ],
+          "dwavel_tokens": [
+            "0.00000"
+          ],
+          "matches_primary_cell_exact_decimal": true,
+          "ordinal": 0,
+          "project": "HKL_base",
+          "raw_record": "DCELL         0    64.8970   78.3230   38.7920   90.0000   90.0000   90.0000",
+          "wavelength_present": true
+        },
+        {
+          "crystal": "crystal",
+          "dataset": "Original-experimental-data-mapped-to-asu",
+          "dataset_setid": "1",
+          "dcell_normalized_exact_decimals": [
+            "64.897",
+            "78.323",
+            "38.792",
+            "9E+1",
+            "9E+1",
+            "9E+1"
+          ],
+          "dcell_raw_tokens": [
+            "64.8970",
+            "78.3230",
+            "38.7920",
+            "90.0000",
+            "90.0000",
+            "90.0000"
+          ],
+          "dwav_keyword": "DWAVEL",
+          "dwav_raw_record": "DWAVEL        1    1.00000",
+          "dwav_tokens": [
+            "1.00000"
+          ],
+          "dwavel_tokens": [
+            "1.00000"
+          ],
+          "matches_primary_cell_exact_decimal": true,
+          "ordinal": 1,
+          "project": "project",
+          "raw_record": "DCELL         1    64.8970   78.3230   38.7920   90.0000   90.0000   90.0000",
+          "wavelength_present": true
+        }
+      ],
+      "dwav_records": [
+        {
+          "dataset_setid": "0",
+          "dwav_tokens": [
+            "0.00000"
+          ],
+          "dwavel_tokens": [
+            "0.00000"
+          ],
+          "keyword": "DWAVEL",
+          "ordinal": 0,
+          "raw_record": "DWAVEL        0    0.00000",
+          "wavelength_present": true
+        },
+        {
+          "dataset_setid": "1",
+          "dwav_tokens": [
+            "1.00000"
+          ],
+          "dwavel_tokens": [
+            "1.00000"
+          ],
+          "keyword": "DWAVEL",
+          "ordinal": 1,
+          "raw_record": "DWAVEL        1    1.00000",
+          "wavelength_present": true
+        }
+      ],
+      "errors": [],
+      "header_byte_offset": 492944,
+      "header_order_dcell_observation": {
+        "all_dcell_records_match_primary_cell_exact_decimal": true,
+        "dataset_setids_in_header_order": [
+          "0",
+          "1"
+        ],
+        "dcell_record_count": 2,
+        "executable_cmtzlib_linkage_proven": false,
+        "first_dcell_dataset_setid": "0",
+        "first_non_zero_setid_dcell_dataset_setid": "1",
+        "native_crystal_or_dataset_selection_proven": false,
+        "selection_boundary_note": "ccp4/cmtzlib.c:1240-1249 (ccp4_lrcell) copies xtl->cell[i] for a caller-supplied MTZXTAL *xtl rather than selecting a crystal or dataset from MTZ headers; ccp4/cmtzlib.c:2838-2856 (MtzPut) writes PROJECT/CRYSTAL/DATASET/DCELL keyed by dataset setid. Which crystal/dataset cell a native consumer selects is not proven from header order alone."
+      },
+      "internal_dcell_matches_cell": true,
+      "label": "HKLOUT",
+      "reso_raw_record": "RESO 0.0004004509537481   0.1599971801042557",
+      "reso_raw_tokens": [
+        "0.0004004509537481",
+        "0.1599971801042557"
+      ],
+      "valid": true
+    },
+    "output_reso_tokens": [
+      "0.0004004509537481",
+      "0.1599971801042557"
+    ],
+    "symmetry_exact_match": true
+  },
+  "effective_hkls_proven": false,
+  "effective_hkls_unproven_reason": "Candidate HKLOUT columns/counts do not prove effective REFMAC internal reflection membership or active-mask exclusions; parsed native REFMAC log is unavailable; input observed domain contains 11 zero/negative F observation(s)",
+  "errors": [
+    "HKLOUT observation columns ('F-obs', 'SIGF-obs', 'R-free-flags') span multiple dataset IDs: ['0', '1']",
+    "HKLOUT dropped or invalidated 11 eligible observation(s)"
+  ],
+  "fc_all_ls_audit": {
+    "candidate_overall_free_count": 723,
+    "candidate_overall_r_free": 0.21312843449191576,
+    "candidate_overall_r_free_abs_diff": null,
+    "candidate_overall_r_work": 0.16950426618711353,
+    "candidate_overall_r_work_abs_diff": null,
+    "candidate_overall_work_count": 6494,
+    "candidate_resolution_bins": [],
+    "fc_all_ls_column_descriptor": {
+      "column_index": 15,
+      "column_key": "FC_ALL_LS",
+      "dataset_id": "1",
+      "dataset_name": "Original-experimental-data-mapped-to-asu",
+      "label": "FC_ALL_LS",
+      "max_token": "1370.35254",
+      "min_token": "0.58821106",
+      "raw_record": "COLUMN FC_ALL_LS                      F        0.58821106        1370.35254    1",
+      "type": "F"
+    },
+    "fc_all_ls_present": true,
+    "forbidden_fallback_columns": [
+      "FC",
+      "FC_ALL"
+    ],
+    "free_flag_value": 1,
+    "log_final_r_free": null,
+    "log_final_r_work": null,
+    "phic_all_ls_column_descriptor": {
+      "column_index": 16,
+      "column_key": "PHIC_ALL_LS",
+      "dataset_id": "1",
+      "dataset_name": "Original-experimental-data-mapped-to-asu",
+      "label": "PHIC_ALL_LS",
+      "max_token": "360",
+      "min_token": "0",
+      "raw_record": "COLUMN PHIC_ALL_LS                    P                 0               360    1",
+      "type": "P"
+    },
+    "phic_all_ls_present": true,
+    "preselected_column": "FC_ALL_LS",
+    "preselected_phase_column": "PHIC_ALL_LS",
+    "work_flag_value": 0
+  },
+  "native_bin_membership_proven": false,
+  "native_bin_membership_unproven_reason": "HKLOUT does not emit native per-reflection resolution-bin assignments and candidate d-spacing bin counts do not prove REFMAC native bin membership or boundary conventions",
+  "native_residual_reconstruction_proven": false,
+  "native_residual_reconstruction_unproven_reason": "Native residual reconstruction requires proven effective HKL membership and proven native bin membership/denominators, which are unproven from candidate HKLOUT sets",
+  "one_to_one_hkl_audit": {
+    "dropped_or_invalidated_eligible_observations": [
+      {
+        "hkl": [
+          0,
+          20,
+          10
+        ],
+        "input_f_obs": 0.0,
+        "input_sigf_obs": 28.16650390625,
+        "output_fp": null,
+        "output_fp_class": "nan",
+        "output_fp_word_hex": "fffa5a5a",
+        "output_sigfp": null,
+        "output_sigfp_class": "nan",
+        "output_sigfp_word_hex": "fffa5a5a"
+      },
+      {
+        "hkl": [
+          0,
+          22,
+          11
+        ],
+        "input_f_obs": 0.0,
+        "input_sigf_obs": 27.943145751953125,
+        "output_fp": null,
+        "output_fp_class": "nan",
+        "output_fp_word_hex": "fffa5a5a",
+        "output_sigfp": null,
+        "output_sigfp_class": "nan",
+        "output_sigfp_word_hex": "fffa5a5a"
+      },
+      {
+        "hkl": [
+          0,
+          24,
+          2
+        ],
+        "input_f_obs": 0.0,
+        "input_sigf_obs": 16.597389221191406,
+        "output_fp": null,
+        "output_fp_class": "nan",
+        "output_fp_word_hex": "fffa5a5a",
+        "output_sigfp": null,
+        "output_sigfp_class": "nan",
+        "output_sigfp_word_hex": "fffa5a5a"
+      },
+      {
+        "hkl": [
+          1,
+          31,
+          0
+        ],
+        "input_f_obs": 0.0,
+        "input_sigf_obs": 27.962570190429688,
+        "output_fp": null,
+        "output_fp_class": "nan",
+        "output_fp_word_hex": "fffa5a5a",
+        "output_sigfp": null,
+        "output_sigfp_class": "nan",
+        "output_sigfp_word_hex": "fffa5a5a"
+      },
+      {
+        "hkl": [
+          7,
+          23,
+          5
+        ],
+        "input_f_obs": 0.0,
+        "input_sigf_obs": 23.588470458984375,
+        "output_fp": null,
+        "output_fp_class": "nan",
+        "output_fp_word_hex": "fffa5a5a",
+        "output_sigfp": null,
+        "output_sigfp_class": "nan",
+        "output_sigfp_word_hex": "fffa5a5a"
+      },
+      {
+        "hkl": [
+          10,
+          27,
+          0
+        ],
+        "input_f_obs": 0.0,
+        "input_sigf_obs": 23.39838409423828,
+        "output_fp": null,
+        "output_fp_class": "nan",
+        "output_fp_word_hex": "fffa5a5a",
+        "output_sigfp": null,
+        "output_sigfp_class": "nan",
+        "output_sigfp_word_hex": "fffa5a5a"
+      },
+      {
+        "hkl": [
+          12,
+          11,
+          0
+        ],
+        "input_f_obs": 0.0,
+        "input_sigf_obs": 22.803298950195312,
+        "output_fp": null,
+        "output_fp_class": "nan",
+        "output_fp_word_hex": "fffa5a5a",
+        "output_sigfp": null,
+        "output_sigfp_class": "nan",
+        "output_sigfp_word_hex": "fffa5a5a"
+      },
+      {
+        "hkl": [
+          15,
+          3,
+          0
+        ],
+        "input_f_obs": 0.0,
+        "input_sigf_obs": 26.396400451660156,
+        "output_fp": null,
+        "output_fp_class": "nan",
+        "output_fp_word_hex": "fffa5a5a",
+        "output_sigfp": null,
+        "output_sigfp_class": "nan",
+        "output_sigfp_word_hex": "fffa5a5a"
+      },
+      {
+        "hkl": [
+          15,
+          22,
+          0
+        ],
+        "input_f_obs": 0.0,
+        "input_sigf_obs": 31.681259155273438,
+        "output_fp": null,
+        "output_fp_class": "nan",
+        "output_fp_word_hex": "fffa5a5a",
+        "output_sigfp": null,
+        "output_sigfp_class": "nan",
+        "output_sigfp_word_hex": "fffa5a5a"
+      },
+      {
+        "hkl": [
+          16,
+          10,
+          7
+        ],
+        "input_f_obs": 0.0,
+        "input_sigf_obs": 25.98345947265625,
+        "output_fp": null,
+        "output_fp_class": "nan",
+        "output_fp_word_hex": "fffa5a5a",
+        "output_sigfp": null,
+        "output_sigfp_class": "nan",
+        "output_sigfp_word_hex": "fffa5a5a"
+      },
+      {
+        "hkl": [
+          21,
+          8,
+          7
+        ],
+        "input_f_obs": 0.0,
+        "input_sigf_obs": 31.541229248046875,
+        "output_fp": null,
+        "output_fp_class": "nan",
+        "output_fp_word_hex": "fffa5a5a",
+        "output_sigfp": null,
+        "output_sigfp_class": "nan",
+        "output_sigfp_word_hex": "fffa5a5a"
+      }
+    ],
+    "fp_sigfp_scaling": {
+      "fp_ratio_max": 1.1234820930667202,
+      "fp_ratio_mean": 1.0008978382289715,
+      "fp_ratio_min": 0.8936777729153813,
+      "sigfp_ratio_max": 1.123482105120031,
+      "sigfp_ratio_mean": 1.000897838554407,
+      "sigfp_ratio_min": 0.8936777291084681,
+      "usable_fp_rescaled_count": 7216,
+      "usable_fp_word_unchanged_count": 1,
+      "usable_free_word_changed_count": 0,
+      "usable_free_word_unchanged_count": 7217,
+      "usable_sigfp_rescaled_count": 7216,
+      "usable_sigfp_word_unchanged_count": 1
+    },
+    "input_total_rows": 7248,
+    "missing_eligible_hkl_keys": [],
+    "missing_ineligible_padding_hkl_keys": [],
+    "missing_observed_domain_hkl_keys": [],
+    "missing_or_invalid_usable_flags": [],
+    "output_duplicate_hkl_keys": [],
+    "output_nonintegral_hkl_rows": [],
+    "output_total_rows": 7248,
+    "padding_nan_preserved_keys": [],
+    "padding_nan_to_free_zero_keys": [
+      [
+        0,
+        1,
+        9
+      ],
+      [
+        0,
+        3,
+        9
+      ],
+      [
+        0,
+        7,
+        9
+      ],
+      [
+        0,
+        12,
+        7
+      ],
+      [
+        0,
+        17,
+        3
+      ],
+      [
+        0,
+        19,
+        1
+      ],
+      [
+        1,
+        4,
+        9
+      ],
+      [
+        1,
+        18,
+        3
+      ],
+      [
+        2,
+        7,
+        8
+      ],
+      [
+        3,
+        0,
+        9
+      ],
+      [
+        3,
+        8,
+        8
+      ],
+      [
+        4,
+        7,
+        8
+      ],
+      [
+        4,
+        18,
+        1
+      ],
+      [
+        5,
+        4,
+        8
+      ],
+      [
+        6,
+        13,
+        5
+      ],
+      [
+        7,
+        16,
+        3
+      ],
+      [
+        10,
+        14,
+        0
+      ],
+      [
+        12,
+        0,
+        5
+      ],
+      [
+        12,
+        11,
+        1
+      ],
+      [
+        13,
+        11,
+        0
+      ]
+    ],
+    "padding_nan_to_unexpected_free_values": [],
+    "row_order_preserved": true,
+    "unexpected_extra_output_hkl_keys": [],
+    "unexpected_new_finite_observations": [],
+    "usable_flag_flips": []
+  },
+  "output_layout_summary": {
+    "bindings": [
+      {
+        "dataset_id": 1,
+        "label": "F-obs",
+        "type": "F"
+      },
+      {
+        "dataset_id": 1,
+        "label": "SIGF-obs",
+        "type": "Q"
+      },
+      {
+        "dataset_id": 0,
+        "label": "R-free-flags",
+        "type": "I"
+      }
+    ],
+    "col_indices": {
+      "F-obs": 4,
+      "H": 0,
+      "K": 1,
+      "L": 2,
+      "R-free-flags": 3,
+      "SIGF-obs": 5
+    },
+    "columns": [
+      "H",
+      "K",
+      "L",
+      "R-free-flags",
+      "F-obs",
+      "SIGF-obs",
+      "FC",
+      "PHIC",
+      "FC_ALL",
+      "PHIC_ALL",
+      "FWT",
+      "PHWT",
+      "DELFWT",
+      "PHDELWT",
+      "FOM",
+      "FC_ALL_LS",
+      "PHIC_ALL_LS"
+    ],
+    "datasets": {
+      "0": {
+        "crystal": "HKL_base",
+        "dataset": "HKL_base",
+        "dcell_tokens": [
+          "64.8970",
+          "78.3230",
+          "38.7920",
+          "90.0000",
+          "90.0000",
+          "90.0000"
+        ],
+        "dwav_keyword": "DWAVEL",
+        "dwav_raw_record": "DWAVEL        0    0.00000",
+        "dwav_tokens": [
+          "0.00000"
+        ],
+        "dwavel_tokens": [
+          "0.00000"
+        ],
+        "project": "HKL_base",
+        "wavelength_present": true
+      },
+      "1": {
+        "crystal": "crystal",
+        "dataset": "Original-experimental-data-mapped-to-asu",
+        "dcell_tokens": [
+          "64.8970",
+          "78.3230",
+          "38.7920",
+          "90.0000",
+          "90.0000",
+          "90.0000"
+        ],
+        "dwav_keyword": "DWAVEL",
+        "dwav_raw_record": "DWAVEL        1    1.00000",
+        "dwav_tokens": [
+          "1.00000"
+        ],
+        "dwavel_tokens": [
+          "1.00000"
+        ],
+        "project": "project",
+        "wavelength_present": true
+      }
+    },
+    "header_byte_offset": 492944,
+    "ncols": 17,
+    "nrows": 7248
+  },
+  "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_hklout.mtz",
+  "populations": {
+    "input_mtz_population": {
+      "free_flag_value": 1,
+      "free_observed_rows": 723,
+      "free_positive_rows": 723,
+      "ineligible_all_nan_padding_rows": 20,
+      "observed_domain_rows": 7228,
+      "positive_amplitude_rows": 7217,
+      "total_rows": 7248,
+      "work_flag_value": 0,
+      "work_observed_rows": 6505,
+      "work_positive_rows": 6494,
+      "zero_or_negative_f_rows": 11
+    },
+    "log_reported_population": null,
+    "output_mtz_population": {
+      "fc_all_ls_finite_on_eligible_rows": 7228,
+      "fc_all_ls_finite_on_padding_rows": 20,
+      "fc_all_ls_finite_total_rows": 7248,
+      "fc_all_ls_present": true,
+      "free_flag_value": 1,
+      "free_positive_fp_sigfp_rows": 723,
+      "fwt_finite_total_rows": 7248,
+      "fwt_present": true,
+      "integral_unique_hkl_rows": 7248,
+      "nan_fp_sigfp_rows": 31,
+      "observed_domain_fp_sigfp_rows": 7217,
+      "padding_nan_preserved_rows": 0,
+      "padding_nan_to_free_zero_rows": 20,
+      "positive_fp_sigfp_rows": 7217,
+      "total_rows": 7248,
+      "work_flag_value": 0,
+      "work_positive_fp_sigfp_rows": 6494,
+      "zero_or_negative_fp_rows": 0
+    },
+    "read_eligible_population": {
+      "free_flag_value": 1,
+      "free_read_eligible": 723,
+      "observed_domain_total": 7228,
+      "positive_amplitude_total": 7217,
+      "work_flag_value": 0,
+      "work_read_eligible": 6494,
+      "zero_or_negative_f_total": 11
+    }
+  },
+  "raw_export_json": {
+    "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_hklout_raw_export.json",
+    "sha256": "fe228067c691d7df610b05f11c3305846f14fbdf93cdb692df6684d20c011675",
+    "size_bytes": 14256933
+  },
+  "schema_version": 1,
+  "status": "rejected_invalid_or_inconsistent",
+  "valid": false,
+  "word_hex_convention": "uint32_le_hex_8char"
+}

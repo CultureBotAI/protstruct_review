@@ -1,0 +1,57 @@
+{
+  "contract": "primary_refmac_preparation_build_launch_v1",
+  "kind": "prepare",
+  "started_at": "2026-11-08T22:42:56.441662+00:00",
+  "argv": [
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/.venv/bin/python",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/hooks-633-interim-01/scripts/prepare_refmac_diagnostic.py",
+    "--source",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/594-attempt04-decision/vendor-refmac-5.8.0431",
+    "--output",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01"
+  ],
+  "cwd": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review",
+  "environment_selection": {
+    "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "removed_if_present": [
+      "LD_LIBRARY_PATH"
+    ]
+  },
+  "inputs_before": [
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/hooks-633-interim-01/scripts/prepare_refmac_diagnostic.py",
+      "resolved": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/hooks-633-interim-01/scripts/prepare_refmac_diagnostic.py",
+      "sha256": "9f116be407c71494e2350fff1ffe4e49e4d16824f327fcc8781847aef61633fe",
+      "size_bytes": 67473
+    },
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/hooks-633-interim-01/scripts/refmac_diagnostic/trace_writer.f90",
+      "resolved": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/hooks-633-interim-01/scripts/refmac_diagnostic/trace_writer.f90",
+      "sha256": "9539453a7137ae01c27f43441c0a3fcaadf3ffe211a71198d0df13e4412199dd",
+      "size_bytes": 25436
+    },
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/hooks-633-interim-01/scripts/refmac_diagnostic/trace_hooks.f90",
+      "resolved": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/hooks-633-interim-01/scripts/refmac_diagnostic/trace_hooks.f90",
+      "sha256": "fdfbfb3dbe46cd4a58547b9032036775b2ba698bc3b9d0cde4cc8eb44293cd95",
+      "size_bytes": 66643
+    },
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/.venv/bin/python",
+      "resolved": "/Users/marcin/.pyenv/versions/3.12.11/bin/python3.12",
+      "sha256": "fe1d249d8278c3ac1a8e7d0550394adfe0485a5f5802fe070c17bc1aa40b00f9",
+      "size_bytes": 33816
+    },
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/observe-preparation-build.py",
+      "resolved": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/observe-preparation-build.py",
+      "sha256": "0e843db95a9e7e28be70bb341aa999fbb75eb6bfff41fccef9c93fcd48e5041a",
+      "size_bytes": 4726
+    }
+  ],
+  "native_refmac_executed": false,
+  "returncode": null,
+  "child_completed": false,
+  "passed": false
+}

@@ -1,0 +1,68 @@
+{
+  "passed": true,
+  "checks": [
+    {
+      "case": "nested_alias_exact_expected_edges_and_old_algorithm_discriminated",
+      "passed": true
+    },
+    {
+      "case": "parent_component_exact_expected_edges_and_old_algorithm_discriminated",
+      "passed": true
+    },
+    {
+      "case": "source_role_positive_control",
+      "passed": true
+    },
+    {
+      "case": "same_bytes_other_path_role_rejected",
+      "passed": true,
+      "exception": "AssertionError"
+    },
+    {
+      "case": "source_changed_after_capture_rejected_at_join",
+      "passed": true,
+      "exception": "AssertionError"
+    },
+    {
+      "case": "source_changed_after_join_rejected_at_final_recheck",
+      "passed": true,
+      "exception": "AssertionError"
+    },
+    {
+      "case": "source_changed_during_load_rejected",
+      "passed": true,
+      "exception": "ValueError"
+    }
+  ],
+  "frozen_inputs_unchanged": true,
+  "full_composer_executed": false,
+  "producer_executed": false,
+  "synthetic_edges": [
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/composer-review687/fixture/sdk",
+      "target": "sdk-real"
+    },
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/composer-review687/fixture/sdk-real/Versions/Current",
+      "target": "A"
+    },
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/composer-review687/fixture/sdk-real/lib",
+      "target": "Versions/Current/lib"
+    }
+  ],
+  "old_algorithm_edges": [
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/composer-review687/fixture/sdk",
+      "target": "sdk-real"
+    },
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/composer-review687/fixture/sdk/Versions/Current",
+      "target": "A"
+    },
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/composer-review687/fixture/sdk/lib",
+      "target": "Versions/Current/lib"
+    }
+  ]
+}

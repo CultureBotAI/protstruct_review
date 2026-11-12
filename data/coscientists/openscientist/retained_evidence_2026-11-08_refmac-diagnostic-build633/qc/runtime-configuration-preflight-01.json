@@ -1,0 +1,11 @@
+{
+  "at": "2026-11-08T22:14:34.453147+00:00",
+  "stage": "pre_import_environment_guard",
+  "outcome": "refused",
+  "native_refmac_executed": false,
+  "script_sha256": "e4f5223a1cdf532f494d32757ee32744ed09540f9ac0ce175d83dd49bf6a53d2",
+  "removed_for_next_isolated_child": {
+    "LD_LIBRARY_PATH": ":/Library/Frameworks/R.framework/Versions/2.15/Resources/library/rJava/libs/x86_64/:/Library/Frameworks/R.framework/Resources/lib/:/Library/Frameworks/R.framework/Versions/3.6/Resources/library/rJava/jri/:/Library/Frameworks/R.framework/Versions/2.15/Resources/library/rJava/libs/x86_64/:/Library/Frameworks/R.framework/Resources/lib/:/Library/Frameworks/R.framework/Versions/3.6/Resources/library/rJava/jri/:/Library/Frameworks/R.framework/Versions/2.15/Resources/library/rJava/libs/x86_64/:/Library/Frameworks/R.framework/Resources/lib/:/Library/Frameworks/R.framework/Versions/3.6/Resources/library/rJava/jri/:/Library/Frameworks/R.framework/Versions/2.15/Resources/library/rJava/libs/x86_64/:/Library/Frameworks/R.framework/Resources/lib/:/Library/Frameworks/R.framework/Versions/3.6/Resources/library/rJava/jri/"
+  },
+  "reason": "Inherited R/rJava library search paths; explicit child-only isolation before configured CCP4 resolver; no configuration edits."
+}

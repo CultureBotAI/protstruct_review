@@ -1,0 +1,569 @@
+[
+  {
+    "line": 29073,
+    "record": {
+      "sequence": 29072,
+      "event": "completeness_summary_slot",
+      "namespace": "reporting_completeness",
+      "source_hook_id": "C5",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 1,
+      "is_overall_slot": false,
+      "FREER_FLAG": true,
+      "NREFA_work": 96,
+      "NREFA_free": 10,
+      "NREFM_work": 0,
+      "NREFM_free": 0,
+      "HNREF_SHELL_WORK": 96,
+      "HNREF_SHELL_FREE": 10,
+      "HNREF_SHELL_OBS": 106,
+      "HNREF_SHELL_ALL": 106,
+      "HPERC_SHELL_REFL": {
+        "bits_hex": "42C80000",
+        "decimal": "10000000000000000000E-17"
+      }
+    }
+  },
+  {
+    "line": 29074,
+    "record": {
+      "sequence": 29073,
+      "event": "completeness_summary_slot",
+      "namespace": "reporting_completeness",
+      "source_hook_id": "C5",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 2,
+      "is_overall_slot": false,
+      "FREER_FLAG": true,
+      "NREFA_work": 149,
+      "NREFA_free": 17,
+      "NREFM_work": 0,
+      "NREFM_free": 0,
+      "HNREF_SHELL_WORK": 149,
+      "HNREF_SHELL_FREE": 17,
+      "HNREF_SHELL_OBS": 166,
+      "HNREF_SHELL_ALL": 166,
+      "HPERC_SHELL_REFL": {
+        "bits_hex": "42C80000",
+        "decimal": "10000000000000000000E-17"
+      }
+    }
+  },
+  {
+    "line": 29075,
+    "record": {
+      "sequence": 29074,
+      "event": "completeness_summary_slot",
+      "namespace": "reporting_completeness",
+      "source_hook_id": "C5",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 3,
+      "is_overall_slot": false,
+      "FREER_FLAG": true,
+      "NREFA_work": 186,
+      "NREFA_free": 21,
+      "NREFM_work": 0,
+      "NREFM_free": 0,
+      "HNREF_SHELL_WORK": 186,
+      "HNREF_SHELL_FREE": 21,
+      "HNREF_SHELL_OBS": 207,
+      "HNREF_SHELL_ALL": 207,
+      "HPERC_SHELL_REFL": {
+        "bits_hex": "42C80000",
+        "decimal": "10000000000000000000E-17"
+      }
+    }
+  },
+  {
+    "line": 29076,
+    "record": {
+      "sequence": 29075,
+      "event": "completeness_summary_slot",
+      "namespace": "reporting_completeness",
+      "source_hook_id": "C5",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 4,
+      "is_overall_slot": false,
+      "FREER_FLAG": true,
+      "NREFA_work": 218,
+      "NREFA_free": 24,
+      "NREFM_work": 0,
+      "NREFM_free": 0,
+      "HNREF_SHELL_WORK": 218,
+      "HNREF_SHELL_FREE": 24,
+      "HNREF_SHELL_OBS": 242,
+      "HNREF_SHELL_ALL": 242,
+      "HPERC_SHELL_REFL": {
+        "bits_hex": "42C80000",
+        "decimal": "10000000000000000000E-17"
+      }
+    }
+  },
+  {
+    "line": 29077,
+    "record": {
+      "sequence": 29076,
+      "event": "completeness_summary_slot",
+      "namespace": "reporting_completeness",
+      "source_hook_id": "C5",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 5,
+      "is_overall_slot": false,
+      "FREER_FLAG": true,
+      "NREFA_work": 244,
+      "NREFA_free": 27,
+      "NREFM_work": 0,
+      "NREFM_free": 0,
+      "HNREF_SHELL_WORK": 244,
+      "HNREF_SHELL_FREE": 27,
+      "HNREF_SHELL_OBS": 271,
+      "HNREF_SHELL_ALL": 271,
+      "HPERC_SHELL_REFL": {
+        "bits_hex": "42C80000",
+        "decimal": "10000000000000000000E-17"
+      }
+    }
+  },
+  {
+    "line": 29078,
+    "record": {
+      "sequence": 29077,
+      "event": "completeness_summary_slot",
+      "namespace": "reporting_completeness",
+      "source_hook_id": "C5",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 6,
+      "is_overall_slot": false,
+      "FREER_FLAG": true,
+      "NREFA_work": 267,
+      "NREFA_free": 30,
+      "NREFM_work": 0,
+      "NREFM_free": 0,
+      "HNREF_SHELL_WORK": 267,
+      "HNREF_SHELL_FREE": 30,
+      "HNREF_SHELL_OBS": 297,
+      "HNREF_SHELL_ALL": 297,
+      "HPERC_SHELL_REFL": {
+        "bits_hex": "42C80000",
+        "decimal": "10000000000000000000E-17"
+      }
+    }
+  },
+  {
+    "line": 29079,
+    "record": {
+      "sequence": 29078,
+      "event": "completeness_summary_slot",
+      "namespace": "reporting_completeness",
+      "source_hook_id": "C5",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 7,
+      "is_overall_slot": false,
+      "FREER_FLAG": true,
+      "NREFA_work": 264,
+      "NREFA_free": 30,
+      "NREFM_work": 15,
+      "NREFM_free": 0,
+      "HNREF_SHELL_WORK": 264,
+      "HNREF_SHELL_FREE": 30,
+      "HNREF_SHELL_OBS": 294,
+      "HNREF_SHELL_ALL": 309,
+      "HPERC_SHELL_REFL": {
+        "bits_hex": "42BE4A90",
+        "decimal": "9514562988281250000E-17"
+      }
+    }
+  },
+  {
+    "line": 29080,
+    "record": {
+      "sequence": 29079,
+      "event": "completeness_summary_slot",
+      "namespace": "reporting_completeness",
+      "source_hook_id": "C5",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 8,
+      "is_overall_slot": false,
+      "FREER_FLAG": true,
+      "NREFA_work": 297,
+      "NREFA_free": 33,
+      "NREFM_work": 8,
+      "NREFM_free": 0,
+      "HNREF_SHELL_WORK": 297,
+      "HNREF_SHELL_FREE": 33,
+      "HNREF_SHELL_OBS": 330,
+      "HNREF_SHELL_ALL": 338,
+      "HPERC_SHELL_REFL": {
+        "bits_hex": "42C3442A",
+        "decimal": "9763313293457031250E-17"
+      }
+    }
+  },
+  {
+    "line": 29081,
+    "record": {
+      "sequence": 29080,
+      "event": "completeness_summary_slot",
+      "namespace": "reporting_completeness",
+      "source_hook_id": "C5",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 9,
+      "is_overall_slot": false,
+      "FREER_FLAG": true,
+      "NREFA_work": 319,
+      "NREFA_free": 36,
+      "NREFM_work": 8,
+      "NREFM_free": 0,
+      "HNREF_SHELL_WORK": 319,
+      "HNREF_SHELL_FREE": 36,
+      "HNREF_SHELL_OBS": 355,
+      "HNREF_SHELL_ALL": 363,
+      "HPERC_SHELL_REFL": {
+        "bits_hex": "42C397A0",
+        "decimal": "9779614257812500000E-17"
+      }
+    }
+  },
+  {
+    "line": 29082,
+    "record": {
+      "sequence": 29081,
+      "event": "completeness_summary_slot",
+      "namespace": "reporting_completeness",
+      "source_hook_id": "C5",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 10,
+      "is_overall_slot": false,
+      "FREER_FLAG": true,
+      "NREFA_work": 328,
+      "NREFA_free": 35,
+      "NREFM_work": 1,
+      "NREFM_free": 0,
+      "HNREF_SHELL_WORK": 328,
+      "HNREF_SHELL_FREE": 35,
+      "HNREF_SHELL_OBS": 363,
+      "HNREF_SHELL_ALL": 364,
+      "HPERC_SHELL_REFL": {
+        "bits_hex": "42C77357",
+        "decimal": "9972527313232421875E-17"
+      }
+    }
+  },
+  {
+    "line": 29083,
+    "record": {
+      "sequence": 29082,
+      "event": "completeness_summary_slot",
+      "namespace": "reporting_completeness",
+      "source_hook_id": "C5",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 11,
+      "is_overall_slot": false,
+      "FREER_FLAG": true,
+      "NREFA_work": 351,
+      "NREFA_free": 40,
+      "NREFM_work": 2,
+      "NREFM_free": 0,
+      "HNREF_SHELL_WORK": 351,
+      "HNREF_SHELL_FREE": 40,
+      "HNREF_SHELL_OBS": 391,
+      "HNREF_SHELL_ALL": 393,
+      "HPERC_SHELL_REFL": {
+        "bits_hex": "42C6FB71",
+        "decimal": "9949109649658203125E-17"
+      }
+    }
+  },
+  {
+    "line": 29084,
+    "record": {
+      "sequence": 29083,
+      "event": "completeness_summary_slot",
+      "namespace": "reporting_completeness",
+      "source_hook_id": "C5",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 12,
+      "is_overall_slot": false,
+      "FREER_FLAG": true,
+      "NREFA_work": 371,
+      "NREFA_free": 41,
+      "NREFM_work": 0,
+      "NREFM_free": 0,
+      "HNREF_SHELL_WORK": 371,
+      "HNREF_SHELL_FREE": 41,
+      "HNREF_SHELL_OBS": 412,
+      "HNREF_SHELL_ALL": 412,
+      "HPERC_SHELL_REFL": {
+        "bits_hex": "42C80000",
+        "decimal": "10000000000000000000E-17"
+      }
+    }
+  },
+  {
+    "line": 29085,
+    "record": {
+      "sequence": 29084,
+      "event": "completeness_summary_slot",
+      "namespace": "reporting_completeness",
+      "source_hook_id": "C5",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 13,
+      "is_overall_slot": false,
+      "FREER_FLAG": true,
+      "NREFA_work": 381,
+      "NREFA_free": 42,
+      "NREFM_work": 1,
+      "NREFM_free": 0,
+      "HNREF_SHELL_WORK": 381,
+      "HNREF_SHELL_FREE": 42,
+      "HNREF_SHELL_OBS": 423,
+      "HNREF_SHELL_ALL": 424,
+      "HPERC_SHELL_REFL": {
+        "bits_hex": "42C7873F",
+        "decimal": "9976415252685546875E-17"
+      }
+    }
+  },
+  {
+    "line": 29086,
+    "record": {
+      "sequence": 29085,
+      "event": "completeness_summary_slot",
+      "namespace": "reporting_completeness",
+      "source_hook_id": "C5",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 14,
+      "is_overall_slot": false,
+      "FREER_FLAG": true,
+      "NREFA_work": 384,
+      "NREFA_free": 43,
+      "NREFM_work": 2,
+      "NREFM_free": 0,
+      "HNREF_SHELL_WORK": 384,
+      "HNREF_SHELL_FREE": 43,
+      "HNREF_SHELL_OBS": 427,
+      "HNREF_SHELL_ALL": 429,
+      "HPERC_SHELL_REFL": {
+        "bits_hex": "42C7114F",
+        "decimal": "9953380584716796875E-17"
+      }
+    }
+  },
+  {
+    "line": 29087,
+    "record": {
+      "sequence": 29086,
+      "event": "completeness_summary_slot",
+      "namespace": "reporting_completeness",
+      "source_hook_id": "C5",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 15,
+      "is_overall_slot": false,
+      "FREER_FLAG": true,
+      "NREFA_work": 422,
+      "NREFA_free": 47,
+      "NREFM_work": 1,
+      "NREFM_free": 0,
+      "HNREF_SHELL_WORK": 422,
+      "HNREF_SHELL_FREE": 47,
+      "HNREF_SHELL_OBS": 469,
+      "HNREF_SHELL_ALL": 470,
+      "HPERC_SHELL_REFL": {
+        "bits_hex": "42C79310",
+        "decimal": "9978723144531250000E-17"
+      }
+    }
+  },
+  {
+    "line": 29088,
+    "record": {
+      "sequence": 29087,
+      "event": "completeness_summary_slot",
+      "namespace": "reporting_completeness",
+      "source_hook_id": "C5",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 16,
+      "is_overall_slot": false,
+      "FREER_FLAG": true,
+      "NREFA_work": 407,
+      "NREFA_free": 46,
+      "NREFM_work": 0,
+      "NREFM_free": 0,
+      "HNREF_SHELL_WORK": 407,
+      "HNREF_SHELL_FREE": 46,
+      "HNREF_SHELL_OBS": 453,
+      "HNREF_SHELL_ALL": 453,
+      "HPERC_SHELL_REFL": {
+        "bits_hex": "42C80000",
+        "decimal": "10000000000000000000E-17"
+      }
+    }
+  },
+  {
+    "line": 29089,
+    "record": {
+      "sequence": 29088,
+      "event": "completeness_summary_slot",
+      "namespace": "reporting_completeness",
+      "source_hook_id": "C5",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 17,
+      "is_overall_slot": false,
+      "FREER_FLAG": true,
+      "NREFA_work": 431,
+      "NREFA_free": 48,
+      "NREFM_work": 2,
+      "NREFM_free": 0,
+      "HNREF_SHELL_WORK": 431,
+      "HNREF_SHELL_FREE": 48,
+      "HNREF_SHELL_OBS": 479,
+      "HNREF_SHELL_ALL": 481,
+      "HPERC_SHELL_REFL": {
+        "bits_hex": "42C72B1C",
+        "decimal": "9958419799804687500E-17"
+      }
+    }
+  },
+  {
+    "line": 29090,
+    "record": {
+      "sequence": 29089,
+      "event": "completeness_summary_slot",
+      "namespace": "reporting_completeness",
+      "source_hook_id": "C5",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 18,
+      "is_overall_slot": false,
+      "FREER_FLAG": true,
+      "NREFA_work": 460,
+      "NREFA_free": 50,
+      "NREFM_work": 1,
+      "NREFM_free": 0,
+      "HNREF_SHELL_WORK": 460,
+      "HNREF_SHELL_FREE": 50,
+      "HNREF_SHELL_OBS": 510,
+      "HNREF_SHELL_ALL": 511,
+      "HPERC_SHELL_REFL": {
+        "bits_hex": "42C79BCE",
+        "decimal": "9980430603027343750E-17"
+      }
+    }
+  },
+  {
+    "line": 29091,
+    "record": {
+      "sequence": 29090,
+      "event": "completeness_summary_slot",
+      "namespace": "reporting_completeness",
+      "source_hook_id": "C5",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 19,
+      "is_overall_slot": false,
+      "FREER_FLAG": true,
+      "NREFA_work": 449,
+      "NREFA_free": 50,
+      "NREFM_work": 1,
+      "NREFM_free": 0,
+      "HNREF_SHELL_WORK": 449,
+      "HNREF_SHELL_FREE": 50,
+      "HNREF_SHELL_OBS": 499,
+      "HNREF_SHELL_ALL": 500,
+      "HPERC_SHELL_REFL": {
+        "bits_hex": "42C7999A",
+        "decimal": "9980000305175781250E-17"
+      }
+    }
+  },
+  {
+    "line": 29092,
+    "record": {
+      "sequence": 29091,
+      "event": "completeness_summary_slot",
+      "namespace": "reporting_completeness",
+      "source_hook_id": "C5",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 20,
+      "is_overall_slot": false,
+      "FREER_FLAG": true,
+      "NREFA_work": 470,
+      "NREFA_free": 53,
+      "NREFM_work": 3,
+      "NREFM_free": 0,
+      "HNREF_SHELL_WORK": 470,
+      "HNREF_SHELL_FREE": 53,
+      "HNREF_SHELL_OBS": 523,
+      "HNREF_SHELL_ALL": 526,
+      "HPERC_SHELL_REFL": {
+        "bits_hex": "42C6DBFC",
+        "decimal": "9942965698242187500E-17"
+      }
+    }
+  },
+  {
+    "line": 29093,
+    "record": {
+      "sequence": 29092,
+      "event": "completeness_summary_slot",
+      "namespace": "reporting_completeness",
+      "source_hook_id": "C5",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 21,
+      "is_overall_slot": true,
+      "FREER_FLAG": true,
+      "NREFA_work": 6494,
+      "NREFA_free": 723,
+      "NREFM_work": 45,
+      "NREFM_free": 0,
+      "HNREF_SHELL_WORK": 6494,
+      "HNREF_SHELL_FREE": 723,
+      "HNREF_SHELL_OBS": 7217,
+      "HNREF_SHELL_ALL": 7262,
+      "HPERC_SHELL_REFL": {
+        "bits_hex": "42C6C2BC",
+        "decimal": "9938034057617187500E-17"
+      }
+    }
+  }
+]

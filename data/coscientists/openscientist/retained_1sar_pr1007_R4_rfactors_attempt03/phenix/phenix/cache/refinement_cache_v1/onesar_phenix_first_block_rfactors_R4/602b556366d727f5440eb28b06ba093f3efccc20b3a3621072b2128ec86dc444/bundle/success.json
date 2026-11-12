@@ -1,0 +1,204 @@
+{
+  "invocation": {
+    "argv_template": [
+      {
+        "literal": "/Users/marcin/phenix-2.0-5936/bin/phenix.python"
+      },
+      {
+        "literal": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/onesar_phenix_measure.py"
+      },
+      {
+        "literal": "--pdb"
+      },
+      {
+        "literal": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/inputs/original_model.pdb"
+      },
+      {
+        "literal": "--mtz"
+      },
+      {
+        "literal": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/inputs/projected_observations.mtz"
+      },
+      {
+        "literal": "--params-json"
+      },
+      {
+        "literal": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/phenix/phenix_operation_parameters.json"
+      },
+      {
+        "literal": "--out-json"
+      },
+      {
+        "output_template": "{operation_dir}/phenix_rfactors.json"
+      },
+      {
+        "literal": "--out-maps-mtz"
+      },
+      {
+        "output_template": "{operation_dir}/phx_maps.mtz"
+      },
+      {
+        "literal": "--out-obs-pair-mtz"
+      },
+      {
+        "output_template": "{operation_dir}/PHX_OBS_PAIR_ONLY.mtz"
+      },
+      {
+        "literal": "--out-diagnostics-json"
+      },
+      {
+        "output_template": "{operation_dir}/phenix_diagnostics.json"
+      },
+      {
+        "literal": "--out-partial-json"
+      },
+      {
+        "output_template": "{operation_dir}/phenix_rfactors_partial_evidence.json"
+      }
+    ],
+    "contract": 1,
+    "inputs": {
+      "helper_script": {
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/onesar_phenix_measure.py",
+        "sha256": "693a205d2826e0ea6db0630d432dd1ce6ef68890634ac8ad254a0c411c242292"
+      },
+      "model_pdb": {
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/inputs/original_model.pdb",
+        "sha256": "8cbc1650f8be5a3833f98833fa514ec7d490c2c3bb9aa930413abac05e2a510b"
+      },
+      "parameters_json": {
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/phenix/phenix_operation_parameters.json",
+        "sha256": "d472e33fbf72d79b20271429c2ecf2a47995120910e27e81dac66e73626ae16e"
+      },
+      "projected_observations_mtz": {
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/inputs/projected_observations.mtz",
+        "sha256": "6edbe54b2ec7b815f30b6bd20a7264a7c978721189670e39e20d876d9b4fece7"
+      },
+      "vendor_iotbx_extract_xtal_data": {
+        "path": "/Users/marcin/phenix-2.0-5936/lib/python3.9/site-packages/iotbx/extract_xtal_data.py",
+        "sha256": "ae19ae6c380fcf4a080897a6820aac9e2b8a49eeabac973c5126b7d793980d5c"
+      },
+      "vendor_iotbx_mtz": {
+        "path": "/Users/marcin/phenix-2.0-5936/lib/python3.9/site-packages/iotbx/mtz/__init__.py",
+        "sha256": "56be7b33ae01974c21dea729b76c631aec8f83770627d78538ad2e5f03f46e3e"
+      },
+      "vendor_iotbx_reflection_file_utils": {
+        "path": "/Users/marcin/phenix-2.0-5936/lib/python3.9/site-packages/iotbx/reflection_file_utils.py",
+        "sha256": "8b14ac63b5f8eeabef4b74100bf744fa485b7bb5b2775c3ff9e40321c75efd62"
+      },
+      "vendor_mmtbx_f_model": {
+        "path": "/Users/marcin/phenix-2.0-5936/lib/python3.9/site-packages/mmtbx/f_model/f_model.py",
+        "sha256": "f00fd9c7db51c62271cc97213860b1308c9d4cb20612dfd60bd325cff75eaa8a"
+      },
+      "vendor_mmtbx_map_tools": {
+        "path": "/Users/marcin/phenix-2.0-5936/lib/python3.9/site-packages/mmtbx/map_tools.py",
+        "sha256": "69d32279023fc82a4bdb392f8057fe310f9094e97a4cc08c5425c4fda5b6b376"
+      },
+      "vendor_mmtbx_model_vs_data": {
+        "path": "/Users/marcin/phenix-2.0-5936/lib/python3.9/site-packages/mmtbx/model_vs_data.py",
+        "sha256": "fbc4322b14e29a18114110bfd8e2179843a5d90626904cbd8a540d6a4d4123cc"
+      }
+    },
+    "launcher": {
+      "configured_path": "/Users/marcin/phenix-2.0-5936/phenix_bin/phenix.python",
+      "path": "/Users/marcin/phenix-2.0-5936/bin/phenix.python",
+      "sha256": "0d04defbd0509c645f84c5341fe3e33683411e308969fc3c3b39076e1b779639"
+    },
+    "measured_build": {
+      "parsed_build": "2.0-5936",
+      "reported_version": "-------------------------------------------------------------------------------\n  Phenix: Python-based Hierarchical ENvironment for Integrated Xtallography\n  Version: 2.0\n  Release tag: 5936\n  User: marcin\n-------------------------------------------------------------------------------",
+      "reported_version_source": "vendor_setup_environment",
+      "version_probe": {
+        "argv": [
+          "/Users/marcin/phenix-2.0-5936/bin/phenix.version"
+        ],
+        "configured_path": "/Users/marcin/phenix-2.0-5936/phenix_bin/phenix.version",
+        "configured_prefix": "/Users/marcin/phenix-2.0-5936",
+        "ignored_inherited_shell_hooks": [
+          "BASH_ENV"
+        ],
+        "ignored_inherited_version_variables": [],
+        "parsed_build": "2.0-5936",
+        "probe_mode": "vendor_setup_environment",
+        "resolved_path": "/Users/marcin/phenix-2.0-5936/bin/phenix.version",
+        "resolved_prefix": "/Users/marcin/phenix-2.0-5936",
+        "returncode": 0,
+        "setup_argv": [
+          "/bin/bash",
+          "--noprofile",
+          "--norc",
+          "-c",
+          "builtin unset -f export unset printf . exit 2>/dev/null || true; builtin unset PHENIX_VERSION PHENIX_RELEASE_TAG BASH_ENV ENV; builtin . \"$1\"; status=$?; if [ \"$status\" -ne 0 ]; then builtin exit \"$status\"; fi; builtin printf \"\\0PHENIX_VERSION=%s\\0PHENIX_RELEASE_TAG=%s\\0\" \"${PHENIX_VERSION+set}:${PHENIX_VERSION-}\" \"${PHENIX_RELEASE_TAG+set}:${PHENIX_RELEASE_TAG-}\"",
+          "protstruct-phenix-setup",
+          "/Users/marcin/phenix-2.0-5936/phenix_env.sh"
+        ],
+        "setup_configured_path": "/Users/marcin/phenix-2.0-5936/phenix_env.sh",
+        "setup_parsed_build": "2.0-5936",
+        "setup_resolved_path": "/Users/marcin/phenix-2.0-5936/phenix_env.sh",
+        "setup_returncode": 0,
+        "setup_sha256": "1e0d9ef0f77d31c216e5a297ef8695a0d1a8097e41b55aff2edc8bd6f5a3872c",
+        "setup_stderr": "",
+        "setup_stdout": "",
+        "setup_version_fields": {
+          "PHENIX_RELEASE_TAG": null,
+          "PHENIX_VERSION": "2.0-5936"
+        },
+        "sha256": "7892ca35343f3aafa50d548506c484561128a1e6c56e8fafd0fee9ccd866abd7",
+        "stderr": "",
+        "stdout": "-------------------------------------------------------------------------------\n  Phenix: Python-based Hierarchical ENvironment for Integrated Xtallography\n  Version: 2.0\n  Release tag: 5936\n  User: marcin\n-------------------------------------------------------------------------------\n\n"
+      }
+    },
+    "name": "onesar_phenix_first_block_rfactors_R4",
+    "required_outputs": {
+      "phenix_diagnostics_json": "phenix_diagnostics.json",
+      "phenix_rfactors_json": "phenix_rfactors.json",
+      "phx_maps_mtz": "phx_maps.mtz",
+      "phx_obs_pair_only_mtz": "PHX_OBS_PAIR_ONLY.mtz"
+    }
+  },
+  "execution_directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/.attempt-602b556366d727f5-i_mb2qo5",
+  "executed_argv": [
+    "/Users/marcin/phenix-2.0-5936/bin/phenix.python",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/onesar_phenix_measure.py",
+    "--pdb",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/inputs/original_model.pdb",
+    "--mtz",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/inputs/projected_observations.mtz",
+    "--params-json",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/phenix/phenix_operation_parameters.json",
+    "--out-json",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/.attempt-602b556366d727f5-i_mb2qo5/phenix_rfactors.json",
+    "--out-maps-mtz",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/.attempt-602b556366d727f5-i_mb2qo5/phx_maps.mtz",
+    "--out-obs-pair-mtz",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/.attempt-602b556366d727f5-i_mb2qo5/PHX_OBS_PAIR_ONLY.mtz",
+    "--out-diagnostics-json",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/.attempt-602b556366d727f5-i_mb2qo5/phenix_diagnostics.json",
+    "--out-partial-json",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/.attempt-602b556366d727f5-i_mb2qo5/phenix_rfactors_partial_evidence.json"
+  ],
+  "returncode": 0,
+  "reusable": true,
+  "artifacts": {
+    "stdout": {
+      "path": "stdout.log",
+      "sha256": "7e21a8548074da86625a16a5e44953a612117764114bad4ee3c9e95aa551d199"
+    },
+    "phenix_rfactors_json": {
+      "path": "phenix_rfactors.json",
+      "sha256": "80f26d721c625fd707c19a60a5f3bb15a6b5a0d56cf9cb831e879b3b40bdc875"
+    },
+    "phx_maps_mtz": {
+      "path": "phx_maps.mtz",
+      "sha256": "7beeabf1e70efe3260052ed363d8fc85d5e1990acd7e4f20768cffab6e216ddb"
+    },
+    "phx_obs_pair_only_mtz": {
+      "path": "PHX_OBS_PAIR_ONLY.mtz",
+      "sha256": "f5a64443f4cac4f6ffa86e80548dc9d3536f370ad092ad0aff5af84c2250bfdc"
+    },
+    "phenix_diagnostics_json": {
+      "path": "phenix_diagnostics.json",
+      "sha256": "1004d025a57f13eec23a929275cb15c60a9ca3db5bf944788d86fdc45f95ac4b"
+    }
+  }
+}

@@ -1,0 +1,2110 @@
+{
+  "all_candidate_imports_pinned": true,
+  "archive": {
+    "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/cdba2c07-daff-4f60-ae96-12452b3a5fbb_artifacts.zip",
+    "sha256": "9fc5352284b7ffa7763c633a3eb4d3d0db96b8c25a1be9bcea361722d2c53054",
+    "size_bytes": 5491709
+  },
+  "archive_unchanged": true,
+  "cases": [
+    {
+      "checks": [
+        {
+          "assertion": "Eight helper role entries",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: audit_1sar_retained_evidence.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: onesar_refmac.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: onesar_refmac_log.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: onesar_rerun.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: t03_reflection_retention.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: toolchain.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: refmac_diagnostic_profile.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: refmac_diagnostic_trace.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Independently repinned alternate helper passes public profile validation",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Same bytes and size, genuinely different resolved targets",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Persisted manifest equals actual error payload",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Persisted diagnostics equal actual error payload",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Publication pair complete",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Error diagnostics path binds pinned manifest reference",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Specific actual-helper preflight refusal",
+          "detail": "verify_diagnostic_helper_role_join",
+          "passed": true
+        },
+        {
+          "assertion": "Exactly one retained role mismatch",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Only resolved helper target differs",
+          "detail": {
+            "actual_helper": {
+              "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/onesar_refmac_log.py",
+              "sha256": "31908f40708ce2f8e0abc68b4b9f22b08ef0f63df0a9c7907141b82f1323d458",
+              "size_bytes": 92207
+            },
+            "expected_module_name": "onesar_refmac_log.py",
+            "helper_baseline_key": "onesar_refmac_log_py",
+            "index": 2,
+            "matches": false,
+            "profile_role_observation": {
+              "file_id": "item_41",
+              "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c1-helper-target/alternate-helper/onesar_refmac_log.py",
+              "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c1-helper-target/alternate-helper/onesar_refmac_log.py",
+              "sha256": "31908f40708ce2f8e0abc68b4b9f22b08ef0f63df0a9c7907141b82f1323d458",
+              "size_bytes": 92207
+            },
+            "reason": "resolved_path '/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/onesar_refmac_log.py' != '/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c1-helper-target/alternate-helper/onesar_refmac_log.py'",
+            "resolved_path_matches": false,
+            "role_file_id": "item_41",
+            "sha256_matches": true,
+            "size_bytes_matches": true
+          },
+          "passed": true
+        },
+        {
+          "assertion": "Both actual and declared helper targets retained",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Exactly one retained role mismatch",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Only resolved helper target differs",
+          "detail": {
+            "actual_helper": {
+              "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/onesar_refmac_log.py",
+              "sha256": "31908f40708ce2f8e0abc68b4b9f22b08ef0f63df0a9c7907141b82f1323d458",
+              "size_bytes": 92207
+            },
+            "expected_module_name": "onesar_refmac_log.py",
+            "helper_baseline_key": "onesar_refmac_log_py",
+            "index": 2,
+            "matches": false,
+            "profile_role_observation": {
+              "file_id": "item_41",
+              "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c1-helper-target/alternate-helper/onesar_refmac_log.py",
+              "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c1-helper-target/alternate-helper/onesar_refmac_log.py",
+              "sha256": "31908f40708ce2f8e0abc68b4b9f22b08ef0f63df0a9c7907141b82f1323d458",
+              "size_bytes": 92207
+            },
+            "reason": "resolved_path '/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/onesar_refmac_log.py' != '/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c1-helper-target/alternate-helper/onesar_refmac_log.py'",
+            "resolved_path_matches": false,
+            "role_file_id": "item_41",
+            "sha256_matches": true,
+            "size_bytes_matches": true
+          },
+          "passed": true
+        },
+        {
+          "assertion": "Both actual and declared helper targets retained",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Zero runner calls",
+          "detail": null,
+          "passed": true
+        }
+      ],
+      "collector_error": {
+        "message": "REFMAC5 collector failed at verify_diagnostic_helper_role_join (ValueError): Diagnostic collector_helpers role join mismatch at index 2 (onesar_refmac_log.py / onesar_refmac_log_py vs role file_id item_41): resolved_path '/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/onesar_refmac_log.py' != '/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c1-helper-target/alternate-helper/onesar_refmac_log.py'",
+        "traceback": "Traceback (most recent call last):\n  File \"/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/onesar_refmac.py\", line 9242, in run_refmac_rfactor_operation\n    raise ValueError(\nValueError: Diagnostic collector_helpers role join mismatch at index 2 (onesar_refmac_log.py / onesar_refmac_log_py vs role file_id item_41): resolved_path '/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/onesar_refmac_log.py' != '/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c1-helper-target/alternate-helper/onesar_refmac_log.py'\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector767-controls/collector_controls770.py\", line 333, in run_helper_target\n    plumbing._run_collector(\"capture\", runner, diagnostic_profile=request,\n  File \"/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/test_onesar_refmac_diagnostic.py\", line 778, in _run_collector\n    return onesar_refmac.run_refmac_rfactor_operation(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/onesar_refmac.py\", line 13058, in run_refmac_rfactor_operation\n    raise err from first_caught_exception\nonesar_refmac.RefmacCollectorError: REFMAC5 collector failed at verify_diagnostic_helper_role_join (ValueError): Diagnostic collector_helpers role join mismatch at index 2 (onesar_refmac_log.py / onesar_refmac_log_py vs role file_id item_41): resolved_path '/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/onesar_refmac_log.py' != '/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c1-helper-target/alternate-helper/onesar_refmac_log.py'\n",
+        "type": "RefmacCollectorError"
+      },
+      "diagnostics_reference": {
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c1-helper-target/repo/runs/capture/refmac/refmac_diagnostics.json",
+        "sha256": "a80591cb332dc3495c88e8ce15c7e1b1077db7e1f9505188d236a624d7c7e993",
+        "size_bytes": 2322579
+      },
+      "events": [],
+      "manifest_reference": {
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c1-helper-target/repo/runs/capture/refmac/refmac_operation_manifest.json",
+        "sha256": "523d6882aae6898cc60250d432588f83fad1986a464de5b18700dedeaf7cf6dd",
+        "size_bytes": 2332706
+      },
+      "name": "c1-helper-target",
+      "status": "passed",
+      "validated_fixture": {
+        "manifest": {
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c1-helper-target/diag_fixture/diagnostic-profile.json",
+          "sha256": "d3e850f9a0ae8069054bb7eebe482e24bac96195eb914826f30194ba56bce794",
+          "size_bytes": 37912
+        },
+        "profile_id": "refmac_5_8_0431_instrumented_attempt4_v1"
+      }
+    },
+    {
+      "actual_profile_result_verified": true,
+      "actual_trace_result": {
+        "bytes_read": 40,
+        "closed": false,
+        "descriptor_binding_note": "Opened with O_RDONLY (+ O_NOFOLLOW when available) and bound via pre/post fstat/lstat inode/device/size/mtime comparison; detects path replacement across the inspection window without claiming kernel-atomic protection against transient swaps.",
+        "envelope_only": true,
+        "errors": [
+          {
+            "byte_offset": 0,
+            "code": "missing_header_record",
+            "errno": null,
+            "exception_type": null,
+            "field": "record_type",
+            "line_number": 1,
+            "message": "First record must have record_type='header', got None",
+            "stage": "envelope_parse"
+          }
+        ],
+        "event_count": 0,
+        "expected_sha256": "12b05af0158ac6b127444beb9f7ba03ef1f108f4195dee3028e4a7e565bfe89b",
+        "expected_size_bytes": 40,
+        "first_failure": {
+          "byte_offset": 0,
+          "code": "missing_header_record",
+          "errno": null,
+          "exception_type": null,
+          "field": "record_type",
+          "line_number": 1,
+          "message": "First record must have record_type='header', got None",
+          "stage": "envelope_parse"
+        },
+        "footer_record_count": null,
+        "has_events": false,
+        "header": null,
+        "observed_sha256": "12b05af0158ac6b127444beb9f7ba03ef1f108f4195dee3028e4a7e565bfe89b",
+        "observed_size_bytes": 40,
+        "partial_sha256": null,
+        "partial_size_bytes": null,
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/repo/runs/capture/refmac/refmac_native_trace.jsonl",
+        "read_complete": true,
+        "record_count": 0,
+        "representation_header": null,
+        "schema_id": "protstruct_refmac_native_trace_v1",
+        "scientific_capture_established": false,
+        "scientific_eligibility_established": false,
+        "sha256_match": true,
+        "size_bytes_match": true,
+        "valid": false
+      },
+      "checks": [
+        {
+          "assertion": "Eight helper role entries",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: audit_1sar_retained_evidence.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: onesar_refmac.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: onesar_refmac_log.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: onesar_rerun.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: t03_reflection_retention.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: toolchain.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: refmac_diagnostic_profile.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: refmac_diagnostic_trace.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Exactly six positional and six named runner arguments",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Exact staged input and fixed output paths",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Literal seven stdin lines and final newline",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "900-second production timeout",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Explicit ccp4=False",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Exact cwd/XML/selected executable",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Only two fixed child activation settings added",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac.log",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac_xyzout.pdb",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac_hklout.mtz",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac_xmlout.xml",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac_native_trace.jsonl",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac.log",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac_hklout.mtz",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac_native_trace.jsonl",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac_xmlout.xml",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac_xyzout.pdb",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Real profile recheck verifies the unchanged fixture",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Trace inspector receives exact retained path and independent pins",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Exactly one real installed resolver call",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Exactly one runner call; no retry",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Both real audit boundaries reached once",
+          "detail": {
+            "profile": 1,
+            "trace": 1
+          },
+          "passed": true
+        },
+        {
+          "assertion": "Caller/sourced environments unchanged",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Persisted manifest equals actual error payload",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Persisted diagnostics equal actual error payload",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Publication pair complete",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Error diagnostics path binds pinned manifest reference",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Final persisted raw trace path/hash/size and bytes retained",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Diagnostic outer schema/stage retained",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Profile recheck continues and verifies unchanged fixture",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual malformed-trace findings retained",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Final persisted raw trace path/hash/size and bytes retained",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Diagnostic outer schema/stage retained",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Profile recheck continues and verifies unchanged fixture",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual malformed-trace findings retained",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Checkpoint schema/stage: pre_execution_checkpoint_json",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Checkpoint schema/stage: post_execution_checkpoint_json",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Installed identity remains distinct from selected diagnostic executable",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Invocation case fails specifically on deliberately invalid trace",
+          "detail": "refmac_raw_outputs",
+          "passed": true
+        }
+      ],
+      "collector_error": {
+        "message": "REFMAC5 collector failed at refmac_raw_outputs (RuntimeError): Missing, empty, unreadable, or symlinked REFMAC raw output or directory artifact(s): native_trace (invalid_native_trace_envelope (missing_header_record: First record must have record_type='header', got None))",
+        "traceback": "Traceback (most recent call last):\n  File \"/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector767-controls/collector_controls770.py\", line 484, in run_capture\n    plumbing._run_collector(\"capture\", runner, diagnostic_profile=fixture.profile,\n  File \"/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/test_onesar_refmac_diagnostic.py\", line 778, in _run_collector\n    return onesar_refmac.run_refmac_rfactor_operation(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/onesar_refmac.py\", line 13059, in run_refmac_rfactor_operation\n    raise err from None\nonesar_refmac.RefmacCollectorError: REFMAC5 collector failed at refmac_raw_outputs (RuntimeError): Missing, empty, unreadable, or symlinked REFMAC raw output or directory artifact(s): native_trace (invalid_native_trace_envelope (missing_header_record: First record must have record_type='header', got None))\n",
+        "type": "RefmacCollectorError"
+      },
+      "diagnostics_reference": {
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/repo/runs/capture/refmac/refmac_diagnostics.json",
+        "sha256": "c151ac43e709b3a19bcbdfed6212ca9d1457d9e76f6e893038ffbbecb8cbd765",
+        "size_bytes": 3208922
+      },
+      "events": [
+        "runner",
+        "raw:refmac.log",
+        "raw:refmac_xyzout.pdb",
+        "raw:refmac_hklout.mtz",
+        "raw:refmac_xmlout.xml",
+        "raw:refmac_native_trace.jsonl",
+        "raw:refmac.log",
+        "raw:refmac_hklout.mtz",
+        "raw:refmac_native_trace.jsonl",
+        "raw:refmac_xmlout.xml",
+        "raw:refmac_xyzout.pdb",
+        "profile_inspection",
+        "trace_inspection"
+      ],
+      "manifest_reference": {
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/repo/runs/capture/refmac/refmac_operation_manifest.json",
+        "sha256": "3fdb1ea79a45eb15770e687b8291618bb84acf4b3d8cb35a1409bd5c0bc25e97",
+        "size_bytes": 3252872
+      },
+      "name": "c2-one-invocation",
+      "raw_observations": {
+        "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/repo/runs/capture/refmac/refmac.log": {
+          "error": null,
+          "exists": true,
+          "is_regular_file": true,
+          "is_symlink": false,
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/repo/runs/capture/refmac/refmac.log",
+          "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/repo/runs/capture/refmac/refmac.log",
+          "sha256": "392992723c3a3f1f6f8368642bef28da317eacf5002556dd294e789e995449eb",
+          "size_bytes": 2054,
+          "within_refmac_dir": true
+        },
+        "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/repo/runs/capture/refmac/refmac_hklout.mtz": {
+          "error": null,
+          "exists": true,
+          "is_regular_file": true,
+          "is_symlink": false,
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/repo/runs/capture/refmac/refmac_hklout.mtz",
+          "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/repo/runs/capture/refmac/refmac_hklout.mtz",
+          "sha256": "6edbe54b2ec7b815f30b6bd20a7264a7c978721189670e39e20d876d9b4fece7",
+          "size_bytes": 176592,
+          "within_refmac_dir": true
+        },
+        "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/repo/runs/capture/refmac/refmac_native_trace.jsonl": {
+          "error": null,
+          "exists": true,
+          "is_regular_file": true,
+          "is_symlink": false,
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/repo/runs/capture/refmac/refmac_native_trace.jsonl",
+          "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/repo/runs/capture/refmac/refmac_native_trace.jsonl",
+          "sha256": "12b05af0158ac6b127444beb9f7ba03ef1f108f4195dee3028e4a7e565bfe89b",
+          "size_bytes": 40,
+          "within_refmac_dir": true
+        },
+        "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/repo/runs/capture/refmac/refmac_xmlout.xml": {
+          "error": null,
+          "exists": true,
+          "is_regular_file": true,
+          "is_symlink": false,
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/repo/runs/capture/refmac/refmac_xmlout.xml",
+          "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/repo/runs/capture/refmac/refmac_xmlout.xml",
+          "sha256": "afea40590ef6c30973b5e94b928f30c0c19a4de9c977d8bf035ab628861a330b",
+          "size_bytes": 14,
+          "within_refmac_dir": true
+        },
+        "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/repo/runs/capture/refmac/refmac_xyzout.pdb": {
+          "error": null,
+          "exists": true,
+          "is_regular_file": true,
+          "is_symlink": false,
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/repo/runs/capture/refmac/refmac_xyzout.pdb",
+          "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/repo/runs/capture/refmac/refmac_xyzout.pdb",
+          "sha256": "8cbc1650f8be5a3833f98833fa514ec7d490c2c3bb9aa930413abac05e2a510b",
+          "size_bytes": 135240,
+          "within_refmac_dir": true
+        }
+      },
+      "runner_calls": [
+        {
+          "args": [
+            "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/repo/runs/capture/inputs/original_model.pdb",
+            "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/repo/runs/capture/inputs/projected_observations.mtz",
+            "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/repo/runs/capture/refmac/refmac_xyzout.pdb",
+            "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/repo/runs/capture/refmac/refmac_hklout.mtz",
+            "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/repo/runs/capture/refmac/refmac.log",
+            "LABIN FP=F-obs SIGFP=SIGF-obs FREE=R-free-flags\nFREE 1\nREFI BREF MIXED\nNCYC 0\nMONI MANY\nLABOUT FC=FC PHIC=PHIC FWT=FWT PHWT=PHWT DELFWT=DELFWT PHDELWT=PHDELWT FOM=FOM\nEND\n"
+          ],
+          "kwargs": {
+            "ccp4": "False",
+            "cwd": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/repo/runs/capture/refmac",
+            "env": {
+              "CBIN": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/diag_fixture/installed/bin",
+              "CCP4": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/diag_fixture/installed",
+              "CCP4_MASTER": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/diag_fixture",
+              "CCP4_OPEN": "UNKNOWN",
+              "CCP4_SCR": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/diag_fixture/installed/scr",
+              "CETC": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/diag_fixture/installed/etc",
+              "CINCL": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/diag_fixture/installed/include",
+              "CLIB": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/diag_fixture/installed/lib",
+              "CLIBD": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/diag_fixture/installed/lib/data",
+              "CLIBD_MON": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/diag_fixture/installed/lib/data/monomers/",
+              "DYLD_PRINT_LIBRARIES": "1",
+              "GFORTRAN_UNBUFFERED_PRECONNECTED": "Y",
+              "GITHUB_TOKEN": "ghp_secret_marker_never_persist_9911",
+              "MMCIFDIC": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/diag_fixture/installed/lib/ccp4/cif_mmdic.lib",
+              "OPENAI_API_KEY": "sk_secret_marker_never_persist_9913",
+              "PATH": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/diag_fixture/installed/bin:/usr/bin:/bin",
+              "REFMAC_DIAGNOSTIC_TRACE": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/repo/runs/capture/refmac/refmac_native_trace.jsonl",
+              "warpbin": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/diag_fixture/installed/arp_warp/bin",
+              "warpdoc": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/diag_fixture/installed/arp_warp/doc"
+            },
+            "executable": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/diag_fixture/build/subdir/refmac5",
+            "timeout": "900.0",
+            "xml_output": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/repo/runs/capture/refmac/refmac_xmlout.xml"
+          }
+        }
+      ],
+      "status": "passed",
+      "validated_fixture": {
+        "manifest": {
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c2-one-invocation/diag_fixture/diagnostic-profile.json",
+          "sha256": "79898318d405a11fe1b561eb18e1139b0570db80c3789055eb631cc6f9d4314d",
+          "size_bytes": 38024
+        },
+        "profile_id": "refmac_5_8_0431_instrumented_attempt4_v1"
+      }
+    },
+    {
+      "actual_trace_result": {
+        "bytes_read": 40,
+        "closed": false,
+        "descriptor_binding_note": "Opened with O_RDONLY (+ O_NOFOLLOW when available) and bound via pre/post fstat/lstat inode/device/size/mtime comparison; detects path replacement across the inspection window without claiming kernel-atomic protection against transient swaps.",
+        "envelope_only": true,
+        "errors": [
+          {
+            "byte_offset": 0,
+            "code": "missing_header_record",
+            "errno": null,
+            "exception_type": null,
+            "field": "record_type",
+            "line_number": 1,
+            "message": "First record must have record_type='header', got None",
+            "stage": "envelope_parse"
+          }
+        ],
+        "event_count": 0,
+        "expected_sha256": "12b05af0158ac6b127444beb9f7ba03ef1f108f4195dee3028e4a7e565bfe89b",
+        "expected_size_bytes": 40,
+        "first_failure": {
+          "byte_offset": 0,
+          "code": "missing_header_record",
+          "errno": null,
+          "exception_type": null,
+          "field": "record_type",
+          "line_number": 1,
+          "message": "First record must have record_type='header', got None",
+          "stage": "envelope_parse"
+        },
+        "footer_record_count": null,
+        "has_events": false,
+        "header": null,
+        "observed_sha256": "12b05af0158ac6b127444beb9f7ba03ef1f108f4195dee3028e4a7e565bfe89b",
+        "observed_size_bytes": 40,
+        "partial_sha256": null,
+        "partial_size_bytes": null,
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac_native_trace.jsonl",
+        "read_complete": true,
+        "record_count": 0,
+        "representation_header": null,
+        "schema_id": "protstruct_refmac_native_trace_v1",
+        "scientific_capture_established": false,
+        "scientific_eligibility_established": false,
+        "sha256_match": true,
+        "size_bytes_match": true,
+        "valid": false
+      },
+      "checks": [
+        {
+          "assertion": "Eight helper role entries",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: audit_1sar_retained_evidence.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: onesar_refmac.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: onesar_refmac_log.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: onesar_rerun.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: t03_reflection_retention.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: toolchain.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: refmac_diagnostic_profile.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: refmac_diagnostic_trace.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Exactly six positional and six named runner arguments",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Exact staged input and fixed output paths",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Literal seven stdin lines and final newline",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "900-second production timeout",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Explicit ccp4=False",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Exact cwd/XML/selected executable",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Only two fixed child activation settings added",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac.log",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac_xyzout.pdb",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac_hklout.mtz",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac_xmlout.xml",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac_native_trace.jsonl",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac.log",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac_hklout.mtz",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac_native_trace.jsonl",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac_xmlout.xml",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac_xyzout.pdb",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "All five raw observations precede profile",
+          "detail": {
+            "expected": [
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac.log",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac_hklout.mtz",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac_native_trace.jsonl",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac_xmlout.xml",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac_xyzout.pdb"
+            ],
+            "observed": [
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac.log",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac_hklout.mtz",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac_native_trace.jsonl",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac_xmlout.xml",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac_xyzout.pdb"
+            ]
+          },
+          "passed": true
+        },
+        {
+          "assertion": "Literal raw trace bytes still present before profile",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "All five raw observations precede trace",
+          "detail": {
+            "expected": [
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac.log",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac_hklout.mtz",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac_native_trace.jsonl",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac_xmlout.xml",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac_xyzout.pdb"
+            ],
+            "observed": [
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac.log",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac_hklout.mtz",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac_native_trace.jsonl",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac_xmlout.xml",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac_xyzout.pdb"
+            ]
+          },
+          "passed": true
+        },
+        {
+          "assertion": "Literal raw trace bytes still present before trace",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Trace inspector receives exact retained path and independent pins",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Exactly one real installed resolver call",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Exactly one runner call; no retry",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Both real audit boundaries reached once",
+          "detail": {
+            "profile": 1,
+            "trace": 1
+          },
+          "passed": true
+        },
+        {
+          "assertion": "Caller/sourced environments unchanged",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Persisted manifest equals actual error payload",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Persisted diagnostics equal actual error payload",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Publication pair complete",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Error diagnostics path binds pinned manifest reference",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Final persisted raw trace path/hash/size and bytes retained",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Diagnostic outer schema/stage retained",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual profile inspection error retained",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual malformed-trace findings retained",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Final persisted raw trace path/hash/size and bytes retained",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Diagnostic outer schema/stage retained",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual profile inspection error retained",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual malformed-trace findings retained",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Checkpoint schema/stage: pre_execution_checkpoint_json",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Checkpoint schema/stage: post_execution_checkpoint_json",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Installed identity remains distinct from selected diagnostic executable",
+          "detail": null,
+          "passed": true
+        }
+      ],
+      "collector_error": {
+        "message": "REFMAC5 collector failed at refmac_raw_outputs (RuntimeError): Missing, empty, unreadable, or symlinked REFMAC raw output or directory artifact(s): native_trace (invalid_native_trace_envelope (missing_header_record: First record must have record_type='header', got None))",
+        "traceback": "Traceback (most recent call last):\n  File \"/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector767-controls/collector_controls770.py\", line 484, in run_capture\n    plumbing._run_collector(\"capture\", runner, diagnostic_profile=fixture.profile,\n  File \"/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/test_onesar_refmac_diagnostic.py\", line 778, in _run_collector\n    return onesar_refmac.run_refmac_rfactor_operation(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/onesar_refmac.py\", line 13059, in run_refmac_rfactor_operation\n    raise err from None\nonesar_refmac.RefmacCollectorError: REFMAC5 collector failed at refmac_raw_outputs (RuntimeError): Missing, empty, unreadable, or symlinked REFMAC raw output or directory artifact(s): native_trace (invalid_native_trace_envelope (missing_header_record: First record must have record_type='header', got None))\n",
+        "type": "RefmacCollectorError"
+      },
+      "diagnostics_reference": {
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac_diagnostics.json",
+        "sha256": "3971481832f01daa5402dbe315ab70ed1776c1f4a2aae6dfa73005b1a0cadc9e",
+        "size_bytes": 924285
+      },
+      "events": [
+        "runner",
+        "raw:refmac.log",
+        "raw:refmac_xyzout.pdb",
+        "raw:refmac_hklout.mtz",
+        "raw:refmac_xmlout.xml",
+        "raw:refmac_native_trace.jsonl",
+        "raw:refmac.log",
+        "raw:refmac_hklout.mtz",
+        "raw:refmac_native_trace.jsonl",
+        "raw:refmac_xmlout.xml",
+        "raw:refmac_xyzout.pdb",
+        "profile_inspection",
+        "trace_inspection"
+      ],
+      "manifest_reference": {
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac_operation_manifest.json",
+        "sha256": "7fc7f74d76f1f823b49eb305196684ddd025fbb3e039675abfc825d10e2acc63",
+        "size_bytes": 968234
+      },
+      "name": "c3a-profile-error",
+      "raw_observations": {
+        "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac.log": {
+          "error": null,
+          "exists": true,
+          "is_regular_file": true,
+          "is_symlink": false,
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac.log",
+          "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac.log",
+          "sha256": "392992723c3a3f1f6f8368642bef28da317eacf5002556dd294e789e995449eb",
+          "size_bytes": 2054,
+          "within_refmac_dir": true
+        },
+        "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac_hklout.mtz": {
+          "error": null,
+          "exists": true,
+          "is_regular_file": true,
+          "is_symlink": false,
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac_hklout.mtz",
+          "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac_hklout.mtz",
+          "sha256": "6edbe54b2ec7b815f30b6bd20a7264a7c978721189670e39e20d876d9b4fece7",
+          "size_bytes": 176592,
+          "within_refmac_dir": true
+        },
+        "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac_native_trace.jsonl": {
+          "error": null,
+          "exists": true,
+          "is_regular_file": true,
+          "is_symlink": false,
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac_native_trace.jsonl",
+          "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac_native_trace.jsonl",
+          "sha256": "12b05af0158ac6b127444beb9f7ba03ef1f108f4195dee3028e4a7e565bfe89b",
+          "size_bytes": 40,
+          "within_refmac_dir": true
+        },
+        "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac_xmlout.xml": {
+          "error": null,
+          "exists": true,
+          "is_regular_file": true,
+          "is_symlink": false,
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac_xmlout.xml",
+          "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac_xmlout.xml",
+          "sha256": "afea40590ef6c30973b5e94b928f30c0c19a4de9c977d8bf035ab628861a330b",
+          "size_bytes": 14,
+          "within_refmac_dir": true
+        },
+        "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac_xyzout.pdb": {
+          "error": null,
+          "exists": true,
+          "is_regular_file": true,
+          "is_symlink": false,
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac_xyzout.pdb",
+          "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac_xyzout.pdb",
+          "sha256": "8cbc1650f8be5a3833f98833fa514ec7d490c2c3bb9aa930413abac05e2a510b",
+          "size_bytes": 135240,
+          "within_refmac_dir": true
+        }
+      },
+      "runner_calls": [
+        {
+          "args": [
+            "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/inputs/original_model.pdb",
+            "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/inputs/projected_observations.mtz",
+            "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac_xyzout.pdb",
+            "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac_hklout.mtz",
+            "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac.log",
+            "LABIN FP=F-obs SIGFP=SIGF-obs FREE=R-free-flags\nFREE 1\nREFI BREF MIXED\nNCYC 0\nMONI MANY\nLABOUT FC=FC PHIC=PHIC FWT=FWT PHWT=PHWT DELFWT=DELFWT PHDELWT=PHDELWT FOM=FOM\nEND\n"
+          ],
+          "kwargs": {
+            "ccp4": "False",
+            "cwd": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac",
+            "env": {
+              "CBIN": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/diag_fixture/installed/bin",
+              "CCP4": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/diag_fixture/installed",
+              "CCP4_MASTER": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/diag_fixture",
+              "CCP4_OPEN": "UNKNOWN",
+              "CCP4_SCR": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/diag_fixture/installed/scr",
+              "CETC": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/diag_fixture/installed/etc",
+              "CINCL": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/diag_fixture/installed/include",
+              "CLIB": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/diag_fixture/installed/lib",
+              "CLIBD": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/diag_fixture/installed/lib/data",
+              "CLIBD_MON": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/diag_fixture/installed/lib/data/monomers/",
+              "DYLD_PRINT_LIBRARIES": "1",
+              "GFORTRAN_UNBUFFERED_PRECONNECTED": "Y",
+              "GITHUB_TOKEN": "ghp_secret_marker_never_persist_9911",
+              "MMCIFDIC": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/diag_fixture/installed/lib/ccp4/cif_mmdic.lib",
+              "OPENAI_API_KEY": "sk_secret_marker_never_persist_9913",
+              "PATH": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/diag_fixture/installed/bin:/usr/bin:/bin",
+              "REFMAC_DIAGNOSTIC_TRACE": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac_native_trace.jsonl",
+              "warpbin": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/diag_fixture/installed/arp_warp/bin",
+              "warpdoc": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/diag_fixture/installed/arp_warp/doc"
+            },
+            "executable": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/diag_fixture/build/subdir/refmac5",
+            "timeout": "900.0",
+            "xml_output": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/repo/runs/capture/refmac/refmac_xmlout.xml"
+          }
+        }
+      ],
+      "status": "passed",
+      "validated_fixture": {
+        "manifest": {
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3a-profile-error/diag_fixture/diagnostic-profile.json",
+          "sha256": "23cf9bca7ccd96dbb13e30dbe0e82212ef2559974893fe16f28b8d73a22169fe",
+          "size_bytes": 38024
+        },
+        "profile_id": "refmac_5_8_0431_instrumented_attempt4_v1"
+      }
+    },
+    {
+      "actual_profile_result_verified": true,
+      "checks": [
+        {
+          "assertion": "Eight helper role entries",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: audit_1sar_retained_evidence.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: onesar_refmac.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: onesar_refmac_log.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: onesar_rerun.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: t03_reflection_retention.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: toolchain.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: refmac_diagnostic_profile.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: refmac_diagnostic_trace.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Exactly six positional and six named runner arguments",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Exact staged input and fixed output paths",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Literal seven stdin lines and final newline",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "900-second production timeout",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Explicit ccp4=False",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Exact cwd/XML/selected executable",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Only two fixed child activation settings added",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac.log",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac_xyzout.pdb",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac_hklout.mtz",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac_xmlout.xml",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac_native_trace.jsonl",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac.log",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac_hklout.mtz",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac_native_trace.jsonl",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac_xmlout.xml",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac_xyzout.pdb",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "All five raw observations precede profile",
+          "detail": {
+            "expected": [
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac.log",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac_hklout.mtz",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac_native_trace.jsonl",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac_xmlout.xml",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac_xyzout.pdb"
+            ],
+            "observed": [
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac.log",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac_hklout.mtz",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac_native_trace.jsonl",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac_xmlout.xml",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac_xyzout.pdb"
+            ]
+          },
+          "passed": true
+        },
+        {
+          "assertion": "Literal raw trace bytes still present before profile",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Real profile recheck verifies the unchanged fixture",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "All five raw observations precede trace",
+          "detail": {
+            "expected": [
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac.log",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac_hklout.mtz",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac_native_trace.jsonl",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac_xmlout.xml",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac_xyzout.pdb"
+            ],
+            "observed": [
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac.log",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac_hklout.mtz",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac_native_trace.jsonl",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac_xmlout.xml",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac_xyzout.pdb"
+            ]
+          },
+          "passed": true
+        },
+        {
+          "assertion": "Literal raw trace bytes still present before trace",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Trace inspector receives exact retained path and independent pins",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Exactly one real installed resolver call",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Exactly one runner call; no retry",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Both real audit boundaries reached once",
+          "detail": {
+            "profile": 1,
+            "trace": 1
+          },
+          "passed": true
+        },
+        {
+          "assertion": "Caller/sourced environments unchanged",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Persisted manifest equals actual error payload",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Persisted diagnostics equal actual error payload",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Publication pair complete",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Error diagnostics path binds pinned manifest reference",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Final persisted raw trace path/hash/size and bytes retained",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Diagnostic outer schema/stage retained",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Profile recheck continues and verifies unchanged fixture",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual trace inspection exception retained",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Final persisted raw trace path/hash/size and bytes retained",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Diagnostic outer schema/stage retained",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Profile recheck continues and verifies unchanged fixture",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual trace inspection exception retained",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Checkpoint schema/stage: pre_execution_checkpoint_json",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Checkpoint schema/stage: post_execution_checkpoint_json",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Installed identity remains distinct from selected diagnostic executable",
+          "detail": null,
+          "passed": true
+        }
+      ],
+      "collector_error": {
+        "message": "REFMAC5 collector failed at refmac_raw_outputs (ValueError): Missing, empty, unreadable, or symlinked REFMAC raw output or directory artifact(s): native_trace (invalid_native_trace_envelope (envelope_inspection_exception: ValueError: control767-later-trace))",
+        "traceback": "Traceback (most recent call last):\n  File \"/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/onesar_refmac.py\", line 2867, in _inspect_retained_native_trace_envelope\n    envelope = refmac_diagnostic_trace.inspect_native_trace_envelope(\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/marcin/.pyenv/versions/3.12.11/lib/python3.12/unittest/mock.py\", line 1139, in __call__\n    return self._mock_call(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/marcin/.pyenv/versions/3.12.11/lib/python3.12/unittest/mock.py\", line 1143, in _mock_call\n    return self._execute_mock_call(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/marcin/.pyenv/versions/3.12.11/lib/python3.12/unittest/mock.py\", line 1204, in _execute_mock_call\n    result = effect(*args, **kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector767-controls/collector_controls770.py\", line 465, in observe_trace\n    raise trace_error\nValueError: control767-later-trace\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector767-controls/collector_controls770.py\", line 484, in run_capture\n    plumbing._run_collector(\"capture\", runner, diagnostic_profile=fixture.profile,\n  File \"/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/test_onesar_refmac_diagnostic.py\", line 778, in _run_collector\n    return onesar_refmac.run_refmac_rfactor_operation(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/onesar_refmac.py\", line 13058, in run_refmac_rfactor_operation\n    raise err from first_caught_exception\nonesar_refmac.RefmacCollectorError: REFMAC5 collector failed at refmac_raw_outputs (ValueError): Missing, empty, unreadable, or symlinked REFMAC raw output or directory artifact(s): native_trace (invalid_native_trace_envelope (envelope_inspection_exception: ValueError: control767-later-trace))\n",
+        "type": "RefmacCollectorError"
+      },
+      "diagnostics_reference": {
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac_diagnostics.json",
+        "sha256": "deb0276ba73d5a00df916780749533153407123d105c72ba0846f12f9435604e",
+        "size_bytes": 3199507
+      },
+      "events": [
+        "runner",
+        "raw:refmac.log",
+        "raw:refmac_xyzout.pdb",
+        "raw:refmac_hklout.mtz",
+        "raw:refmac_xmlout.xml",
+        "raw:refmac_native_trace.jsonl",
+        "raw:refmac.log",
+        "raw:refmac_hklout.mtz",
+        "raw:refmac_native_trace.jsonl",
+        "raw:refmac_xmlout.xml",
+        "raw:refmac_xyzout.pdb",
+        "profile_inspection",
+        "trace_inspection"
+      ],
+      "manifest_reference": {
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac_operation_manifest.json",
+        "sha256": "50b005c7dd14c913540b1ad6b17fced78a6d2644476f4cbcfb35964574c12666",
+        "size_bytes": 3243397
+      },
+      "name": "c3b-trace-error",
+      "raw_observations": {
+        "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac.log": {
+          "error": null,
+          "exists": true,
+          "is_regular_file": true,
+          "is_symlink": false,
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac.log",
+          "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac.log",
+          "sha256": "392992723c3a3f1f6f8368642bef28da317eacf5002556dd294e789e995449eb",
+          "size_bytes": 2054,
+          "within_refmac_dir": true
+        },
+        "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac_hklout.mtz": {
+          "error": null,
+          "exists": true,
+          "is_regular_file": true,
+          "is_symlink": false,
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac_hklout.mtz",
+          "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac_hklout.mtz",
+          "sha256": "6edbe54b2ec7b815f30b6bd20a7264a7c978721189670e39e20d876d9b4fece7",
+          "size_bytes": 176592,
+          "within_refmac_dir": true
+        },
+        "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac_native_trace.jsonl": {
+          "error": null,
+          "exists": true,
+          "is_regular_file": true,
+          "is_symlink": false,
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac_native_trace.jsonl",
+          "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac_native_trace.jsonl",
+          "sha256": "12b05af0158ac6b127444beb9f7ba03ef1f108f4195dee3028e4a7e565bfe89b",
+          "size_bytes": 40,
+          "within_refmac_dir": true
+        },
+        "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac_xmlout.xml": {
+          "error": null,
+          "exists": true,
+          "is_regular_file": true,
+          "is_symlink": false,
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac_xmlout.xml",
+          "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac_xmlout.xml",
+          "sha256": "afea40590ef6c30973b5e94b928f30c0c19a4de9c977d8bf035ab628861a330b",
+          "size_bytes": 14,
+          "within_refmac_dir": true
+        },
+        "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac_xyzout.pdb": {
+          "error": null,
+          "exists": true,
+          "is_regular_file": true,
+          "is_symlink": false,
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac_xyzout.pdb",
+          "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac_xyzout.pdb",
+          "sha256": "8cbc1650f8be5a3833f98833fa514ec7d490c2c3bb9aa930413abac05e2a510b",
+          "size_bytes": 135240,
+          "within_refmac_dir": true
+        }
+      },
+      "runner_calls": [
+        {
+          "args": [
+            "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/inputs/original_model.pdb",
+            "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/inputs/projected_observations.mtz",
+            "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac_xyzout.pdb",
+            "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac_hklout.mtz",
+            "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac.log",
+            "LABIN FP=F-obs SIGFP=SIGF-obs FREE=R-free-flags\nFREE 1\nREFI BREF MIXED\nNCYC 0\nMONI MANY\nLABOUT FC=FC PHIC=PHIC FWT=FWT PHWT=PHWT DELFWT=DELFWT PHDELWT=PHDELWT FOM=FOM\nEND\n"
+          ],
+          "kwargs": {
+            "ccp4": "False",
+            "cwd": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac",
+            "env": {
+              "CBIN": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/diag_fixture/installed/bin",
+              "CCP4": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/diag_fixture/installed",
+              "CCP4_MASTER": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/diag_fixture",
+              "CCP4_OPEN": "UNKNOWN",
+              "CCP4_SCR": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/diag_fixture/installed/scr",
+              "CETC": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/diag_fixture/installed/etc",
+              "CINCL": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/diag_fixture/installed/include",
+              "CLIB": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/diag_fixture/installed/lib",
+              "CLIBD": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/diag_fixture/installed/lib/data",
+              "CLIBD_MON": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/diag_fixture/installed/lib/data/monomers/",
+              "DYLD_PRINT_LIBRARIES": "1",
+              "GFORTRAN_UNBUFFERED_PRECONNECTED": "Y",
+              "GITHUB_TOKEN": "ghp_secret_marker_never_persist_9911",
+              "MMCIFDIC": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/diag_fixture/installed/lib/ccp4/cif_mmdic.lib",
+              "OPENAI_API_KEY": "sk_secret_marker_never_persist_9913",
+              "PATH": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/diag_fixture/installed/bin:/usr/bin:/bin",
+              "REFMAC_DIAGNOSTIC_TRACE": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac_native_trace.jsonl",
+              "warpbin": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/diag_fixture/installed/arp_warp/bin",
+              "warpdoc": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/diag_fixture/installed/arp_warp/doc"
+            },
+            "executable": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/diag_fixture/build/subdir/refmac5",
+            "timeout": "900.0",
+            "xml_output": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/repo/runs/capture/refmac/refmac_xmlout.xml"
+          }
+        }
+      ],
+      "status": "passed",
+      "validated_fixture": {
+        "manifest": {
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c3b-trace-error/diag_fixture/diagnostic-profile.json",
+          "sha256": "5a7511460c7d9ff27800bee24afce4952c4bae8f8d4ff7892f270f5fc0287130",
+          "size_bytes": 37800
+        },
+        "profile_id": "refmac_5_8_0431_instrumented_attempt4_v1"
+      }
+    },
+    {
+      "checks": [
+        {
+          "assertion": "Eight helper role entries",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: audit_1sar_retained_evidence.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: onesar_refmac.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: onesar_refmac_log.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: onesar_rerun.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: t03_reflection_retention.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: toolchain.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: refmac_diagnostic_profile.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Fixture role joins actual imported helper: refmac_diagnostic_trace.py",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Exactly six positional and six named runner arguments",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Exact staged input and fixed output paths",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Literal seven stdin lines and final newline",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "900-second production timeout",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Explicit ccp4=False",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Exact cwd/XML/selected executable",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Only two fixed child activation settings added",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac.log",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac_xyzout.pdb",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac_hklout.mtz",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac_xmlout.xml",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac_native_trace.jsonl",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac.log",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac_hklout.mtz",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac_native_trace.jsonl",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac_xmlout.xml",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual raw observation matches independent bytes: refmac_xyzout.pdb",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "All five raw observations precede profile",
+          "detail": {
+            "expected": [
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac.log",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac_hklout.mtz",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac_native_trace.jsonl",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac_xmlout.xml",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac_xyzout.pdb"
+            ],
+            "observed": [
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac.log",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac_hklout.mtz",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac_native_trace.jsonl",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac_xmlout.xml",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac_xyzout.pdb"
+            ]
+          },
+          "passed": true
+        },
+        {
+          "assertion": "Literal raw trace bytes still present before profile",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "All five raw observations precede trace",
+          "detail": {
+            "expected": [
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac.log",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac_hklout.mtz",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac_native_trace.jsonl",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac_xmlout.xml",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac_xyzout.pdb"
+            ],
+            "observed": [
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac.log",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac_hklout.mtz",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac_native_trace.jsonl",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac_xmlout.xml",
+              "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac_xyzout.pdb"
+            ]
+          },
+          "passed": true
+        },
+        {
+          "assertion": "Literal raw trace bytes still present before trace",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Trace inspector receives exact retained path and independent pins",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Exactly one real installed resolver call",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Exactly one runner call; no retry",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Both real audit boundaries reached once",
+          "detail": {
+            "profile": 1,
+            "trace": 1
+          },
+          "passed": true
+        },
+        {
+          "assertion": "Caller/sourced environments unchanged",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Persisted manifest equals actual error payload",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Persisted diagnostics equal actual error payload",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Publication pair complete",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Error diagnostics path binds pinned manifest reference",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Final persisted raw trace path/hash/size and bytes retained",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Diagnostic outer schema/stage retained",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual profile inspection error retained",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual trace inspection exception retained",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Final persisted raw trace path/hash/size and bytes retained",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Diagnostic outer schema/stage retained",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual profile inspection error retained",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Actual trace inspection exception retained",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Checkpoint schema/stage: pre_execution_checkpoint_json",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Checkpoint schema/stage: post_execution_checkpoint_json",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Installed identity remains distinct from selected diagnostic executable",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Original runner exception remains primary and explicit cause",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Original profile exception retained in aligned mutation-cause list",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Both original later inspection objects retained",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Persisted failures retain primary and both later channels",
+          "detail": [
+            "refmac_runner_invocation",
+            "refmac_raw_outputs",
+            "verify_input_immutability"
+          ],
+          "passed": true
+        },
+        {
+          "assertion": "Persisted failures retain primary and both later channels",
+          "detail": [
+            "refmac_runner_invocation",
+            "refmac_raw_outputs",
+            "verify_input_immutability"
+          ],
+          "passed": true
+        }
+      ],
+      "collector_error": {
+        "message": "REFMAC5 collector failed at refmac_runner_invocation (RuntimeError): control767-primary-runner",
+        "traceback": "Traceback (most recent call last):\n  File \"/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/onesar_refmac.py\", line 9526, in run_refmac_rfactor_operation\n    completed = active_runner(\n                ^^^^^^^^^^^^^^\n  File \"/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector767-controls/collector_controls770.py\", line 421, in runner\n    raise runner_error\nRuntimeError: control767-primary-runner\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector767-controls/collector_controls770.py\", line 484, in run_capture\n    plumbing._run_collector(\"capture\", runner, diagnostic_profile=fixture.profile,\n  File \"/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/test_onesar_refmac_diagnostic.py\", line 778, in _run_collector\n    return onesar_refmac.run_refmac_rfactor_operation(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/onesar_refmac.py\", line 13058, in run_refmac_rfactor_operation\n    raise err from first_caught_exception\nonesar_refmac.RefmacCollectorError: REFMAC5 collector failed at refmac_runner_invocation (RuntimeError): control767-primary-runner\n",
+        "type": "RefmacCollectorError"
+      },
+      "diagnostics_reference": {
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac_diagnostics.json",
+        "sha256": "fbad355a44fb6fa1e1cac3f79b5f793372c9a52cb750c4fda26c248d3f23b15c",
+        "size_bytes": 922404
+      },
+      "events": [
+        "runner",
+        "raw:refmac.log",
+        "raw:refmac_xyzout.pdb",
+        "raw:refmac_hklout.mtz",
+        "raw:refmac_xmlout.xml",
+        "raw:refmac_native_trace.jsonl",
+        "raw:refmac.log",
+        "raw:refmac_hklout.mtz",
+        "raw:refmac_native_trace.jsonl",
+        "raw:refmac_xmlout.xml",
+        "raw:refmac_xyzout.pdb",
+        "profile_inspection",
+        "trace_inspection"
+      ],
+      "manifest_reference": {
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac_operation_manifest.json",
+        "sha256": "5438c46c3ae12a631eca2da764539ff1f93691e2d2a7f3fb12db21a97422d2ee",
+        "size_bytes": 966383
+      },
+      "name": "c4-combined-errors",
+      "raw_observations": {
+        "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac.log": {
+          "error": null,
+          "exists": true,
+          "is_regular_file": true,
+          "is_symlink": false,
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac.log",
+          "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac.log",
+          "sha256": "392992723c3a3f1f6f8368642bef28da317eacf5002556dd294e789e995449eb",
+          "size_bytes": 2054,
+          "within_refmac_dir": true
+        },
+        "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac_hklout.mtz": {
+          "error": null,
+          "exists": true,
+          "is_regular_file": true,
+          "is_symlink": false,
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac_hklout.mtz",
+          "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac_hklout.mtz",
+          "sha256": "6edbe54b2ec7b815f30b6bd20a7264a7c978721189670e39e20d876d9b4fece7",
+          "size_bytes": 176592,
+          "within_refmac_dir": true
+        },
+        "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac_native_trace.jsonl": {
+          "error": null,
+          "exists": true,
+          "is_regular_file": true,
+          "is_symlink": false,
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac_native_trace.jsonl",
+          "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac_native_trace.jsonl",
+          "sha256": "12b05af0158ac6b127444beb9f7ba03ef1f108f4195dee3028e4a7e565bfe89b",
+          "size_bytes": 40,
+          "within_refmac_dir": true
+        },
+        "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac_xmlout.xml": {
+          "error": null,
+          "exists": true,
+          "is_regular_file": true,
+          "is_symlink": false,
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac_xmlout.xml",
+          "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac_xmlout.xml",
+          "sha256": "afea40590ef6c30973b5e94b928f30c0c19a4de9c977d8bf035ab628861a330b",
+          "size_bytes": 14,
+          "within_refmac_dir": true
+        },
+        "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac_xyzout.pdb": {
+          "error": null,
+          "exists": true,
+          "is_regular_file": true,
+          "is_symlink": false,
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac_xyzout.pdb",
+          "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac_xyzout.pdb",
+          "sha256": "8cbc1650f8be5a3833f98833fa514ec7d490c2c3bb9aa930413abac05e2a510b",
+          "size_bytes": 135240,
+          "within_refmac_dir": true
+        }
+      },
+      "runner_calls": [
+        {
+          "args": [
+            "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/inputs/original_model.pdb",
+            "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/inputs/projected_observations.mtz",
+            "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac_xyzout.pdb",
+            "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac_hklout.mtz",
+            "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac.log",
+            "LABIN FP=F-obs SIGFP=SIGF-obs FREE=R-free-flags\nFREE 1\nREFI BREF MIXED\nNCYC 0\nMONI MANY\nLABOUT FC=FC PHIC=PHIC FWT=FWT PHWT=PHWT DELFWT=DELFWT PHDELWT=PHDELWT FOM=FOM\nEND\n"
+          ],
+          "kwargs": {
+            "ccp4": "False",
+            "cwd": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac",
+            "env": {
+              "CBIN": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/diag_fixture/installed/bin",
+              "CCP4": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/diag_fixture/installed",
+              "CCP4_MASTER": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/diag_fixture",
+              "CCP4_OPEN": "UNKNOWN",
+              "CCP4_SCR": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/diag_fixture/installed/scr",
+              "CETC": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/diag_fixture/installed/etc",
+              "CINCL": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/diag_fixture/installed/include",
+              "CLIB": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/diag_fixture/installed/lib",
+              "CLIBD": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/diag_fixture/installed/lib/data",
+              "CLIBD_MON": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/diag_fixture/installed/lib/data/monomers/",
+              "DYLD_PRINT_LIBRARIES": "1",
+              "GFORTRAN_UNBUFFERED_PRECONNECTED": "Y",
+              "GITHUB_TOKEN": "ghp_secret_marker_never_persist_9911",
+              "MMCIFDIC": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/diag_fixture/installed/lib/ccp4/cif_mmdic.lib",
+              "OPENAI_API_KEY": "sk_secret_marker_never_persist_9913",
+              "PATH": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/diag_fixture/installed/bin:/usr/bin:/bin",
+              "REFMAC_DIAGNOSTIC_TRACE": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac_native_trace.jsonl",
+              "warpbin": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/diag_fixture/installed/arp_warp/bin",
+              "warpdoc": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/diag_fixture/installed/arp_warp/doc"
+            },
+            "executable": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/diag_fixture/build/subdir/refmac5",
+            "timeout": "900.0",
+            "xml_output": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/repo/runs/capture/refmac/refmac_xmlout.xml"
+          }
+        }
+      ],
+      "status": "passed",
+      "validated_fixture": {
+        "manifest": {
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01/c4-combined-errors/diag_fixture/diagnostic-profile.json",
+          "sha256": "ebfc0b950010d56da7f9a263fd68c35c48c2e63a321b5fa59782bda886950556",
+          "size_bytes": 38136
+        },
+        "profile_id": "refmac_5_8_0431_instrumented_attempt4_v1"
+      }
+    },
+    {
+      "checks": [
+        {
+          "assertion": "Specific legacy refusal for schema 2",
+          "detail": "refmac_operation_manifest: expected integer schema_version == 1, got 2",
+          "passed": true
+        },
+        {
+          "assertion": "Consumer input unchanged and hash-consistent",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Specific legacy refusal for schema 1",
+          "detail": "refmac_operation_manifest.collector_stage: expected 'stage2_invocation_raw_retention_log_parse_and_output_audits', got 'instrumented_native_trace_capture_v1'",
+          "passed": true
+        },
+        {
+          "assertion": "Stage refusal identifies both literal stages",
+          "detail": null,
+          "passed": true
+        },
+        {
+          "assertion": "Consumer input unchanged and hash-consistent",
+          "detail": null,
+          "passed": true
+        }
+      ],
+      "events": [],
+      "name": "c5-consumer",
+      "schema_1_error": {
+        "message": "refmac_operation_manifest.collector_stage: expected 'stage2_invocation_raw_retention_log_parse_and_output_audits', got 'instrumented_native_trace_capture_v1'",
+        "traceback": "Traceback (most recent call last):\n  File \"/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector767-controls/collector_controls770.py\", line 563, in run_consumer\n    records.verify_retained_refmac_rfactor_evidence(\n  File \"/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/onesar_records.py\", line 4035, in verify_retained_refmac_rfactor_evidence\n    return _verify_retained_refmac_rfactor_evidence_impl(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/onesar_records.py\", line 3120, in _verify_retained_refmac_rfactor_evidence_impl\n    raise RefmacRetainedVerificationError(\nonesar_records.RefmacRetainedVerificationError: refmac_operation_manifest.collector_stage: expected 'stage2_invocation_raw_retention_log_parse_and_output_audits', got 'instrumented_native_trace_capture_v1'\n",
+        "type": "RefmacRetainedVerificationError"
+      },
+      "schema_2_error": {
+        "message": "refmac_operation_manifest: expected integer schema_version == 1, got 2",
+        "traceback": "Traceback (most recent call last):\n  File \"/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector767-controls/collector_controls770.py\", line 563, in run_consumer\n    records.verify_retained_refmac_rfactor_evidence(\n  File \"/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/onesar_records.py\", line 4035, in verify_retained_refmac_rfactor_evidence\n    return _verify_retained_refmac_rfactor_evidence_impl(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/onesar_records.py\", line 3115, in _verify_retained_refmac_rfactor_evidence_impl\n    raise RefmacRetainedVerificationError(\nonesar_records.RefmacRetainedVerificationError: refmac_operation_manifest: expected integer schema_version == 1, got 2\n",
+        "type": "RefmacRetainedVerificationError"
+      },
+      "status": "passed"
+    }
+  ],
+  "denied_events": [],
+  "imported_candidate_sources": {
+    "audit_1sar_retained_evidence": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/audit_1sar_retained_evidence.py",
+      "sha256": "8ed22c08212174057c3dea1d1ece57fb525c211fc9c4507add055f39f10fb7b5",
+      "size_bytes": 18087
+    },
+    "onesar_phenix_measure": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/onesar_phenix_measure.py",
+      "sha256": "693a205d2826e0ea6db0630d432dd1ce6ef68890634ac8ad254a0c411c242292",
+      "size_bytes": 73170
+    },
+    "onesar_records": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/onesar_records.py",
+      "sha256": "beba616fa50c8312c009f56451747356c6f480de6d333791422753936db56c52",
+      "size_bytes": 420403
+    },
+    "onesar_refmac": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/onesar_refmac.py",
+      "sha256": "98ce55f63c07881425bfade47b39e59e09f0224780b70b65ac4195193a9385a9",
+      "size_bytes": 564972
+    },
+    "onesar_refmac_log": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/onesar_refmac_log.py",
+      "sha256": "31908f40708ce2f8e0abc68b4b9f22b08ef0f63df0a9c7907141b82f1323d458",
+      "size_bytes": 92207
+    },
+    "onesar_rerun": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/onesar_rerun.py",
+      "sha256": "13fac3428be7ab2a3bc43dfa8b720efdad2e7262d212b17ca7de36b44e264e81",
+      "size_bytes": 223088
+    },
+    "refinement_cache": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/refinement_cache.py",
+      "sha256": "512137dcb8a1df7b3e8778131f7d7619dd643d1054fc6c067a44809925ddb119",
+      "size_bytes": 19345
+    },
+    "refmac_diagnostic_profile": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/refmac_diagnostic_profile.py",
+      "sha256": "082b4703d75150e02ae253bb4a262cf333f49f91d89fd49c576548b8667b2d42",
+      "size_bytes": 320519
+    },
+    "refmac_diagnostic_trace": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/refmac_diagnostic_trace.py",
+      "sha256": "984aced8d794eb4454c6fab83e9d3202b497482f054698a075549d2b5a69a69f",
+      "size_bytes": 57659
+    },
+    "t03_reflection_retention": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/t03_reflection_retention.py",
+      "sha256": "fdf2b3650f844d6dd602b0b695586bff2b25a5b9202748b1f1c07b79ff353d4a",
+      "size_bytes": 10218
+    },
+    "t13_data_quality": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/t13_data_quality.py",
+      "sha256": "9cf55c75fe51a9711f7df97138ba2404e2144dcc7c7b1c4c6c9419b78191355a",
+      "size_bytes": 23083
+    },
+    "test_onesar_refmac_diagnostic": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/test_onesar_refmac_diagnostic.py",
+      "sha256": "a7be3772ceaa6702a0d73be4e26d362b2f334913193b8f769e470e13100a4b70",
+      "size_bytes": 116594
+    },
+    "toolchain": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-focused-01/scripts/toolchain.py",
+      "sha256": "9d2d1e2c36a0dee1bede3252015384e5db70e5124e7b5e346c23558804eaf095",
+      "size_bytes": 40876
+    }
+  },
+  "pins_document": {
+    "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/collector781-independent01-source-inventory.json",
+    "sha256": "f0a9b57a0e8662549203886d209979c2a69d6e4a245723da67278e09c0ede2fe",
+    "size_bytes": 26591
+  },
+  "scope": "C1-C5 bounded synthetic controls; no scientific/native acceptance",
+  "source_inventory_unchanged": true,
+  "status": "passed"
+}

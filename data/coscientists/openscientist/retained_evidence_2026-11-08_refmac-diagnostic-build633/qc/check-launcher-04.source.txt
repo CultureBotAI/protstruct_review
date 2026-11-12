@@ -1,0 +1,371 @@
+"""PRIMARY synthetic one-call/retention tests; no collector/producer imports."""
+from pathlib import Path
+import hashlib
+import copy
+import io
+from contextlib import redirect_stdout
+import importlib.util
+import json
+import os
+import sys
+from types import SimpleNamespace
+from unittest.mock import patch
+
+E = Path(__file__).resolve().parent
+OUT = E / 'launcher-selftest-04'
+OUT.mkdir()
+source = E / 'launch-attempt04.py'
+source_raw = source.read_bytes()
+checker_raw = Path(__file__).read_bytes()
+assert not sys.flags.optimize
+def deny_process(event, args):
+    if event in {'subprocess.Popen', 'os.system', 'os.posix_spawn', 'os.fork', 'socket.connect', 'socket.bind'}:
+        raise RuntimeError('Prohibited execution/network in inert launcher test: ' + event)
+sys.addaudithook(deny_process)
+spec = importlib.util.spec_from_file_location('primary_attempt4_launcher_test', source)
+m = importlib.util.module_from_spec(spec)
+exec(compile(source_raw, str(source), "exec"), m.__dict__)
+fixture = OUT / 'pinned-input'
+fixture.write_bytes(b'synthetic launcher pin\n')
+git_baseline = {'head': 'a'*40, 'branch': m.BRANCH, 'worktree': str(m.WT), 'status': ''}
+start = {'started_at': m.now(), 'launch_file_pins': [m.pin(fixture)], 'git_preclaim': git_baseline}
+def run_once(*args, **kwargs):
+    kwargs.setdefault('git_observer', lambda **k: {n:v for n,v in git_baseline.items() if n != 'status'})
+    return m.run_claimed_once(*args, **kwargs)
+profile = object()
+checks = []
+calls = []
+
+def fake_collector(root, **kwargs):
+    calls.append((root, kwargs))
+    assert kwargs == {'subject_id': 'R4', 'repo_root': m.WT, 'timeout': 900.0,
+                      'require_no_protstruct_overrides': True, 'runner': None,
+                      'diagnostic_profile': profile}
+    return {'collector_succeeded': True, 'canary_admission_eligible': False}
+
+r = run_once(start, fake_collector, profile, claim=OUT/'success', root=OUT/'synthetic-root')
+assert len(calls) == 1 and calls[0][0] == OUT/'synthetic-root'
+assert r['collector_call_count'] == 1 and r['collector_returned'] and r['launch_files_unchanged']
+assert not r['scientific_admission_established']
+checks.append('one_call_exact_kwargs_false_admission')
+try:
+    run_once(start, fake_collector, profile, claim=OUT/'success', root=OUT/'synthetic-root')
+except FileExistsError:
+    pass
+else:
+    raise AssertionError('Repeated claim accepted')
+assert len(calls) == 1
+checks.append('duplicate_claim_zero_additional_calls')
+
+class CollectorFailure(RuntimeError):
+    failed_stage = 'synthetic_native_failure'
+    returncode = 7
+    manifest_payload = {'raw_trace': 'retained synthetic bytes', 'status': 'failed'}
+    diagnostics_payload = {'status': 'failed', 'first_failure': 'synthetic'}
+
+def failing_collector(root, **kwargs):
+    fake_collector(root, **kwargs)
+    raise CollectorFailure('original collector error')
+
+try:
+    run_once(start, failing_collector, profile, claim=OUT/'failure', root=OUT/'synthetic-failure-root')
+except CollectorFailure:
+    pass
+else:
+    raise AssertionError('Collector error swallowed')
+t = json.loads((OUT/'failure/terminal.json').read_text())
+assert t['collector_call_count'] == 1 and not t['collector_returned']
+assert t['error']['returncode'] == 7
+for name in ('manifest_payload', 'diagnostics_payload'):
+    assert json.loads((OUT/'failure'/(name+'.json')).read_text()) == getattr(CollectorFailure, name)
+checks.append('collector_error_payloads_and_terminal_retained')
+
+def drifting_collector(root, **kwargs):
+    result = fake_collector(root, **kwargs)
+    fixture.write_bytes(b'changed synthetic pin\n')
+    return result
+
+try:
+    run_once(start, drifting_collector, profile, claim=OUT/'drift', root=OUT/'synthetic-drift-root')
+except RuntimeError as exc:
+    assert 'identity changed' in str(exc)
+else:
+    raise AssertionError('Post-pin drift accepted')
+assert json.loads((OUT/'drift/terminal.json').read_text())['launch_files_unchanged'] is False
+checks.append('post_pin_drift_retained_and_refused')
+fixture.write_bytes(b'synthetic launcher pin\n')
+original_write = m.write_new
+def terminal_write_failure(path, payload):
+    if path.name == 'terminal.json':
+        raise OSError('synthetic terminal persistence error')
+    return original_write(path, payload)
+
+before = len(calls)
+with patch.object(m, 'write_new', terminal_write_failure):
+    try:
+        run_once(start, failing_collector, profile, claim=OUT/'terminal-failure', root=OUT/'synthetic-terminal-root')
+    except CollectorFailure as exc:
+        assert isinstance(exc.__cause__, OSError)
+    else:
+        raise AssertionError('Original collector failure lost')
+assert len(calls) == before + 1
+checks.append('terminal_write_failure_preserves_original_error_no_retry')
+
+observation = {'removed_for_next_isolated_child': {'LD_LIBRARY_PATH': 'known synthetic legacy value'}}
+with patch.dict(os.environ, {'HOME': '/synthetic', 'PATH': '/synthetic', 'LD_LIBRARY_PATH': 'known synthetic legacy value'}, clear=True):
+    isolation = m.isolate_environment(observation)
+    assert isolation['removed'] == {'LD_LIBRARY_PATH': 'known synthetic legacy value'}
+    assert os.environ['PATH'] == m.FIXED_PATH and 'LD_LIBRARY_PATH' not in os.environ
+checks.append('explicit_known_child_only_environment_isolation')
+for key, value in [('LD_LIBRARY_PATH', 'unknown'), ('LD_FOO', ''), ('DYLD_INSERT_LIBRARIES', ''), ('BASH_ENV', ''), ('ENV', ''), ('SFOUT', ''), ('FCFOUT', ''), ('REFMAC_DIAGNOSTIC_TRACE', ''), ('GIT_DIR',''), ('GIT_WORK_TREE',''), ('GIT_INDEX_FILE',''), ('GIT_CONFIG_PARAMETERS',''), ('GIT_CONFIG_KEY_0','')]:
+    with patch.dict(os.environ, {'PATH': '/synthetic', key: value}, clear=True):
+        before_env = dict(os.environ)
+        try:
+            m.isolate_environment(observation)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(key)
+        assert dict(os.environ) == before_env
+    checks.append('reject_environment_'+key)
+for suffix in ['bad-sha', 'bool-size']:
+    row = {k:v for k,v in m.pin(fixture).items() if k != 'resolved_path'}
+    row['sha256' if suffix=='bad-sha' else 'size_bytes'] = '0'*64 if suffix=='bad-sha' else True
+    try:
+        m.checked_pin(row)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError(suffix)
+    checks.append('reject_pin_'+suffix)
+
+def result_write_failure(path, payload):
+    if path.name == 'collector-result.json':
+        raise OSError('synthetic result persistence error')
+    return original_write(path, payload)
+
+before = len(calls)
+with patch.object(m, 'write_new', result_write_failure):
+    try:
+        run_once(start, fake_collector, profile, claim=OUT/'result-failure', root=OUT/'synthetic-result-root')
+    except OSError:
+        pass
+    else:
+        raise AssertionError('Result persistence error swallowed')
+terminal = json.loads((OUT/'result-failure/terminal.json').read_text())
+assert len(calls) == before + 1 and terminal['collector_returned'] is True
+assert terminal['error']['launcher_stage'] == 'persist_collector_result'
+assert terminal['unpersisted_collector_result']['collector_succeeded'] is True
+assert terminal['collector_result_retention_error']['type'] == 'OSError'
+checks.append('true_collector_return_and_payload_after_result_write_error')
+
+for case in ['head_drift', 'git_read_error']:
+    def observe(**kwargs):
+        assert kwargs == {'include_status': False}
+        if case == 'git_read_error':
+            raise OSError('synthetic Git read failure')
+        return {'head': 'b'*40, 'branch': m.BRANCH, 'worktree': str(m.WT)}
+    before = len(calls)
+    try:
+        run_once(start, fake_collector, profile, claim=OUT/case, root=OUT/('synthetic-'+case), git_observer=observe)
+    except RuntimeError as exc:
+        assert 'Git state' in str(exc)
+    else:
+        raise AssertionError('Git drift/error accepted')
+    terminal = json.loads((OUT/case/'terminal.json').read_text())
+    assert len(calls) == before + 1 and terminal['git_postflight']['unchanged'] is False
+    checks.append('postflight_'+case)
+
+with patch.object(m.subprocess, 'check_output', return_value='synthetic\n') as git_call:
+    assert m.git('rev-parse', 'HEAD') == 'synthetic'
+    args, kwargs = git_call.call_args
+    assert args[0][:4] == ['/usr/bin/git', '--no-optional-locks', '-c', 'core.fsmonitor=false']
+    assert kwargs['env']['PATH'] == m.FIXED_PATH and kwargs['env']['GIT_ALLOW_PROTOCOL'] == ''
+    assert 'GIT_DIR' not in kwargs['env'] and kwargs['env']['GIT_CONFIG_GLOBAL'] == '/dev/null'
+checks.append('fixed_guarded_git_subprocess_selection')
+
+# Exercise actual main ordering with all pin/producer boundaries mocked. No
+# future product module is imported, and both reserved destinations stay untouched.
+def row(path):
+    return {'path': str(path), 'sha256': '0'*64, 'size_bytes': 0}
+request = {'contract': 'primary_instrumented_attempt04_request_v1', 'git_head': 'a'*40,
+           'manifest': row(OUT/'fake-profile'), 'executable': row(OUT/'fake-executable'),
+           'launcher': row(source), 'interpreter': row(Path(sys.executable)),
+           'isolation_observation': {k:v for k,v in m.pin(E/'runtime-configuration-preflight-01.json').items() if k != 'resolved_path'},
+           'preregistration': row(m.WT/'ref/research/1sar_rerun_2026_11_08_instrumented_attempt04_preregistration.md')}
+request_path = OUT/'mock-request.json'
+request_path.write_text(json.dumps(request))
+argv = [str(source), '--request', str(request_path), '--request-sha256', m.digest(request_path),
+        '--request-size-bytes', str(request_path.stat().st_size)]
+def fake_pincheck(r):
+    if r['path'] == str(request_path):
+        return m.pin(request_path)
+    return {**r, 'resolved_path': str(Path(r['path']).resolve())}
+
+with patch.object(sys, 'argv', argv), patch.object(m, 'checked_pin', fake_pincheck), \
+     patch.object(m, 'safe_fresh_paths'), patch.object(m, 'git') as git_never, \
+     patch.dict(os.environ, {'TMUX_PANE':'%0', 'HOME':'/synthetic', 'PATH':'/untrusted', 'GIT_DIR':'/redirected'}, clear=True):
+    try:
+        m.main()
+    except ValueError as exc:
+        assert 'GIT_DIR' in str(exc)
+    else:
+        raise AssertionError('Git redirect accepted')
+    git_never.assert_not_called()
+checks.append('main_rejects_redirect_before_any_git_subprocess')
+
+def valid_provenance(req):
+    return {'profile_files_verified': True,
+            'roles': {'launcher': ['opaque-launch'], 'collection_interpreter': ['opaque-python']},
+            'files': {'opaque-launch': fake_pincheck(req['launcher']),
+                      'opaque-python': fake_pincheck(req['interpreter'])}}
+class Baseline:
+    def __init__(self, provenance):
+        self.provenance = copy.deepcopy(provenance)
+    def to_provenance(self):
+        return copy.deepcopy(self.provenance)
+fake_dp = SimpleNamespace(reject_conflicting_environment=lambda e: None,
+                          FilePin=lambda **k:k, RefmacDiagnosticProfile=lambda *a:object(),
+                          validate_profile=lambda *a:Baseline(valid_provenance(request)))
+fake_col = SimpleNamespace(_resolve_ccp4_refmac_toolchain=lambda: ({}, {}, None),
+                          run_refmac_rfactor_operation=fake_collector)
+fake_rerun = SimpleNamespace(_verify_no_protstruct_overrides=lambda:None)
+states = [git_baseline, {**git_baseline, 'head':'b'*40}]
+saved_path = list(sys.path)
+try:
+    with patch.object(sys, 'argv', argv), patch.object(m, 'checked_pin', fake_pincheck), \
+         patch.object(m, 'safe_fresh_paths'), patch.object(m, 'read_git_state', side_effect=states) as git_reads, \
+         patch.object(m, 'run_claimed_once') as claim_never, \
+         patch.dict(os.environ, {'TMUX_PANE':'%0', 'HOME':'/synthetic', 'PATH':'/untrusted'}, clear=True), \
+         patch.dict(sys.modules, {'refmac_diagnostic_profile':fake_dp, 'onesar_refmac':fake_col, 'onesar_rerun':fake_rerun}):
+        try:
+            m.main()
+        except ValueError as exc:
+            assert 'head mismatch' in str(exc)
+        else:
+            raise AssertionError('Preflight head drift accepted')
+        assert git_reads.call_count == 2
+        claim_never.assert_not_called()
+finally:
+    sys.path[:] = saved_path
+checks.append('main_rechecks_head_after_profile_before_claim')
+
+# Actual main must refuse mismatched role/request identities before its claim.
+# All product boundaries are mocked; the native collector is never entered.
+def main_role_case(name, req, mutate=None, executable=None, expect_error=False):
+    request_path.write_text(json.dumps(req))
+    local_argv = [str(source), '--request', str(request_path), '--request-sha256', m.digest(request_path),
+                  '--request-size-bytes', str(request_path.stat().st_size)]
+    prov = valid_provenance(req)
+    if mutate:
+        mutate(prov)
+    local_dp = SimpleNamespace(**vars(fake_dp))
+    local_dp.validate_profile = lambda *a: Baseline(prov)
+    previous_path = list(sys.path)
+    try:
+        with patch.object(sys, 'argv', local_argv), patch.object(sys, 'executable', executable or sys.executable), \
+             patch.object(m, 'checked_pin', fake_pincheck), patch.object(m, 'safe_fresh_paths'), \
+             patch.object(m, 'read_git_state', return_value=git_baseline), \
+             patch.object(m, 'run_claimed_once', return_value={'collector_returned': False}) as claim, \
+             patch.dict(os.environ, {'TMUX_PANE':'%0', 'HOME':'/synthetic', 'PATH':'/untrusted'}, clear=True), \
+             patch.dict(sys.modules, {'refmac_diagnostic_profile':local_dp, 'onesar_refmac':fake_col, 'onesar_rerun':fake_rerun}), \
+             redirect_stdout(io.StringIO()):
+            if expect_error:
+                try:
+                    m.main()
+                except ValueError as exc:
+                    assert 'Execution role mismatch:' in str(exc)
+                else:
+                    raise AssertionError(name + ' accepted')
+                claim.assert_not_called()
+            else:
+                m.main()
+                claim.assert_called_once()
+                retained = claim.call_args.args[0]['execution_role_joins']
+                assert set(retained) == {'launcher', 'interpreter'}
+                for key in retained:
+                    assert retained[key]['matches'] is True
+                    assert retained[key]['request_observation'] == retained[key]['profile_observation']
+    finally:
+        sys.path[:] = previous_path
+    checks.append(name)
+
+main_role_case('matched_actual_main_role_join', copy.deepcopy(request))
+for file_id in ('opaque-launch', 'opaque-python'):
+    for key in ('path', 'resolved_path', 'sha256', 'size_bytes'):
+        def change(prov, file_id=file_id, key=key):
+            row = prov['files'][file_id]
+            row[key] = row[key] + 1 if key == 'size_bytes' else row[key] + 'x'
+        main_role_case('preclaim_role_mismatch_'+file_id+'_'+key, copy.deepcopy(request), change, expect_error=True)
+
+# Independently repinned identical content under a different target is unequal.
+same_bytes = OUT / 'same-byte-launcher-copy.py'
+same_bytes.write_bytes(source_raw)
+actual_observed = {'launcher': m.pin(source), 'interpreter': m.pin(sys.executable)}
+copy_prov = valid_provenance(request)
+copy_prov['files']['opaque-launch'] = m.pin(same_bytes)
+copy_prov['files']['opaque-python'] = actual_observed['interpreter']
+assert copy_prov['files']['opaque-launch']['sha256'] == actual_observed['launcher']['sha256']
+try:
+    m.join_execution_roles(Baseline(copy_prov), actual_observed)
+except ValueError as exc:
+    assert 'Execution role mismatch: launcher' in str(exc)
+else:
+    raise AssertionError('Same-byte different launcher target accepted')
+checks.append('same_byte_independently_repinned_launcher_target_rejected')
+
+# Request/profile agree on an alias while the running Python uses its target.
+python_alias = OUT / 'python-alias'
+python_alias.symlink_to(Path(sys.executable).resolve())
+alias_request = copy.deepcopy(request)
+alias_request['interpreter'] = row(python_alias)
+main_role_case('equivalent_running_python_spelling_preserves_declared_alias', alias_request,
+               executable=str(Path(sys.executable).resolve()))
+
+git_commands = [('rev-parse', 'HEAD'), ('branch', '--show-current'), ('rev-parse', '--show-toplevel')]
+git_fields = ['head', 'branch', 'worktree']
+for missing in git_fields:
+    def partial_git(*args):
+        field = git_fields[git_commands.index(args)]
+        if field == missing:
+            raise OSError('synthetic missing '+field)
+        return git_baseline[field]
+    with patch.object(m, 'git', side_effect=partial_git) as mocked_git:
+        observed = m.observe_git_postflight(include_status=False)
+        assert mocked_git.call_count == 3
+    assert observed[missing] is None and set(observed['errors']) == {missing}
+    assert all(observed[n] == git_baseline[n] for n in git_fields if n != missing)
+    checks.append('obtainable_post_git_after_'+missing+'_error')
+with patch.object(m, 'git', side_effect=OSError('synthetic all reads unavailable')) as mocked_git:
+    observed = m.observe_git_postflight(include_status=False)
+    assert mocked_git.call_count == 3 and set(observed['errors']) == set(git_fields)
+checks.append('all_post_git_errors_retained')
+
+def missing_branch(*args):
+    field = git_fields[git_commands.index(args)]
+    if field == 'branch':
+        raise OSError('synthetic branch read failure')
+    return git_baseline[field]
+with patch.object(m, 'git', side_effect=missing_branch):
+    try:
+        run_once(start, fake_collector, profile, claim=OUT/'partial-git', root=OUT/'synthetic-partial-git',
+                 git_observer=m.observe_git_postflight)
+    except RuntimeError as exc:
+        assert 'Git state' in str(exc)
+    else:
+        raise AssertionError('Partial Git observation accepted')
+terminal = json.loads((OUT/'partial-git/terminal.json').read_text())
+post = terminal['git_postflight']
+assert not post['unchanged'] and post['after']['head'] == git_baseline['head']
+assert post['after']['worktree'] == git_baseline['worktree'] and post['after']['branch'] is None
+assert post['after']['errors']['branch']['type'] == 'OSError'
+checks.append('terminal_retains_obtainable_git_fields_and_errors')
+assert not m.ROOT.exists() and not m.CLAIM.exists()
+assert source.read_bytes() == source_raw
+assert Path(__file__).read_bytes() == checker_raw
+result = {'passed': True, 'checks': checks, 'native_refmac_executed': False,
+          'producer_imported': False, 'attempt4_destinations_untouched': True,
+          'launcher_sha256': hashlib.sha256(source_raw).hexdigest(),
+          'checker_sha256': hashlib.sha256(checker_raw).hexdigest()}
+(OUT/'result.json').write_text(json.dumps(result, indent=2)+'\n')
+print(json.dumps({'passed': True, 'checks': len(checks)}))

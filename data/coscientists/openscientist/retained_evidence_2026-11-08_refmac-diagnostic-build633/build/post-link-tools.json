@@ -1,0 +1,80 @@
+{
+  "at": "2026-11-08T21:23:20.049334+00:00",
+  "files": {
+    "entry_xcrun": {
+      "path": "/usr/bin/xcrun",
+      "resolved": "/usr/bin/xcrun",
+      "sha256": "bbe7671518a3905f9d3fce54312fbc77c2876b0d62aca74a0688fa869d31a8a9",
+      "size_bytes": 199024
+    },
+    "entry_otool": {
+      "path": "/usr/bin/otool",
+      "resolved": "/usr/bin/otool",
+      "sha256": "34129c71a01a74f7f3b2443521519b2e5447553fa187f5fcafaaf8c42cc192e2",
+      "size_bytes": 200560
+    },
+    "entry_install_name_tool": {
+      "path": "/usr/bin/install_name_tool",
+      "resolved": "/usr/bin/install_name_tool",
+      "sha256": "34129c71a01a74f7f3b2443521519b2e5447553fa187f5fcafaaf8c42cc192e2",
+      "size_bytes": 200560
+    },
+    "entry_codesign": {
+      "path": "/usr/bin/codesign",
+      "resolved": "/usr/bin/codesign",
+      "sha256": "d517c9be608ffd266ec106c685e880cda71abc94001450e36d2476016406dd1e",
+      "size_bytes": 973408
+    },
+    "effective_otool": {
+      "path": "/Library/Developer/CommandLineTools/usr/bin/otool",
+      "resolved": "/Library/Developer/CommandLineTools/usr/bin/llvm-otool",
+      "sha256": "8353ad3c42743a93e9ca7d0d4e9d3df22305252d169c42c543ee22eeb8c33809",
+      "size_bytes": 72672
+    },
+    "effective_install_name_tool": {
+      "path": "/Library/Developer/CommandLineTools/usr/bin/install_name_tool",
+      "resolved": "/Library/Developer/CommandLineTools/usr/bin/install_name_tool",
+      "sha256": "ce7c944f855250c5df6b4de8ab024e94b5577f2385a122bd8993a531d466c0de",
+      "size_bytes": 214272
+    },
+    "effective_codesign": {
+      "path": "/usr/bin/codesign",
+      "resolved": "/usr/bin/codesign",
+      "sha256": "d517c9be608ffd266ec106c685e880cda71abc94001450e36d2476016406dd1e",
+      "size_bytes": 973408
+    }
+  },
+  "commands": [
+    {
+      "argv": [
+        "/usr/bin/xcrun",
+        "--find",
+        "otool"
+      ],
+      "stdout": "/Library/Developer/CommandLineTools/usr/bin/otool\n",
+      "stderr": "xcrun: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead\n",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "/usr/bin/xcrun",
+        "--find",
+        "install_name_tool"
+      ],
+      "stdout": "/Library/Developer/CommandLineTools/usr/bin/install_name_tool\n",
+      "stderr": "xcrun: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead\n",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "/usr/bin/xcrun",
+        "--find",
+        "codesign"
+      ],
+      "stdout": "/usr/bin/codesign\n",
+      "stderr": "xcrun: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead\n",
+      "returncode": 0
+    }
+  ],
+  "native_refmac_executed": false
+}

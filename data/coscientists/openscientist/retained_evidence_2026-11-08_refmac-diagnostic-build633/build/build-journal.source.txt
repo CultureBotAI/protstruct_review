@@ -1,0 +1,87 @@
+"""PRIMARY build-only command journaling. No native binary is selected here."""
+from datetime import datetime, timezone
+from pathlib import Path
+import hashlib, json, subprocess
+from contextlib import ExitStack
+
+def sha(path):
+    h=hashlib.sha256()
+    with Path(path).open('rb') as f:
+        for block in iter(lambda:f.read(1024*1024),b''): h.update(block)
+    return h.hexdigest()
+
+class Journal:
+    def __init__(self, output, record, env):
+        self.output=Path(output)
+        self.record=record
+        self.env=env
+        self.record['environment']=dict(env)
+        self.record.setdefault('commands',[])
+        self.save()
+
+    def save(self):
+        (self.output/'build-receipt.json').write_text(json.dumps(self.record,indent=2)+'\n')
+
+    def run(self,label,argv,timeout=None,capture_stdout=False):
+        if timeout is not None:
+            raise ValueError('Automatic build-command timeouts are disabled; PRIMARY monitors the owned build')
+        logpath=self.output/(label+'.log')
+        stdoutpath=self.output/(label+'.stdout') if capture_stdout else None
+        row={'label':label,'argv':list(map(str,argv)),'cwd':str(self.output),
+             'started_at':datetime.now(timezone.utc).isoformat(),'outcome':'starting',
+             'returncode':None,'log_path':logpath.name}
+        row['automatic_timeout']=False
+        row['log_stream']='stderr' if capture_stdout else 'stdout_and_stderr'
+        if stdoutpath is not None: row['stdout_path']=stdoutpath.name
+        self.record['commands'].append(row)
+        self.save()
+        try:
+            with ExitStack() as stack:
+                log=stack.enter_context(logpath.open('x'))
+                stdout=stack.enter_context(stdoutpath.open('x')) if stdoutpath is not None else log
+                row['outcome']='running'
+                self.save()
+                p=subprocess.run(row['argv'],cwd=self.output,env=self.env,
+                                 stdout=stdout,stderr=log if capture_stdout else subprocess.STDOUT,timeout=timeout)
+                row['returncode']=p.returncode
+                row['outcome']='completed'
+        except BaseException as exc:
+            row['outcome']='launch_or_capture_error'
+            row['error_type']=type(exc).__name__
+            row['error']=str(exc)
+            row['process_tree_completion']='not_established'
+            raise
+        finally:
+            row['finished_at']=datetime.now(timezone.utc).isoformat()
+            if logpath.is_file():
+                if row['outcome']=='completed':
+                    row['log_sha256']=sha(logpath)
+                    row['log_size_bytes']=logpath.stat().st_size
+                else:
+                    snapshot=logpath.with_name(logpath.name+'.failure-snapshot')
+                    with snapshot.open('xb') as f: f.write(logpath.read_bytes())
+                    row['log_snapshot_path']=snapshot.name
+                    row['log_snapshot_sha256']=sha(snapshot)
+                    row['log_snapshot_size_bytes']=snapshot.stat().st_size
+            if stdoutpath is not None and stdoutpath.is_file():
+                if row['outcome']=='completed':
+                    row['stdout_sha256']=sha(stdoutpath)
+                    row['stdout_size_bytes']=stdoutpath.stat().st_size
+                else:
+                    snapshot=stdoutpath.with_name(stdoutpath.name+'.failure-snapshot')
+                    with snapshot.open('xb') as f: f.write(stdoutpath.read_bytes())
+                    row['stdout_snapshot_path']=snapshot.name
+                    row['stdout_snapshot_sha256']=sha(snapshot)
+                    row['stdout_snapshot_size_bytes']=snapshot.stat().st_size
+            self.save()
+        if row['returncode']:
+            raise RuntimeError(f'{label} returned {row["returncode"]}')
+        return (stdoutpath if stdoutpath is not None else logpath).read_text(errors='replace')
+
+    def finish(self,exc=None):
+        self.record['passed']=exc is None
+        if exc is not None:
+            self.record['failure_type']=type(exc).__name__
+            self.record['failure']=str(exc)
+        self.record['finished_at']=datetime.now(timezone.utc).isoformat()
+        self.save()

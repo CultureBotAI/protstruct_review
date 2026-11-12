@@ -1,0 +1,81 @@
+{
+  "contract": "primary_refmac_preparation_build_launch_v1",
+  "kind": "build",
+  "started_at": "2026-11-08T22:43:08.615278+00:00",
+  "argv": [
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/.venv/bin/python",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/build-instrumented-v2.py",
+    "--source",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01",
+    "--output",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01"
+  ],
+  "cwd": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review",
+  "environment_selection": {
+    "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "removed_if_present": [
+      "LD_LIBRARY_PATH"
+    ]
+  },
+  "inputs_before": [
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/build-instrumented-v2.py",
+      "resolved": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/build-instrumented-v2.py",
+      "sha256": "735aa8bb7e8a9b8e5d9721ac6f3b9fee95c8fb599d8037df70a98f51bc6b580c",
+      "size_bytes": 10640
+    },
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/build-journal.py",
+      "resolved": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/build-journal.py",
+      "sha256": "6c5a5388ab562562b9d99692ea2332afe242afe7dd4281d5a686a76232df0380",
+      "size_bytes": 4187
+    },
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/installed-runtime.cmake",
+      "resolved": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/installed-runtime.cmake",
+      "sha256": "fc358a401cc94ee236aad69224f154133b3290b585c6d6d87bd9e55a5fee5f73",
+      "size_bytes": 254
+    },
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/toolchain-inventory.json",
+      "resolved": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/toolchain-inventory.json",
+      "sha256": "6b46054dd2645ad14f420d37a56187e8b4ebed6854df750fc9423e55d4b66d3a",
+      "size_bytes": 6846
+    },
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/effective-build-tools.json",
+      "resolved": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/effective-build-tools.json",
+      "sha256": "520f78b7f9f80c38f3c12a70e0107882f0da56c6cec7cffc23f78709e637363d",
+      "size_bytes": 6333
+    },
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/assembler-tool.json",
+      "resolved": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/assembler-tool.json",
+      "sha256": "d326a5a03cbd0951692e11af249a48c46da7410282fc1f622860cccfc728247b",
+      "size_bytes": 285
+    },
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/post-link-tools.json",
+      "resolved": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/post-link-tools.json",
+      "sha256": "192745e46b33ca092e822ad6579a2e64e86e9696e76f2a758eec0911b0dac64d",
+      "size_bytes": 2769
+    },
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/.venv/bin/python",
+      "resolved": "/Users/marcin/.pyenv/versions/3.12.11/bin/python3.12",
+      "sha256": "fe1d249d8278c3ac1a8e7d0550394adfe0485a5f5802fe070c17bc1aa40b00f9",
+      "size_bytes": 33816
+    },
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/observe-preparation-build.py",
+      "resolved": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/observe-preparation-build.py",
+      "sha256": "0e843db95a9e7e28be70bb341aa999fbb75eb6bfff41fccef9c93fcd48e5041a",
+      "size_bytes": 4726
+    }
+  ],
+  "native_refmac_executed": false,
+  "returncode": null,
+  "child_completed": false,
+  "passed": false
+}

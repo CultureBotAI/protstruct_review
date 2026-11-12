@@ -1,0 +1,32 @@
+{
+  "byte_length": null,
+  "data_region_byte_length": null,
+  "data_start_byte_offset": 80,
+  "data_word_count": null,
+  "exists": false,
+  "header_byte_offset": null,
+  "header_location_words": null,
+  "header_parse": {
+    "columns": [],
+    "datasets": {},
+    "nbatches": null,
+    "ncol": null,
+    "nrows": null,
+    "valm_tokens": []
+  },
+  "is_regular_file": false,
+  "is_symlink": false,
+  "keyword_records": {},
+  "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt02/refmac/refmac/refmac_hklout.mtz",
+  "primary_header_cards": [],
+  "raw_export_error": "HKLOUT file is missing, symlinked, or outside refmac_dir",
+  "raw_export_warnings": [],
+  "row_count_exported": 0,
+  "rows": [],
+  "schema_version": 1,
+  "sha256": null,
+  "stamp_ascii": null,
+  "trailer_byte_length": null,
+  "within_refmac_dir": true,
+  "word_hex_convention": "uint32_le_hex_8char"
+}

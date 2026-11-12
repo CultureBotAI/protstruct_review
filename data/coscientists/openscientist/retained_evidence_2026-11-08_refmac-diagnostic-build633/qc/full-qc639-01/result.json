@@ -1,0 +1,53 @@
+{
+  "at": "2026-11-09T08:31:01.834003+00:00",
+  "argv": [
+    "/bin/bash",
+    "--noprofile",
+    "--norc",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/036-safe-qc.sh",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078"
+  ],
+  "cwd": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078",
+  "python": "3.9.6 (default, Aug 25 2026, 21:26:21) \n[Clang 21.0.0 (clang-2100.3.34.2)]",
+  "head": "47569d52c54323af56d1a7bd1d9c3a9d06f0f426",
+  "status": " M scripts/onesar_refmac.py\n?? scripts/test_onesar_refmac_diagnostic.py\n",
+  "driver": {
+    "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/run-full-qc639.py",
+    "sha256": "2e84a71dbc681fd2f63320971cfa723f6598e618783ee32e64a795457b3b601d",
+    "size_bytes": 3743
+  },
+  "wrapper": {
+    "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/036-safe-qc.sh",
+    "sha256": "b657e083b291a0abda6a7c1ef1ed41de400f8036ea1813013efd89c7c99e4c3e",
+    "size_bytes": 898
+  },
+  "interpreter": {
+    "path": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/bin/python3.9",
+    "sha256": "6e7ae61f68a3838094fc56590f84c52069a97d7816f6bb79e0e85995b340e464",
+    "size_bytes": 53200
+  },
+  "removed_environment_keys": [
+    "LD_LIBRARY_PATH"
+  ],
+  "temporary_directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/639-qc-scratch01",
+  "native_tools_disabled_by": "036-safe-qc.sh PROTSTRUCT absent-tool sentinel paths; offline locked benchmark extra",
+  "scope": "diagnostic collector milestone, not native or scientific acceptance",
+  "completed_at": "2026-11-09T08:35:05.375349+00:00",
+  "returncode": 0,
+  "input_count": 917,
+  "changed_inputs": [],
+  "source_closure_unchanged": true,
+  "logs": [
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/full-qc639-01/stdout.log",
+      "sha256": "eea5705ba3706458adbc1e24c344d6b403a98f99f3e49a5f72909f4eb9ba841b",
+      "size_bytes": 203123
+    },
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/full-qc639-01/stderr.log",
+      "sha256": "26a7b064ebef8f58d1f8907e00350b77b224c35bb6dc6871dd8f3e8feae8665f",
+      "size_bytes": 26965
+    }
+  ],
+  "passed": true
+}

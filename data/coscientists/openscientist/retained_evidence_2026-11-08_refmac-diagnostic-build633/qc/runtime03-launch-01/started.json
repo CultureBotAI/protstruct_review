@@ -1,0 +1,16 @@
+{
+  "at": "2026-11-09T08:36:34.244134+00:00",
+  "argv": [
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/.venv/bin/python",
+    "-B",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/observe-runtime-configuration-03.py"
+  ],
+  "cwd": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078",
+  "observer_sha256": "92c65a3872e4900925e4943fdcb5d45317509eda443bc445e0b312a7de46395a",
+  "driver_sha256": "77f12ccd22afea8a0de198db56cf4dcbc604c2718897ee9c9eb01f8eb7866391",
+  "removed_environment_keys": [
+    "LD_LIBRARY_PATH"
+  ],
+  "pre_source_PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+  "native_refmac_executed": false
+}

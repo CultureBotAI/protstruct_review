@@ -1,0 +1,32 @@
+"""PRIMARY offline envelope reparse of immutable Attempt4; never scientific admission."""
+from pathlib import Path
+from datetime import datetime,timezone
+import hashlib,json,sys
+E=Path(__file__).resolve().parent;W=E.parents[2].parent/'protstruct_review-wt-078'
+OUT=E/'attempt04-reparse793-01';OUT.mkdir(exist_ok=False)
+trace=W/'data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt04/refmac/refmac_native_trace.jsonl'
+reader=W/'scripts/refmac_diagnostic_trace.py'
+def pin(p):
+ h=hashlib.sha256()
+ with Path(p).open('rb') as f:
+  for b in iter(lambda:f.read(1048576),b''):h.update(b)
+ return {'path':str(p),'sha256':h.hexdigest(),'size_bytes':Path(p).stat().st_size}
+pins={'trace':pin(trace),'reader':pin(reader),'recipe':pin(Path(__file__))}
+assert pins['trace']['sha256']=='4dd312bf512d32cdf4095f1e3ee0c5471cb2ad91deb602b2c60d4f210216505d'
+assert pins['trace']['size_bytes']==68015529
+assert pins['reader']['sha256']=='984aced8d794eb4454c6fab83e9d3202b497482f054698a075549d2b5a69a69f'
+start={'at':datetime.now(timezone.utc).isoformat(),'pins':pins,'scope':'existing reader envelope replay only; no scientific audit or native execution'}
+(OUT/'started.json').write_text(json.dumps(start,indent=2)+'\n')
+denied=[]
+def guard(event,args):
+ if event.startswith(('subprocess.','os.exec','os.spawn','os.posix_spawn','os.fork','socket.')) or event=='os.system':
+  denied.append(event);raise RuntimeError('Forbidden operation in read-only reparse: '+event)
+sys.addaudithook(guard);sys.dont_write_bytecode=True;sys.path.insert(0,str(W/'scripts'))
+import refmac_diagnostic_trace as t
+result=t.inspect_native_trace_envelope(trace,expected_sha256=pins['trace']['sha256'],expected_size_bytes=pins['trace']['size_bytes'])
+(OUT/'envelope.json').write_text(json.dumps(result,indent=2)+'\n')
+unchanged=all(pin(pins[k]['path'])==pins[k] for k in pins)
+summary={**start,'completed_at':datetime.now(timezone.utc).isoformat(),'envelope':pin(OUT/'envelope.json'),'denied_events':denied,'inputs_unchanged':unchanged,'valid':result['valid'],'closed':result['closed'],'event_count':result['event_count'],'scientific_admission':False,'passed':unchanged and not denied and result['valid'] and result['closed'] and result['sha256_match'] and result['size_bytes_match']}
+(OUT/'result.json').write_text(json.dumps(summary,indent=2)+'\n')
+print(json.dumps(summary))
+if not summary['passed']:raise SystemExit(1)

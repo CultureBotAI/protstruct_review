@@ -1,0 +1,176 @@
+{
+  "archive": {
+    "archive_id": "cdba2c07-daff-4f60-ae96-12452b3a5fbb",
+    "archive_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/cdba2c07-daff-4f60-ae96-12452b3a5fbb_artifacts.zip",
+    "archive_sha256": "9fc5352284b7ffa7763c633a3eb4d3d0db96b8c25a1be9bcea361722d2c53054"
+  },
+  "input_ledger_counts": {
+    "eligible_free": 723,
+    "eligible_negative_f": 0,
+    "eligible_total": 7228,
+    "eligible_work": 6505,
+    "eligible_zero_f": 11,
+    "ineligible_nonfinite_f": 20,
+    "ineligible_nonpositive_or_nonfinite_sigf": 0,
+    "ineligible_total": 20,
+    "ineligible_unassigned_flag": 20,
+    "raw_free": 723,
+    "raw_total": 7248,
+    "raw_unassigned": 20,
+    "raw_work": 6505
+  },
+  "mtz": {
+    "member": "data/1sar.mtz",
+    "sha256": "f36d5fe685a3e524e8809d17d19ce12073acdf339eba2cfd3b0347a818850ab2",
+    "subject_ref": "mtz:sha256:f36d5fe685a3e524e8809d17d19ce12073acdf339eba2cfd3b0347a818850ab2"
+  },
+  "projection": {
+    "crystallographic_context": {
+      "cell_a_b_c_alpha_beta_gamma": [
+        "64.897",
+        "78.323",
+        "38.792",
+        "9E+1",
+        "9E+1",
+        "9E+1"
+      ],
+      "resolution_limits_inverse_a2": [
+        "0.0004004509537481",
+        "0.1599971801042557"
+      ],
+      "symmetry": {
+        "lattice": "P",
+        "operator_count": 4,
+        "operators_xyz": [
+          "-X+1/2,-Y,Z+1/2",
+          "-X,Y+1/2,-Z+1/2",
+          "X+1/2,-Y+1/2,-Z",
+          "X,Y,Z"
+        ],
+        "point_group": "222",
+        "primitive_operator_count": 4,
+        "space_group_number": 19,
+        "space_group_symbol": "P212121"
+      }
+    },
+    "input_ncols": 16,
+    "input_sha256": "f36d5fe685a3e524e8809d17d19ce12073acdf339eba2cfd3b0347a818850ab2",
+    "nrows": 7248,
+    "projected_columns": [
+      "H",
+      "K",
+      "L",
+      "F-obs",
+      "SIGF-obs",
+      "R-free-flags"
+    ],
+    "projected_ncols": 6,
+    "projected_sha256": "6edbe54b2ec7b815f30b6bd20a7264a7c978721189670e39e20d876d9b4fece7",
+    "retained_dataset_ids": [
+      "1"
+    ],
+    "retention_audit": {
+      "added_all_nan_rows": 0,
+      "added_raw_rows": 0,
+      "audit_status": "preserved",
+      "changed_flags": [],
+      "changed_observations": [],
+      "flag_values": [
+        0,
+        1
+      ],
+      "free_value": 1,
+      "input": {
+        "eligible_rows": 7228,
+        "excluded_nonfinite_f": 20,
+        "excluded_nonpositive_or_nonfinite_sigf": 0,
+        "free_rows": 723,
+        "negative_f": 0,
+        "observed_rows_with_invalid_flags": 0,
+        "raw_rows": 7248,
+        "work_rows": 6505,
+        "zero_f": 11
+      },
+      "input_column_bindings": [
+        {
+          "dataset_id": 1,
+          "label": "F-obs",
+          "type": "F"
+        },
+        {
+          "dataset_id": 1,
+          "label": "SIGF-obs",
+          "type": "Q"
+        },
+        {
+          "dataset_id": 1,
+          "label": "R-free-flags",
+          "type": "I"
+        }
+      ],
+      "input_labels": [
+        "F-obs",
+        "SIGF-obs",
+        "R-free-flags"
+      ],
+      "input_sha256": "f36d5fe685a3e524e8809d17d19ce12073acdf339eba2cfd3b0347a818850ab2",
+      "invalid_output_flags": [],
+      "invalidated_input_hkls": [],
+      "missing_input_hkls": [],
+      "new_usable_output_hkls": [],
+      "output": {
+        "eligible_rows": 7228,
+        "excluded_nonfinite_f": 20,
+        "excluded_nonpositive_or_nonfinite_sigf": 0,
+        "free_rows": 723,
+        "negative_f": 0,
+        "observed_rows_with_invalid_flags": 0,
+        "raw_rows": 7248,
+        "work_rows": 6505,
+        "zero_f": 11
+      },
+      "output_column_bindings": [
+        {
+          "dataset_id": 1,
+          "label": "F-obs",
+          "type": "F"
+        },
+        {
+          "dataset_id": 1,
+          "label": "SIGF-obs",
+          "type": "Q"
+        },
+        {
+          "dataset_id": 1,
+          "label": "R-free-flags",
+          "type": "I"
+        }
+      ],
+      "output_labels": [
+        "F-obs",
+        "SIGF-obs",
+        "R-free-flags"
+      ],
+      "output_sha256": "6edbe54b2ec7b815f30b6bd20a7264a7c978721189670e39e20d876d9b4fece7",
+      "scope": "retained selected input observations; not a new refinement or a QDS verdict"
+    }
+  },
+  "schema_version": 1,
+  "staged_files": {
+    "input_hkl_ledger_json": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/inputs/input_hkl_ledger.json",
+    "input_hkl_ledger_json_sha256": "35543c5821665de8f65b5fbd153669556dfef766ac8b156dc001a0c5b667a51e",
+    "original_data_mtz": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/inputs/original_data.mtz",
+    "original_data_mtz_sha256": "f36d5fe685a3e524e8809d17d19ce12073acdf339eba2cfd3b0347a818850ab2",
+    "original_model_pdb": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/inputs/original_model.pdb",
+    "original_model_pdb_sha256": "8cbc1650f8be5a3833f98833fa514ec7d490c2c3bb9aa930413abac05e2a510b",
+    "projected_observations_mtz": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/phenix/inputs/projected_observations.mtz",
+    "projected_observations_mtz_sha256": "6edbe54b2ec7b815f30b6bd20a7264a7c978721189670e39e20d876d9b4fece7"
+  },
+  "subject": {
+    "member": "data/1sar_final.pdb",
+    "sha256": "8cbc1650f8be5a3833f98833fa514ec7d490c2c3bb9aa930413abac05e2a510b",
+    "stage": "final",
+    "subject_id": "R4",
+    "subject_ref": "artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb"
+  }
+}

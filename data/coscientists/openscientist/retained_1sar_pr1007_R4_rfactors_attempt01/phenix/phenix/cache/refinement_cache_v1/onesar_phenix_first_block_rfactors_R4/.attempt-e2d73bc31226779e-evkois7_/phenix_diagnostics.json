@@ -1,0 +1,27 @@
+{
+  "adapter_identity": "mmtbx.model_vs_data.first_block_public_api (public Python API adapter; not the phenix.model_vs_data CLI banner)",
+  "completed_raw_stages": [],
+  "current_phase": "reflection_file_input",
+  "extract_xtal_data_constructor_log_note": "iotbx.extract_xtal_data.run owns an internal self.log StringIO buffer that becomes accessible only after __init__ returns; if __init__ raises before returning, only the exception is accessible.",
+  "extract_xtal_data_log": null,
+  "f_model_manager_log_note": "mmtbx.f_model.manager.__init__ accepts no log parameter in PHENIX 2.0-5936.",
+  "failure": {
+    "constructor_log_limitation": null,
+    "exception_message": "'utf-8' codec can't decode byte 0xf5 in position 4: invalid start byte",
+    "exception_type": "UnicodeDecodeError",
+    "failed_phase": "reflection_file_input"
+  },
+  "fmodel_update_all_scales_log": "",
+  "model_manager_log": "",
+  "partial_evidence_json_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt01/phenix/phenix/cache/refinement_cache_v1/onesar_phenix_first_block_rfactors_R4/.attempt-e2d73bc31226779e-evkois7_/phenix_rfactors_partial_evidence.json",
+  "partial_evidence_status": "failed_partial_unverified",
+  "phase_history": [
+    "parameter_validation",
+    "vendor_imports",
+    "runtime_environment_inspection",
+    "pdb_input",
+    "reflection_file_input"
+  ],
+  "schema_version": 1,
+  "status": "failed"
+}

@@ -1,0 +1,11 @@
+/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build/refmac5:
+	/System/Library/Frameworks/Accelerate.framework/Versions/A/Accelerate (compatibility version 1.0.0, current version 4.0.0)
+	/Users/Shared/ccb63/Jenkins/workspace/CCP4/release-9-osx-clang-m1/devtools/install/lib/librfftw.2.dylib (compatibility version 3.0.0, current version 3.7.0)
+	/Users/Shared/ccb63/Jenkins/workspace/CCP4/release-9-osx-clang-m1/devtools/install/lib/libfftw.2.dylib (compatibility version 3.0.0, current version 3.7.0)
+	/Users/Shared/ccb63/Jenkins/workspace/CCP4/release-9-osx-clang-m1/devtools/install/lib/libccp4f.8.0.dylib (compatibility version 8.0.0, current version 0.0.0)
+	/Users/Shared/ccb63/Jenkins/workspace/CCP4/release-9-osx-clang-m1/devtools/install/lib/libccp4c.8.0.dylib (compatibility version 8.0.0, current version 0.0.0)
+	/Users/Shared/ccb63/Jenkins/workspace/CCP4/release-9-osx-clang-m1/devtools/install/lib/libmmdb2.0.dylib (compatibility version 1.0.0, current version 1.0.0)
+	/Users/Shared/ccb63/Jenkins/workspace/CCP4/release-9-osx-clang-m1/devtools/install/lib/libgfortran.5.dylib (compatibility version 6.0.0, current version 6.0.0)
+	/Users/Shared/ccb63/Jenkins/workspace/CCP4/release-9-osx-clang-m1/devtools/install/lib/libgcc_s.2.dylib (compatibility version 2.0.0, current version 2.0.0)
+	/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1359.0.0)
+	/usr/lib/libc++.1.dylib (compatibility version 1.0.0, current version 2200.27.0)

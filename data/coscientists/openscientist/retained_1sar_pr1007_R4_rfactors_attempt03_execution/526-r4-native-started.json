@@ -1,0 +1,61 @@
+{
+  "started_at": "2026-11-08T02:45:02.779935+00:00",
+  "head": "e7ad32b420718cf6606610db060edb16c585c766",
+  "accepted_measurement_code_head": "9b6d923dd107bc300e00801b33ddefa197153457",
+  "qc_receipt": {
+    "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/529-full-qc-receipt.json",
+    "sha256": "f2562f04bcc7db332fafcd03bf3fd6a099b29a7ebf0bce366508f7ce9bab20c0"
+  },
+  "source_hashes": {
+    "ref/research/1sar_rerun_2026_11_06_methods.md": "16b4aa30876ee96ae32bb2e6414d32611feac9cda3824233fea520afc92182f2",
+    "ref/research/1sar_rerun_2026_11_07_hydrogen_policy.json": "3b0cf35c7cd12465527306c4f6691f02980da337a5953ab30293f455494be13f",
+    "scripts/onesar_refmac.py": "941a69249d7bfa27ff32f7081c371980736ffee6539ce0952c6d6d27bc45f2f5",
+    "scripts/test_onesar_refmac.py": "0b325dbc5fd06ec2ed6872ff0c12799ab3fe5c84fc51f69534f8e82197e6d6b6",
+    "scripts/onesar_rerun.py": "13fac3428be7ab2a3bc43dfa8b720efdad2e7262d212b17ca7de36b44e264e81",
+    "scripts/test_onesar_rerun.py": "8fdfe7000a4c26c966e20ff11efef39790ee85dc5dd3fa5ef03ef74a348f7e0e",
+    "scripts/onesar_records.py": "beba616fa50c8312c009f56451747356c6f480de6d333791422753936db56c52",
+    "scripts/test_onesar_records.py": "d558b380904e34a967e9109d8032e78eed1490b3b4ae3df8cc64111f8647c6b2",
+    "scripts/onesar_phenix_measure.py": "693a205d2826e0ea6db0630d432dd1ce6ef68890634ac8ad254a0c411c242292",
+    "scripts/toolchain.py": "9d2d1e2c36a0dee1bede3252015384e5db70e5124e7b5e346c23558804eaf095",
+    "scripts/refinement_cache.py": "512137dcb8a1df7b3e8778131f7d7619dd643d1054fc6c067a44809925ddb119",
+    "ref/research/1sar_rerun_2026_11_06_preregistration.md": "b1e6a85c97153748cd78c087e4a1faa7156dd3af13563cca0af33ecc9aa03bc7"
+  },
+  "argv": [
+    "/Users/marcin/.local/bin/uv",
+    "run",
+    "--locked",
+    "--offline",
+    "--extra",
+    "benchmark",
+    "--",
+    "python",
+    "scripts/onesar_rerun.py",
+    "--subject",
+    "R4",
+    "--family",
+    "rfactors",
+    "--evidence-out",
+    "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03"
+  ],
+  "cwd": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078",
+  "inherited_protstruct_names": [],
+  "archive_sha256": "9fc5352284b7ffa7763c633a3eb4d3d0db96b8c25a1be9bcea361722d2c53054",
+  "evidence_destination": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03",
+  "scientific_premise_reference": {
+    "policy_id": "1SAR_REFMAC_H_POLICY_2026_11_07",
+    "source_path": "ref/research/1sar_rerun_2026_11_07_hydrogen_policy.json",
+    "commit": "e7ad32b420718cf6606610db060edb16c585c766",
+    "sha256": "3b0cf35c7cd12465527306c4f6691f02980da337a5953ab30293f455494be13f",
+    "size_bytes": 8170,
+    "retained_copy": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/526-r4-hydrogen-policy.json",
+      "sha256": "3b0cf35c7cd12465527306c4f6691f02980da337a5953ab30293f455494be13f",
+      "size_bytes": 8170
+    }
+  },
+  "launcher": {
+    "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/526-run-r4-canary.py",
+    "sha256": "0e53147a78c0154c9a838ac290112ffc151e3e3aaee0ea82bfeb79d3f3f7676d"
+  },
+  "scientific_admission_claimed": false
+}

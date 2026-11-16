@@ -1,0 +1,91 @@
+{
+  "record_kind": "retained_primary_execution_binding",
+  "native_attempt_root": "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03",
+  "retained_execution_directory": "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03_execution",
+  "native_launch_head": "e7ad32b420718cf6606610db060edb16c585c766",
+  "original_source_head": "9b6d923dd107bc300e00801b33ddefa197153457",
+  "committed_policy_path": "ref/research/1sar_rerun_2026_11_07_hydrogen_policy.json",
+  "committed_policy_sha256": "3b0cf35c7cd12465527306c4f6691f02980da337a5953ab30293f455494be13f",
+  "committed_policy": {
+    "path": "ref/research/1sar_rerun_2026_11_07_hydrogen_policy.json",
+    "sha256": "3b0cf35c7cd12465527306c4f6691f02980da337a5953ab30293f455494be13f",
+    "size_bytes": 8170
+  },
+  "relocation_note": "Receipts and logs are copied byte-for-byte without rewriting and contain the original machine paths, timestamps, and source hashes recorded at launch; this index locates their committed repository-local copies. The original launcher script is retained as non-executable .source.txt evidence, not a new product runner.",
+  "relocation_map": {
+    ".orchestration/evidence/526-r4-hydrogen-policy.json": {
+      "retained_filename": "526-r4-hydrogen-policy.json",
+      "retained_path": "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03_execution/526-r4-hydrogen-policy.json",
+      "sha256": "3b0cf35c7cd12465527306c4f6691f02980da337a5953ab30293f455494be13f",
+      "size_bytes": 8170
+    },
+    ".orchestration/evidence/526-r4-native-started.json": {
+      "retained_filename": "526-r4-native-started.json",
+      "retained_path": "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03_execution/526-r4-native-started.json",
+      "sha256": "508e78aae848ee61fab22e51e45676f3436d245bba8d15450242ed0c8987e132",
+      "size_bytes": 3314
+    },
+    ".orchestration/evidence/526-r4-native-receipt.json": {
+      "retained_filename": "526-r4-native-receipt.json",
+      "retained_path": "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03_execution/526-r4-native-receipt.json",
+      "sha256": "e706374778ca40506e1539e69bbf8a6df1f08dab64a8f820b9ab1d45ebbaed09",
+      "size_bytes": 5856
+    },
+    ".orchestration/evidence/526-r4-native.stdout.log": {
+      "retained_filename": "526-r4-native.stdout.log",
+      "retained_path": "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03_execution/526-r4-native.stdout.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    ".orchestration/evidence/526-r4-native.stderr.log": {
+      "retained_filename": "526-r4-native.stderr.log",
+      "retained_path": "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03_execution/526-r4-native.stderr.log",
+      "sha256": "b76b36d3a411b07f19f39bc7f592d2204dc1648b4b385c497d8e5be0cfeb6f63",
+      "size_bytes": 614
+    },
+    ".orchestration/evidence/526-run-r4-canary.py": {
+      "retained_filename": "526-run-r4-canary.source.txt",
+      "retained_path": "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03_execution/526-run-r4-canary.source.txt",
+      "sha256": "0e53147a78c0154c9a838ac290112ffc151e3e3aaee0ea82bfeb79d3f3f7676d",
+      "size_bytes": 8544
+    }
+  },
+  "retained_files": [
+    {
+      "source": ".orchestration/evidence/526-r4-hydrogen-policy.json",
+      "destination_name": "526-r4-hydrogen-policy.json",
+      "sha256": "3b0cf35c7cd12465527306c4f6691f02980da337a5953ab30293f455494be13f",
+      "size_bytes": 8170
+    },
+    {
+      "source": ".orchestration/evidence/526-r4-native-started.json",
+      "destination_name": "526-r4-native-started.json",
+      "sha256": "508e78aae848ee61fab22e51e45676f3436d245bba8d15450242ed0c8987e132",
+      "size_bytes": 3314
+    },
+    {
+      "source": ".orchestration/evidence/526-r4-native-receipt.json",
+      "destination_name": "526-r4-native-receipt.json",
+      "sha256": "e706374778ca40506e1539e69bbf8a6df1f08dab64a8f820b9ab1d45ebbaed09",
+      "size_bytes": 5856
+    },
+    {
+      "source": ".orchestration/evidence/526-r4-native.stdout.log",
+      "destination_name": "526-r4-native.stdout.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "source": ".orchestration/evidence/526-r4-native.stderr.log",
+      "destination_name": "526-r4-native.stderr.log",
+      "sha256": "b76b36d3a411b07f19f39bc7f592d2204dc1648b4b385c497d8e5be0cfeb6f63",
+      "size_bytes": 614
+    },
+    {
+      "source": ".orchestration/evidence/526-run-r4-canary.py",
+      "destination_name": "526-run-r4-canary.source.txt",
+      "sha256": "0e53147a78c0154c9a838ac290112ffc151e3e3aaee0ea82bfeb79d3f3f7676d",
+      "size_bytes": 8544
+    }
+  ]
+}

@@ -1,0 +1,267 @@
+"""PRIMARY retained-byte audit only. Does not invoke tools or authorize EVAL/QDS.
+
+Usage: Python 3.12 this_script.py WORKTREE CANDIDATE_JSON OUTPUT_DIRECTORY
+The output directory must be new and outside the original native attempt.
+The original execution interval is copied from its immutable checkpoint;
+the replay time describes only this parsing/recount, never a new native run.
+"""
+from collections import Counter
+from datetime import datetime, timezone
+from fractions import Fraction
+import hashlib
+import json
+import math
+from pathlib import Path
+import struct
+import sys
+import types
+from unittest.mock import patch
+
+w, frozen_path, destination = map(Path, sys.argv[1:])
+if sys.flags.optimize:
+    raise RuntimeError('This evidence audit requires assertions; Python optimization is forbidden')
+w = w.resolve()
+frozen_bytes = frozen_path.read_bytes()
+frozen = json.loads(frozen_bytes)
+sha = lambda b: hashlib.sha256(b).hexdigest()
+assert not destination.exists()
+for name, info in frozen['files'].items():
+    assert sha((w / name).read_bytes()) == info['sha256'], name
+attempt_rel = 'data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03'
+a = w / attempt_rel
+assert not destination.resolve().is_relative_to(a.resolve())
+native_before = {str(p.relative_to(a)): sha(p.read_bytes()) for p in a.rglob('*') if p.is_file()}
+assert len(native_before) == 37
+sources = {}
+historical_pins = {
+    'refmac/refmac/refmac.log': '8303f6898c6e9b22f70f6e9f5a51cf275d49775295ac09fb3396b67ff9e20b2c',
+    'refmac/refmac/refmac_post_execution_checkpoint.json': '66abad14d62274849833bc2bf71dbf98942ec6902240761d525d4805939fc293',
+    'parent_attempt_started.json': '8fe62848809e24688f768d293571a38940ce4ee6fdf34bed116332f5e27a0379',
+    'parent_attempt_outcome.json': '4dac145b9107c058e7d75dec0c96dbad58f75d95556323d55521a4441d1385a2',
+}
+
+def read(rel):
+    p = a / rel
+    assert p.is_file() and not p.is_symlink() and p.resolve().is_relative_to(a.resolve())
+    b = p.read_bytes()
+    if rel in historical_pins:
+        assert sha(b) == historical_pins[rel], rel
+    sources[rel] = {'path': attempt_rel + '/' + rel, 'sha256': sha(b), 'size_bytes': len(b)}
+    return b
+
+def jread(rel):
+    return json.loads(read(rel))
+
+start = datetime.now(timezone.utc).isoformat()
+sys.path.insert(0, str(w / 'scripts'))
+with patch('subprocess.Popen', side_effect=AssertionError('no native or other subprocess is permitted')):
+    import gemmi
+    parser_source = (w / 'scripts/onesar_refmac_log.py').read_bytes()
+    assert sha(parser_source) == frozen['files']['scripts/onesar_refmac_log.py']['sha256']
+    onesar_refmac_log = types.ModuleType('retained_candidate_refmac_parser')
+    onesar_refmac_log.__file__ = str(w / 'scripts/onesar_refmac_log.py')
+    sys.modules[onesar_refmac_log.__name__] = onesar_refmac_log
+    exec(compile(parser_source, onesar_refmac_log.__file__, 'exec'), onesar_refmac_log.__dict__)
+    log = read('refmac/refmac/refmac.log').decode('utf-8')
+    assert sha(log.encode()) == '8303f6898c6e9b22f70f6e9f5a51cf275d49775295ac09fb3396b67ff9e20b2c'
+    parsed = onesar_refmac_log.parse_refmac_log(log)
+    checkpoint = jread('refmac/refmac/refmac_post_execution_checkpoint.json')
+    assert checkpoint['raw_outputs']['log']['sha256'] == sha(log.encode())
+    assert checkpoint['helper_sources']['onesar_refmac_log_py']['sha256'] == 'ddc05ea4e9a4270f7e55e16887acbf8ddb4333ce773b1e59d0c2ca96e925a4ad'
+    parent = jread('parent_attempt_outcome.json')
+    parent_started = jread('parent_attempt_started.json')
+    launch_path = w / (attempt_rel + '_execution') / '526-r4-native-receipt.json'
+    launch_bytes = launch_path.read_bytes()
+    assert sha(launch_bytes) == 'e706374778ca40506e1539e69bbf8a6df1f08dab64a8f820b9ab1d45ebbaed09'
+    launch = json.loads(launch_bytes)
+    assert launch['head'] == 'e7ad32b420718cf6606610db060edb16c585c766'
+    sources['external_native_launch_receipt'] = {'path': str(launch_path.relative_to(w)), 'sha256': sha(launch_bytes), 'size_bytes': len(launch_bytes)}
+    export = jread('refmac/refmac/refmac_hklout_raw_export.json')
+    ledger = jread('refmac/inputs/input_hkl_ledger.json')
+    raw_mtz = read('refmac/refmac/refmac_hklout.mtz')
+    assert raw_mtz[:4] == b'MTZ '
+    header_at = (struct.unpack('<i', raw_mtz[4:8])[0] - 1) * 4
+    cards = []
+    for i in range(header_at, len(raw_mtz), 80):
+        card = raw_mtz[i:i + 80].decode('ascii').strip()
+        cards.append(card)
+        if card == 'END':
+            break
+    assert cards[-1] == 'END'
+    ncol, nref = [int(t) for t in next(c for c in cards if c.startswith('NCOL ')).split()[1:3]]
+    columns = [c.split() for c in cards if c.startswith('COLUMN ')]
+    labels = [c[1] for c in columns]
+    assert ncol == len(labels) == len(set(labels))
+    assert header_at == 80 + ncol * nref * 4
+    assert len(export['rows']) == nref
+    checked_words = 0
+    numerators = {'work': Fraction(0), 'free': Fraction(0)}
+    denominators = {'work': Fraction(0), 'free': Fraction(0)}
+    candidate_counts = Counter()
+    candidate_hkls = []
+    zero_work_output_nan_hkls = []
+    for row_number, exported in enumerate(export['rows']):
+        block = raw_mtz[80 + row_number * ncol * 4:80 + (row_number + 1) * ncol * 4]
+        values = struct.unpack('<' + 'f' * ncol, block)
+        words = struct.unpack('<' + 'I' * ncol, block)
+        for label, word in zip(labels, words, strict=True):
+            assert f'{word:08x}' == exported['column_words_hex'][label], (row_number, label)
+            checked_words += 1
+        vals = dict(zip(labels, values, strict=True))
+        hkl = tuple(int(vals[k]) for k in ('H', 'K', 'L'))
+        assert list(hkl) == exported['hkl']
+        original = ledger['eligible_by_hkl'].get(','.join(map(str, hkl)))
+        if original and original['is_zero_f'] and original['partition'] == 'work':
+            assert math.isnan(vals['F-obs']) and math.isnan(vals['SIGF-obs'])
+            zero_work_output_nan_hkls.append(list(hkl))
+        fo, sig, fc = vals['F-obs'], vals['SIGF-obs'], vals['FC_ALL_LS']
+        if not (math.isfinite(fo) and fo > 0 and math.isfinite(sig) and sig > 0):
+            continue
+        assert original is not None
+        assert original['f_obs'] > 0
+        assert math.isfinite(fc)
+        assert vals['R-free-flags'] == original['r_free_flag']
+        group = original['partition']
+        assert group in ('work', 'free')
+        candidate_counts[group] += 1
+        candidate_hkls.append((hkl, group))
+        f, c = Fraction(fo), Fraction(fc)
+        numerators[group] += abs(f - c)
+        denominators[group] += f
+    detail = parsed['detailed_cycles'][-1]
+    # Reproduce the PRE-EXISTING diagnostic midpoint rule, never infer native bins.
+    cell = [float(t) for t in next(c for c in cards if c.startswith('CELL ')).split()[1:]]
+    assert cell[3:] == [90.0, 90.0, 90.0]
+    native_bin_summaries = parsed['final_resolution_bins']['bins']
+    midpoints = [float(b['m_4ssq_ll_token']) for b in native_bin_summaries]
+    diagnostic_edges = [(x + y) * 0.5 for x, y in zip(midpoints, midpoints[1:])]
+    candidate_bins = []
+    for bin_index, row in enumerate(native_bin_summaries):
+        low = diagnostic_edges[bin_index - 1] if bin_index else None
+        high = diagnostic_edges[bin_index] if bin_index < len(diagnostic_edges) else None
+        counts = Counter()
+        for hkl, group in candidate_hkls:
+            inv_d2 = sum((v / length) ** 2 for v, length in zip(hkl, cell[:3], strict=True))
+            if (low is None or inv_d2 > low) and (high is None or inv_d2 <= high):
+                counts[group] += 1
+        candidate_bins.append({'bin_ordinal': row['bin_ordinal'], 'source_line': row['line'],
+            'printed_midpoint_token': row['m_4ssq_ll_token'], 'candidate_low_edge': low, 'candidate_high_edge': high,
+            'candidate_work': counts['work'], 'candidate_free': counts['free'],
+            'native_reported_work_count': row['nr_used'], 'native_reported_free_count': row['nr_free'],
+            'counts_differ': counts['work'] != row['nr_used'] or counts['free'] != row['nr_free']})
+    residuals = {}
+    for group, token_key in [('work', 'overall_r_token'), ('free', 'free_r_token')]:
+        token = detail[token_key]
+        center = Fraction(token)
+        half_ulp = Fraction(1, 2 * 10 ** len(token.split('.')[1]))
+        ratio = numerators[group] / denominators[group]
+        residuals[group] = {'candidate_n': candidate_counts[group], 'numerator_exact': str(numerators[group]),
+            'denominator_exact': str(denominators[group]), 'ratio_exact': str(ratio), 'ratio_float': float(ratio),
+            'native_token': token, 'half_ulp_lower_exact': str(center - half_ulp),
+            'half_ulp_upper_exact': str(center + half_ulp),
+            'outside_half_ulp_diagnostic_interval': not center - half_ulp <= ratio <= center + half_ulp}
+    def pdb_inventory(rel):
+        rows = {}
+        representation = {}
+        elements = Counter()
+        for line in read(rel).decode().splitlines():
+            if line[:6].strip() not in ('ATOM', 'HETATM'):
+                continue
+            key = (line[21:22], line[22:26], line[26:27], line[17:20], line[12:16], line[16:17])
+            assert key not in rows
+            rows[key] = line[30:66]
+            representation[key] = {'record_type': line[:6].strip(), 'element_text': line[76:78].strip()}
+            element = line[76:78].strip().upper()
+            assert element
+            elements[element] += 1
+        return rows, representation, {'atom_rows': sum(elements.values()), 'heavy': sum(v for k, v in elements.items() if k not in ('H', 'D')),
+                      'H': elements['H'], 'D': elements['D'], 'element_counts': dict(elements)}
+    in_rows, in_repr, in_counts = pdb_inventory('refmac/inputs/original_model.pdb')
+    out_rows, out_repr, out_counts = pdb_inventory('refmac/refmac/refmac_xyzout.pdb')
+    representation_diff = [{'key': list(k), 'input': in_repr[k], 'output': out_repr[k]}
+                           for k in in_repr.keys() & out_repr.keys() if in_repr[k] != out_repr[k]]
+    representation_diff.sort(key=lambda x: x['key'])
+    cif_doc = gemmi.cif.read_string(read('refmac/refmac/refmac_xyzout.mmcif').decode())
+    atom_blocks = [block for block in cif_doc if block.find_mmcif_category('_atom_site.')]
+    assert len(atom_blocks) == 1, 'expected exactly one atom-site-bearing CIF block'
+    cif_block = atom_blocks[0]
+    elements = list(cif_block.find_values('_atom_site.type_symbol'))
+    occupancies = list(cif_block.find_values('_atom_site.occupancy'))
+    assert elements and len(elements) == len(occupancies)
+    cif_elements = Counter(s.upper() for s in elements)
+    h_occupancies = Counter(o for s, o in zip(elements, occupancies, strict=True) if s.upper() == 'H')
+    mmcif = {'data_block_count': len(cif_doc), 'atom_site_block_name': cif_block.name,
+        'atom_site_rows': len(elements), 'element_counts': dict(cif_elements),
+        'heavy': sum(v for k, v in cif_elements.items() if k not in ('H', 'D')),
+        'H': cif_elements['H'], 'D': cif_elements['D'], 'H_occupancy_tokens': dict(h_occupancies),
+        'method': 'direct _atom_site.type_symbol and occupancy counts; not subtraction from a log total'}
+    result = {'artifact_kind': 'retained_native_diagnostic_reparse_and_recount', 'subject': 'R4',
+        'source_native_head': launch['head'],
+        'source_native_parser_sha256': checkpoint['helper_sources']['onesar_refmac_log_py']['sha256'],
+        'replay_repository_baseline_head': frozen['head'],
+        'frozen_candidate': {'sha256': sha(frozen_bytes), 'size_bytes': len(frozen_bytes), 'payload': frozen},
+        'replay_argv': sys.argv,
+        'source_native_invocation': {k: checkpoint['invocation'][k] for k in ('started_at_utc', 'finished_at_utc', 'returncode', 'elapsed_seconds')},
+        'source_native_banner': {'identity_line': 11, 'identity_text': log.splitlines()[10],
+            'date_time_line': 13, 'date_time_text': log.splitlines()[12], 'banner_timezone_unspecified': True},
+        'original_parent_status': {k: parent.get(k) for k in ('status', 'failed_stage', 'committed', 'published')},
+        'original_parent_declared_run_date': parent_started['run_date'],
+        'replay_started_at_utc': start,
+        'replay_code_state': 'uncommitted frozen candidate; exact parser blob bound below, not a new native execution',
+        'parser': {'path': 'scripts/onesar_refmac_log.py', 'sha256': sha(parser_source), 'size_bytes': len(parser_source),
+            'entry_point': 'parse_refmac_log', 'loading': 'compile the exact frozen source bytes; no bytecode cache'},
+        'audit_script_sha256': sha(Path(__file__).read_bytes()), 'python': sys.version, 'gemmi_version': gemmi.__version__,
+        'sources': sources, 'historical_log_interpretation': {'parse_status': 'parsed', 'parsed_native_log': parsed,
+            'meaning': 'corrected interpretation of the unchanged historical native log; not a new execution'},
+        'fresh_retained_output_recount_context': {'performed_at_utc': datetime.now(timezone.utc).isoformat(),
+            'meaning': 'new derived coordinate/MTZ audit of retained output bytes; not a new native REFMAC observation'},
+        'mtz_word_audit': {'word_count': checked_words, 'all_export_words_equal_raw_little_endian_binary32': True,
+            'column_datasets': {c[1]: int(c[-1]) for c in columns}},
+        'diagnostic_residual_candidate': {'column': 'FC_ALL_LS',
+            'selection': 'positive finite output F-obs and SIGF-obs; positive original eligible F; finite FC_ALL_LS; output FREE unchanged from original eligible-by-HKL partition; NOT proven native membership',
+            'formula': 'sum(abs(F-obs - FC_ALL_LS)) / sum(F-obs), exact rational from retained binary32 words; no fitted scale',
+            'half_ulp_role': 'closed diagnostic interval from printed precision, not the collector strict-interior gate, a proven native rounding rule, or a scientific pass threshold', 'results': residuals},
+        'diagnostic_midpoint_bin_candidate': {
+            'reference_code_path': 'scripts/onesar_refmac.py',
+            'reference_code_sha256': sha((w / 'scripts/onesar_refmac.py').read_bytes()),
+            'method': 'existing diagnostic midpoint interpolation; lower-exclusive/upper-inclusive; independent orthorhombic 1/d^2 = sum((h_i/a_i)^2)',
+            'cell_from_output_MTZ_header': cell, 'selection': 'same positive-F candidate as residual diagnostic',
+            'rows': candidate_bins, 'differing_bin_count': sum(b['counts_differ'] for b in candidate_bins),
+            'limitation': 'These are candidate assignments, not inferred or established native fields. No edge or mask was fitted to native counts.'},
+        'original_ledger_reported_counts': ledger['counts'], 'original_zero_work_hkls_with_output_F_SIGF_nan': zero_work_output_nan_hkls,
+        'pdb': {'input': in_counts, 'output': out_counts, 'keyed_xyz_occupancy_b_text_equal': in_rows == out_rows,
+            'ordered_keys_equal': list(in_rows) == list(out_rows), 'representation_differences': representation_diff,
+            'comparison_key': ['chain', 'resseq', 'icode', 'resname', 'atom_name', 'altloc'],
+            'comparison_limit': 'does not waive record-class, atom-order or element-case checks'},
+        'companion_mmcif': mmcif,
+        'boundary': {'native_tools_executed': False, 'native_observation_time_refreshed': False,
+            'original_artifacts_mutated': False, 'scientific_acceptance': False, 'EVAL_or_QDS_authored': False,
+            'native_effective_membership_proven': False, 'native_residual_reconstruction_proven': False,
+            'native_bin_membership_proven': False, 'internal_active_scattering_population_proven': False,
+            'model_preservation_proven': False, 'xml_reconciliation_performed': False,
+            'note': 'Parser consistency and direct output counts do not supply missing native scientific proofs or authorize a batch.'}}
+    assert native_before == {str(p.relative_to(a)): sha(p.read_bytes()) for p in a.rglob('*') if p.is_file()}
+    for name, info in frozen['files'].items():
+        assert sha((w / name).read_bytes()) == info['sha256'], name
+    result['unchanged_native_file_sha256'] = native_before
+    result['replay_completed_at_utc'] = datetime.now(timezone.utc).isoformat()
+    destination.mkdir()
+    with (destination / 'diagnostic_reparse.json').open('x') as handle:
+        json.dump(result, handle, indent=2, allow_nan=False)
+        handle.write('\n')
+    # These are generated execution-provenance outputs of PRIMARY's authorized audit.
+    # They are evidence snapshots, not new product source modules or native results.
+    with (destination / 'replay_driver.source.txt').open('xb') as handle:
+        handle.write(Path(__file__).read_bytes())
+    with (destination / 'source_candidate.json').open('xb') as handle:
+        handle.write(frozen_bytes)
+    index = {'record_kind': 'retained_derived_diagnostic_receipt',
+        'original_native_attempt': attempt_rel, 'source_native_head': launch['head'],
+        'parser_source_sha256': sha(parser_source), 'scientific_acceptance': False,
+        'note': 'Historical log reparse and fresh retained-output recount, with original failed attempt unchanged. Source snapshots retain original invocation paths; source_candidate.json is the copied input manifest.',
+        'files': {name: {'sha256': sha((destination / name).read_bytes()), 'size_bytes': (destination / name).stat().st_size}
+                  for name in ['diagnostic_reparse.json', 'replay_driver.source.txt', 'source_candidate.json']}}
+    with (destination / 'index.json').open('x') as handle:
+        json.dump(index, handle, indent=2, allow_nan=False)
+        handle.write('\n')
+print(json.dumps({'destination': str(destination), 'residuals': residuals, 'pdb': result['pdb'], 'mmcif': mmcif}, indent=2))

@@ -1,0 +1,32 @@
+"""PRIMARY child-only runtime observation; no native REFMAC execution."""
+from pathlib import Path
+from datetime import datetime,timezone
+import hashlib,json,os,subprocess,sys
+E=Path(__file__).resolve().parent
+W=E.parents[2].parent/'protstruct_review-wt-078'
+OUT=E/'runtime03-launch-01'
+assert os.environ.get('TMUX_PANE')=='%0'
+assert not OUT.exists() and not (E/'runtime-configuration-03.json').exists()
+OUT.mkdir()
+script=E/'observe-runtime-configuration-03.py'
+assert hashlib.sha256(script.read_bytes()).hexdigest()=='92c65a3872e4900925e4943fdcb5d45317509eda443bc445e0b312a7de46395a'
+assert hashlib.sha256((W/'scripts/onesar_refmac.py').read_bytes()).hexdigest()=='98ce55f63c07881425bfade47b39e59e09f0224780b70b65ac4195193a9385a9'
+env=dict(os.environ);iso=json.loads((E/'runtime-configuration-preflight-01.json').read_text())
+removed=[]
+if 'LD_LIBRARY_PATH' in env:
+ assert env['LD_LIBRARY_PATH']==iso['removed_for_next_isolated_child']['LD_LIBRARY_PATH']
+ del env['LD_LIBRARY_PATH'];removed.append('LD_LIBRARY_PATH')
+blocked=sorted(k for k in env if k.startswith(('PROTSTRUCT_','LD_','DYLD_')) or k in {'BASH_ENV','ENV','REFMAC_DIAGNOSTIC_TRACE','SFOUT','FCFOUT'})
+assert not blocked,blocked
+env.update(PATH='/usr/bin:/bin:/usr/sbin:/sbin',PYTHONDONTWRITEBYTECODE='1')
+argv=[str(W/'.venv/bin/python'),'-B',str(script)]
+record={'at':datetime.now(timezone.utc).isoformat(),'argv':argv,'cwd':str(W),'observer_sha256':hashlib.sha256(script.read_bytes()).hexdigest(),'driver_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),'removed_environment_keys':removed,'pre_source_PATH':env['PATH'],'native_refmac_executed':False}
+(OUT/'started.json').write_text(json.dumps(record,indent=2)+'\n')
+with (OUT/'stdout.log').open('wb') as out,(OUT/'stderr.log').open('wb') as err:
+ p=subprocess.run(argv,cwd=W,env=env,stdout=out,stderr=err,timeout=60)
+record['completed_at']=datetime.now(timezone.utc).isoformat();record['returncode']=p.returncode
+target=E/'runtime-configuration-03.json'
+record['observation']={'path':str(target),'sha256':hashlib.sha256(target.read_bytes()).hexdigest(),'size_bytes':target.stat().st_size} if target.exists() else None
+(OUT/'completed.json').write_text(json.dumps(record,indent=2)+'\n')
+print(json.dumps(record))
+sys.exit(p.returncode)

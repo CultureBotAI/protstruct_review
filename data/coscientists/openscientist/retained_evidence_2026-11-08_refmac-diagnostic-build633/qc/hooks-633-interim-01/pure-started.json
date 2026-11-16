@@ -1,0 +1,26 @@
+{
+  "started_at": "2026-11-08T22:42:36.685053+00:00",
+  "argv": [
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/.venv/bin/python",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/hooks-633-interim-01/scripts/test_prepare_refmac_diagnostic.py"
+  ],
+  "cwd": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/hooks-633-interim-01",
+  "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+  "source_hashes": {
+    "scripts/prepare_refmac_diagnostic.py": "9f116be407c71494e2350fff1ffe4e49e4d16824f327fcc8781847aef61633fe",
+    "scripts/test_prepare_refmac_diagnostic.py": "fe04eb9ef72e2be2cb3a1361e3568f42e819a774dca9052e8efcbee14baa92d1",
+    "scripts/refmac_diagnostic/trace_hooks.f90": "fdfbfb3dbe46cd4a58547b9032036775b2ba698bc3b9d0cde4cc8eb44293cd95",
+    "scripts/refmac_diagnostic/trace_writer.f90": "9539453a7137ae01c27f43441c0a3fcaadf3ffe211a71198d0df13e4412199dd"
+  },
+  "returncode": null,
+  "child_completed": false,
+  "passed": false,
+  "native_refmac_executed": false,
+  "synthetic_hook_fixture_only": true,
+  "interpreter_before": {
+    "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/.venv/bin/python",
+    "resolved": "/Users/marcin/.pyenv/versions/3.12.11/bin/python3.12",
+    "sha256": "fe1d249d8278c3ac1a8e7d0550394adfe0485a5f5802fe070c17bc1aa40b00f9",
+    "size_bytes": 33816
+  }
+}

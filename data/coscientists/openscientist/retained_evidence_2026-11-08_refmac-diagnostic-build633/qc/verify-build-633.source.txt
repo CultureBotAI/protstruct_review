@@ -1,0 +1,82 @@
+"""PRIMARY read-only side-effect check of the bounded 633 build, never execution."""
+from datetime import datetime, timezone
+import hashlib
+import json
+import os
+from pathlib import Path
+
+E = Path(__file__).resolve().parent
+B = E / "instrumented-build-633-01"
+OUT = E / "build-side-effects-633-01.json"
+assert not OUT.exists()
+
+def digest(p):
+    h = hashlib.sha256()
+    with Path(p).open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+def pincheck(path, expected):
+    p = Path(path)
+    assert p.is_file(), path
+    assert digest(p) == expected["sha256"], path
+    if "size_bytes" in expected:
+        assert p.stat().st_size == expected["size_bytes"], path
+    for k in ("resolved", "resolved_path"):
+        if k in expected:
+            assert str(p.resolve(strict=True)) == expected[k], path
+
+def fail_walk(exc):
+    raise exc
+
+x = json.loads((B / "build-receipt.json").read_bytes())
+assert x["passed"] is True and x["native_refmac_executed"] is False
+assert x["source_before"] == x["source_after"]
+source = Path(x["source"])
+actual = {}
+for base, dirs, names in os.walk(source, followlinks=False, onerror=fail_walk):
+    for name in dirs + names:
+        assert not (Path(base) / name).is_symlink()
+    for name in names:
+        p = Path(base) / name
+        actual[p.relative_to(source).as_posix()] = {"sha256": digest(p), "size_bytes": p.stat().st_size}
+assert actual == x["source_after"]
+assert x["tools_libraries_before"] == x["tools_libraries_after"]
+for group in ("tools_libraries_before", "external_inputs_before", "external_inputs_after"):
+    for path, expected in x[group].items():
+        pincheck(path, expected)
+assert all(x["external_inputs_before"].get(p) == v for p, v in x["external_inputs_after"].items())
+for p, sha in x["intrinsic_modules_before"].items():
+    pincheck(p, {"sha256": sha})
+for p, sha in x["build_metadata"].items():
+    pincheck(B / p, {"sha256": sha})
+for c in x["commands"]:
+    assert c["outcome"] == "completed" and c["returncode"] == 0
+    assert c["cwd"] == str(B)
+    assert Path(c["argv"][0]).name != "refmac5"
+    pincheck(B / c["log_path"], {"sha256": c["log_sha256"], "size_bytes": c["log_size_bytes"]})
+    if c["log_stream"] == "stderr":
+        pincheck(B / c["stdout_path"], {"sha256": c["stdout_sha256"], "size_bytes": c["stdout_size_bytes"]})
+pincheck(x["executable"]["path"], x["executable"])
+pincheck(B / "refmac5.linked-unrelocated", {"sha256": x["linked_executable_sha256"]})
+assert os.access(x["executable"]["path"], os.X_OK)
+stock = json.loads((E / "runtime-configuration-02.json").read_bytes())["resolver_record"]["refmac5_binary"]
+pincheck(stock["resolved_path"], stock)
+assert x["executable"]["sha256"] != stock["sha256"]
+old = json.loads((E / "preservation-check-04.json").read_bytes())
+wt = E.parents[2].parent / "protstruct_review-wt-078"
+for row in old["original_native_files"]:
+    pincheck(wt / row["path"], row)
+assert len(old["original_native_files"]) == 84
+attempt4 = wt / "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt04"
+assert not attempt4.exists() and not attempt4.is_symlink()
+result = {"at": datetime.now(timezone.utc).isoformat(), "passed": True,
+          "build_receipt_sha256": digest(B / "build-receipt.json"),
+          "executable": x["executable"], "source_files_verified": len(actual),
+          "commands_verified": len(x["commands"]), "all84_unchanged": True,
+          "stock_binary_unchanged": True, "attempt04_root_absent": True,
+          "native_refmac_executed": False, "runtime_loading_proved": False,
+          "implementation_sha256": digest(__file__)}
+OUT.write_text(json.dumps(result, indent=2) + "\n")
+print(json.dumps(result))

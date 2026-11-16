@@ -1,0 +1,200 @@
+{
+  "at": "2026-11-08T21:09:39.908204+00:00",
+  "commands": [
+    {
+      "argv": [
+        "/opt/homebrew/bin/gfortran",
+        "-print-prog-name=f951"
+      ],
+      "returncode": 0,
+      "stdout": "/opt/homebrew/Cellar/gcc/16.2.0/bin/../libexec/gcc/aarch64-apple-darwin27/16/f951\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/opt/homebrew/bin/gfortran",
+        "-print-prog-name=as"
+      ],
+      "returncode": 0,
+      "stdout": "as\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/opt/homebrew/bin/gfortran",
+        "-print-prog-name=collect2"
+      ],
+      "returncode": 0,
+      "stdout": "/opt/homebrew/Cellar/gcc/16.2.0/bin/../libexec/gcc/aarch64-apple-darwin27/16/collect2\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/opt/homebrew/bin/gfortran",
+        "-print-prog-name=ld"
+      ],
+      "returncode": 0,
+      "stdout": "ld\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/usr/bin/xcrun",
+        "--find",
+        "clang"
+      ],
+      "returncode": 0,
+      "stdout": "/Library/Developer/CommandLineTools/usr/bin/clang\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/usr/bin/xcrun",
+        "--find",
+        "clang++"
+      ],
+      "returncode": 0,
+      "stdout": "/Library/Developer/CommandLineTools/usr/bin/clang++\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/usr/bin/xcrun",
+        "--find",
+        "ld"
+      ],
+      "returncode": 0,
+      "stdout": "/Library/Developer/CommandLineTools/usr/bin/ld\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/usr/bin/xcrun",
+        "--find",
+        "ar"
+      ],
+      "returncode": 0,
+      "stdout": "/Library/Developer/CommandLineTools/usr/bin/ar\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/usr/bin/xcrun",
+        "--find",
+        "make"
+      ],
+      "returncode": 0,
+      "stdout": "/Library/Developer/CommandLineTools/usr/bin/make\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/usr/bin/xcrun",
+        "--show-sdk-path"
+      ],
+      "returncode": 0,
+      "stdout": "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/usr/bin/xcrun",
+        "--show-sdk-version"
+      ],
+      "returncode": 0,
+      "stdout": "27.0\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/usr/bin/sw_vers"
+      ],
+      "returncode": 0,
+      "stdout": "ProductName:\t\tmacOS\nProductVersion:\t\t27.0.1\nBuildVersion:\t\t26A434\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/usr/bin/uname",
+        "-r"
+      ],
+      "returncode": 0,
+      "stdout": "27.0.0\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/usr/bin/uname",
+        "-m"
+      ],
+      "returncode": 0,
+      "stdout": "arm64\n",
+      "stderr": ""
+    }
+  ],
+  "files": {
+    "gfortran_f951": {
+      "path": "/opt/homebrew/Cellar/gcc/16.2.0/bin/../libexec/gcc/aarch64-apple-darwin27/16/f951",
+      "resolved": "/opt/homebrew/Cellar/gcc/16.2.0/libexec/gcc/aarch64-apple-darwin27/16/f951",
+      "sha256": "6d1e9de5221477e92b5eccca6fcaeffb57b5310ebeda8ffab04833ee271872aa",
+      "size_bytes": 50469552
+    },
+    "gfortran_collect2": {
+      "path": "/opt/homebrew/Cellar/gcc/16.2.0/bin/../libexec/gcc/aarch64-apple-darwin27/16/collect2",
+      "resolved": "/opt/homebrew/Cellar/gcc/16.2.0/libexec/gcc/aarch64-apple-darwin27/16/collect2",
+      "sha256": "f2ec6a35a31946f31d8ade5e994b10d37b2fb73c8571d9fc9c2ac4d872d4f61d",
+      "size_bytes": 1936632
+    },
+    "xcrun_clang": {
+      "path": "/Library/Developer/CommandLineTools/usr/bin/clang",
+      "resolved": "/Library/Developer/CommandLineTools/usr/bin/clang",
+      "sha256": "1590ac950a3d627817d09ade5cb60b2115f17a72182a3141e010b4bcc482a0c9",
+      "size_bytes": 124676976
+    },
+    "xcrun_clang++": {
+      "path": "/Library/Developer/CommandLineTools/usr/bin/clang++",
+      "resolved": "/Library/Developer/CommandLineTools/usr/bin/clang",
+      "sha256": "1590ac950a3d627817d09ade5cb60b2115f17a72182a3141e010b4bcc482a0c9",
+      "size_bytes": 124676976
+    },
+    "xcrun_ld": {
+      "path": "/Library/Developer/CommandLineTools/usr/bin/ld",
+      "resolved": "/Library/Developer/CommandLineTools/usr/bin/ld",
+      "sha256": "374d9f0713bce2c8a9e1e82bde51615d5433516a10d99b63107eb6ee70542e4c",
+      "size_bytes": 2749664
+    },
+    "xcrun_ar": {
+      "path": "/Library/Developer/CommandLineTools/usr/bin/ar",
+      "resolved": "/Library/Developer/CommandLineTools/usr/bin/ar",
+      "sha256": "85d15bd3999895f659e8a483b17ea9ab44b924c8e0b3026abfe359f2de02cbd7",
+      "size_bytes": 73520
+    },
+    "xcrun_make": {
+      "path": "/Library/Developer/CommandLineTools/usr/bin/make",
+      "resolved": "/Library/Developer/CommandLineTools/usr/bin/make",
+      "sha256": "fe709619aab6d3b280cc22cb06d14432b3fa5fa7eb323e8d4817071410760f1b",
+      "size_bytes": 69456
+    },
+    "sdk_SDKSettings.json": {
+      "path": "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/SDKSettings.json",
+      "resolved": "/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/SDKSettings.json",
+      "sha256": "7b93ad7e534cc4b31c6a4e39d19b5e0288acf2168c2649479a796d1cb51939fb",
+      "size_bytes": 7948
+    },
+    "sdk_Accelerate.tbd": {
+      "path": "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks/Accelerate.framework/Accelerate.tbd",
+      "resolved": "/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks/Accelerate.framework/Versions/A/Accelerate.tbd",
+      "sha256": "7e5493d3b8ec67a818fdf9ec9656d9f65d64e8eb616821bb27a14a47c607c8a0",
+      "size_bytes": 383422
+    },
+    "libgcc_s.2.dylib": {
+      "path": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libgcc_s.2.dylib",
+      "resolved": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libgcc_s.2.dylib",
+      "sha256": "94e10ad77d04b65a945b2ea24fb1d0c8d0071729788e739abe2e1623ebf415c1",
+      "size_bytes": 94000
+    }
+  },
+  "native_refmac_executed": false,
+  "sdk_real_path": "/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk",
+  "accelerate_identity_boundary": "SDK stub hash is a build input, not the runtime Accelerate image. Runtime is supplied by macOS shared cache; actual loader images must be recorded separately during the authorized run."
+}

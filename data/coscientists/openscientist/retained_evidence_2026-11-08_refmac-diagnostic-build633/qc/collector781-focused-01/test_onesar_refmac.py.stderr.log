@@ -1,0 +1,79 @@
+test_actual_archive_complete_capture (__main__.TestRefmacCollectorFirstSlice.test_actual_archive_complete_capture)
+Case 1: Actual-archive complete capture, env/secret filtering, and false admission flags. ... ok
+test_atomic_write_new_json_file_canonical_and_preexisting_temp_collisions (__main__.TestRefmacCollectorFirstSlice.test_atomic_write_new_json_file_canonical_and_preexisting_temp_collisions)
+Case 33 (Fixtures 1a, 1b): _atomic_write_new_json_file preserves canonical and pre-existing temporary markers on collision. ... ok
+test_child_refmac_dir_missing_by_rename_and_replacements_with_parent_fallback (__main__.TestRefmacCollectorFirstSlice.test_child_refmac_dir_missing_by_rename_and_replacements_with_parent_fallback) ... ok
+test_disk_log_malformed_despite_plausible_completed_process_stdout (__main__.TestRefmacCollectorFirstSlice.test_disk_log_malformed_despite_plausible_completed_process_stdout)
+Case 2: Malformed on-disk log fails at parse_refmac_log despite plausible CompletedProcess.stdout. ... ok
+test_dwavel_and_dwav_header_metadata_and_absent_vs_zero_wavelength (__main__.TestRefmacCollectorFirstSlice.test_dwavel_and_dwav_header_metadata_and_absent_vs_zero_wavelength)
+Case 6: Literal MTZ header cases for DWAVEL, DWAV, absent wavelength, and 0.00000 (#1052). ... ok
+test_escaped_output_and_escaped_input_ancestor_symlinks_rejected_without_reading_target (__main__.TestRefmacCollectorFirstSlice.test_escaped_output_and_escaped_input_ancestor_symlinks_rejected_without_reading_target) ... ok
+test_exact_int_fraction_formatting_and_unavailable_component_cell_tuple_maximum (__main__.TestRefmacCollectorFirstSlice.test_exact_int_fraction_formatting_and_unavailable_component_cell_tuple_maximum)
+Group 2 (6): Bounded exact integer/fraction formatting beyond 4300 digits and one unavailable-component cell tuple maximum. ... ok
+test_exact_token_and_conditional_interval_comparisons (__main__.TestRefmacCollectorFirstSlice.test_exact_token_and_conditional_interval_comparisons)
+Group 2 (4): Exact R-token comparisons across leading/trailing zeros, 0.1235/0.123, disjoint 28/29-place tokens, and 10^28 pair. ... ok
+test_executable_outside_configured_ccp4_prefix_rejected_at_preflight (__main__.TestRefmacCollectorFirstSlice.test_executable_outside_configured_ccp4_prefix_rejected_at_preflight)
+Case 8: Discovered refmac5 outside configured CCP4 prefix fails at preflight before runner call. ... ok
+test_existing_evidence_root_rejected_before_runner_preserving_marker (__main__.TestRefmacCollectorFirstSlice.test_existing_evidence_root_rejected_before_runner_preserving_marker)
+Case 7: Existing evidence_root is rejected at staging before any runner call and preserves owned marker. ... ok
+test_late_publication_d0_exhaustion_same_child_m0_d1_collisions_and_mode_refresh (__main__.TestRefmacCollectorFirstSlice.test_late_publication_d0_exhaustion_same_child_m0_d1_collisions_and_mode_refresh)
+Case 38 (Fixtures F3, F4, F5, F6): D0 write exhaustion without M0 fallback, same-child M0/D1 collisions, and current-child mode refresh with rejected D1 correction. ... ok
+test_late_publication_failure_and_collision_ordering_invariants (__main__.TestRefmacCollectorFirstSlice.test_late_publication_failure_and_collision_ordering_invariants)
+Case 39 (Fixtures F7a, F7b, F8): Persistence/parent-identity before final collision vs collision before later manifest failure retain both facts and the first cause. ... ok
+test_late_publication_first_d0_and_m0_child_write_failures (__main__.TestRefmacCollectorFirstSlice.test_late_publication_first_d0_and_m0_child_write_failures)
+Case 37 (Fixtures F1, F2): First-late D0 and M0 child write failures produce honest public failure, authoritative final references, preserved audits/snapshots, and idempotent outcome derivation. ... ok
+test_late_publication_original_cause_and_structured_none_preservation (__main__.TestRefmacCollectorFirstSlice.test_late_publication_original_cause_and_structured_none_preservation)
+Case 40 (Fixture F9): Original runner, timeout, preflight, and structured-None causes survive later D0 child + selected-parent M0 terminal publication failures. ... ok
+test_malformed_xmlout_through_full_collector_operation (__main__.TestRefmacCollectorFirstSlice.test_malformed_xmlout_through_full_collector_operation)
+Group 2 (3): Malformed XMLOUT through run_refmac_rfactor_operation fails at audit_refmac_xmlout and persists raw/audit evidence. ... ok
+test_mtz_cell_context_representations_and_header_metadata (__main__.TestRefmacCollectorFirstSlice.test_mtz_cell_context_representations_and_header_metadata)
+Group 4 (MTZ cell/context): float32-to-4f emission match, 64.8970->64.8971 and 0.01 mismatches, and full pair DCELL/DWAV/dataset bindings. ... ok
+test_mtz_five_row_reorder_rescale_padding_and_special_float32_words (__main__.TestRefmacCollectorFirstSlice.test_mtz_five_row_reorder_rescale_padding_and_special_float32_words)
+Group 3 (1): 5-row reorder, 2x FP/SIGFP rescaling, NaN->FREE=0 padding, and NaN/+Inf/-Inf/-0.0/+0.0 raw word classification. ... ok
+test_mtz_ledger_defects_hkl_domain_flag_violations_and_no_fc_all_fallback (__main__.TestRefmacCollectorFirstSlice.test_mtz_ledger_defects_hkl_domain_flag_violations_and_no_fc_all_fallback)
+Group 3 (2): Missing/malformed input ledger, missing/new/duplicate/nonintegral HKLs, flag flip/NaN on zero/negative F, and no FC_ALL fallback. ... ok
+test_mtz_malformed_headers_raw_retention_and_full_collector_promotion (__main__.TestRefmacCollectorFirstSlice.test_mtz_malformed_headers_raw_retention_and_full_collector_promotion)
+Group 4 (malformed MTZ headers): VALM -999, NCOL row mismatch, truncated END card raw retention + audit rejection, and full collector promotion. ... ok
+test_mtz_mixed_fc_all_ls_summary_and_bounded_reso_1e400_2e400 (__main__.TestRefmacCollectorFirstSlice.test_mtz_mixed_fc_all_ls_summary_and_bounded_reso_1e400_2e400)
+Group 2 remainder: mixed work-unavailable/free-mismatch FC_ALL_LS summary and bounded RESO 1E400 2E400 handling. ... ok
+test_mtz_three_row_baseline_ledger_and_hklout_audit (__main__.TestRefmacCollectorFirstSlice.test_mtz_three_row_baseline_ledger_and_hklout_audit)
+Group 3 baseline: 3-row exact ledger, raw export, 1-to-1 HKL audit, FC_ALL_LS residuals, and false native proofs. ... ok
+test_native_log_banner_and_end_of_refmac_markers_including_attempt03_canary_log (__main__.TestRefmacCollectorFirstSlice.test_native_log_banner_and_end_of_refmac_markers_including_attempt03_canary_log) ... ok
+test_nonzero_runner_exit_with_outputs (__main__.TestRefmacCollectorFirstSlice.test_nonzero_runner_exit_with_outputs)
+Case 3: Nonzero runner exit retains outputs and records refmac_returncode as primary failure. ... ok
+test_pdb_baseline_reorder_and_serial_only_distinction (__main__.TestRefmacCollectorFirstSlice.test_pdb_baseline_reorder_and_serial_only_distinction)
+Group 4 (PDB baseline/reorder/serial): reader, adapter, supplemented inventory, unchanged baseline, reordered keys, and serial-only preservation. ... ok
+test_pdb_coordinate_occupancy_element_b_factor_key_set_record_type_and_padding_variants (__main__.TestRefmacCollectorFirstSlice.test_pdb_coordinate_occupancy_element_b_factor_key_set_record_type_and_padding_variants)
+Group 4 (PDB valid comparison variants): coordinate, occupancy, element, B-factor, uniform B-shift, added/removed keys, ATOM/HETATM, and atom-name padding. ... ok
+test_pdb_hd_anisou_model_altloc_numeric_representation_and_full_collector_promotion (__main__.TestRefmacCollectorFirstSlice.test_pdb_hd_anisou_model_altloc_numeric_representation_and_full_collector_promotion)
+Group 4 (PDB evidence/representation boundaries + promotion): H/D, ANISOU, MODEL/ENDMDL, altloc, NaN, numeric text, and full operation promotion. ... ok
+test_persist_collector_json_with_fallback_child_write_denial_and_no_anchor_memory (__main__.TestRefmacCollectorFirstSlice.test_persist_collector_json_with_fallback_child_write_denial_and_no_anchor_memory)
+Case 35 (Fixtures 4, 5): _persist_collector_json_with_fallback handles child write denial with parent collisions, no-anchor memory, and immutable MappingProxyType caller payloads. ... ok
+test_pre_execution_checkpoint_overwrite_move_and_inode_replacement_recovery (__main__.TestRefmacCollectorFirstSlice.test_pre_execution_checkpoint_overwrite_move_and_inode_replacement_recovery) ... ok
+test_rejected_parent_replacement_and_successful_recheck_after_restoring_original_inode (__main__.TestRefmacCollectorFirstSlice.test_rejected_parent_replacement_and_successful_recheck_after_restoring_original_inode) ... ok
+test_resource_bounded_xml_token_and_compact_exponent_sentinel_handling (__main__.TestRefmacCollectorFirstSlice.test_resource_bounded_xml_token_and_compact_exponent_sentinel_handling)
+Group 2 (5): 4301-place valid XML token and bounded compact exponent/sentinel handling without global setting mutation. ... ok
+test_returned_args_none_after_otherwise_successful_capture (__main__.TestRefmacCollectorFirstSlice.test_returned_args_none_after_otherwise_successful_capture)
+Case 5: CompletedProcess(args=None, returncode=0) is refused at refmac_argv_verification (#1053). ... ok
+test_run_refmac_rfactor_operation_final_diagnostics_collision_e2e (__main__.TestRefmacCollectorFirstSlice.test_run_refmac_rfactor_operation_final_diagnostics_collision_e2e)
+Case 36 (Fixture 6): Final canonical diagnostics collision during run_refmac_rfactor_operation writes sibling diagnostics, preserves marker, and fails at refmac_raw_outputs. ... ok
+test_runner_mutates_staged_input_and_raises_declared_exception (__main__.TestRefmacCollectorFirstSlice.test_runner_mutates_staged_input_and_raises_declared_exception)
+Case 9: Runner mutates an owned staged input and raises a declared exception after partial outputs. ... ok
+test_runner_removes_staged_input_retaining_baseline_and_outputs (__main__.TestRefmacCollectorFirstSlice.test_runner_removes_staged_input_retaining_baseline_and_outputs)
+Case 10: Runner removes one owned staged input; baseline, child metadata, and raw outputs remain retained. ... ok
+test_timeout_after_partial_output (__main__.TestRefmacCollectorFirstSlice.test_timeout_after_partial_output)
+Case 4: Timeout after partial output retains partial bytes and original TimeoutExpired cause. ... ok
+test_unexpected_audit_boundary_exception_persists_contextual_failure (__main__.TestRefmacCollectorFirstSlice.test_unexpected_audit_boundary_exception_persists_contextual_failure)
+Case 11: Narrow unexpected exception at XMLOUT audit boundary persists contextual audit_exception while keeping staging, other audits, and publication real. ... ok
+test_unreadable_owned_extra_file_retains_original_cause_and_restores_mode (__main__.TestRefmacCollectorFirstSlice.test_unreadable_owned_extra_file_retains_original_cause_and_restores_mode) ... ok
+test_unusable_owned_child_dir_falls_back_to_surviving_admitted_parent (__main__.TestRefmacCollectorFirstSlice.test_unusable_owned_child_dir_falls_back_to_surviving_admitted_parent) ... ok
+test_whole_root_replacement_rejects_scan_and_returns_truthful_memory_only_refusal (__main__.TestRefmacCollectorFirstSlice.test_whole_root_replacement_rejects_scan_and_returns_truthful_memory_only_refusal) ... ok
+test_write_json_with_sibling_collision_fallback_regular_and_symlink_collisions (__main__.TestRefmacCollectorFirstSlice.test_write_json_with_sibling_collision_fallback_regular_and_symlink_collisions)
+Case 34 (Fixtures 2, 3): _write_json_with_sibling_collision_fallback handles canonical/sibling regular and symlink collisions across target and temp paths. ... ok
+test_xmlout_audit_states_log_unproven_association_and_values_above_one (__main__.TestRefmacCollectorFirstSlice.test_xmlout_audit_states_log_unproven_association_and_values_above_one)
+Group 2 (1-2): Direct _audit_refmac_xmlout across supported, absent, unsupported, malformed, -999 sentinel, log-present unproven association, and R > 1. ... ok
+
+----------------------------------------------------------------------
+Ran 41 tests in 13.485s
+
+OK

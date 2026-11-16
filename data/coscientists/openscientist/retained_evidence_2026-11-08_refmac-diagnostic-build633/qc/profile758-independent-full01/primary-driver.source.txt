@@ -1,0 +1,29 @@
+"""PRIMARY full independent profile checker, after the public recheck API exists.
+Preserves the checker's pending acceptance ledger; case success alone is not acceptance.
+"""
+import argparse,hashlib,json,sys,traceback
+from pathlib import Path
+from datetime import datetime,timezone
+sys.dont_write_bytecode=True
+E=Path(__file__).resolve().parent
+p=argparse.ArgumentParser();p.add_argument('--module',type=Path,required=True);p.add_argument('--sha256',required=True);p.add_argument('--output',type=Path,required=True);a=p.parse_args()
+checker=E/'check-profile-independent-accepted754.py';fixture=E/'profile-independent-fixture.py';module=a.module.resolve();out=a.output.resolve()
+assert out.parent==E and not out.exists() and module.is_relative_to(E) and sys.flags.optimize==0
+pins={checker:'af8e3463562e382260bc6a3a442122780d40f59e58ad42c498a60e6a96d4738d',fixture:'4b0c275940332e13e24a12a97602e87686188693984128df4d6eab248a1e0a92',module:a.sha256,Path(__file__).resolve():hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
+for path,digest in pins.items():assert hashlib.sha256(path.read_bytes()).hexdigest()==digest,path
+raw=checker.read_bytes()
+def guard(event,args):
+ if event.startswith(('subprocess.','os.exec','os.spawn','os.posix_spawn','os.fork','socket.','ctypes.')) or event=='os.system':raise RuntimeError('Forbidden independent QA operation '+event)
+sys.addaudithook(guard)
+sys.argv=[str(checker),'--module',str(module),'--output',str(out)]
+ns={'__name__':'__main__','__file__':str(checker)};error=None;exit_code=None
+try:exec(compile(raw,str(checker),'exec'),ns)
+except SystemExit as exc:exit_code=exc.code
+except Exception as exc:error={'type':type(exc).__name__,'message':str(exc),'traceback':traceback.format_exc()}
+assert out.exists()
+unchanged=all(hashlib.sha256(path.read_bytes()).hexdigest()==digest for path,digest in pins.items())
+result=json.loads((out/'result.json').read_text()) if (out/'result.json').exists() else None
+record={'at':datetime.now(timezone.utc).isoformat(),'source_pins':{str(k):v for k,v in pins.items()},'source_closure_unchanged':unchanged,'checker_exit_code':exit_code,'unexpected_error':error,'checker_result_present':result is not None,'full_checker_executed':error is None and result is not None,'native_execution':False,'pending_ledger_preserved':True,'acceptance_claim':False}
+(out/'primary-driver.json').write_text(json.dumps(record,indent=2)+'\n');(out/'primary-driver.source.txt').write_bytes(Path(__file__).read_bytes())
+print(json.dumps({'primary':record,'result_summary':None if result is None else {k:result[k] for k in ('passed','case_count','failures','denied_operations','pending_acceptance_assertions')}}))
+sys.exit(2 if error or not unchanged or result is None else 0 if not result['failures'] and not result['denied_operations'] else 1)

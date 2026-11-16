@@ -1,0 +1,115 @@
+"""PRIMARY focused collector checks; run only on a completed, idle-secondary snapshot."""
+from pathlib import Path
+from datetime import datetime, timezone
+import hashlib
+import json
+import os
+import stat
+import subprocess
+import sys
+
+E = Path(__file__).resolve().parent
+R = E.parents[2]
+W = R.parent / "protstruct_review-wt-078"
+OUT = E / "collector781-focused-01"
+OUT.mkdir(exist_ok=False)
+(OUT / "tmp").mkdir()
+(OUT / "scripts").mkdir()
+
+
+def pin(path):
+    path = Path(path)
+    st = path.lstat()
+    if stat.S_ISLNK(st.st_mode):
+        target = os.readlink(path)
+        raw = os.fsencode(target)
+        return {"kind": "symlink", "target": target,
+                "sha256": hashlib.sha256(raw).hexdigest(), "size_bytes": len(raw)}
+    assert stat.S_ISREG(st.st_mode), path
+    h = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            h.update(block)
+    after = path.stat()
+    assert (st.st_ino, st.st_size, st.st_mtime_ns) == (after.st_ino, after.st_size, after.st_mtime_ns)
+    return {"sha256": h.hexdigest(), "size_bytes": st.st_size}
+
+
+def git(*args):
+    return subprocess.check_output(["git", "-C", str(W), *args])
+
+
+def inputs():
+    names = set(git("ls-files", "-z").decode().split("\0"))
+    names |= set(git("ls-files", "--others", "--exclude-standard", "-z").decode().split("\0"))
+    return {name: pin(W / name) for name in sorted(names) if name}
+
+
+tests = ["test_onesar_refmac_diagnostic.py", "test_onesar_refmac.py"]
+for name in tests:
+    assert (W / "scripts" / name).is_file(), name
+before = inputs()
+head = git("rev-parse", "HEAD").decode().strip()
+branch = git("branch", "--show-current").decode().strip()
+assert branch == "analysis/1sar-rerun-2026-11-06"
+(OUT / "inputs-before.json").write_text(json.dumps(before, indent=2) + "\n")
+for source in sorted((W / "scripts").glob("*.py")):
+    (OUT / "scripts" / source.name).write_bytes(source.read_bytes())
+frozen = {str(p.relative_to(OUT)): pin(p) for p in sorted((OUT / "scripts").glob("*.py"))}
+driver_before = pin(Path(__file__))
+(OUT / "driver.source.txt").write_bytes(Path(__file__).read_bytes())
+guard = OUT / "guarded-test.py"
+guard.write_text("""import json,runpy,sys
+from pathlib import Path
+assert sys.version_info[:2] == (3,12), sys.version
+target=Path(sys.argv[1]).resolve()
+denied=[]
+def guard(event,args):
+ if event.startswith(('subprocess.','os.exec','os.spawn','os.posix_spawn','os.fork','socket.')) or event=='os.system':
+  denied.append(event)
+  raise RuntimeError('Forbidden native/process/network operation in collector synthetic QC: '+event)
+sys.addaudithook(guard)
+sys.argv=[str(target),'-v']
+try:
+ runpy.run_path(str(target),run_name='__main__')
+finally:
+ Path(__file__).with_name(target.name+'.denied.json').write_text(json.dumps(denied)+'\\n')
+ if denied: raise RuntimeError('Forbidden operation attempted even if caught: '+repr(denied))
+""")
+guard_before = pin(guard)
+env = dict(os.environ)
+removed = sorted(k for k in env if k.startswith(("LD_", "DYLD_", "PROTSTRUCT_"))
+                 or k in {"BASH_ENV", "ENV", "SFOUT", "FCFOUT", "REFMAC_DIAGNOSTIC_TRACE"})
+for key in removed:
+    env.pop(key)
+env.update(PATH=str(W / ".venv/bin") + ":/usr/bin:/bin:/usr/sbin:/sbin",
+           PYTHONDONTWRITEBYTECODE="1", TMPDIR=str(OUT / "tmp"))
+start = {"at": datetime.now(timezone.utc).isoformat(), "head": head, "branch": branch,
+         "driver": driver_before, "guard": guard_before, "input_count": len(before),
+         "removed_environment_keys": removed, "native_execution": False,
+         "scope": "focused synthetic diagnostic and legacy collector tests; no canary admission"}
+(OUT / "started.json").write_text(json.dumps(start, indent=2) + "\n")
+results = []
+for name in tests:
+    argv = ["/Users/marcin/.local/bin/uv", "run", "--locked", "--offline", "--extra", "benchmark",
+            "--", "python", "-B", str(guard), str(W / "scripts" / name)]
+    with (OUT / (name + ".stdout.log")).open("wb") as stdout, (OUT / (name + ".stderr.log")).open("wb") as stderr:
+        proc = subprocess.run(argv, cwd=W, env=env, stdout=stdout, stderr=stderr)
+    results.append({"test": name, "argv": argv, "returncode": proc.returncode})
+ruff_argv = [str(W / ".venv/bin/ruff"), "check", "--no-cache",
+             str(W / "scripts/onesar_refmac.py"), str(W / "scripts/test_onesar_refmac_diagnostic.py")]
+with (OUT / "ruff.stdout.log").open("wb") as stdout, (OUT / "ruff.stderr.log").open("wb") as stderr:
+    ruff = subprocess.run(ruff_argv, cwd=W, env=env, stdout=stdout, stderr=stderr)
+after = inputs()
+(OUT / "inputs-after.json").write_text(json.dumps(after, indent=2) + "\n")
+changes = [name for name in sorted(set(before) | set(after)) if before.get(name) != after.get(name)]
+unchanged = (not changes and head == git("rev-parse", "HEAD").decode().strip()
+             and driver_before == pin(Path(__file__)) and guard_before == pin(guard)
+             and frozen == {str(p.relative_to(OUT)): pin(p) for p in sorted((OUT / "scripts").glob("*.py"))})
+record = {**start, "completed_at": datetime.now(timezone.utc).isoformat(), "tests": results,
+          "ruff": {"argv": ruff_argv, "returncode": ruff.returncode}, "changed_inputs": changes,
+          "source_closure_unchanged": unchanged, "frozen_scripts": frozen,
+          "passed": unchanged and ruff.returncode == 0 and all(x["returncode"] == 0 for x in results)}
+(OUT / "result.json").write_text(json.dumps(record, indent=2) + "\n")
+print(json.dumps({"passed": record["passed"], "tests": results, "source_closure_unchanged": unchanged}))
+sys.exit(0 if record["passed"] else 1)

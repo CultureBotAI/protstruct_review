@@ -1,0 +1,29 @@
+test_inspect_retained_native_trace_envelope_failure_progress_1185 (__main__.TestOnesarRefmacDiagnosticWiring.test_inspect_retained_native_trace_envelope_failure_progress_1185)
+Unexpected reader exception exposes unknown progress while skipped reader records zero bytes and no prefix digest/size (#1185). ... ok
+test_legacy_default_mode_remains_unchanged (__main__.TestOnesarRefmacDiagnosticWiring.test_legacy_default_mode_remains_unchanged)
+Default diagnostic_profile=None preserves schema_version 1, 6 helpers, and stock CCP4 executable. ... ok
+test_positive_diagnostic_capture_and_non_promotion_guards (__main__.TestOnesarRefmacDiagnosticWiring.test_positive_diagnostic_capture_and_non_promotion_guards)
+Positive diagnostic capture runs once with instrumented binary, dyld log, v2 envelopes, and false Gate 1 / admission flags. ... ok
+test_post_launch_nonzero_exit_timeout_and_truncated_trace_retention (__main__.TestOnesarRefmacDiagnosticWiring.test_post_launch_nonzero_exit_timeout_and_truncated_trace_retention)
+Post-launch failures retain raw native_trace bytes/SHA-256 and preserve first failure stage and cause. ... ok
+test_postflight_profile_mutation_and_fallback_retention (__main__.TestOnesarRefmacDiagnosticWiring.test_postflight_profile_mutation_and_fallback_retention)
+Postflight profile mutation, audit exception, and unwritable child refmac_dir fallback preserve trace and provenance. ... ok
+test_preflight_rejects_collector_helper_role_join_mismatch_1163 (__main__.TestOnesarRefmacDiagnosticWiring.test_preflight_rejects_collector_helper_role_join_mismatch_1163)
+Independently repinned copy of a helper module at a different path passes validate_profile but fails verify_diagnostic_helper_role_join (#1163). ... ok
+test_preflight_rejects_conflicting_environment_before_toolchain_resolver (__main__.TestOnesarRefmacDiagnosticWiring.test_preflight_rejects_conflicting_environment_before_toolchain_resolver)
+Conflicting inherited environment is rejected with ValueError before _resolve_ccp4_refmac_toolchain with zero runner calls. ... ok
+test_preflight_rejects_non_ascii_trace_path_and_fresh_trace_collision (__main__.TestOnesarRefmacDiagnosticWiring.test_preflight_rejects_non_ascii_trace_path_and_fresh_trace_collision)
+Non-ASCII native_trace path and pre-existing refmac_native_trace.jsonl are rejected before launch. ... ok
+test_preflight_rejects_outside_prefix_resolver_and_bad_profile_pins (__main__.TestOnesarRefmacDiagnosticWiring.test_preflight_rejects_outside_prefix_resolver_and_bad_profile_pins)
+Outside-prefix stock resolver and bad caller manifest/executable pins fail at preflight with zero runner calls. ... ok
+test_preflight_rejects_untyped_profile_and_non_r4_subject_before_staging (__main__.TestOnesarRefmacDiagnosticWiring.test_preflight_rejects_untyped_profile_and_non_r4_subject_before_staging)
+Untyped diagnostic_profile or subject_id != 'R4' raises ValueError before staging. ... ok
+test_raw_observations_precede_audits_and_combined_failures_retain_causes_1184 (__main__.TestOnesarRefmacDiagnosticWiring.test_raw_observations_precede_audits_and_combined_failures_retain_causes_1184)
+All five raw observations precede both diagnostic audits and combined runner/profile/trace failures retain original causes (#1184). ... ok
+test_symlink_helper_alias_and_empty_closed_trace_prove_no_coverage (__main__.TestOnesarRefmacDiagnosticWiring.test_symlink_helper_alias_and_empty_closed_trace_prove_no_coverage)
+Symlink alias in collector_helpers passes role join if resolved target matches; closed empty trace has has_events=False. ... ok
+
+----------------------------------------------------------------------
+Ran 12 tests in 12.293s
+
+OK

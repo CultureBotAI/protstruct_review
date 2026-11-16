@@ -1,0 +1,16 @@
+import json,runpy,sys
+from pathlib import Path
+assert sys.version_info[:2] == (3,12), sys.version
+target=Path(sys.argv[1]).resolve()
+denied=[]
+def guard(event,args):
+ if event.startswith(('subprocess.','os.exec','os.spawn','os.posix_spawn','os.fork','socket.')) or event=='os.system':
+  denied.append(event)
+  raise RuntimeError('Forbidden native/process/network operation in collector synthetic QC: '+event)
+sys.addaudithook(guard)
+sys.argv=[str(target),'-v']
+try:
+ runpy.run_path(str(target),run_name='__main__')
+finally:
+ Path(__file__).with_name(target.name+'.denied.json').write_text(json.dumps(denied)+'\n')
+ if denied: raise RuntimeError('Forbidden operation attempted even if caught: '+repr(denied))

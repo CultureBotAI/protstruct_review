@@ -1,0 +1,29 @@
+{
+  "algorithm": "mmtbx.model_vs_data.first_block_public_api",
+  "apply_pdb_header_resolution_cut": false,
+  "expected_phenix_version": "2.0-5936",
+  "expected_resolved_prefix": "/Users/marcin/phenix-2.0-5936",
+  "ignore_r_free_flags": false,
+  "keep_going": false,
+  "labels": [
+    "F-obs",
+    "SIGF-obs"
+  ],
+  "map_coefficients": {
+    "acentrics_scale": 2.0,
+    "centrics_pre_scale": 1.0,
+    "exclude_free_r_reflections": false,
+    "fill_missing": false,
+    "isotropize": true,
+    "phases_prefix": "PH",
+    "sharp": false
+  },
+  "r_free_flags_generate": false,
+  "r_free_flags_label": "R-free-flags",
+  "scattering_table": "n_gaussian",
+  "schema_version": 1,
+  "subject_id": "R4",
+  "test_flag_value": 1,
+  "twin_law": null,
+  "update_f_part1": true
+}

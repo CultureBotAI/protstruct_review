@@ -1,0 +1,1496 @@
+"""PRIMARY bounded synthetic acceptance checks; never calls a producer or native tool."""
+import argparse
+import builtins
+import copy
+from dataclasses import fields, is_dataclass
+from collections.abc import Mapping
+from datetime import datetime, timezone
+import hashlib
+import io
+import importlib.util
+import json
+import os
+import errno
+import stat
+from pathlib import Path
+import sys
+import traceback
+from types import MappingProxyType
+from unittest.mock import patch
+from contextlib import ExitStack, contextmanager
+
+sys.dont_write_bytecode = True
+if sys.flags.optimize != 0:
+    raise RuntimeError("Profile QC requires unoptimized assertions")
+p = argparse.ArgumentParser()
+p.add_argument("--module", type=Path, required=True)
+p.add_argument("--output", type=Path, required=True)
+a = p.parse_args()
+here = Path(__file__).resolve().parent
+out = a.output.absolute()
+if out.parent != here or out.exists() or out.is_symlink():
+    raise ValueError("Fresh direct orchestration child required")
+
+
+denied_operations = []
+
+
+class ForbiddenQcOperation(RuntimeError):
+    pass
+
+
+def deny_processes(event, args):
+    if event.startswith(("subprocess.", "os.exec", "os.spawn", "os.posix_spawn", "os.fork", "socket.")) or event == "os.system":
+        denied_operations.append(event)
+        raise ForbiddenQcOperation("Synthetic profile QC forbids process/network execution: " + event)
+    write_paths = []
+    if event == "open":
+        path, mode, flags = args
+        writing = isinstance(mode, str) and any(c in mode for c in "wax+")
+        writing = writing or isinstance(flags, int) and bool(flags & (
+            os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND))
+        if writing:
+            write_paths.append(path)
+    elif event in {"os.mkdir", "os.remove", "os.rmdir", "os.chmod", "os.truncate"}:
+        write_paths.append(args[0])
+    elif event in {"os.rename", "os.link"}:
+        write_paths.extend(args[:2])
+    elif event == "os.symlink":
+        write_paths.append(args[1])
+    for path in write_paths:
+        if not isinstance(path, int):
+            resolved = Path(os.fsdecode(path)).resolve(strict=False)
+            if resolved != out and not resolved.is_relative_to(out):
+                denied_operations.append(event + ":outside-output")
+                raise ForbiddenQcOperation("Synthetic QC write outside its fresh output: " + str(path))
+
+
+sys.addaudithook(deny_processes)
+out.mkdir()
+fixture_source = here / "profile-independent-fixture.py"
+fixture_bytes = fixture_source.read_bytes()
+checker_bytes = Path(__file__).read_bytes()
+(out / "fixture.source.txt").write_bytes(fixture_bytes)
+(out / "checker.source.txt").write_bytes(checker_bytes)
+fixture_ns = {"__name__": "independent_fixture"}
+exec(compile(fixture_bytes, str(fixture_source), "exec"), fixture_ns)
+make_fixture = fixture_ns["make_fixture"]
+pin = fixture_ns["pin"]
+dump = fixture_ns["dump"]
+module_source = a.module.read_bytes()
+snapshot = out / "refmac_diagnostic_profile.py"
+snapshot.write_bytes(module_source)
+spec = importlib.util.spec_from_file_location("profile_under_check", snapshot)
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+exec(compile(module_source, str(snapshot), "exec"), vars(module))
+results = []
+# These depend on the completed public baseline/recheck shape. This checker
+# must not claim acceptance before they are implemented and independently checked.
+reconciled_acceptance_assertions = [
+    "Review and execute the corrected admission assertion changes",
+    "Assert every negative case's independently named failure stage",
+    "Observe referenced-file access under the wrong-manifest-pin guard",
+    "Capture pre-admission file/root identities as well as content pins",
+    "Exercise ordinary immutable-field mutations and caller alias detachment",
+    "Freeze original postflight expected rows before mutations",
+    "Assert partial postflight observations and original cause identity",
+    "Assert bidirectional row/mutation/error consistency",
+    "Exercise root, ancestor, mode and symlink postflight identity changes",
+]
+# Reconciled by PRIMARY against 82 actual passing cases and fresh review759.
+# Evidence: checker754-bounded-acceptance.json; no native/scientific admission.
+pending_acceptance_assertions = []
+
+
+def profile(f):
+    return module.RefmacDiagnosticProfile(
+        profile_id="refmac_5_8_0431_instrumented_attempt4_v1",
+        manifest=module.FilePin(**pin(f["manifest_path"])),
+        executable=module.FilePin(**pin(f["executable"])),
+    )
+
+
+def validate(f, request=None):
+    installed_before = copy.deepcopy(f["installed_record"])
+    environment_before = copy.deepcopy(f["environment"])
+    supplied_request = request if request is not None else profile(f)
+    f["held_request"] = supplied_request
+    f["held_request_pins"] = {
+        "manifest": supplied_request.manifest.to_dict(),
+        "executable": supplied_request.executable.to_dict(),
+    }
+    f["held_installed_record"] = installed_before
+    f["held_environment"] = environment_before
+    f["held_outer_manifest"] = copy.deepcopy(f["manifest"])
+    # Capture independent file pins before crossing the public API. Bad-shape
+    # negative fixtures may contain unusable paths; they cannot become positives.
+    f["held_file_pins"] = {}
+    f["held_file_observations"] = {}
+    for ident, row in f["manifest"]["files"].items():
+        try:
+            f["held_file_pins"][ident] = pin(row["path"], "resolved_path")
+            f["held_file_observations"][ident] = capture_file_expectation(row["path"])
+        except OSError as exc:
+            f["held_file_pins"][ident] = {"unavailable": type(exc).__name__}
+    f["held_manifest_observation"] = capture_file_expectation(f["manifest_path"])
+    f["held_root_observations"] = {}
+    for ident, row in f["manifest"]["roots"].items():
+        try:
+            f["held_root_observations"][ident] = {
+                "path": row["path"], **path_identity(row["path"]),
+                "members": expected_members(f, ident),
+            }
+        except OSError as exc:
+            f["held_root_observations"][ident] = {"unavailable": type(exc).__name__}
+    with ExitStack() as stack:
+        if f.get("forbid_json_parse"):
+            original_loads = json.loads
+            forbidden = f["manifest_path"].read_bytes()
+            f["manifest_parse_attempts"] = []
+            f["referenced_inspection_attempts"] = []
+            reference_paths = {
+                os.path.normpath(row["path"]) for row in f["manifest"]["files"].values()
+            } | {os.path.normpath(row["path"]) for row in f["manifest"]["roots"].values()}
+            reference_paths.update(
+                os.path.normpath(row["resolved_path"])
+                for row in f["held_file_pins"].values() if "resolved_path" in row
+            )
+            def reference_trap(original):
+                def checked(path, *args, **kwargs):
+                    if isinstance(path, (str, bytes, os.PathLike)):
+                        raw = os.fsdecode(path)
+                        normalized = os.path.normpath(os.path.abspath(raw))
+                        if normalized in reference_paths:
+                            f["referenced_inspection_attempts"].append(raw)
+                            raise AssertionError("Inspected a reference before manifest pin admission")
+                    return original(path, *args, **kwargs)
+                return checked
+            def only_manifest_trap(value, *args, **kwargs):
+                raw = value.encode("utf-8") if isinstance(value, str) else value
+                if raw == forbidden:
+                    f["manifest_parse_attempts"].append(True)
+                    raise AssertionError("Parsed manifest before caller hash admission")
+                return original_loads(value, *args, **kwargs)
+            for name, value in list(vars(module).items()):
+                if value is original_loads:
+                    stack.enter_context(patch.object(module, name, side_effect=only_manifest_trap))
+            stack.enter_context(patch.object(json, "loads", side_effect=only_manifest_trap))
+            reference_functions = [(owner, name, getattr(owner, name)) for owner, name in (
+                (builtins, "open"), (io, "open"), (os, "open"), (os, "stat"), (os, "lstat"),
+                (os, "scandir"), (os, "listdir"))]
+            for imported_name, value in list(vars(module).items()):
+                if any(value is original for _, _, original in reference_functions):
+                    stack.enter_context(patch.object(module, imported_name,
+                                                    side_effect=reference_trap(value)))
+            for owner, name, original in reference_functions:
+                stack.enter_context(patch.object(owner, name, side_effect=reference_trap(original)))
+        if f.get("admission_context") is not None:
+            stack.enter_context(f["admission_context"](f))
+        try:
+            return module.validate_profile(supplied_request, f["installed_record"],
+                                           f["environment"], f["evidence_root"])
+        finally:
+            assert f["installed_record"] == installed_before, "Changed caller installed record"
+            assert f["environment"] == environment_before, "Changed caller environment"
+
+
+def repin(f, path):
+    for row in f["manifest"]["files"].values():
+        if row["path"] == str(path):
+            row.update(pin(path, "resolved_path"))
+    dump(f["manifest_path"], f["manifest"])
+
+
+def role_path(f, role):
+    return Path(f["manifest"]["files"][f["manifest"]["roles"][role][0]]["path"])
+
+
+def edit_receipt(f, role, edit):
+    path = role_path(f, role)
+    value = json.loads(path.read_text())
+    edit(value)
+    dump(path, value)
+    repin(f, path)
+
+
+def path_identity(path, *, follow=False):
+    value = os.stat(path, follow_symlinks=follow)
+    return {"dev": value.st_dev, "ino": value.st_ino, "mode": stat.S_IMODE(value.st_mode),
+            "uid": value.st_uid, "gid": value.st_gid}
+
+
+def assert_identity(row, path, *, follow=False):
+    assert isinstance(row, dict) and row["path"] == str(path)
+    for key, value in path_identity(path, follow=follow).items():
+        assert type(row[key]) is int and row[key] == value, (path, key)
+
+
+def capture_file_expectation(path):
+    """Independent fixture observation captured before the admission call."""
+    raw = str(path)
+    current = pin(raw, "resolved_path")
+    parent_paths = {
+        str(parent.resolve(strict=True))
+        for spelling in (raw, current["resolved_path"])
+        for parent in Path(spelling).parents
+    }
+    edge_paths = sorted(str(q) for q in (Path(raw), *Path(raw).parents) if q.is_symlink())
+    return {
+        **current, **path_identity(raw, follow=True),
+        "ancestors": {p: {"path": p, **path_identity(p)} for p in parent_paths},
+        "symlink_identities": {
+            p: {"path": p, "target": os.readlink(p), **path_identity(p)} for p in edge_paths
+        },
+    }
+
+
+def assert_held_file(observed, expected):
+    for key, value in expected.items():
+        if key in {"ancestors", "symlink_identities"}:
+            indexed = {v["path"]: v for v in observed[key]}
+            assert len(indexed) == len(observed[key])
+            for path, identity in value.items():
+                assert path in indexed, (key, path)
+                for identity_key, identity_value in identity.items():
+                    assert indexed[path][identity_key] == identity_value, (path, identity_key)
+        else:
+            assert observed[key] == value, (expected["path"], key)
+
+
+def assert_ancestors(row, paths):
+    observations = row["ancestors"]
+    assert isinstance(observations, list) and observations
+    indexed = {value["path"]: value for value in observations}
+    assert len(indexed) == len(observations)
+    # Enumerate before resolving: bin/../tool depends on bin as well as its
+    # canonical parent, but the literal spelling bin/.. is not a directory ID.
+    required = {str(parent.resolve(strict=True)) for path in paths for parent in Path(path).parents}
+    assert required <= set(indexed), (required - set(indexed))
+    for path, observation in indexed.items():
+        assert_identity(observation, path)
+
+
+def assert_file_observation(observation, path):
+    raw_path = str(path)
+    assert_identity(observation, raw_path, follow=True)
+    current_pin = pin(raw_path, "resolved_path")
+    assert type(observation["size_bytes"]) is int
+    for key, value in current_pin.items():
+        assert observation[key] == value, (raw_path, key)
+    edges = observation["symlinks"]
+    assert isinstance(edges, list)
+    assert edges == sorted(edges, key=lambda edge: edge["path"])
+    edge_paths = set()
+    for edge in edges:
+        assert isinstance(edge, dict) and isinstance(edge["path"], str)
+        assert edge["target"] == os.readlink(edge["path"])
+        edge_paths.add(edge["path"])
+    assert len(edge_paths) == len(edges)
+    # Independent fixture aliases have direct, deliberately known edges.
+    direct_edges = {str(q) for q in (Path(raw_path), *Path(raw_path).parents) if q.is_symlink()}
+    assert direct_edges <= edge_paths
+    identities = observation["symlink_identities"]
+    assert isinstance(identities, list)
+    assert {v["path"] for v in identities} == edge_paths and len(identities) == len(edges)
+    for identity in identities:
+        assert_identity(identity, identity["path"])
+    assert_ancestors(observation, (raw_path, current_pin["resolved_path"]))
+
+
+def expected_members(f, root_id):
+    root = Path(f["manifest"]["roots"][root_id]["path"])
+    ids = {str(Path(row["path"]).relative_to(root)): ident for ident, row in f["manifest"]["files"].items()
+           if Path(row["path"]).is_relative_to(root)}
+    members = []
+    def fail(exc):
+        raise exc
+    for current, directories, filenames in os.walk(root, followlinks=False, onerror=fail):
+        if root_id == "vendor" and Path(current) == root:
+            directories[:] = [n for n in directories if n != ".git"]
+            filenames = [n for n in filenames if n != ".git"]
+        for name in filenames:
+            path = Path(current) / name
+            relative = str(path.relative_to(root))
+            members.append({"relative_path": relative, "file_id": ids.get(relative)})
+    return sorted(members, key=lambda row: row["relative_path"])
+
+
+def assert_root_observation(f, root_id, observation, *, complete):
+    path = f["manifest"]["roots"][root_id]["path"]
+    assert_identity(observation, path)
+    assert_ancestors(observation, (path,))
+    assert isinstance(observation["members"], list)
+    if complete:
+        assert observation["members"] == expected_members(f, root_id)
+
+
+def assert_admitted(f, baseline):
+    assert type(baseline) is module.ValidatedProfile
+    assert baseline.request == f["held_request"]
+    assert isinstance(baseline.selected_executable, module.FilePin)
+    assert baseline.selected_executable == f["held_request"].executable
+    provenance = baseline.to_provenance()
+    json.dumps(provenance, allow_nan=False)
+    assert provenance["profile_id"] == "refmac_5_8_0431_instrumented_attempt4_v1"
+    assert provenance["subject_id"] == "R4"
+    assert provenance["profile_files_verified"] is True
+    assert provenance["runtime_image_coverage"] == "not_assessed"
+    assert provenance["selected_executable"] == f["held_request_pins"]["executable"]
+    assert provenance["requested"] == f["held_request_pins"]
+    assert provenance["installed_reference"] == pin(role_path(f, "installed_reference"))
+    assert provenance["installed_record"] == f["held_installed_record"]
+    assert provenance["evidence_root"] == str(f["evidence_root"])
+    assert provenance["expected_environment"] == f["held_environment"]
+    assert provenance["requested_absences"] == f["manifest"]["runtime_environment"]["expected_absent"]
+    assert provenance["roles"] == f["manifest"]["roles"]
+    assert set(provenance["files"]) == set(f["manifest"]["files"])
+    assert set(provenance["roots"]) == {"vendor", "prepared", "build"}
+    assert_file_observation(provenance["manifest"], f["manifest_path"])
+    assert_held_file(provenance["manifest"], f["held_manifest_observation"])
+    for ident, row in f["manifest"]["files"].items():
+        for key, value in f["held_file_pins"][ident].items():
+            assert provenance["files"][ident][key] == value, (ident, key)
+        assert_held_file(provenance["files"][ident], f["held_file_observations"][ident])
+        assert_file_observation(provenance["files"][ident], row["path"])
+        assert [{"path": e["path"], "target": e["target"]} for e in provenance["files"][ident]["symlinks"]] == row["symlinks"]
+    for root_id, observation in provenance["roots"].items():
+        for key, value in f["held_root_observations"][root_id].items():
+            assert observation[key] == value, (root_id, key)
+        assert_root_observation(f, root_id, observation, complete=True)
+    assert not any(k in provenance for k in ("canary_eligible", "batch_eligible", "scientific_eligible"))
+    return provenance
+
+
+def exception_chain_contains(cause, intended):
+    seen = set()
+    while isinstance(cause, Exception) and id(cause) not in seen:
+        if cause is intended:
+            return True
+        seen.add(id(cause))
+        cause = cause.__cause__
+    return False
+
+
+def assert_error_descriptor(error):
+    assert isinstance(error, dict)
+    assert isinstance(error["type"], str) and error["type"]
+    assert isinstance(error["message"], str) and error["message"]
+    assert error["errno"] is None or type(error["errno"]) is int
+
+
+def reject_ordinary_field_writes(obj, names):
+    """Try ordinary writes to actual existing evidence fields, without frozen-object bypasses."""
+    checks = []
+    for name in names:
+        current = getattr(obj, name)
+        for operation in ("assign", "delete"):
+            try:
+                if operation == "assign":
+                    setattr(obj, name, current)
+                else:
+                    delattr(obj, name)
+            except (AttributeError, TypeError):
+                checks.append({"field": name, "operation": operation, "rejected": True})
+            else:
+                checks.append({"field": name, "operation": operation, "rejected": False})
+                raise AssertionError("Writable retained evidence: " + name + "/" + operation)
+    return checks
+
+
+def reject_ordinary_item_writes(obj):
+    assert len(obj), "Mutation control needs an existing item"
+    key = next(iter(obj)) if isinstance(obj, Mapping) else 0
+    value = obj[key]
+    for operation in ("assign", "delete"):
+        try:
+            if operation == "assign":
+                obj[key] = value
+            else:
+                del obj[key]
+        except (AttributeError, TypeError):
+            pass
+        else:
+            raise AssertionError("Writable retained container: " + operation)
+
+
+marker = "QC_ONLY_DETACHED_RETURN_652"
+
+
+def contaminate_return(value):
+    if isinstance(value, dict):
+        for key, item in list(value.items()):
+            contaminate_return(item)
+            if not isinstance(item, (dict, list, tuple)):
+                value[key] = marker
+        value[marker] = marker
+    elif isinstance(value, (list, tuple)):
+        for index, item in enumerate(list(value)):
+            contaminate_return(item)
+            if isinstance(value, list) and not isinstance(item, (dict, list, tuple)):
+                value[index] = marker
+        if isinstance(value, list):
+            value.append(marker)
+
+
+
+def assert_failure_immutable(error):
+    original = copy.deepcopy(error.to_provenance())
+    checks = reject_ordinary_field_writes(error, (
+        "failed_check", "request", "manifest_identity", "files", "roots", "roles",
+        "installed_reference", "installed_record_json", "expected_environment",
+        "requested_absences", "evidence_root", "error_type", "error_message", "error_errno",
+        "selected_executable", "profile_files_verified", "runtime_image_coverage",
+    ))
+    for table in (error.files, error.roots, error.roles, error.expected_environment):
+        if len(table):
+            reject_ordinary_item_writes(table)
+    exported = error.to_provenance()
+    contaminate_return(exported)
+    assert error.to_provenance() == original
+    return checks
+
+
+def capture_partial_dependencies(raw_path):
+    """Capture measurable dependencies even when the final target is unavailable.
+
+    This bounded independent fixture oracle uses lstat/readlink on each literal
+    component before trying canonical directory resolution. It never substitutes
+    the baseline identity for an unavailable live target.
+    """
+    path = Path(raw_path)
+    parents, edges = {}, {}
+    for candidate in (path, *path.parents):
+        try:
+            value = candidate.lstat()
+        except OSError:
+            continue
+        if stat.S_ISLNK(value.st_mode):
+            try:
+                edges[str(candidate)] = {"path": str(candidate), "target": os.readlink(candidate),
+                                         **path_identity(candidate)}
+            except OSError:
+                continue
+        if candidate != path:
+            try:
+                canonical = str(candidate.resolve(strict=True))
+                if stat.S_ISDIR(os.stat(canonical).st_mode):
+                    parents[canonical] = {"path": canonical, **path_identity(canonical)}
+            except OSError:
+                continue
+    return {"path": str(raw_path), "ancestors": parents, "symlink_identities": edges}
+
+
+def capture_postflight_facts(f):
+    """Observe the inert fixture independently before injected read/scan faults."""
+    original = f["held_baseline_provenance"]
+    facts = {}
+    files = [("profile:manifest", original["manifest"])] + [
+        ("profile:file:" + key, value) for key, value in original["files"].items()
+    ]
+    for key, row in files:
+        try:
+            facts[key] = {"complete": True, "file": capture_file_expectation(row["path"])}
+        except OSError:
+            facts[key] = {"complete": False, "file": capture_partial_dependencies(row["path"])}
+    def fail(error):
+        raise error
+    for root_id, row in original["roots"].items():
+        path = Path(row["path"])
+        known_ids = {
+            str(Path(value["path"]).relative_to(path)): ident
+            for ident, value in original["files"].items()
+            if Path(value["path"]).is_relative_to(path)
+        }
+        members = []
+        subdirectories = {}
+        for current, directories, filenames in os.walk(path, followlinks=False, onerror=fail):
+            if root_id == "vendor" and Path(current) == path:
+                directories[:] = [n for n in directories if n != ".git"]
+                filenames = [n for n in filenames if n != ".git"]
+            for name in directories:
+                child = Path(current) / name
+                subdirectories[str(child)] = {"path": str(child),
+                    "resolved_path": str(child.resolve(strict=True)), **path_identity(child)}
+            for name in filenames:
+                relative = str((Path(current) / name).relative_to(path))
+                members.append({"relative_path": relative, "file_id": known_ids.get(relative)})
+        facts["profile:root:" + root_id] = {
+            "path": str(path), "resolved_path": str(path.resolve(strict=True)),
+            **path_identity(path), "members": sorted(members, key=lambda value: value["relative_path"]),
+            "subdirectories": subdirectories,
+            "ancestors": {
+                str(parent): {"path": str(parent), **path_identity(parent)}
+                for parent in (path, *path.parents)
+            },
+        }
+    return facts
+
+
+def assert_available_observation(key, row, fact):
+    observed = row["observed"]
+    if key.startswith("profile:root:"):
+        # These fixtures fault enumeration, not the independently measured
+        # root identity/dependencies. Errors cannot excuse dropping those facts.
+        assert isinstance(observed, dict), (key, "missing obtainable root identity")
+        for field in ("path", "resolved_path", "dev", "ino", "mode", "uid", "gid"):
+            assert observed.get(field) == fact[field], (key, field)
+        retained_ancestors = {value["path"]: value for value in observed.get("ancestors", [])}
+        assert set(fact["ancestors"]) <= set(retained_ancestors), (key, "missing obtainable ancestors")
+    if observed is None:
+        assert row["errors"] and row["matches_baseline"] is False
+        return
+    assert isinstance(observed, dict) and observed["path"] == row["expected"]["path"]
+    actual = fact if key.startswith("profile:root:") else fact["file"]
+    for name in ("path", "resolved_path", "sha256", "size_bytes", "dev", "ino", "mode", "uid", "gid"):
+        value = observed.get(name)
+        if value is not None:
+            assert name in actual and value == actual[name], (key, name, value, actual.get(name))
+    for name in ("ancestors", "symlink_identities"):
+        values = observed.get(name)
+        if values is None:
+            continue
+        assert isinstance(values, list)
+        assert len({value["path"] for value in values}) == len(values)
+        for value in values:
+            reference = actual.get(name, {}).get(value["path"])
+            assert reference is not None, (key, name, value["path"])
+            for field, expected_value in reference.items():
+                assert value[field] == expected_value, (key, name, field)
+    if not key.startswith("profile:root:"):
+        edges = observed.get("symlinks")
+        if edges is not None:
+            expected_edges = [
+                {"path": p, "target": value["target"]}
+                for p, value in sorted(actual.get("symlink_identities", {}).items())
+            ]
+            assert edges == expected_edges
+        if not row["errors"]:
+            assert fact["complete"]
+            assert_held_file(observed, actual)
+    else:
+        # Validate every supplied subdirectory identity, including partial rows.
+        # Missing measurements may remain absent; false supplied identities may not.
+        child_values = observed.get("subdirectories")
+        children = {}
+        if child_values is not None:
+            assert isinstance(child_values, list)
+            children = {value["path"]: value for value in child_values}
+            assert len(children) == len(child_values)
+            for child, value in children.items():
+                assert child in actual["subdirectories"], (key, child)
+                for field, reference in actual["subdirectories"][child].items():
+                    assert value.get(field) == reference, (key, child, field)
+        # A complete error-free observation must retain the independently known
+        # identity. Calling omitted evidence a mismatch is not sufficient.
+        if not row["errors"]:
+            assert row["scan_complete"] is True
+            for field in ("path", "resolved_path", "dev", "ino", "mode", "uid", "gid"):
+                assert observed.get(field) == actual[field], (key, field)
+            ancestors = {v["path"]: v for v in observed.get("ancestors", [])}
+            assert set(actual["ancestors"]) <= set(ancestors), key
+            assert child_values is not None
+            assert set(children) == set(actual["subdirectories"]), key
+        members = observed.get("members")
+        if members is not None:
+            known = {value["relative_path"]: value["file_id"] for value in actual["members"]}
+            paths = [value["relative_path"] for value in members]
+            assert paths == sorted(set(paths))
+            for value in members:
+                assert value["relative_path"] in known
+                expected_id = known[value["relative_path"]]
+                if expected_id is not None:
+                    assert value["file_id"] == expected_id
+                else:
+                    assert isinstance(value["file_id"], str) and value["file_id"]
+            if row["scan_complete"]:
+                assert set(paths) == set(known)
+        if row["scan_complete"]:
+            assert members is not None
+
+
+def descriptor_in_chain(descriptor, cause):
+    keys = ("type", "message", "errno")
+    if not isinstance(descriptor, dict) or any(key not in descriptor for key in keys):
+        return False
+    core = {key: descriptor[key] for key in keys}
+    seen = set()
+    while isinstance(cause, Exception) and id(cause) not in seen:
+        if core == {"type": type(cause).__name__, "message": str(cause),
+                    "errno": getattr(cause, "errno", None)}:
+            return True
+        seen.add(id(cause))
+        cause = cause.__cause__
+    return False
+
+
+def assert_post_shape(f, baseline, observed, causes):
+    original = f["held_baseline_provenance"]
+    assert baseline.to_provenance() == original, "Postflight changed its original authority"
+    assert observed["profile_id"] == original["profile_id"]
+    assert set(observed["files"]) == set(original["files"])
+    assert set(observed["roots"]) == {"vendor", "prepared", "build"}
+    assert list(observed["files"]) == sorted(original["files"])
+    assert list(observed["roots"]) == sorted(original["roots"])
+    assert observed["runtime_image_coverage"] == "not_assessed"
+    assert type(observed["verified"]) is bool
+    assert len(causes) == len(observed["mutations"])
+    assert isinstance(observed["errors"], list)
+    keyed_rows = [("profile:manifest", observed["manifest"], original["manifest"])]
+    keyed_rows += [("profile:file:" + k, r, original["files"][k]) for k, r in observed["files"].items()]
+    keyed_rows += [("profile:root:" + k, r, original["roots"][k]) for k, r in observed["roots"].items()]
+    # Fault keys come from independent fixture observations/injected objects,
+    # never from the product's own error labels.
+    observation_error_keys = set(f.get("injected_error_objects", {}))
+    if f.get("injected_scan_exceptions"):
+        observation_error_keys.add("profile:root:vendor")
+    observation_error_keys.update(
+        key for key, fact in f["postflight_facts"].items()
+        if not key.startswith("profile:root:") and not fact["complete"]
+    )
+    for key, row, expected in keyed_rows:
+        if key not in observation_error_keys:
+            assert row["errors"] == [], (key, "invented observation error")
+        assert row["expected"] == expected, key
+        assert type(row["matches_baseline"]) is bool and isinstance(row["errors"], list)
+        if key.startswith("profile:root:"):
+            assert type(row["scan_complete"]) is bool
+            assert isinstance(row["member_diff"], dict) and set(row["member_diff"]) == {"added", "removed"}
+            if row["scan_complete"]:
+                old_members = {v["relative_path"] for v in expected["members"]}
+                new_members = {v["relative_path"] for v in row["observed"]["members"]}
+                assert row["member_diff"] == {"added": sorted(new_members - old_members), "removed": sorted(old_members - new_members)}
+            else:
+                assert row["member_diff"]["removed"] == [], "Incomplete scan cannot establish missing members"
+                seen = {value["relative_path"] for value in (row["observed"] or {}).get("members", [])}
+                old = {value["relative_path"] for value in expected["members"]}
+                assert set(row["member_diff"]["added"]) <= seen - old
+        assert_available_observation(key, row, f["postflight_facts"][key])
+        complete = not key.startswith("profile:root:") or row["scan_complete"]
+        identity_fields = ("path", "resolved_path", "dev", "ino", "mode", "uid", "gid", "ancestors")
+        if key.startswith("profile:root:"):
+            identity_fields += ("name", "members", "subdirectories")
+        else:
+            identity_fields += ("sha256", "size_bytes", "symlinks", "symlink_identities")
+        same_identity = row["observed"] is not None and all(
+            row["observed"].get(field) == expected.get(field) for field in identity_fields
+        )
+        independent_match = complete and not row["errors"] and same_identity
+        assert row["matches_baseline"] is bool(independent_match), key
+        if not independent_match:
+            assert any(m["key"] == key for m in observed["mutations"]), key
+        for error in row["errors"]:
+            assert_error_descriptor(error)
+            assert error.get("key", key) == key, (key, "wrong row error owner")
+            assert any(e["key"] == key and all(e.get(n) == error[n] for n in ("type", "message", "errno")) for e in observed["errors"])
+            assert any(m["key"] == key and m["error"] == error for m in observed["mutations"])
+    for mutation, cause in zip(observed["mutations"], causes):
+        assert set(mutation) >= {"category", "key", "path", "reason", "expected", "observed", "error"}
+        assert isinstance(mutation["reason"], str) and mutation["reason"]
+        indexed_rows = {key: row for key, row, _ in keyed_rows}
+        assert mutation["key"] in indexed_rows
+        matched_row = indexed_rows[mutation["key"]]
+        assert matched_row["matches_baseline"] is False
+        assert mutation["path"] == matched_row["expected"]["path"]
+        assert mutation["expected"] == matched_row["expected"]
+        assert mutation["observed"] == matched_row["observed"]
+        category = "diagnostic_profile_" + mutation["key"].split(":")[1]
+        assert mutation["category"] == category
+        if mutation["key"] not in observation_error_keys:
+            assert mutation["error"] is None and cause is None, (mutation["key"], "comparison-only cause")
+        if mutation["error"] is None:
+            assert cause is None
+        else:
+            assert_error_descriptor(mutation["error"])
+            assert isinstance(cause, Exception)
+            assert descriptor_in_chain(mutation["error"], cause)
+            assert mutation["error"] in matched_row["errors"]
+            injected = list(f.get("injected_scan_exceptions", [])) if mutation["key"] == "profile:root:vendor" else []
+            if mutation["key"] in f.get("injected_error_objects", {}):
+                injected.append(f["injected_error_objects"][mutation["key"]])
+            if injected:
+                assert any(exception_chain_contains(cause, original_error)
+                           for original_error in injected), (mutation["key"], "reconstructed cause")
+    for error in observed["errors"]:
+        indexed_rows = {key: row for key, row, _ in keyed_rows}
+        assert error["key"] in indexed_rows
+        assert any(row_error.get("key", error["key"]) == error["key"]
+                   and all(row_error.get(field) == error[field]
+                           for field in ("type", "message", "errno"))
+                   for row_error in indexed_rows[error["key"]]["errors"])
+    independent_verified = all(row["matches_baseline"] for _, row, _ in keyed_rows)
+    independent_verified = independent_verified and not observed["mutations"] and not observed["errors"]
+    assert observed["verified"] is bool(independent_verified)
+    if f.get("injected_scan_exceptions"):
+        assert any(m["key"] == "profile:root:vendor"
+                   and any(exception_chain_contains(cause, original_error)
+                           for original_error in f["injected_scan_exceptions"])
+                   for m, cause in zip(observed["mutations"], causes))
+    for key, original_error in f.get("injected_error_objects", {}).items():
+        assert any(m["key"] == key and exception_chain_contains(cause, original_error)
+                   for m, cause in zip(observed["mutations"], causes)), key
+
+
+PREFLIGHT_EXPECTATIONS = {
+    "wrong independent manifest pin": "manifest_pin",
+    "wrong independent executable pin": "outer_manifest_shape",
+    "independent hash checked before malformed JSON parsing": "manifest_pin",
+    "duplicate nested JSON key with correct caller pin": "manifest_json",
+    **{name: "outer_manifest_shape" for name in (
+        "extra arbitrary command field", "wrong subject", "wrong upstream", "Boolean size",
+        "helper order", "empty QC support", "weaken absence list", "controlled roots overlap", "omitted external symlink edge",
+        "controlled lexical dotdot", "controlled member becomes same-byte symlink",
+    )},
+    **{name: "outer_profile_files_and_roots" for name in (
+        "hidden extra tree member", "nonexecutable diagnostic file",
+        "external alias retargeted to same bytes",
+    )},
+    "wrong expected environment": "ccp4_env",
+    "supplied installed prefix differs": "installed_record",
+    **{name: "runtime_observation_join" for name in (
+        "supplied installed reference differs", "supplied installed setup differs",
+        "supplied installed bound environment differs", "repinned runtime observer target",
+        "repinned runtime library membership",
+    )},
+    "supplied environment alone differs": "ccp4_env",
+    "evidence root overlaps controlled tree": "evidence_root",
+    "repinned audit interpreter target": "source_audit_join",
+    "repinned complete inventory changed member": "source_audit_join",
+}
+
+
+def case(name, mutate=None, expected_reject=True, post=None, post_assert=None, post_context=None,
+         expected_check=None, mutation_descriptor=None, pre_context=None, failure_assert=None):
+    f = make_fixture(out / ("fixture-" + str(len(results))))
+    observed = None
+    if pre_context is not None:
+        f["admission_context"] = pre_context
+    phase = "mutation"
+    denied_before = len(denied_operations)
+    declared_check = expected_check or PREFLIGHT_EXPECTATIONS.get(name)
+    if expected_reject and not post and declared_check is None:
+        raise ValueError("Missing independently declared failure stage for " + name)
+    try:
+        if post:
+            baseline = validate(f)
+            f["held_baseline_provenance"] = copy.deepcopy(assert_admitted(f, baseline))
+            post(f)
+            f["postflight_facts"] = capture_postflight_facts(f)
+            phase = "postflight"
+            causes = []
+            with ExitStack() as stack:
+                if post_context is not None:
+                    stack.enter_context(post_context(f))
+                observed = module.recheck_profile(baseline, mutation_causes_out=causes)
+            assert capture_postflight_facts(f) == f["postflight_facts"], "Recheck changed the inert fixture"
+            json.dumps(observed, allow_nan=False)
+            assert_post_shape(f, baseline, observed, causes)
+            passed = (observed["verified"] is (not expected_reject)
+                      and post_assert is not None and post_assert(f, baseline, observed))
+        else:
+            request = mutate(f) if mutate else None
+            phase = "validation"
+            observed = validate(f, request)
+            passed = not expected_reject
+            if passed:
+                assert_admitted(f, observed)
+    except Exception as exc:
+        intended_type = getattr(module, "ProfileValidationError", None)
+        intended = intended_type is not None and type(exc) is intended_type
+        passed = expected_reject and not post and phase == "validation" and intended
+        returned_observation = copy.deepcopy(observed) if isinstance(observed, dict) else None
+        observed = {"error_type": type(exc).__name__, "message": str(exc),
+                    "traceback": traceback.format_exc()}
+        if returned_observation is not None:
+            observed["returned_observation"] = returned_observation
+        if passed:
+            try:
+                failure = exc.to_provenance()
+                json.dumps(failure, allow_nan=False)
+                assert failure["profile_files_verified"] is False
+                assert failure["selected_executable"] is None
+                assert failure["runtime_image_coverage"] == "not_assessed"
+                assert failure["failed_check"] == declared_check, (name, declared_check, failure["failed_check"])
+                assert failure["requested"] == f["held_request_pins"]
+                assert_error_descriptor(failure["error"])
+                if f.get("forbid_json_parse"):
+                    assert f["manifest_parse_attempts"] == []
+                    assert f["referenced_inspection_attempts"] == []
+                observed["failed_admission"] = failure
+                if failure_assert is not None:
+                    failure_assert(f, exc, failure)
+                if name == "repinned source_audit.passed":
+                    observed["failure_immutability_checks"] = assert_failure_immutable(exc)
+            except Exception as check_error:
+                passed = False
+                observed["failure_assertion_error"] = type(check_error).__name__ + ": " + str(check_error)
+                observed["failure_assertion_traceback"] = traceback.format_exc()
+    passed = passed and len(denied_operations) == denied_before
+    row = {"name": name, "passed": passed, "expect_rejection": expected_reject,
+           "expected_check": declared_check, "mutation_descriptor": mutation_descriptor,
+           "caller_request_pins": f.get("held_request_pins"),
+           "postflight": post is not None, "phase": phase,
+           "cause_identity_checks": f.get("retained_exception_identity_checks"),
+           "observation": observed if isinstance(observed, dict) else type(observed).__name__}
+    results.append(row)
+    dump(out / "cases.json", results)
+    return passed
+
+
+if not case("complete independent positive fixture", expected_reject=False):
+    raise RuntimeError("Positive control failed; mutation cases were not run")
+
+
+def outer_edit(f, edit):
+    edit(f["manifest"])
+    dump(f["manifest_path"], f["manifest"])
+
+
+def wrong_caller_pin(f, which):
+    valid = profile(f)
+    bad = module.FilePin(path=getattr(valid, which).path, sha256="0" * 64,
+                        size_bytes=getattr(valid, which).size_bytes)
+    return module.RefmacDiagnosticProfile(profile_id=valid.profile_id,
+        manifest=bad if which == "manifest" else valid.manifest,
+        executable=bad if which == "executable" else valid.executable)
+
+
+case("wrong independent manifest pin", lambda f: wrong_caller_pin(f, "manifest"))
+case("wrong independent executable pin", lambda f: wrong_caller_pin(f, "executable"))
+
+
+def malformed_behind_wrong_pin(f):
+    f["manifest_path"].write_text("{ malformed JSON")
+    f["forbid_json_parse"] = True
+    return wrong_caller_pin(f, "manifest")
+
+
+case("independent hash checked before malformed JSON parsing", malformed_behind_wrong_pin)
+
+
+def duplicate_nested_key(f):
+    raw = f["manifest_path"].read_text()
+    raw = raw.replace('"tag": "5.8.0431"', '"tag": "5.8.0431", "tag": "5.8.0431"', 1)
+    f["manifest_path"].write_text(raw)
+
+
+case("duplicate nested JSON key with correct caller pin", duplicate_nested_key)
+
+
+def changed_source_tag_with_consistent_supporting_pins(f):
+    source = role_path(f, "source_manifest")
+    value = json.loads(source.read_text())
+    value["upstream_source"]["expected_tag"] = "synthetic-wrong-tag"
+    dump(source, value)
+    repin(f, source)
+    measured = pin(source)
+    relative = str(source.relative_to(Path(f["manifest"]["roots"]["prepared"]["path"])))
+    def update_audit(audit):
+        audit["manifest_sha256"] = measured["sha256"]
+        audit["complete_prepared_inventory"][relative] = {
+            "sha256": measured["sha256"], "size_bytes": measured["size_bytes"],
+        }
+    edit_receipt(f, "source_audit", update_audit)
+
+
+case("repinned source-manifest tag with consistent supporting pins",
+     changed_source_tag_with_consistent_supporting_pins,
+     expected_check="source_manifest_join",
+     mutation_descriptor={"role": "source_manifest", "field": "upstream_source.expected_tag",
+                          "changed_value": "synthetic-wrong-tag",
+                          "relationship": "fixed upstream tag; dependent audit digests updated"})
+
+
+for name, edit in (
+    ("extra arbitrary command field", lambda d: d.update(argv=["unexpected"])),
+    ("wrong subject", lambda d: d.update(subject_id="R6")),
+    ("wrong upstream", lambda d: d["upstream"].update(commit="a" * 40)),
+    ("Boolean size", lambda d: d["files"][d["roles"]["launcher"][0]].update(size_bytes=True)),
+    ("helper order", lambda d: d["roles"]["collector_helpers"].reverse()),
+    ("empty QC support", lambda d: d["roles"].update(qc_evidence=[])),
+    ("weaken absence list", lambda d: d["runtime_environment"].update(expected_absent=[])),
+    ("wrong expected environment", lambda d: d["runtime_environment"]["expected_values"].update(PATH="altered")),
+):
+    case(name, lambda f, edit=edit: outer_edit(f, edit))
+
+for role, key, value in (
+    ("source_audit", "source_root", "/nonexistent/unrelated-vendor"),
+    ("source_audit", "upstream_commit", "a" * 40),
+    ("source_audit", "manifest_sha256", "a" * 64),
+    ("source_audit", "auditor_sha256", "a" * 64),
+    ("source_audit", "patch_sha256", "a" * 64),
+    ("source_audit", "passed", 1),
+    ("source_audit", "python_optimization", False),
+    ("source_audit", "literal_git_objects", 1),
+    ("build_receipt", "source", "/nonexistent/unrelated-prepared"),
+    ("build_receipt", "output", "/nonexistent/unrelated-build"),
+    ("build_receipt", "driver_sha256", "a" * 64),
+    ("build_receipt", "journal_sha256", "a" * 64),
+    ("build_receipt", "runtime_config_sha256", "a" * 64),
+    ("build_receipt", "linked_executable_sha256", "a" * 64),
+    ("build_receipt", "passed", 1),
+    ("runtime_observation", "contract", "unrelated_contract"),
+):
+    case("repinned " + role + "." + key,
+         lambda f, role=role, key=key, value=value:
+         edit_receipt(f, role, lambda d: d.update({key: value})),
+         expected_check=role + "_join",
+         mutation_descriptor={"role": role, "field": key, "changed_value": value,
+                              "relationship": "receipt field to independently observed role/root"})
+
+case("repinned audit interpreter target",
+     lambda f: edit_receipt(f, "source_audit", lambda d: d["interpreter"].update(resolved_path="/other/python")))
+case("repinned complete inventory changed member",
+     lambda f: edit_receipt(f, "source_audit", lambda d: d["complete_prepared_inventory"].pop("source.f")))
+case("repinned runtime observer target",
+     lambda f: edit_receipt(f, "runtime_observation", lambda d: d["observation_script"].update(resolved="/other/observer")))
+case("repinned runtime library membership",
+     lambda f: edit_receipt(f, "runtime_observation", lambda d: d.update(static_library_load_commands=[])))
+case("hidden extra tree member", lambda f: (f["root"] / "vendor/.hidden").write_text("extra") and None)
+case("nonexecutable diagnostic file", lambda f: f["executable"].chmod(0o644))
+case("supplied installed prefix differs", lambda f: f["installed_record"].update(configured_installation_prefix="/unrelated/install"))
+case("supplied installed reference differs", lambda f: f["installed_record"]["refmac5_binary"].update(sha256="a" * 64))
+case("supplied installed setup differs", lambda f: f["installed_record"]["setup_script"].update(sha256="a" * 64))
+case("supplied installed bound environment differs", lambda f: f["installed_record"]["bound_ccp4_configuration"].update(CCP4="/unrelated/install"))
+case("supplied environment alone differs", lambda f: f["environment"].update(PATH="unrelated caller path"))
+case("evidence root overlaps controlled tree", lambda f: f.update(evidence_root=f["root"] / "build/collection"))
+case("controlled roots overlap", lambda f: outer_edit(f, lambda d: d["roots"]["vendor"].update(path=d["roots"]["prepared"]["path"])))
+case("controlled lexical dotdot", lambda f: outer_edit(f, lambda d: d["roots"]["vendor"].update(path=str(f["root"] / "prepared/../vendor"))))
+case("omitted external symlink edge", lambda f: outer_edit(f, lambda d: next(row for row in d["files"].values() if row["path"] == str(f["alias_paths"][0])).update(symlinks=[])))
+
+
+def controlled_symlink(f):
+    path = f["root"] / "vendor/source.f"
+    destination = f["root"] / "support/source.f"
+    path.rename(destination)
+    path.symlink_to(destination)
+    repin(f, path)
+
+
+case("controlled member becomes same-byte symlink", controlled_symlink)
+
+
+def retarget_alias(f):
+    link = f["alias_paths"][0]
+    other = link.parent / "same-byte-other-python"
+    other.write_bytes(link.read_bytes())
+    link.unlink()
+    link.symlink_to(other.name)
+
+
+case("external alias retargeted to same bytes", retarget_alias)
+
+for name in ("BASH_ENV", "ENV", "REFMAC_DIAGNOSTIC_TRACE", "SFOUT", "FCFOUT",
+             "LD_LIBRARY_PATH", "LD_UNLISTED", "DYLD_PRINT_LIBRARIES"):
+    for value in ("", "inherited"):
+        original = {name: value}
+        try:
+            module.reject_conflicting_environment(original)
+        except Exception as exc:
+            passed = original == {name: value} and type(exc) is ValueError
+            observation = type(exc).__name__ + ": " + str(exc)
+        else:
+            passed = False
+            observation = "accepted forbidden key"
+        results.append({"name": "environment " + name + "=" + repr(value),
+                        "passed": passed, "observation": observation})
+
+clean_environment = {"PATH": "/inert/system/path", "CCP4": "/inert/install"}
+try:
+    module.reject_conflicting_environment(clean_environment)
+    clean_guard_passed = clean_environment == {"PATH": "/inert/system/path", "CCP4": "/inert/install"}
+except Exception:
+    clean_guard_passed = False
+results.append({"name": "clean environment guard positive control", "passed": clean_guard_passed})
+
+
+def same_byte_replace(path):
+    raw = path.read_bytes()
+    mode = path.stat().st_mode
+    path.rename(path.with_name(path.name + ".saved-original"))
+    path.write_bytes(raw)
+    path.chmod(mode)
+
+
+def change_bytes_same_size(path):
+    original = path.read_bytes()
+    assert original, 'Same-size corruption needs a nonempty inert file'
+    changed = bytes([original[0] ^ 1]) + original[1:]
+    assert len(changed) == len(original) and changed != original
+    path.write_bytes(changed)
+    assert path.read_bytes() == changed
+
+
+def changed_role(f, observed, role):
+    ident = f["manifest"]["roles"][role][0]
+    row = observed["files"][ident]
+    return (row["matches_baseline"] is False
+            and any(m["key"] == "profile:file:" + ident for m in observed["mutations"]))
+
+
+def all_rows_readable(observed):
+    return (observed["manifest"]["observed"] is not None
+            and all(r["observed"] is not None for r in observed["files"].values())
+            and all(r["observed"] is not None and r["scan_complete"] is True
+                    for r in observed["roots"].values()))
+
+
+def replace_directory_preserving_children(target, backup):
+    mode = stat.S_IMODE(target.stat().st_mode)
+    before = {str(path.relative_to(target)): path_identity(path)
+              for path in target.rglob("*") if path.is_file()}
+    target.rename(backup)
+    target.mkdir()
+    target.chmod(mode)
+    for child in backup.iterdir():
+        child.rename(target / child.name)
+    after = {str(path.relative_to(target)): path_identity(path)
+             for path in target.rglob("*") if path.is_file()}
+    assert before == after, "Directory replacement changed child file identities"
+
+
+def alias_row(f, observed, index):
+    path = str(f["alias_paths"][index])
+    ident = next(k for k, value in f["manifest"]["files"].items() if value["path"] == path)
+    return ident, observed["files"][ident]
+
+
+def ancestor_change_isolated(f, baseline, observed):
+    ident, row = alias_row(f, observed, 1)
+    target = str(f["root"] / "support/bin")
+    before = {value["path"]: value for value in row["expected"]["ancestors"]}[target]
+    after = {value["path"]: value for value in row["observed"]["ancestors"]}[target]
+    return (before["ino"] != after["ino"] and row["matches_baseline"] is False
+            and row["expected"]["sha256"] == row["observed"]["sha256"]
+            and row["expected"]["ino"] == row["observed"]["ino"]
+            and all(value["matches_baseline"] for key, value in observed["files"].items() if key != ident)
+            and all(value["matches_baseline"] for value in observed["roots"].values())
+            and observed["manifest"]["matches_baseline"])
+
+
+def replace_alias_same_target(f):
+    path = f["alias_paths"][0]
+    target = os.readlink(path)
+    before_target = pin(path)
+    path.rename(path.with_name(path.name + ".saved-original"))
+    path.symlink_to(target)
+    assert pin(path) == before_target
+
+
+def symlink_change_isolated(f, baseline, observed):
+    ident, row = alias_row(f, observed, 0)
+    before, after = row["expected"], row["observed"]
+    return (before["sha256"] == after["sha256"] and before["ino"] == after["ino"]
+            and before["symlinks"] == after["symlinks"]
+            and before["symlink_identities"] != after["symlink_identities"]
+            and row["matches_baseline"] is False
+            and any(m["key"] == "profile:file:" + ident for m in observed["mutations"]))
+
+
+def missing_and_later_checked(f, baseline, observed):
+    missing_id = f["manifest"]["roles"]["preparer"][0]
+    row = observed["files"][missing_id]
+    return (row["matches_baseline"] is False and bool(row["errors"])
+            and changed_role(f, observed, "launcher")
+            and observed["manifest"]["observed"] is not None
+            and all(r["observed"] is not None for k, r in observed["files"].items() if k != missing_id)
+            and all(r["observed"] is not None and r["scan_complete"] is True
+                    for r in observed["roots"].values()))
+
+
+case("postflight same-byte external inode replacement",
+     post=lambda f: same_byte_replace(role_path(f, "launcher")),
+     post_assert=lambda f, b, o: changed_role(f, o, "launcher") and all_rows_readable(o))
+case("postflight file plus mutually updated manifest",
+     post=lambda f: (change_bytes_same_size(role_path(f, "launcher")), repin(f, role_path(f, "launcher"))),
+     post_assert=lambda f, b, o: changed_role(f, o, "launcher")
+       and o["manifest"]["matches_baseline"] is False and all_rows_readable(o))
+case("postflight missing early file and later changed file",
+     post=lambda f: (role_path(f, "preparer").unlink(), change_bytes_same_size(role_path(f, "launcher"))),
+     post_assert=missing_and_later_checked)
+case("unrelated sibling changes only ancestor mtime", expected_reject=False,
+     post=lambda f: (f["root"] / "unrelated-sibling").write_text("unrelated"),
+     post_assert=lambda f, b, o: all_rows_readable(o) and not o["mutations"] and not o["errors"])
+case("unchanged postflight positive control", expected_reject=False, post=lambda f: None,
+     post_assert=lambda f, b, o: all_rows_readable(o) and not o["mutations"] and not o["errors"])
+case("postflight same-content vendor root replacement",
+     post=lambda f: replace_directory_preserving_children(f["root"] / "vendor", f["root"] / "saved-vendor"),
+     post_assert=lambda f, b, o: o["roots"]["vendor"]["matches_baseline"] is False
+       and o["roots"]["vendor"]["expected"]["ino"] != o["roots"]["vendor"]["observed"]["ino"]
+       and all_rows_readable(o))
+case("postflight traversed dotdot ancestor replacement",
+     post=lambda f: replace_directory_preserving_children(f["root"] / "support/bin", f["root"] / "saved-bin"),
+     post_assert=ancestor_change_isolated)
+case("postflight mode-only launcher change",
+     post=lambda f: role_path(f, "launcher").chmod(stat.S_IMODE(role_path(f, "launcher").stat().st_mode) ^ stat.S_IXUSR),
+     post_assert=lambda f, b, o: changed_role(f, o, "launcher") and all_rows_readable(o)
+       and o["files"][f["manifest"]["roles"]["launcher"][0]]["expected"]["mode"]
+           != o["files"][f["manifest"]["roles"]["launcher"][0]]["observed"]["mode"])
+case("postflight same-target symlink identity replacement", post=replace_alias_same_target,
+     post_assert=symlink_change_isolated)
+
+
+@contextmanager
+def root_scan_failure(f):
+    target = f["root"] / "vendor"
+    original_scandir, original_listdir = os.scandir, os.listdir
+    f["injected_scan_failures"] = []
+    f["injected_scan_exceptions"] = []
+    def wrap(original):
+        def fail_target(path=".", *args, **kwargs):
+            if not isinstance(path, int) and Path(path).absolute() == target:
+                f["injected_scan_failures"].append(str(path))
+                error = PermissionError(errno.EACCES, "deliberate controlled-root scan failure", str(path))
+                f["injected_scan_exception"] = error
+                f["injected_scan_exceptions"].append(error)
+                raise error
+            return original(path, *args, **kwargs)
+        return fail_target
+    with ExitStack() as stack:
+        # Cover both common traversal primitives and direct imports of them.
+        for name, value in list(vars(module).items()):
+            if value is original_scandir:
+                stack.enter_context(patch.object(module, name, wrap(original_scandir)))
+            elif value is original_listdir:
+                stack.enter_context(patch.object(module, name, wrap(original_listdir)))
+        stack.enter_context(patch.object(os, "scandir", wrap(original_scandir)))
+        stack.enter_context(patch.object(os, "listdir", wrap(original_listdir)))
+        yield
+
+
+@contextmanager
+def partial_scan_and_read_failure(f):
+    """Prepared fault fixture: a child scan fails after root members were read,
+    and an external file read fails after descriptor identity was measured.
+    Partial-result assertions check the accepted failure representation below.
+    """
+    scan_target = f["root"] / "build/build"
+    read_target = role_path(f, "launcher")
+    identity = read_target.stat()
+    read_key = "profile:file:" + f["manifest"]["roles"]["launcher"][0]
+    scan_error = PermissionError(errno.EACCES, "deliberate child-directory scan failure", str(scan_target))
+    read_error = OSError(errno.EIO, "deliberate post-fstat read failure", str(read_target))
+    f["injected_error_objects"] = {read_key: read_error, "profile:root:build": scan_error}
+    f["partial_fault_events"] = []
+    original_scandir, original_listdir = os.scandir, os.listdir
+    original_fdopen, original_fstat = os.fdopen, os.fstat
+    build_root = f["root"] / "build"
+    root_member_identities = {}
+    for child in build_root.iterdir():
+        if child.is_file():
+            st = child.stat()
+            root_member_identities[(st.st_dev, st.st_ino)] = child.name
+    scan_state = {"root_started": False, "child_failed": False}
+    f["partial_completed_root_members"] = []
+    def tracked_fstat(fd):
+        result = original_fstat(fd)
+        if (result.st_dev, result.st_ino) == (identity.st_dev, identity.st_ino):
+            f["partial_fault_events"].append({"stage": "consumer_fstat", "key": read_key,
+                "dev": result.st_dev, "ino": result.st_ino, "mode": stat.S_IMODE(result.st_mode),
+                "uid": result.st_uid, "gid": result.st_gid, "stat_size_bytes": result.st_size})
+        return result
+    class FailedRead:
+        def __init__(self, handle):
+            self.handle = handle
+            self.prefix_read = False
+        def __enter__(self):
+            self.handle.__enter__()
+            return self
+        def __exit__(self, *args):
+            return self.handle.__exit__(*args)
+        def fileno(self):
+            return self.handle.fileno()
+        def read(self, size=-1):
+            prefix = f.get("partial_read_prefix_bytes", 0)
+            if prefix and not self.prefix_read:
+                self.prefix_read = True
+                value = self.handle.read(min(size, prefix) if size >= 0 else prefix)
+                f["partial_fault_events"].append({"stage": "successful_read", "key": read_key,
+                                                  "size_bytes": len(value)})
+                return value
+            f["partial_fault_events"].append({"stage": "read_failure", "key": read_key})
+            raise read_error
+    class ObservedRootRead:
+        def __init__(self, handle, member):
+            self.handle, self.member = handle, member
+            self.reached_eof = False
+            self.completed_before_child_failure = False
+            self.byte_count = 0
+        def __enter__(self):
+            self.handle.__enter__()
+            return self
+        def __exit__(self, exc_type, exc, tb):
+            if exc_type is None and self.completed_before_child_failure:
+                f["partial_completed_root_members"].append(self.member)
+                f["partial_fault_events"].append({"stage": "completed_root_member_stream",
+                    "key": "profile:root:build", "relative_path": self.member,
+                    "size_bytes": self.byte_count})
+            return self.handle.__exit__(exc_type, exc, tb)
+        def fileno(self):
+            return self.handle.fileno()
+        def read(self, size=-1):
+            value = self.handle.read(size)
+            self.byte_count += len(value)
+            if size < 0 or (value == b"" and size != 0):
+                self.reached_eof = True
+                # Completion time and successful closure are separate facts.
+                # A later close must not discard an earlier completed read.
+                if not scan_state["child_failed"]:
+                    self.completed_before_child_failure = True
+            return value
+    def fdopen(fd, *args, **kwargs):
+        st = original_fstat(fd)
+        handle = original_fdopen(fd, *args, **kwargs)
+        key = (st.st_dev, st.st_ino)
+        if key == (identity.st_dev, identity.st_ino):
+            return FailedRead(handle)
+        if scan_state["root_started"] and not scan_state["child_failed"] and key in root_member_identities:
+            return ObservedRootRead(handle, root_member_identities[key])
+        return handle
+    def scan(original):
+        def wrapped(path=".", *args, **kwargs):
+            if not isinstance(path, int) and Path(path).absolute() == build_root:
+                scan_state["root_started"] = True
+            if not isinstance(path, int) and Path(path).absolute() == scan_target:
+                scan_state["child_failed"] = True
+                f["partial_fault_events"].append({"stage": "child_scan_failure", "key": "profile:root:build"})
+                raise scan_error
+            return original(path, *args, **kwargs)
+        return wrapped
+    with ExitStack() as stack:
+        for owner, name, replacement in (
+            (os, "fstat", tracked_fstat), (os, "fdopen", fdopen),
+            (os, "scandir", scan(original_scandir)), (os, "listdir", scan(original_listdir)),
+        ):
+            original = getattr(owner, name)
+            for imported_name, value in list(vars(module).items()):
+                if value is original:
+                    stack.enter_context(patch.object(module, imported_name, replacement))
+            stack.enter_context(patch.object(owner, name, replacement))
+        yield
+
+
+def assert_partial_file_read(f, observed, expected):
+    """Require actual completed measurements, with unknown full hash/size."""
+    ident = f["manifest"]["roles"]["launcher"][0]
+    key = "profile:file:" + ident
+    assert isinstance(observed, dict)
+    for field in ("path", "resolved_path", "dev", "ino", "mode", "uid", "gid"):
+        assert observed[field] == expected[field], field
+    assert observed["stat_size_bytes"] == expected["size_bytes"]
+    assert observed["sha256"] is None and observed["size_bytes"] is None
+    assert observed["read_complete"] is False
+    events = [e for e in f["partial_fault_events"] if e["key"] == key]
+    names = [e["stage"] for e in events]
+    assert "consumer_fstat" in names and "read_failure" in names
+    assert names.index("consumer_fstat") < names.index("read_failure")
+    for event in events:
+        if event["stage"] == "consumer_fstat":
+            for field in ("dev", "ino", "mode", "uid", "gid"):
+                assert observed[field] == event[field]
+    streamed = sum(e["size_bytes"] for e in events if e["stage"] == "successful_read")
+    assert observed["streamed_size_bytes"] == streamed
+    prefix = f.get("partial_read_prefix_bytes", 0)
+    assert 0 < streamed <= prefix if prefix else streamed == 0
+
+
+def partial_postflight_retained(f, baseline, observed):
+    ident = f["manifest"]["roles"]["launcher"][0]
+    key = "profile:file:" + ident
+    row = observed["files"][ident]
+    assert row["matches_baseline"] is False and row["errors"]
+    assert_partial_file_read(f, row["observed"], f["postflight_facts"][key]["file"])
+    root = observed["roots"]["build"]
+    assert root["scan_complete"] is False and root["matches_baseline"] is False and root["errors"]
+    partial = root["observed"]
+    assert isinstance(partial, dict)
+    actual = f["postflight_facts"]["profile:root:build"]
+    for field in ("path", "resolved_path", "dev", "ino", "mode", "uid", "gid"):
+        assert partial[field] == actual[field]
+    measured = set(f["partial_completed_root_members"])
+    assert measured <= {r["relative_path"] for r in partial["members"]}
+    if f.get("require_partial_member_coverage"):
+        assert measured, "QC fixture did not exercise completed parent-member retention; no product defect inferred"
+    assert root["member_diff"]["removed"] == []
+    assert any(e["stage"] == "child_scan_failure" for e in f["partial_fault_events"])
+    assert all(r["observed"] is not None and r["matches_baseline"]
+               for k, r in observed["files"].items() if k != ident)
+    assert all(observed["roots"][k]["scan_complete"] and observed["roots"][k]["matches_baseline"]
+               for k in ("prepared", "vendor"))
+    assert observed["manifest"]["matches_baseline"]
+    return True
+
+
+def partial_admission_retained(f, error, failure):
+    ident = f["manifest"]["roles"]["launcher"][0]
+    key = "profile:file:" + ident
+    assert_partial_file_read(f, failure["files"][ident], f["held_file_observations"][ident])
+    assert set(failure["files"]) == set(f["held_file_observations"])
+    for other, expected in f["held_file_observations"].items():
+        if other != ident:
+            assert_held_file(failure["files"][other], expected)
+    assert set(failure["roots"]) == set(f["held_root_observations"])
+    assert_held_file(failure["manifest"], f["held_manifest_observation"])
+    retained = error.error_records
+    checks = {owner: any(exception_chain_contains(record.exception, original)
+                         for record in retained)
+              for owner, original in f["injected_error_objects"].items()}
+    f["retained_exception_identity_checks"] = checks
+    assert checks and all(checks.values()), checks
+    assert descriptor_in_chain(failure["error"], error)
+
+
+case("postflight partial file read and child scan retain actual measurements",
+     post=lambda f: f.update(require_partial_member_coverage=True), post_assert=partial_postflight_retained,
+     post_context=partial_scan_and_read_failure)
+case("postflight partial file read after a chunk retains actual byte count",
+     post=lambda f: f.update(partial_read_prefix_bytes=7, require_partial_member_coverage=True), post_assert=partial_postflight_retained,
+     post_context=partial_scan_and_read_failure)
+case("admission partial read retains actual measurements and later observations",
+     pre_context=partial_scan_and_read_failure, failure_assert=partial_admission_retained,
+     expected_check="outer_profile_files_and_roots")
+
+
+def multi_failure_retained(f, baseline, observed):
+    missing_id = f["manifest"]["roles"]["preparer"][0]
+    root = observed["roots"]["vendor"]
+    return (bool(f["injected_scan_failures"])
+            and observed["files"][missing_id]["matches_baseline"] is False
+            and bool(observed["files"][missing_id]["errors"])
+            and changed_role(f, observed, "launcher")
+            and root["scan_complete"] is False and root["matches_baseline"] is False
+            and bool(root["errors"])
+            and any(m["key"] == "profile:root:vendor" for m in observed["mutations"])
+            and observed["manifest"]["observed"] is not None
+            and all(r["observed"] is not None for k, r in observed["files"].items() if k != missing_id)
+            and all(observed["roots"][k]["observed"] is not None
+                    and observed["roots"][k]["scan_complete"] is True for k in ("prepared", "build")))
+
+
+case("postflight missing file, changed file and root scan failure retain later observations",
+     post=lambda f: (role_path(f, "preparer").unlink(), change_bytes_same_size(role_path(f, "launcher"))),
+     post_assert=multi_failure_retained, post_context=root_scan_failure)
+
+f = make_fixture(out / "fixture-immutability")
+baseline = validate(f)
+mutable_paths = []
+
+
+def inspect_immutable(value, path="baseline", visited=None):
+    if visited is None:
+        visited = set()
+    if id(value) in visited:
+        return
+    visited.add(id(value))
+    if isinstance(value, (dict, list, set)):
+        mutable_paths.append(path)
+    if is_dataclass(value):
+        if not value.__dataclass_params__.frozen:
+            mutable_paths.append(path + " (unfrozen dataclass)")
+        for field in fields(value):
+            inspect_immutable(getattr(value, field.name), path + "." + field.name, visited)
+    elif isinstance(value, (tuple, frozenset)):
+        for i, item in enumerate(value):
+            inspect_immutable(item, path + "." + str(i), visited)
+    elif isinstance(value, Mapping):
+        if not isinstance(value, MappingProxyType):
+            mutable_paths.append(path + " (unsupported mapping authority)")
+        for key, item in value.items():
+            inspect_immutable(key, path + ".key", visited)
+            inspect_immutable(item, path + "." + str(key), visited)
+    elif not isinstance(value, (str, bytes, int, float, bool, type(None), Path)):
+        mutable_paths.append(path + " (unsupported authority type " + type(value).__name__ + ")")
+
+
+inspect_immutable(baseline)
+results.append({"name": "baseline nested immutability", "passed": not mutable_paths, "mutable_paths": mutable_paths})
+ordinary_checks = reject_ordinary_field_writes(baseline, (
+    "request", "manifest_identity", "files", "roots", "roles", "installed_reference",
+    "selected_executable", "installed_record_json", "expected_environment",
+    "requested_absences", "evidence_root", "_outer_state",
+))
+for target, names in (
+    (baseline.request, ("profile_id", "manifest", "executable")),
+    (baseline.request.manifest, ("path", "sha256", "size_bytes")),
+    (baseline.manifest_identity, ("path", "sha256", "mode", "ancestors", "symlinks")),
+    (baseline.files[0][1], ("path", "sha256", "mode")),
+    (baseline.roots[0][1], ("path", "dev", "ino", "members")),
+    (baseline.roots[0][1].members[0], ("relative_path", "file_id")),
+):
+    ordinary_checks.extend(reject_ordinary_field_writes(target, names))
+for table in (baseline.files, baseline.roots, baseline.roles, baseline.expected_environment,
+              baseline.requested_absences, baseline.roots[0][1].members,
+              baseline._outer_state.observed_files):
+    reject_ordinary_item_writes(table)
+results.append({"name": "ordinary baseline evidence writes rejected", "passed": True,
+                "field_checks": ordinary_checks})
+before_caller_mutation = copy.deepcopy(baseline.to_provenance())
+saved_installed, saved_environment = copy.deepcopy(f["installed_record"]), copy.deepcopy(f["environment"])
+f["installed_record"]["bound_ccp4_configuration"]["CCP4"] = "caller changed nested value"
+f["environment"]["PATH"] = "caller changed environment"
+assert baseline.to_provenance() == before_caller_mutation
+f["held_baseline_provenance"] = before_caller_mutation
+f["postflight_facts"] = capture_postflight_facts(f)
+caller_mutation_causes = []
+caller_mutation_post = module.recheck_profile(baseline, mutation_causes_out=caller_mutation_causes)
+assert_post_shape(f, baseline, caller_mutation_post, caller_mutation_causes)
+assert caller_mutation_post["verified"] is True
+f["installed_record"], f["environment"] = saved_installed, saved_environment
+results.append({"name": "caller mapping mutations detached from admitted snapshot", "passed": True})
+baseline_repr = repr(baseline)
+first_observation = module.recheck_profile(baseline)
+
+
+
+
+first_provenance = baseline.to_provenance()
+canonical_provenance_before = json.dumps(first_provenance, sort_keys=True, allow_nan=False)
+canonical_postflight_before = json.dumps(first_observation, sort_keys=True, allow_nan=False)
+contaminate_return(first_provenance)
+second_provenance = baseline.to_provenance()
+results.append({"name": "provenance serialization detached from authority",
+                "passed": repr(baseline) == baseline_repr
+                and marker not in json.dumps(second_provenance)
+                and second_provenance == assert_admitted(f, baseline)
+                and json.dumps(second_provenance, sort_keys=True, allow_nan=False) == canonical_provenance_before})
+contaminate_return(first_observation)
+second_observation = module.recheck_profile(baseline)
+results.append({"name": "postflight serialization detached from authority",
+                "passed": repr(baseline) == baseline_repr
+                and second_observation.get("verified") is True
+                and marker not in json.dumps(second_observation)
+                and json.dumps(second_observation, sort_keys=True, allow_nan=False) == canonical_postflight_before})
+dump(out / "cases.json", results)
+def captured_pin(path, raw):
+    return {"path": str(path), "sha256": hashlib.sha256(raw).hexdigest(), "size_bytes": len(raw)}
+
+
+source_artifacts = []
+for source_path, captured in ((snapshot, module_source), (out / "checker.source.txt", checker_bytes),
+                              (out / "fixture.source.txt", fixture_bytes)):
+    expected = captured_pin(source_path, captured)
+    try:
+        observed_raw = source_path.read_bytes()
+        observed = captured_pin(source_path, observed_raw)
+        error = None
+        unchanged = observed_raw == captured
+    except OSError as exc:
+        observed, unchanged = None, False
+        error = {"type": type(exc).__name__, "message": str(exc)}
+    source_artifacts.append({"expected": expected, "observed": observed,
+                             "unchanged": unchanged, "error": error})
+source_artifacts_unchanged = all(row["unchanged"] for row in source_artifacts)
+result = {"contract": "primary_independent_profile_checks_v1", "at": datetime.now(timezone.utc).isoformat(),
+          "module": captured_pin(snapshot, module_source),
+          "checker": captured_pin(out / "checker.source.txt", checker_bytes),
+          "fixture_source": captured_pin(out / "fixture.source.txt", fixture_bytes),
+          "source_artifacts_postflight": source_artifacts,
+          "passed": all(row["passed"] for row in results) and not denied_operations
+                    and not pending_acceptance_assertions and source_artifacts_unchanged, "case_count": len(results),
+          "failures": [r["name"] for r in results if not r["passed"]],
+          "denied_operations": denied_operations,
+          "pending_acceptance_assertions": pending_acceptance_assertions,
+          "native_execution": False, "scope": "Synthetic helper checks; no launch/profile admission"}
+dump(out / "result.json", result)
+print(json.dumps(result))
+sys.exit(0 if result["passed"] else 1)

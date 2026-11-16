@@ -1,0 +1,64 @@
+"""PRIMARY read-only installed resolver observation; never executes REFMAC."""
+from pathlib import Path
+from datetime import datetime, timezone
+import hashlib
+import json
+import os
+import subprocess
+import sys
+
+here = Path(__file__).resolve().parent
+repo = here.parents[2]
+wt = repo.parent/'protstruct_review-wt-078'
+out = here/'runtime-configuration-03.json'
+if os.environ.get('PATH') != '/usr/bin:/bin:/usr/sbin:/sbin':
+    raise ValueError('Fixed system-only pre-source PATH required')
+if out.exists():
+    raise ValueError('Do not overwrite runtime observation')
+blocked = {k for k in os.environ if k.startswith(('PROTSTRUCT_', 'DYLD_', 'LD_'))
+           or k in {'REFMAC_DIAGNOSTIC_TRACE','SFOUT','FCFOUT','BASH_ENV','ENV'}}
+if blocked:
+    raise ValueError(f'Conflicting inherited variable names: {sorted(blocked)}')
+sys.path.insert(0,str(wt/'scripts'))
+import onesar_refmac
+import toolchain
+def pin(p):
+    p = Path(p)
+    return {'path':str(p),'resolved':str(p.resolve(strict=True)),
+            'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'size_bytes':p.stat().st_size}
+before = {n: pin(wt/'scripts'/n) for n in ['onesar_refmac.py','toolchain.py']}
+record, environment, stock = onesar_refmac._resolve_ccp4_refmac_toolchain()
+prefix = Path(record['configured_installation_prefix'])
+sources = [Path(record['setup_script']['resolved_path']),
+           prefix.parent/'arp_warp_8.0/arpwarp_setup.bash']
+libraries = ['libccp4f.8.0.dylib','libccp4c.8.0.dylib','libmmdb2.0.dylib',
+             'librfftw.2.dylib','libfftw.2.dylib','libgfortran.5.dylib','libgcc_s.2.dylib']
+observations = []
+for name in libraries:
+    lib = prefix/'lib'/name
+    argv = ['/usr/bin/otool','-L',str(lib)]
+    proc = subprocess.run(argv, capture_output=True, text=True, check=True)
+    observations.append({'library':pin(lib),'argv':argv,'returncode':proc.returncode,
+                         'stdout':proc.stdout,'stderr':proc.stderr})
+keys = set(onesar_refmac.NON_SECRET_CCP4_ENV_KEYS) | {
+    'PATH','GFORTRAN_UNBUFFERED_PRECONNECTED','CCP4_OPEN','CCP4_SCR','MMCIFDIC',
+    'CETC','warpbin','warpdoc'}
+keys.update(k for k in environment if k.startswith(('DYLD_','LD_')))
+sw = subprocess.run(['/usr/bin/sw_vers'],capture_output=True,text=True,check=True)
+after = {n:pin(wt/'scripts'/n) for n in before}
+assert before == after
+payload = {'contract':'primary_ccp4_runtime_configuration_observation_v1',
+    'at':datetime.now(timezone.utc).isoformat(),'native_refmac_executed':False,
+    'pre_source_PATH':os.environ['PATH'],
+    'resolver_record':record,'selected_nonsecret_environment':{k:environment.get(k) for k in sorted(keys)},
+    'setup_source_files':[pin(p) for p in sources],
+    'static_library_load_commands':observations,
+    'resolver_implementation':before,'interpreter':pin(sys.executable),
+    'observation_script':pin(__file__),
+    'os':{'uname':list(os.uname()),'sw_vers':sw.stdout},
+    'limitation':'Static dependencies/configuration only; no observation of images loaded by Attempt4'}
+with out.open('x') as f:
+    json.dump(payload,f,indent=2);f.write('\n')
+print(json.dumps({'output':str(out),'stock_binary_sha256':record['refmac5_binary']['sha256'],
+                  'setup_sources':len(sources),'libraries':len(libraries),
+                  'native_refmac_executed':False}))

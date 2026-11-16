@@ -1,0 +1,32 @@
+"""PRIMARY invoke the accepted composer against concrete accepted evidence; no native producer."""
+from pathlib import Path
+from datetime import datetime,timezone
+import hashlib,json,os,subprocess,sys
+E=Path(__file__).resolve().parent
+W=E.parents[2].parent/'protstruct_review-wt-078'
+OUT=E/'composition783-launch-01';TARGET=E/'profile-final783-01'
+assert os.environ.get('TMUX_PANE')=='%0'
+assert not OUT.exists() and not TARGET.exists()
+OUT.mkdir()
+script=E/'compose-diagnostic-profile.py'
+assert hashlib.sha256(script.read_bytes()).hexdigest()=='c712b315ac5dd4bdf896da8738db5f819b8a10be7d2c750113e1965ef797d565'
+options={'preparation':E/'preparation-633-01/completed.json','source-audit':E/'source-audit-633-02.json','focused':E/'hooks-633-interim-01/result.json','build-launch':E/'build-launch-633-01/completed.json','runtime':E/'runtime-configuration-03.json','qc-list':E/'profile-qc-selection-final783.json','launcher':E/'launch-attempt04.py','output-dir':TARGET}
+argv=[str(W/'.venv/bin/python'),'-B',str(script)]
+for key,value in options.items():argv.extend(['--'+key,str(value)])
+def pin(p):
+ b=p.read_bytes();return {'path':str(p),'sha256':hashlib.sha256(b).hexdigest(),'size_bytes':len(b)}
+inputs=[pin(script),pin(Path(__file__))]+[pin(p) for k,p in options.items() if k!='output-dir']
+env=dict(os.environ);obs=json.loads((E/'runtime-configuration-preflight-01.json').read_text())
+if 'LD_LIBRARY_PATH' in env:
+ assert env['LD_LIBRARY_PATH']==obs['removed_for_next_isolated_child']['LD_LIBRARY_PATH']
+ del env['LD_LIBRARY_PATH']
+env.update(PATH='/usr/bin:/bin:/usr/sbin:/sbin',PYTHONDONTWRITEBYTECODE='1')
+record={'at':datetime.now(timezone.utc).isoformat(),'argv':argv,'cwd':str(W),'inputs':inputs,'native_refmac_executed':False,'scope':'file-pin profile composition only'}
+(OUT/'started.json').write_text(json.dumps(record,indent=2)+'\n')
+with (OUT/'stdout.log').open('wb') as out,(OUT/'stderr.log').open('wb') as err:
+ p=subprocess.run(argv,cwd=W,env=env,stdout=out,stderr=err,timeout=300)
+record.update(completed_at=datetime.now(timezone.utc).isoformat(),returncode=p.returncode,inputs_unchanged=all(pin(Path(x['path']))==x for x in inputs))
+record['outputs']=[pin(p) for p in sorted(TARGET.glob('*')) if p.is_file()] if TARGET.exists() else []
+(OUT/'completed.json').write_text(json.dumps(record,indent=2)+'\n')
+print(json.dumps({'returncode':p.returncode,'inputs_unchanged':record['inputs_unchanged'],'outputs':record['outputs']}))
+sys.exit(0 if p.returncode==0 and record['inputs_unchanged'] else 1)

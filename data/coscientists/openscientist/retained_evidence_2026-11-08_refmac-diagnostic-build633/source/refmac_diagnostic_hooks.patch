@@ -1,0 +1,368 @@
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -31,6 +31,8 @@
+ 
+ 
+ add_executable(refmac5
++trace_writer.f90
++trace_hooks.f90
+ stats_calc.f90
+ makecif_pars.f90
+ vitals.f90
+--- a/ls_scaling_double.f
++++ b/ls_scaling_double.f
+@@ -518,6 +518,8 @@
+       use agreem
+       use CellAndSymmetry
+       use refi_flags
++      use protstruct_diagnostic_hooks, only:
++     &  trace_hook_sumsfs_ls_deriv
+       IMPLICIT NONE
+ C
+ c---Calculates least-square residual and derivatives of this residual wrt
+@@ -629,6 +631,10 @@
+       ENDIF
+       YC_ALL = YC_ALL0*EXPAN_BULK_SCALE
+       DELTA  = YOS - YC_ALL
++      CALL trace_hook_sumsfs_ls_deriv(IR,NREF,ndens,IMODE,NPART,
++     &  NOBS,IHH,RSQ,RHO,YO,YOS,SIGOS,EXPAN,DBULK,EXPAN_BULK,
++     &  EXP_PROT,EXPAN_BULK_SCALE,YC0,YC_ALL0,PHI0,PHI_ALL,
++     &  AC_ALL,BC_ALL,YC_ALL,DELTA)
+       sig_l = sigo(ir)
+       sig_l = 1.0
+       deltaw = delta/sig_l
+--- a/refmac_completeness.f90
++++ b/refmac_completeness.f90
+@@ -7,6 +7,11 @@
+     use agreem
+     use rharvest
+     use refi_flags
++    use protstruct_diagnostic_hooks, only: &
++      trace_hook_comp_c0, trace_hook_comp_c1, trace_hook_comp_c2, &
++      trace_hook_comp_c3, trace_hook_comp_c4, &
++      trace_hook_comp_c5_with_free, trace_hook_comp_c5_no_free, &
++      trace_hook_comp_c_end
+     
+     real, intent(in) :: rot(:,:,:), tr(:,:)
+     real, intent(in) :: cell(6)
+@@ -121,6 +126,9 @@
+        cell_l(4:6) = cell_l(4:6)*degtor
+     endif
+     call define_res_pars(cell_l,ast,bst,cst,cosast,cosbst,coscst)
++    call trace_hook_comp_c0(nsym,nasym,nref,nbin,nb1,res_max, &
++      freer_flag,cell,cell_l,ast,bst,cst,cosast,cosbst,coscst, &
++      sminb,smaxb)
+ 
+     do i=1,nasym
+        jmn = 0
+@@ -130,6 +138,9 @@
+        if(freer_observed(i).eq.0) ifree=2
+        call define_res(hkl_asym(1,i),hkl_asym(2,i),hkl_asym(3,i),ast,bst,cst,cosast,cosbst,coscst,rsq) 
+        rho = sqrt(rsq/4.0)
++       call trace_hook_comp_c1(i,hkl_asym(1,i),hkl_asym(2,i), &
++         hkl_asym(3,i),hkl_observed(i),freer_observed(i),jmn, &
++         ifree,rsq,rho)
+        do  j=1,nbin
+           if(rho.ge.sminb(j).and.rho.le.smaxb(j)) then
+              if(hkl_observed(i).gt.0) then
+@@ -137,6 +148,8 @@
+              else
+                 nrefm(ifree,j) = nrefm(ifree,j) + 1
+              endif
++             call trace_hook_comp_c2(i,j,ifree,hkl_observed(i), &
++               sminb(j),smaxb(j),nrefa(ifree,j),nrefm(ifree,j))
+           endif
+        enddo
+        if(hkl_observed(i).gt.0) then
+@@ -144,6 +157,9 @@
+        else
+           nrefm(ifree,nb1) = nrefm(ifree,nb1) + 1
+        endif
++       call trace_hook_comp_c3(i,nb1,ifree,hkl_observed(i), &
++         nrefa(ifree,nb1),nrefm(ifree,nb1))
++       call trace_hook_comp_c4(i,ifree,hkl_observed(i))
+     enddo
+     !
+     !  finalise calculation by copying all necessary info to harvest files
+@@ -172,8 +188,20 @@
+           perc_free = float(nhrefl_free)/float(nhrefl_work+nhrefl_free)*100.0
+        endif
+     endif
+-
+-    
++    if(freer_flag.and.nrefa(2,nb1).gt.0) then
++       call trace_hook_comp_c5_with_free(nbin,nb1,NBM,HMAXSHELL, &
++         freer_flag,nrefa,nrefm,hnref_shell_work,hnref_shell_free, &
++         hnref_shell_obs,hnref_shell_all,hperc_shell_refl, &
++         nhrefl_work,nhrefl_free,perc_free)
++    else
++       call trace_hook_comp_c5_no_free(nbin,nb1,NBM,HMAXSHELL, &
++         freer_flag,nrefa,nrefm,hnref_shell_work,hnref_shell_free, &
++         hnref_shell_obs,hnref_shell_all,hperc_shell_refl, &
++         nhrefl_work,perc_free)
++    endif
++
++    
++    call trace_hook_comp_c_end()
+     deallocate(hkl_asym)
+     deallocate(hkl_observed)
+     deallocate(freer_observed)
+--- a/refmac_xml.f
++++ b/refmac_xml.f
+@@ -26,6 +26,8 @@
+       use form_factor_refine
+       use coords
+       use hd_mixtures
++      use protstruct_diagnostic_hooks, only:
++     &  trace_hook_normal_termination
+ C------------------------------------------------------------------------
+ C----Remarks on program organization
+ C     Program for refinement macromolecular structures. Current 
+@@ -295,6 +297,7 @@
+       ierr = 0
+       call write_xml(ierr,'normal termination')
+       CALL REFMAC_CLEAN_UP_FILES
++      CALL trace_hook_normal_termination()
+       CALL CCPERR(0,'End of Refmac_'//R_VERSNO)
+       END
+ 
+--- a/subcf_scale1.f
++++ b/subcf_scale1.f
+@@ -17,6 +17,26 @@
+       use atomcom
+       use vitals
+       use consts
++      use protstruct_diagnostic_hooks, only:
++     &  trace_hook_lsq_l0_begin, trace_hook_lsq_l0_freer,
++     &  trace_hook_lsq_l0_aniso, trace_hook_lsq_l0_bulk,
++     &  trace_hook_lsq_l0_parts, trace_hook_lsq_l0_end,
++     &  trace_hook_lsq_l1, trace_hook_lsq_l2_with_freer,
++     &  trace_hook_lsq_l2_no_freer, trace_hook_lsq_l3,
++     &  trace_hook_lsq_l4_valid, trace_hook_lsq_l4_invalid,
++     &  trace_hook_lsq_l5_valid, trace_hook_lsq_l5_invalid,
++     &  trace_hook_lsq_l6a_valid, trace_hook_lsq_l6a_invalid,
++     &  trace_hook_lsq_l6b_valid, trace_hook_lsq_l6b_invalid,
++     &  trace_hook_lsq_l7, trace_hook_lsq_l8_valid,
++     &  trace_hook_lsq_l8_invalid, trace_hook_lsq_l9_work_valid,
++     &  trace_hook_lsq_l9_work_invalid, trace_hook_lsq_l9_free_valid,
++     &  trace_hook_lsq_l9_free_invalid,
++     &  trace_hook_lsq_final_carrier_work_valid,
++     &  trace_hook_lsq_final_carrier_work_invalid,
++     &  trace_hook_lsq_final_carrier_free_valid,
++     &  trace_hook_lsq_final_carrier_free_invalid,
++     &  trace_hook_lsq_l_end, trace_lsq_accumulators_valid,
++     &  trace_lsq_can_capture_addition
+ c
+ c----Subroutine to calculate coefficients for fourie transformation
+ c----for gradient calculation for minimisation function
+@@ -92,7 +112,30 @@
+ 
+       IF(LREFIN.AND.REFS.EQ.'LSQF') IMODE = 2
+       CALL FIND_NREFINED_ATOMS(N_REFINED_ATOMS)
++      CALL trace_hook_lsq_l0_begin(NREF,NOBS,NPART,ndens,NBIN,NB1,
++     &  IMODE,N_REFINED_ATOMS,NREF_PARS,NSMULT,IFACTOR_CC,LREFIN,
++     &  REFS,FREER_FLAG,LEXPUSE,DataSource,phase_flag,MIR_FLAG,
++     &  SMINB,SMAXB,SCALE_LS_OVER,B_LS_OVER,B_LS_OVER_FLAG,
++     &  B_LS_OVER_REFINE_FLAG,B_LS_ANISO_OVER_FLAG,
++     &  B_LS_ANISO_OVER_REFINE_FLAG,BULK_LS_FLAG,
++     &  SCALE_LS_BULK_REFINE_FLAG,B_LS_BULK_REFINE_FLAG)
++      IF(FREER_FLAG) THEN
++        CALL trace_hook_lsq_l0_freer(LFreeRexcludeVal)
++      ENDIF
++      IF(B_LS_ANISO_OVER_FLAG) THEN
++        CALL trace_hook_lsq_l0_aniso(B_LS_ANISO_OVER,RCELL)
++      ENDIF
++      IF(BULK_LS_FLAG) THEN
++        CALL trace_hook_lsq_l0_bulk(SCALE_LS_BULK,B_LS_BULK)
++      ENDIF
++      IF(NPART.GT.0) THEN
++        CALL trace_hook_lsq_l0_parts(NPART,SCALE_LS_PART,
++     &    B_LS_PART,SCALE_LS_PART_REFINE_FLAG,
++     &    B_LS_PART_REFINE_FLAG)
++      ENDIF
++      CALL trace_hook_lsq_l0_end()
+       DO     I=1,NREF
++        CALL trace_hook_lsq_l1(I)
+         YO  = FO(I)
+         SO  = SIGO(I)
+         JMN = 0
+@@ -106,6 +149,13 @@
+         RSQ   = LSTLSQ(1,IHH(1),IHH(2),IHH(3))
+         RHO   = SQRT(RSQ)
+         DY    = 0.0
++        IF(FREER_FLAG) THEN
++          CALL trace_hook_lsq_l2_with_freer(I,IHH,YO,SO,JMN,
++     &      IFREE,FREER(I),RSQ,RHO,DY)
++        ELSE
++          CALL trace_hook_lsq_l2_no_freer(I,IHH,YO,SO,JMN,
++     &      IFREE,RSQ,RHO,DY)
++        ENDIF
+         IF(SO.GT.0.0) then
+            CALL SUMSFS_LS_DERIV(I,NREF,ndens,hkl_asym,
+      &          FO,SIGO,FC,PHASE,YOS,YC_ALL,PHASE_ALL,SIGOS,DFA,DFB,
+@@ -121,6 +171,8 @@
+            SQRTW  = 1.0/SIGAPP
+            DY     = YOS-YC_ALL
+            WDY    = SQRTW*DY
++           CALL trace_hook_lsq_l3(I,YOS,YC_ALL,PHASE_ALL,SIGOS,
++     &       SIGEXPER,SIGAPP,SQRTW,DY,WDY,F_VALUE_C)
+         else
+            sigexper = 0.0
+            sigapp = 0.0
+@@ -133,6 +185,17 @@
+ C---  Resolution ranges:
+         DO     J=1,NBIN
+           IF(RHO.GE.SMINB(J).AND.RHO.LE.SMAXB(J)) THEN
++            IF(trace_lsq_accumulators_valid()) THEN
++              CALL trace_hook_lsq_l4_valid(I,J,IFREE,SMINB(J),
++     &          SMAXB(J),nrefa_this(IFREE,J),AFOMFC(IFREE,J),
++     &          AFOFO(IFREE,J),AFOFC(IFREE,J),AFCFC(IFREE,J),
++     &          AFC(IFREE,J),AFO(IFREE,J),ASIG(IFREE,J),
++     &          WFOMFC(IFREE,J),wfomfc2(ifree,j),WFO(IFREE,J),
++     &          WFOFO(IFREE,J))
++            ELSE
++              CALL trace_hook_lsq_l4_invalid(I,J,IFREE,SMINB(J),
++     &          SMAXB(J),nrefa_this(IFREE,J))
++            ENDIF
+             IF(SO.LE.0.0)  GO TO 100
+             AFOMFC(IFREE,J) = AFOMFC(IFREE,J) + ABS(DY)
+             AFOFO(IFREE,J)  = AFOFO(IFREE,J)  + YOS*YOS
+@@ -146,6 +209,16 @@
+             wfomfc2(ifree,j) = wfomfc2(ifree,j) + wdy**2
+             WFO(IFREE,J)    = WFO(IFREE,J)    + SQRTW*YOS
+             WFOFO(IFREE,J)  = WFOFO(IFREE,J)  + (SQRTW*YOS)**2
++            IF(trace_lsq_can_capture_addition()) THEN
++              CALL trace_hook_lsq_l5_valid(I,J,IFREE,
++     &          nrefa_this(IFREE,J),AFOMFC(IFREE,J),AFOFO(IFREE,J),
++     &          AFOFC(IFREE,J),AFCFC(IFREE,J),AFC(IFREE,J),
++     &          AFO(IFREE,J),ASIG(IFREE,J),WFOMFC(IFREE,J),
++     &          wfomfc2(ifree,j),WFO(IFREE,J),WFOFO(IFREE,J))
++            ELSE
++              CALL trace_hook_lsq_l5_invalid(I,J,IFREE,
++     &          nrefa_this(IFREE,J))
++            ENDIF
+             if(Datasource.eq.'EM'.and.phase_flag) then
+                fofc_mean(ifree,j) =  fofc_mean(ifree,j) + ao*ac+bo*bc
+                ao_mean(ifree,j) = ao_mean(ifree,j) + ao
+@@ -168,6 +241,17 @@
+         IF(SO.LE.0.0) GOTO 101
+ C
+ C---  Totals
++        IF(trace_lsq_can_capture_addition()) THEN
++          CALL trace_hook_lsq_l6a_valid(I,NB1,IFREE,
++     &      nrefa_this(IFREE,NB1),AFOMFC(IFREE,NB1),
++     &      AFOFO(IFREE,NB1),AFOFC(IFREE,NB1),AFCFC(IFREE,NB1),
++     &      AFC(IFREE,NB1),AFO(IFREE,NB1),ASIG(IFREE,NB1),
++     &      WFOMFC(IFREE,NB1),wfomfc2(ifree,nb1),WFO(IFREE,NB1),
++     &      WFOFO(IFREE,NB1))
++        ELSE
++          CALL trace_hook_lsq_l6a_invalid(I,NB1,IFREE,
++     &      nrefa_this(IFREE,NB1))
++        ENDIF
+         AFOMFC(IFREE,NB1) = AFOMFC(IFREE,NB1) + ABS(DY)
+         AFOFO(IFREE,NB1)  = AFOFO(IFREE,NB1)  + YOS*YOS
+         AFOFC(IFREE,NB1)  = AFOFC(IFREE,NB1)  + YOS*YC_ALL
+@@ -183,6 +267,17 @@
+         wfomfc2(ifree,nb1) = wfomfc2(ifree,nb1) + wdy**2
+         WFO(IFREE,NB1)    = WFO(IFREE,NB1)    + SQRTW*YOS
+         WFOFO(IFREE,NB1)  = WFOFO(IFREE,NB1)  + (SQRTW*YOS)**2
++        IF(trace_lsq_can_capture_addition()) THEN
++          CALL trace_hook_lsq_l6b_valid(I,NB1,IFREE,
++     &      nrefa_this(IFREE,NB1),AFOMFC(IFREE,NB1),
++     &      AFOFO(IFREE,NB1),AFOFC(IFREE,NB1),AFCFC(IFREE,NB1),
++     &      AFC(IFREE,NB1),AFO(IFREE,NB1),ASIG(IFREE,NB1),
++     &      WFOMFC(IFREE,NB1),wfomfc2(ifree,nb1),WFO(IFREE,NB1),
++     &      WFOFO(IFREE,NB1))
++        ELSE
++          CALL trace_hook_lsq_l6b_invalid(I,NB1,IFREE,
++     &      nrefa_this(IFREE,NB1))
++        ENDIF
+ C
+ C---  Coefficients for gradient and second derivative calculation
+         IF(IFREE.EQ.1) THEN
+@@ -207,7 +302,16 @@
+           ENDIF
+         ENDIF
+  101    CONTINUE
++        CALL trace_hook_lsq_l7(I)
+       ENDDO
++      IF(trace_lsq_accumulators_valid()) THEN
++        CALL trace_hook_lsq_l8_valid(NBIN,NB1,NBM,nrefa_this,
++     &    NREFA,NREFM,AFOMFC,AFOFO,AFOFC,AFCFC,AFC,AFO,ASIG,
++     &    WFOMFC,wfomfc2,WFO,WFOFO,FXRAY,FXFREE)
++      ELSE
++        CALL trace_hook_lsq_l8_invalid(NBIN,NB1,NBM,nrefa_this,
++     &    NREFA,NREFM)
++      ENDIF
+ 
+ C
+ c---Compile statistics
+@@ -231,6 +335,14 @@
+ C
+         IF(NREFA_this(1,I).GT.0) THEN
+           HRFAC_SHELL_WORK(I)  = AFOMFC(1,I)/AFO(1,I)
++          IF(trace_lsq_accumulators_valid()) THEN
++            CALL trace_hook_lsq_l9_work_valid(I,NB1,
++     &        nrefa_this(1,I),AFOMFC(1,I),AFO(1,I),
++     &        HRFAC_SHELL_WORK(I))
++          ELSE
++            CALL trace_hook_lsq_l9_work_invalid(I,NB1,
++     &        nrefa_this(1,I))
++          ENDIF
+           HRFAC_SHELL_ALL(I)   = (AFOMFC(1,I) + AFOMFC(2,I))/
+      &                           (AFO(1,I)+AFO(2,I))
+           HRFAC_SHELL_OBS(I)   = HRFAC_SHELL_ALL(I)
+@@ -292,6 +404,14 @@
+         END IF
+         IF(NREFA_this(2,I).GT.0) THEN
+           HRFAC_SHELL_FREE(I)  = AFOMFC(2,I)/AFO(2,I)
++          IF(trace_lsq_accumulators_valid()) THEN
++            CALL trace_hook_lsq_l9_free_valid(I,NB1,
++     &        nrefa_this(2,I),AFOMFC(2,I),AFO(2,I),
++     &        HRFAC_SHELL_FREE(I))
++          ELSE
++            CALL trace_hook_lsq_l9_free_invalid(I,NB1,
++     &        nrefa_this(2,I))
++          ENDIF
+           HWRFAC_SHELL_FREE(I)  = WFOMFC(2,I)/WFO(2,I)
+           hwr2fac_shell_free(i) = sqrt(wfomfc2(2,i)/wfofo(2,i))
+ 
+@@ -382,6 +502,15 @@
+ C---outside this routine
+ c      NHREFL_WORK       = NREFA(1,NB1)
+       RFACTOR_WORK      = HRFAC_SHELL_WORK(NB1)
++      IF(nrefa_this(1,NB1).GT.0.AND.
++     &   trace_lsq_accumulators_valid()) THEN
++        CALL trace_hook_lsq_final_carrier_work_valid(NB1,
++     &    nrefa_this(1,NB1),NREFA(1,NB1),HRFAC_SHELL_WORK(NB1),
++     &    RFACTOR_WORK)
++      ELSE
++        CALL trace_hook_lsq_final_carrier_work_invalid(NB1,
++     &    nrefa_this(1,NB1),NREFA(1,NB1))
++      ENDIF
+       RWFACTOR_WORK     = HWRFAC_SHELL_WORK(NB1)
+       r2wfactor_work    = hwr2fac_shell_work(nb1)
+       rfactor_all       = hrfac_shell_all(nb1)
+@@ -390,6 +519,14 @@
+       IF(FREER_FLAG.AND.NREFA(2,NB1).GT.0) THEN
+          NHREFL_FREE     = NREFA(2,NB1)
+          RFACTOR_FREE    = HRFAC_SHELL_FREE(NB1)
++         IF(trace_lsq_accumulators_valid()) THEN
++           CALL trace_hook_lsq_final_carrier_free_valid(NB1,
++     &       nrefa_this(2,NB1),NREFA(2,NB1),NHREFL_FREE,
++     &       HRFAC_SHELL_FREE(NB1),RFACTOR_FREE)
++         ELSE
++           CALL trace_hook_lsq_final_carrier_free_invalid(NB1,
++     &       nrefa_this(2,NB1),NREFA(2,NB1),NHREFL_FREE)
++         ENDIF
+          RWFACTOR_FREE   = HWRFAC_SHELL_FREE(NB1)
+          r2wfactor_free = hwr2fac_shell_free(nb1)
+          IF(NHREFL_WORK+NHREFL_FREE.GT.0)
+@@ -418,6 +555,7 @@
+ C
+ C-----
+       !stop
++      CALL trace_hook_lsq_l_end()
+       RETURN
+       END
+ C

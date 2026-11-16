@@ -1,0 +1,124 @@
+[
+  {
+    "path": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libfftw.2.dylib",
+    "exact_edges": [
+      {
+        "path": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libfftw.2.dylib",
+        "target": "libfftw.2.0.7.dylib"
+      }
+    ],
+    "kernel_resolved": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libfftw.2.0.7.dylib"
+  },
+  {
+    "path": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/librfftw.2.dylib",
+    "exact_edges": [
+      {
+        "path": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/librfftw.2.dylib",
+        "target": "librfftw.2.0.7.dylib"
+      }
+    ],
+    "kernel_resolved": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/librfftw.2.0.7.dylib"
+  },
+  {
+    "path": "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/SDKSettings.json",
+    "exact_edges": [
+      {
+        "path": "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+        "target": "MacOSX27.0.sdk"
+      }
+    ],
+    "kernel_resolved": "/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/SDKSettings.json"
+  },
+  {
+    "path": "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks/Accelerate.framework/Accelerate.tbd",
+    "exact_edges": [
+      {
+        "path": "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+        "target": "MacOSX27.0.sdk"
+      },
+      {
+        "path": "/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks/Accelerate.framework/Accelerate.tbd",
+        "target": "Versions/Current/Accelerate.tbd"
+      },
+      {
+        "path": "/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks/Accelerate.framework/Versions/Current",
+        "target": "A"
+      }
+    ],
+    "kernel_resolved": "/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks/Accelerate.framework/Versions/A/Accelerate.tbd"
+  },
+  {
+    "path": "/Library/Developer/CommandLineTools/usr/bin/clang++",
+    "exact_edges": [
+      {
+        "path": "/Library/Developer/CommandLineTools/usr/bin/clang++",
+        "target": "clang"
+      }
+    ],
+    "kernel_resolved": "/Library/Developer/CommandLineTools/usr/bin/clang"
+  },
+  {
+    "path": "/Library/Developer/CommandLineTools/usr/bin/otool",
+    "exact_edges": [
+      {
+        "path": "/Library/Developer/CommandLineTools/usr/bin/otool",
+        "target": "llvm-otool"
+      }
+    ],
+    "kernel_resolved": "/Library/Developer/CommandLineTools/usr/bin/llvm-otool"
+  },
+  {
+    "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/.venv/bin/python",
+    "exact_edges": [
+      {
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/.venv/bin/python",
+        "target": "/Users/marcin/.pyenv/versions/3.12.11/bin/python3.12"
+      }
+    ],
+    "kernel_resolved": "/Users/marcin/.pyenv/versions/3.12.11/bin/python3.12"
+  },
+  {
+    "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/../protstruct_review-wt-078/.venv/bin/python",
+    "exact_edges": [
+      {
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/.venv/bin/python",
+        "target": "/Users/marcin/.pyenv/versions/3.12.11/bin/python3.12"
+      }
+    ],
+    "kernel_resolved": "/Users/marcin/.pyenv/versions/3.12.11/bin/python3.12"
+  },
+  {
+    "path": "/opt/homebrew/bin/cmake",
+    "exact_edges": [
+      {
+        "path": "/opt/homebrew/bin/cmake",
+        "target": "../Cellar/cmake/4.4.5/bin/cmake"
+      }
+    ],
+    "kernel_resolved": "/opt/homebrew/Cellar/cmake/4.4.5/bin/cmake"
+  },
+  {
+    "path": "/opt/homebrew/bin/gcc-16",
+    "exact_edges": [
+      {
+        "path": "/opt/homebrew/bin/gcc-16",
+        "target": "../Cellar/gcc/16.2.0/bin/gcc-16"
+      }
+    ],
+    "kernel_resolved": "/opt/homebrew/Cellar/gcc/16.2.0/bin/gcc-16"
+  },
+  {
+    "path": "/opt/homebrew/bin/gfortran",
+    "exact_edges": [
+      {
+        "path": "/opt/homebrew/Cellar/gcc/16.2.0/bin/gfortran",
+        "target": "gfortran-16"
+      },
+      {
+        "path": "/opt/homebrew/bin/gfortran",
+        "target": "../Cellar/gcc/16.2.0/bin/gfortran"
+      }
+    ],
+    "kernel_resolved": "/opt/homebrew/Cellar/gcc/16.2.0/bin/gfortran-16"
+  }
+]

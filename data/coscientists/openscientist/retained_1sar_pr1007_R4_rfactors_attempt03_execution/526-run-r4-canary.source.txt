@@ -1,0 +1,144 @@
+"""PRIMARY: one R4 diagnostic with an externally bound, committed scientific premise."""
+from pathlib import Path
+from datetime import datetime, timezone
+import ast
+import hashlib
+import json
+import os
+import subprocess
+import sys
+import time
+
+repo = Path(__file__).resolve().parents[2]
+evidence = repo / '.orchestration/evidence'
+worktree = repo.parent / 'protstruct_review-wt-078'
+head, qc_task, expected_policy_sha = sys.argv[1:]
+assert os.environ.get('TMUX_PANE') == '%0'
+baseline_head = '9b6d923dd107bc300e00801b33ddefa197153457'
+git = lambda *args: subprocess.check_output(['git', '-C', str(worktree), *args], text=True).strip()
+sha = lambda data: hashlib.sha256(data).hexdigest()
+assert git('rev-parse', 'HEAD') == git('rev-parse', '@{upstream}') == head
+assert git('branch', '--show-current') == 'analysis/1sar-rerun-2026-11-06'
+assert not git('status', '--porcelain=v1', '--untracked-files=all')
+receipt_path = evidence / (qc_task + '-full-qc-receipt.json')
+receipt = json.loads(receipt_path.read_text())
+acceptance = json.loads((evidence / (qc_task + '-primary-acceptance.json')).read_text())
+assert acceptance['accepted'] is True
+assert receipt['exit_code'] == 0 and receipt['candidate_unchanged']
+assert receipt['after'] == acceptance['file_hashes']
+before = {name: sha((worktree / name).read_bytes()) for name in receipt['after']}
+assert before == receipt['after']
+source_names = [
+    'scripts/onesar_refmac.py', 'scripts/test_onesar_refmac.py',
+    'scripts/onesar_rerun.py', 'scripts/test_onesar_rerun.py',
+    'scripts/onesar_records.py', 'scripts/test_onesar_records.py',
+    'scripts/onesar_phenix_measure.py', 'scripts/toolchain.py',
+    'scripts/refinement_cache.py', 'ref/research/1sar_rerun_2026_11_06_preregistration.md',
+]
+for name in source_names:
+    observed = (worktree / name).read_bytes()
+    assert observed == subprocess.check_output(['git', '-C', str(worktree), 'show', baseline_head + ':' + name]), name
+    before[name] = sha(observed)
+immutable = json.loads((evidence / '501-dispatch-baseline.json').read_text())['immutable_evidence']
+for name, pin in immutable.items():
+    data = (worktree / name).read_bytes()
+    assert sha(data) == pin['sha256'] and len(data) == pin['size_bytes'], name
+
+overrides = sorted(name for name in os.environ if name.startswith('PROTSTRUCT_'))
+assert not overrides, overrides
+tree = ast.parse((worktree / 'scripts/onesar_rerun.py').read_text())
+archive_literal = None
+for node in tree.body:
+    if isinstance(node, ast.Assign) and any(isinstance(x, ast.Name) and x.id == 'ARCHIVE_REL_PATH' for x in node.targets):
+        assert isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Name)
+        assert node.value.func.id == 'Path' and len(node.value.args) == 1 and not node.value.keywords
+        archive_literal = ast.literal_eval(node.value.args[0])
+assert isinstance(archive_literal, str)
+archive = worktree / archive_literal
+assert archive.is_file() and not archive.is_symlink()
+archive_sha = sha(archive.read_bytes())
+assert archive_sha == '9fc5352284b7ffa7763c633a3eb4d3d0db96b8c25a1be9bcea361722d2c53054'
+relative = Path('data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03')
+destination = worktree / relative
+assert not os.path.lexists(destination)
+for parent in destination.parents:
+    assert not parent.is_symlink() and parent.is_dir()
+    if parent == worktree:
+        break
+
+policy_relative = 'ref/research/1sar_rerun_2026_11_07_hydrogen_policy.json'
+policy_path = worktree / policy_relative
+for parent in [policy_path, *policy_path.parents]:
+    assert not parent.is_symlink()
+    if parent == worktree:
+        break
+assert policy_path.is_file()
+policy_bytes = policy_path.read_bytes()
+assert sha(policy_bytes) == expected_policy_sha
+assert policy_bytes == subprocess.check_output(['git', '-C', str(worktree), 'show', head + ':' + policy_relative])
+policy = json.loads(policy_bytes)
+for key, expected in {
+    'policy_id': '1SAR_REFMAC_H_POLICY_2026_11_07', 'policy_version': 1,
+    'issue': 1104, 'decision': 'keep_defaults_disclose',
+    'user_decision_date': '2026-11-07', 'subject_id': 'R4', 'family': 'rfactors',
+    'intended_evidence_destination': str(relative), 'accepted_measurement_code_head': baseline_head,
+}.items():
+    assert policy[key] == expected, key
+
+def write_bytes_exclusive(path, data):
+    with path.open('xb') as stream:
+        stream.write(data)
+        stream.flush()
+        os.fsync(stream.fileno())
+    assert path.read_bytes() == data
+    return {'path': str(path), 'sha256': sha(data), 'size_bytes': len(data)}
+
+def write_json_exclusive(path, payload):
+    return write_bytes_exclusive(path, (json.dumps(payload, indent=2) + '\n').encode())
+
+policy_copy = write_bytes_exclusive(evidence / '526-r4-hydrogen-policy.json', policy_bytes)
+command = ['/Users/marcin/.local/bin/uv', 'run', '--locked', '--offline', '--extra', 'benchmark', '--',
+           'python', 'scripts/onesar_rerun.py', '--subject', 'R4', '--family', 'rfactors',
+           '--evidence-out', str(relative)]
+environment = dict(os.environ, PYTHONDONTWRITEBYTECODE='1', BASH_ENV='/dev/null')
+start = datetime.now(timezone.utc).isoformat()
+out = {'started_at': start, 'head': head, 'accepted_measurement_code_head': baseline_head,
+       'qc_receipt': {'path': str(receipt_path), 'sha256': sha(receipt_path.read_bytes())},
+       'source_hashes': before, 'argv': command, 'cwd': str(worktree), 'inherited_protstruct_names': overrides,
+       'archive_sha256': archive_sha, 'evidence_destination': str(destination),
+       'scientific_premise_reference': {'policy_id': policy['policy_id'], 'source_path': policy_relative,
+           'commit': head, 'sha256': expected_policy_sha, 'size_bytes': len(policy_bytes), 'retained_copy': policy_copy},
+       'launcher': {'path': str(Path(__file__).resolve()), 'sha256': sha(Path(__file__).read_bytes())},
+       'scientific_admission_claimed': False}
+started_ref = write_json_exclusive(evidence / '526-r4-native-started.json', out)
+with (repo / '.orchestration/LOG.md').open('a') as stream:
+    stream.write('\n- ' + start + ' —PRIMARY launching exactly one R4/rfactors diagnostic from ' + head +
+                 '; pre-execution hydrogen premise pinned and fsynced, no PROTSTRUCT overrides, fresh attempt03, default local tools. All proof gates remain intact; no batch or refinement.\n')
+assert not os.path.lexists(destination)
+assert policy_path.read_bytes() == policy_bytes
+assert sha(Path(started_ref['path']).read_bytes()) == started_ref['sha256']
+tic = time.monotonic()
+with (evidence / '526-r4-native.stdout.log').open('xb') as stdout, (evidence / '526-r4-native.stderr.log').open('xb') as stderr:
+    result = subprocess.run(command, cwd=worktree, env=environment, stdout=stdout, stderr=stderr)
+out.update(completed_at=datetime.now(timezone.utc).isoformat(), exit_code=result.returncode,
+           elapsed_seconds=time.monotonic()-tic, start_reference=started_ref)
+out['source_hashes_after'] = {name: sha((worktree / name).read_bytes()) for name in before}
+out['source_unchanged'] = out['source_hashes_after'] == before
+out['policy_unchanged'] = policy_path.read_bytes() == policy_bytes == Path(policy_copy['path']).read_bytes()
+out['prior_attempts_unchanged'] = all(sha((worktree / name).read_bytes()) == pin['sha256'] for name, pin in immutable.items())
+out['logs'] = {suffix: {'sha256': sha((evidence / ('526-r4-native.' + suffix + '.log')).read_bytes()),
+                        'size_bytes': (evidence / ('526-r4-native.' + suffix + '.log')).stat().st_size}
+               for suffix in ['stdout', 'stderr']}
+out['product_parent_artifacts'] = {}
+for name in ['parent_attempt_started.json', 'parent_attempt_outcome.json', 'parent_completed_execution_checkpoint.json']:
+    path = destination / name
+    out['product_parent_artifacts'][name] = {'available': path.is_file()}
+    if path.is_file():
+        data = path.read_bytes()
+        out['product_parent_artifacts'][name].update(sha256=sha(data), size_bytes=len(data))
+write_json_exclusive(evidence / '526-r4-native-receipt.json', out)
+with (repo / '.orchestration/LOG.md').open('a') as stream:
+    stream.write('\n- ' + out['completed_at'] + ' —PRIMARY single R4 attempt03 process finished exit' + str(result.returncode) +
+                 '; actual outcome/evidence audit pending, no retry or batch.\n')
+print(json.dumps({k:v for k,v in out.items() if k not in ('source_hashes', 'source_hashes_after')}, indent=2))
+assert out['source_unchanged'] and out['policy_unchanged'] and out['prior_attempts_unchanged']

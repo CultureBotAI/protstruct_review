@@ -1139,23 +1139,47 @@ def run_refmac(
     *,
     cwd: str | os.PathLike[str],
     timeout: float = 1800,
+    xml_output: str | os.PathLike[str] | None = None,
+    executable: str | os.PathLike[str] = "refmac5",
+    env: Mapping[str, str] | None = None,
+    ccp4: bool | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    """Run REFMAC with its keyword block on stdin, without a heredoc shell."""
+    """Run REFMAC with its keyword block on stdin, without a heredoc shell.
+
+    Environment contract:
+    - When ``env`` is supplied (``env is not None``) and ``ccp4`` is omitted
+      (``None``) or ``False``, ``env`` is authoritative and ``ccp4_environment()``
+      is not called.
+    - Combining ``env is not None`` with ``ccp4=True`` raises ``ValueError`` so
+      a caller-supplied environment is never silently overwritten.
+    - Omitting both ``env`` and ``ccp4`` preserves the legacy default
+      ``ccp4=True`` (loading ``ccp4_environment()``).
+    """
+    if env is not None and ccp4:
+        raise ValueError(
+            "run_refmac cannot combine an explicit env with ccp4=True; "
+            "pass env with ccp4 omitted or False so the supplied environment is authoritative"
+        )
+    arguments: list[str | os.PathLike[str]] = [
+        executable,
+        "XYZIN",
+        model,
+        "HKLIN",
+        reflections,
+        "XYZOUT",
+        xyz_output,
+        "HKLOUT",
+        hkl_output,
+    ]
+    if xml_output is not None:
+        arguments.extend(["XMLOUT", xml_output])
+    use_ccp4 = (env is None) if ccp4 is None else bool(ccp4)
     return run_logged(
-        [
-            "refmac5",
-            "XYZIN",
-            model,
-            "HKLIN",
-            reflections,
-            "XYZOUT",
-            xyz_output,
-            "HKLOUT",
-            hkl_output,
-        ],
+        arguments,
         log_path,
         cwd=cwd,
         timeout=timeout,
-        ccp4=True,
+        env=env,
+        ccp4=use_ccp4,
         input_text=keywords,
     )

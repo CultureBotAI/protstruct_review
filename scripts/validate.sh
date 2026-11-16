@@ -216,7 +216,13 @@ if ! "${PYTHON}" "${REPO_ROOT}/scripts/test_record_tools.py"; then
   fail "record tool unit tests"
 fi
 
-# 4i. Every remaining scripts/test_*.py, discovered rather than enumerated (#228).
+# 4i. 1SAR rerun input-admission, MTZ projection, and PHENIX R-factor
+#     reconciliation pure-logic unit tests (no PHENIX/CCP4/Gemmi execution).
+if ! "${PYTHON}" "${REPO_ROOT}/scripts/test_onesar_rerun.py"; then
+  fail "onesar_rerun unit tests"
+fi
+
+# 4j. Every remaining scripts/test_*.py, discovered rather than enumerated (#228).
 #     test_round_figures.py shipped in #188 with 18 checks and was never run here,
 #     because this file names each suite by hand and one was forgotten -- silently,
 #     as it always would be. A suite nothing executes is the repo's #2 class: a
@@ -226,7 +232,7 @@ for _suite in "${REPO_ROOT}"/scripts/test_*.py; do
   case "$(basename "${_suite}")" in
     test_qds_emit.py|test_t15_ss_agreement.py|test_t16_interface_quality.py| \
     test_t17_nmr_ensemble.py|test_t17_restraint_summary.py|test_bench_tolerances.py| \
-    test_guards.py|test_record_tools.py|test_summary_coverage.py) continue ;;
+    test_guards.py|test_record_tools.py|test_onesar_rerun.py|test_summary_coverage.py) continue ;;
   esac
   if ! "${PYTHON}" "${_suite}"; then
     fail "$(basename "${_suite}" .py)"

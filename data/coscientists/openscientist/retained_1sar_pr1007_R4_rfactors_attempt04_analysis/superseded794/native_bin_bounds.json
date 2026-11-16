@@ -1,0 +1,464 @@
+[
+  {
+    "line": 29097,
+    "record": {
+      "sequence": 29096,
+      "event": "lsq_coef_bin_bounds",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L0",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 1,
+      "is_overall_slot": false,
+      "SMINB": {
+        "bits_hex": "3C23EEAD",
+        "decimal": "10005635209381580352783203125E-30"
+      },
+      "SMAXB": {
+        "bits_hex": "3D3B7B60",
+        "decimal": "457719564437866210937500000E-28"
+      }
+    }
+  },
+  {
+    "line": 29098,
+    "record": {
+      "sequence": 29097,
+      "event": "lsq_coef_bin_bounds",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L0",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 2,
+      "is_overall_slot": false,
+      "SMINB": {
+        "bits_hex": "3D3B7B60",
+        "decimal": "457719564437866210937500000E-28"
+      },
+      "SMAXB": {
+        "bits_hex": "3D82F9FA",
+        "decimal": "63953354954719543457031250E-27"
+      }
+    }
+  },
+  {
+    "line": 29099,
+    "record": {
+      "sequence": 29098,
+      "event": "lsq_coef_bin_bounds",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L0",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 3,
+      "is_overall_slot": false,
+      "SMINB": {
+        "bits_hex": "3D82F9FA",
+        "decimal": "63953354954719543457031250E-27"
+      },
+      "SMAXB": {
+        "bits_hex": "3D9FC1CC",
+        "decimal": "78006356954574584960937500E-27"
+      }
+    }
+  },
+  {
+    "line": 29100,
+    "record": {
+      "sequence": 29099,
+      "event": "lsq_coef_bin_bounds",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L0",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 4,
+      "is_overall_slot": false,
+      "SMINB": {
+        "bits_hex": "3D9FC1CC",
+        "decimal": "78006356954574584960937500E-27"
+      },
+      "SMAXB": {
+        "bits_hex": "3DB8177C",
+        "decimal": "89888542890548706054687500E-27"
+      }
+    }
+  },
+  {
+    "line": 29101,
+    "record": {
+      "sequence": 29100,
+      "event": "lsq_coef_bin_bounds",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L0",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 5,
+      "is_overall_slot": false,
+      "SMINB": {
+        "bits_hex": "3DB8177C",
+        "decimal": "89888542890548706054687500E-27"
+      },
+      "SMAXB": {
+        "bits_hex": "3DCD90CE",
+        "decimal": "100373849272727966308593750E-27"
+      }
+    }
+  },
+  {
+    "line": 29102,
+    "record": {
+      "sequence": 29101,
+      "event": "lsq_coef_bin_bounds",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L0",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 6,
+      "is_overall_slot": false,
+      "SMINB": {
+        "bits_hex": "3DCD90CE",
+        "decimal": "100373849272727966308593750E-27"
+      },
+      "SMAXB": {
+        "bits_hex": "3DE0FFD4",
+        "decimal": "109862953424453735351562500E-27"
+      }
+    }
+  },
+  {
+    "line": 29103,
+    "record": {
+      "sequence": 29102,
+      "event": "lsq_coef_bin_bounds",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L0",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 7,
+      "is_overall_slot": false,
+      "SMINB": {
+        "bits_hex": "3DE0FFD4",
+        "decimal": "109862953424453735351562500E-27"
+      },
+      "SMAXB": {
+        "bits_hex": "3DF2E20E",
+        "decimal": "118595227599143981933593750E-27"
+      }
+    }
+  },
+  {
+    "line": 29104,
+    "record": {
+      "sequence": 29103,
+      "event": "lsq_coef_bin_bounds",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L0",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 8,
+      "is_overall_slot": false,
+      "SMINB": {
+        "bits_hex": "3DF2E20E",
+        "decimal": "118595227599143981933593750E-27"
+      },
+      "SMAXB": {
+        "bits_hex": "3E01C4C8",
+        "decimal": "12672722339630126953125000E-26"
+      }
+    }
+  },
+  {
+    "line": 29105,
+    "record": {
+      "sequence": 29104,
+      "event": "lsq_coef_bin_bounds",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L0",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 9,
+      "is_overall_slot": false,
+      "SMINB": {
+        "bits_hex": "3E01C4C8",
+        "decimal": "12672722339630126953125000E-26"
+      },
+      "SMAXB": {
+        "bits_hex": "3E0997C1",
+        "decimal": "13436795771121978759765625E-26"
+      }
+    }
+  },
+  {
+    "line": 29106,
+    "record": {
+      "sequence": 29105,
+      "event": "lsq_coef_bin_bounds",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L0",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 10,
+      "is_overall_slot": false,
+      "SMINB": {
+        "bits_hex": "3E0997C1",
+        "decimal": "13436795771121978759765625E-26"
+      },
+      "SMAXB": {
+        "bits_hex": "3E10FECD",
+        "decimal": "14159698784351348876953125E-26"
+      }
+    }
+  },
+  {
+    "line": 29107,
+    "record": {
+      "sequence": 29106,
+      "event": "lsq_coef_bin_bounds",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L0",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 11,
+      "is_overall_slot": false,
+      "SMINB": {
+        "bits_hex": "3E10FECD",
+        "decimal": "14159698784351348876953125E-26"
+      },
+      "SMAXB": {
+        "bits_hex": "3E1809B1",
+        "decimal": "14847446978092193603515625E-26"
+      }
+    }
+  },
+  {
+    "line": 29108,
+    "record": {
+      "sequence": 29107,
+      "event": "lsq_coef_bin_bounds",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L0",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 12,
+      "is_overall_slot": false,
+      "SMINB": {
+        "bits_hex": "3E1809B1",
+        "decimal": "14847446978092193603515625E-26"
+      },
+      "SMAXB": {
+        "bits_hex": "3E1EC4B0",
+        "decimal": "15504717826843261718750000E-26"
+      }
+    }
+  },
+  {
+    "line": 29109,
+    "record": {
+      "sequence": 29108,
+      "event": "lsq_coef_bin_bounds",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L0",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 13,
+      "is_overall_slot": false,
+      "SMINB": {
+        "bits_hex": "3E1EC4B0",
+        "decimal": "15504717826843261718750000E-26"
+      },
+      "SMAXB": {
+        "bits_hex": "3E25398E",
+        "decimal": "16135236620903015136718750E-26"
+      }
+    }
+  },
+  {
+    "line": 29110,
+    "record": {
+      "sequence": 29109,
+      "event": "lsq_coef_bin_bounds",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L0",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 14,
+      "is_overall_slot": false,
+      "SMINB": {
+        "bits_hex": "3E25398E",
+        "decimal": "16135236620903015136718750E-26"
+      },
+      "SMAXB": {
+        "bits_hex": "3E2B7038",
+        "decimal": "16742026805877685546875000E-26"
+      }
+    }
+  },
+  {
+    "line": 29111,
+    "record": {
+      "sequence": 29110,
+      "event": "lsq_coef_bin_bounds",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L0",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 15,
+      "is_overall_slot": false,
+      "SMINB": {
+        "bits_hex": "3E2B7038",
+        "decimal": "16742026805877685546875000E-26"
+      },
+      "SMAXB": {
+        "bits_hex": "3E316F37",
+        "decimal": "17327581346035003662109375E-26"
+      }
+    }
+  },
+  {
+    "line": 29112,
+    "record": {
+      "sequence": 29111,
+      "event": "lsq_coef_bin_bounds",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L0",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 16,
+      "is_overall_slot": false,
+      "SMINB": {
+        "bits_hex": "3E316F37",
+        "decimal": "17327581346035003662109375E-26"
+      },
+      "SMAXB": {
+        "bits_hex": "3E373C01",
+        "decimal": "17893983423709869384765625E-26"
+      }
+    }
+  },
+  {
+    "line": 29113,
+    "record": {
+      "sequence": 29112,
+      "event": "lsq_coef_bin_bounds",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L0",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 17,
+      "is_overall_slot": false,
+      "SMINB": {
+        "bits_hex": "3E373C01",
+        "decimal": "17893983423709869384765625E-26"
+      },
+      "SMAXB": {
+        "bits_hex": "3E3CDB37",
+        "decimal": "18442998826503753662109375E-26"
+      }
+    }
+  },
+  {
+    "line": 29114,
+    "record": {
+      "sequence": 29113,
+      "event": "lsq_coef_bin_bounds",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L0",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 18,
+      "is_overall_slot": false,
+      "SMINB": {
+        "bits_hex": "3E3CDB37",
+        "decimal": "18442998826503753662109375E-26"
+      },
+      "SMAXB": {
+        "bits_hex": "3E4250CE",
+        "decimal": "18976137042045593261718750E-26"
+      }
+    }
+  },
+  {
+    "line": 29115,
+    "record": {
+      "sequence": 29114,
+      "event": "lsq_coef_bin_bounds",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L0",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 19,
+      "is_overall_slot": false,
+      "SMINB": {
+        "bits_hex": "3E4250CE",
+        "decimal": "18976137042045593261718750E-26"
+      },
+      "SMAXB": {
+        "bits_hex": "3E47A031",
+        "decimal": "19494701921939849853515625E-26"
+      }
+    }
+  },
+  {
+    "line": 29116,
+    "record": {
+      "sequence": 29115,
+      "event": "lsq_coef_bin_bounds",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L0",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 20,
+      "is_overall_slot": false,
+      "SMINB": {
+        "bits_hex": "3E47A031",
+        "decimal": "19494701921939849853515625E-26"
+      },
+      "SMAXB": {
+        "bits_hex": "3E4CCC57",
+        "decimal": "19999824464321136474609375E-26"
+      }
+    }
+  },
+  {
+    "line": 29117,
+    "record": {
+      "sequence": 29116,
+      "event": "lsq_coef_bin_bounds",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L0",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 21,
+      "is_overall_slot": true,
+      "SMINB": {
+        "bits_hex": "3C23EEAD",
+        "decimal": "10005635209381580352783203125E-30"
+      },
+      "SMAXB": {
+        "bits_hex": "3E4CCC57",
+        "decimal": "19999824464321136474609375E-26"
+      }
+    }
+  }
+]

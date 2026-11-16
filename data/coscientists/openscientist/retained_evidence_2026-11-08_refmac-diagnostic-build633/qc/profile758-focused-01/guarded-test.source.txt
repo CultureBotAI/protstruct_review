@@ -1,0 +1,8 @@
+import sys,runpy
+from pathlib import Path
+def guard(event,args):
+ if event.startswith(('subprocess.','os.exec','os.spawn','os.posix_spawn','os.fork','socket.')) or event=='os.system': raise RuntimeError('Forbidden process/network in synthetic profile test: '+event)
+sys.addaudithook(guard)
+test=Path(__file__).parent/'scripts/test_refmac_diagnostic_profile.py'
+sys.argv=[str(test),'-v']
+runpy.run_path(str(test),run_name='__main__')

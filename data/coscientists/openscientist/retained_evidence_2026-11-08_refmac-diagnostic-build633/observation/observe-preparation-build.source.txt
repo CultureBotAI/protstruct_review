@@ -1,0 +1,96 @@
+"""PRIMARY top-level launch evidence for preparation or build, never REFMAC."""
+import argparse
+from datetime import datetime, timezone
+import hashlib
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+
+p = argparse.ArgumentParser()
+p.add_argument('--kind', choices=['prepare','build'], required=True)
+p.add_argument('--snapshot', type=Path)
+p.add_argument('--source', type=Path, required=True)
+p.add_argument('--output', type=Path, required=True)
+p.add_argument('--receipt-dir', type=Path, required=True)
+a = p.parse_args()
+here = Path(__file__).resolve().parent
+repo = here.parents[2]
+wt = repo.parent/'protstruct_review-wt-078'
+source = a.source.resolve(strict=True)
+output = a.output.absolute()
+receipt_dir = a.receipt_dir.absolute()
+for path in [output,receipt_dir]:
+    if path.parent != here or path.exists() or path.is_symlink():
+        raise ValueError('Fresh direct evidence child required')
+if output == receipt_dir:
+    raise ValueError('Output and observation must be separate')
+interpreter = wt/'.venv/bin/python'
+def pin(path):
+    path = Path(path)
+    return {'path':str(path),'resolved':str(path.resolve(strict=True)),
+            'sha256':hashlib.sha256(path.read_bytes()).hexdigest(),
+            'size_bytes':path.stat().st_size}
+if a.kind == 'prepare':
+    if a.snapshot is None:
+        raise ValueError('Reviewed frozen snapshot required')
+    snapshot = a.snapshot.resolve(strict=True)
+    script = snapshot/'scripts/prepare_refmac_diagnostic.py'
+    inputs = [script, snapshot/'scripts/refmac_diagnostic/trace_writer.f90',
+              snapshot/'scripts/refmac_diagnostic/trace_hooks.f90']
+else:
+    if a.snapshot is not None:
+        raise ValueError('No snapshot argument for reviewed build driver')
+    script = here/'build-instrumented-v2.py'
+    inputs = [script, here/'build-journal.py',here/'installed-runtime.cmake']
+    inputs += [here/n for n in ['toolchain-inventory.json','effective-build-tools.json',
+                               'assembler-tool.json','post-link-tools.json']]
+inputs += [interpreter,Path(__file__)]
+before = [pin(path) for path in inputs]
+argv = [str(interpreter),str(script),'--source',str(source),'--output',str(output)]
+env = dict(os.environ)
+env['PATH'] = '/usr/bin:/bin:/usr/sbin:/sbin'
+env['PYTHONDONTWRITEBYTECODE'] = '1'
+env.pop('LD_LIBRARY_PATH',None)
+receipt_dir.mkdir()
+record = {'contract':'primary_refmac_preparation_build_launch_v1','kind':a.kind,
+    'started_at':datetime.now(timezone.utc).isoformat(),'argv':argv,'cwd':str(repo),
+    'environment_selection':{'PATH':env['PATH'],'PYTHONDONTWRITEBYTECODE':'1',
+                             'removed_if_present':['LD_LIBRARY_PATH']},
+    'inputs_before':before,'native_refmac_executed':False,
+    'returncode':None,'child_completed':False,'passed':False}
+def obtainable_pin(path):
+    try:
+        return pin(path)
+    except BaseException as exc:
+        return {'path':str(path),'error':{'type':type(exc).__name__,'message':str(exc),
+                                        'errno':getattr(exc,'errno',None)}}
+stage = 'initial_receipt'
+try:
+    (receipt_dir/'started.json').write_text(json.dumps(record,indent=2)+'\n')
+    stage = 'observer_snapshot'
+    shutil.copyfile(__file__,receipt_dir/'primary-observer.py')
+    stage = 'child_launch_and_wait'
+    with (receipt_dir/'stdout.log').open('wb') as stdout, (receipt_dir/'stderr.log').open('wb') as stderr:
+        proc = subprocess.run(argv,cwd=repo,env=env,stdout=stdout,stderr=stderr)
+    record.update(returncode=proc.returncode,child_completed=True)
+except BaseException as exc:
+    record['error'] = {'stage':stage,'type':type(exc).__name__,'message':str(exc),
+                       'errno':getattr(exc,'errno',None)}
+finally:
+    after = [obtainable_pin(path) for path in inputs]
+    record.update(finished_at=datetime.now(timezone.utc).isoformat(),
+        inputs_after=after,inputs_unchanged=before == after,
+        stdout=obtainable_pin(receipt_dir/'stdout.log'),
+        stderr=obtainable_pin(receipt_dir/'stderr.log'))
+    result_file = output/('refmac_diagnostic_source_manifest.json' if a.kind == 'prepare' else 'build-receipt.json')
+    record['result_receipt'] = obtainable_pin(result_file)
+    record['passed'] = bool(record['child_completed'] and record['returncode'] == 0 and
+        before == after and 'error' not in record and
+        all('error' not in record[k] for k in ['stdout','stderr','result_receipt']))
+    (receipt_dir/'completed.json').write_text(json.dumps(record,indent=2)+'\n')
+print(json.dumps({'passed':record['passed'],'returncode':record['returncode'],
+                  'receipt':str(receipt_dir/'completed.json')}),flush=True)
+sys.exit(0 if record['passed'] else 1)

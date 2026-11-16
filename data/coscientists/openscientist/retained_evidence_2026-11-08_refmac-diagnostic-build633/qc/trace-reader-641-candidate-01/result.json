@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-08T22:50:37.645993+00:00",
+  "argv": [
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/.venv/bin/python",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/trace-reader-641-candidate-01/test_refmac_diagnostic_trace.py"
+  ],
+  "returncode": 0,
+  "source_hashes": {
+    "refmac_diagnostic_trace.py": "984aced8d794eb4454c6fab83e9d3202b497482f054698a075549d2b5a69a69f",
+    "test_refmac_diagnostic_trace.py": "e7866958900d431e404711ebf0690b1c52fa32b3e7ed8a6f115b4faf46eb005d"
+  },
+  "live_sources_unchanged": true,
+  "native_refmac_executed": false,
+  "interim_not_submitted": true
+}

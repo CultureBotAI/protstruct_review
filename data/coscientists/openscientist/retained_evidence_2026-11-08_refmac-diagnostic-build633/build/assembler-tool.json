@@ -1,0 +1,10 @@
+{
+  "files": {
+    "xcrun_as": {
+      "path": "/Library/Developer/CommandLineTools/usr/bin/as",
+      "resolved": "/Library/Developer/CommandLineTools/usr/bin/as",
+      "sha256": "06770364632b454317238e79d670c094e27301c7322c3a488323bd42e4d0bcbc",
+      "size_bytes": 303
+    }
+  }
+}

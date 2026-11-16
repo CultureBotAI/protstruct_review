@@ -1,0 +1,414 @@
+"""PRIMARY compose a closed, reviewed file-pin profile. No execution of producers.
+
+Source/build semantics are checked here and in separately retained PRIMARY QC;
+the collector verifies their pinned identity rather than implementing a build system.
+This manifest is not scientific admission or authorization to execute its producer.
+"""
+import argparse
+from datetime import datetime, timezone
+import hashlib
+import json
+import os
+from pathlib import Path
+import stat
+import sys
+
+if sys.flags.optimize:
+    raise RuntimeError('Unoptimized Python required for profile composition')
+p = argparse.ArgumentParser()
+for option in ['preparation','source-audit','focused','build-launch','runtime','qc-list','launcher','output-dir']:
+    p.add_argument('--'+option,type=Path,required=True)
+a = p.parse_args()
+here = Path(__file__).resolve().parent
+repo = here.parents[2]
+wt = repo.parent/'protstruct_review-wt-078'
+out = a.output_dir.absolute()
+if out.parent != here or out.exists() or out.is_symlink():
+    raise ValueError('Fresh direct evidence child required')
+def strict_pairs(pairs):
+    result = {}
+    for k,v in pairs:
+        if k in result:
+            raise ValueError('Duplicate JSON key '+k)
+        result[k]=v
+    return result
+def read_json(path):
+    path=Path(path)
+    resolved=path.resolve(strict=True)
+    raw=path.read_bytes()
+    def reject_constant(token):
+        raise ValueError('Nonstandard JSON constant: '+token)
+    result=json.loads(raw,object_pairs_hook=strict_pairs,parse_constant=reject_constant)
+    register(path,expected={'sha256':hashlib.sha256(raw).hexdigest(),
+                           'size_bytes':len(raw),'resolved_path':str(resolved)})
+    return result
+def digest(path):
+    h=hashlib.sha256()
+    with Path(path).open('rb') as f:
+        for chunk in iter(lambda:f.read(1024*1024),b''):
+            h.update(chunk)
+    return h.hexdigest()
+def fail_walk(exc):
+    raise OSError('Incomplete profile tree enumeration: '+str(exc)) from exc
+def members(root,exclude_git=False):
+    rows={}
+    for base,dirs,names in os.walk(root,followlinks=False,onerror=fail_walk):
+        if exclude_git and Path(base)==root:
+            dirs[:]=[x for x in dirs if x!='.git'];names=[x for x in names if x!='.git']
+        for name in dirs+names:
+            q=Path(base)/name
+            if q.is_symlink():
+                raise ValueError('Controlled tree symlink: '+str(q))
+        for name in names:
+            q=Path(base)/name
+            if not stat.S_ISREG(q.stat().st_mode):
+                raise ValueError('Nonregular profile member: '+str(q))
+            rows[q.relative_to(root).as_posix()]={'sha256':digest(q),'size_bytes':q.stat().st_size}
+    return rows
+def symlink_edges(path):
+    # Preserve aliases, including legitimate bin/../libexec paths. This records
+    # literal symlink edges; resolved_path independently binds the final target.
+    edges={};pending=[path];seen=set()
+    while pending:
+        item=pending.pop()
+        for q in [item,*item.parents]:
+            raw=str(q)
+            if raw in seen:
+                continue
+            seen.add(raw)
+            if q.is_symlink():
+                target=os.readlink(q);edges[raw]=target
+                next_path=Path(target) if Path(target).is_absolute() else q.parent/target
+                pending.append(next_path)
+    return [{'path':k,'target':v} for k,v in sorted(edges.items())]
+files={};by_path={};roles={};roots={}
+def register(path,*,file_id=None,expected=None):
+    path=Path(path)
+    if not path.is_absolute():
+        path=Path.cwd()/path
+    raw=str(path);resolved=path.resolve(strict=True)
+    st=resolved.stat()
+    if not stat.S_ISREG(st.st_mode):
+        raise ValueError('Profile file is not regular: '+raw)
+    row={'path':raw,'resolved_path':str(resolved),'sha256':digest(path),
+         'size_bytes':st.st_size,'symlinks':symlink_edges(path)}
+    if expected is not None:
+        assert row['sha256']==expected['sha256'],raw
+        if 'size_bytes' in expected:
+            assert type(expected['size_bytes']) is int and expected['size_bytes']>=0,raw
+            assert row['size_bytes']==expected['size_bytes'],raw
+        targets=[expected[key] for key in ['resolved','resolved_path'] if key in expected]
+        assert all(type(value) is str and value==row['resolved_path'] for value in targets),raw
+    if raw in by_path:
+        old=by_path[raw]
+        assert files[old]==row,raw
+        return old
+    ident=file_id or 'external:'+hashlib.sha256(raw.encode()).hexdigest()
+    assert ident not in files,ident
+    by_path[raw]=ident;files[ident]=row
+    return ident
+def role(name,paths):
+    ids=[register(path) for path in paths]
+    assert len(set(ids))==len(ids),name
+    roles[name]=ids
+def exact_role(name,path,expected=None):
+    roles[name]=[register(path,expected=expected)]
+def producer_input(receipt,filename):
+    rows=[r for r in receipt['inputs_before'] if Path(r['path']).name==filename]
+    assert len(rows)==1,(filename,len(rows))
+    row=rows[0];register(row['path'],expected=row)
+    return row['path']
+def verify_observed_argv(receipt,producer,source_root,output_root):
+    argv=receipt['argv']
+    assert type(argv) is list and len(argv)==6 and all(type(x) is str for x in argv)
+    assert argv==[argv[0],producer,'--source',str(source_root),'--output',str(output_root)]
+    for path in [argv[0],producer]:
+        matching=[row for row in receipt['inputs_before'] if row['path']==path]
+        assert len(matching)==1,path
+        register(path,expected=matching[0])
+def build_stream_path(token,build_root):
+    assert type(token) is str and token
+    rel=Path(token)
+    assert not rel.is_absolute() and '..' not in rel.parts and str(rel) not in ('.','')
+    path=build_root/rel
+    assert path.resolve(strict=True).is_relative_to(build_root)
+    return path
+ENV_KEYS={'CBIN','CCP4','CCP4_MASTER','CCP4_OPEN','CCP4_SCR','CETC','CINCL','CLIB','CLIBD',
+          'CLIBD_MON','GFORTRAN_UNBUFFERED_PRECONNECTED','MMCIFDIC','PATH','warpbin','warpdoc'}
+ABSENT_KEYS=['BASH_ENV','ENV','FCFOUT','LD_LIBRARY_PATH','REFMAC_DIAGNOSTIC_TRACE','SFOUT']
+SINGLE_ROLES={
+    'source_manifest','preparation_receipt','preparer','preparation_interpreter','writer_input','hooks_input',
+    'source_auditor','source_audit','source_audit_interpreter','build_receipt','build_launch','build_interpreter',
+    'build_qc','build_qc_implementation','linked_executable','diagnostic_executable','runtime_observation',
+    'runtime_observer','installed_reference','ccp4_setup','launcher','collection_interpreter'}
+PAIR_ROLES={'build_driver','build_journal','build_runtime_config'}
+VARIABLE_ROLES={'build_external_inputs','ccp4_setup_dependencies','runtime_images','qc_evidence'}
+def validate_closed_shape(manifest):
+    assert set(manifest)=={'schema_id','profile_id','subject_id','upstream','roots','files','roles','runtime_environment'}
+    assert manifest['schema_id']=='protstruct_refmac_diagnostic_profile_v1'
+    assert manifest['profile_id']=='refmac_5_8_0431_instrumented_attempt4_v1' and manifest['subject_id']=='R4'
+    assert manifest['upstream']=={'commit':'be25e793829952f4f177d7dfd0c10a1eb6bbd180','tag':'5.8.0431'}
+    fs=manifest['files'];rs=manifest['roles'];trees=manifest['roots']
+    assert type(fs) is dict and fs and set(trees)=={'vendor','prepared','build'}
+    assert set(rs)==SINGLE_ROLES|PAIR_ROLES|VARIABLE_ROLES|{'build_inventories','collector_helpers'}
+    assert len(rs)==31
+    used=set();tree_members=set()
+    lexical_paths=set();resolved_pins={}
+    for ident,row in fs.items():
+        assert type(ident) is str and ident
+        assert set(row)=={'path','resolved_path','sha256','size_bytes','symlinks'}
+        assert all(type(row[k]) is str and Path(row[k]).is_absolute() for k in ['path','resolved_path'])
+        assert type(row['sha256']) is str and len(row['sha256'])==64 and all(c in '0123456789abcdef' for c in row['sha256'])
+        assert type(row['size_bytes']) is int and row['size_bytes']>=0
+        assert row['path'] not in lexical_paths
+        lexical_paths.add(row['path'])
+        target_pin=(row['sha256'],row['size_bytes'])
+        assert resolved_pins.get(row['resolved_path'],target_pin)==target_pin
+        resolved_pins[row['resolved_path']]=target_pin
+        assert type(row['symlinks']) is list
+        edges=[]
+        for edge in row['symlinks']:
+            assert set(edge)=={'path','target'} and type(edge['path']) is str and Path(edge['path']).is_absolute()
+            assert type(edge['target']) is str and edge['target']
+            edges.append(edge['path'])
+        assert edges==sorted(set(edges))
+    for name,tree in trees.items():
+        assert set(tree)=={'path','file_ids'} and type(tree['path']) is str and Path(tree['path']).is_absolute()
+        ids=tree['file_ids'];assert type(ids) is list and ids and len(ids)==len(set(ids))
+        assert set(ids)<=set(fs) and not (set(ids)&tree_members)
+        expected={i for i,row in fs.items() if Path(row['path']).is_relative_to(Path(tree['path']))}
+        assert set(ids)==expected,name
+        tree_members.update(ids)
+    for name,ids in rs.items():
+        assert type(ids) is list and ids and all(type(i) is str for i in ids) and len(ids)==len(set(ids))
+        assert set(ids)<=set(fs),name
+        if name in SINGLE_ROLES:
+            assert len(ids)==1,name
+        elif name in PAIR_ROLES:
+            assert len(ids)==2 and fs[ids[0]]['sha256']==fs[ids[1]]['sha256'],name
+        elif name in VARIABLE_ROLES:
+            assert ids==sorted(ids),name
+        else:
+            assert len(ids)==8,name
+        used.update(ids)
+    assert used|tree_members==set(fs)
+    assert [Path(fs[i]['path']).name for i in rs['collector_helpers']]==helper_names
+    inventory_names=[n for n in ['toolchain-inventory.json','effective-build-tools.json','assembler-tool.json','post-link-tools.json'] for _ in range(2)]
+    assert [Path(fs[i]['path']).name for i in rs['build_inventories']]==inventory_names
+    expected_pairs={'build_driver':['build-instrumented-v2.py','build-driver.py'],
+                    'build_journal':['build-journal.py','build-journal.py'],
+                    'build_runtime_config':['installed-runtime.cmake','installed-runtime.cmake']}
+    for name,names in expected_pairs.items():
+        assert [Path(fs[i]['path']).name for i in rs[name]]==names
+    rt=manifest['runtime_environment']
+    assert set(rt)=={'observation_file_id','expected_values','expected_absent'}
+    assert rt['observation_file_id']==rs['runtime_observation'][0]
+    assert type(rt['expected_values']) is dict and set(rt['expected_values'])==ENV_KEYS
+    assert all(type(x) is str for x in rt['expected_values'].values())
+    assert rt['expected_absent']==ABSENT_KEYS
+def recheck_registered_files_and_trees():
+    for ident,row in list(files.items()):
+        assert register(row['path'],expected=row)==ident
+    for name,tree in roots.items():
+        path=Path(tree['path'])
+        assert path==path.resolve(strict=True) and not any(q.is_symlink() for q in [path,*path.parents])
+        expected={Path(files[i]['path']).relative_to(path).as_posix():
+                  {'sha256':files[i]['sha256'],'size_bytes':files[i]['size_bytes']} for i in tree['file_ids']}
+        assert members(path,exclude_git=name=='vendor')==expected,name
+
+prep=read_json(a.preparation);audit=read_json(a.source_audit)
+focused=read_json(a.focused);launch=read_json(a.build_launch);runtime=read_json(a.runtime)
+assert runtime['contract']=='primary_ccp4_runtime_configuration_observation_v1'
+assert prep['contract']==launch['contract']=='primary_refmac_preparation_build_launch_v1'
+for observation,kind in [(prep,'prepare'),(launch,'build')]:
+    assert observation['kind']==kind and observation['passed'] is True
+    assert observation['child_completed'] is True and type(observation['returncode']) is int and observation['returncode']==0
+    assert observation['inputs_before']==observation['inputs_after']
+    for row in observation['inputs_before']:
+        register(row['path'],expected=row)
+    for key in ['stdout','stderr','result_receipt']:
+        register(observation[key]['path'],expected=observation[key])
+assert focused['passed'] is True and focused['tests_passed'] is True
+assert focused['worktree_sources_unchanged'] is True and focused['snapshot_sources_unchanged'] is True
+assert focused['source_hashes_before']==focused['snapshot_source_hashes_after']
+for name in ['prepare_refmac_diagnostic.py','trace_writer.f90','trace_hooks.f90']:
+    path=Path(producer_input(prep,name))
+    expected=[v for k,v in focused['source_hashes_before'].items() if Path(k).name==name]
+    assert expected==[digest(path)],name
+assert audit['contract']=='primary_refmac_source_audit_v1' and audit['passed'] is True
+assert type(audit['python_optimization']) is int and audit['python_optimization']==0 and audit['literal_git_objects'] is True
+source_manifest=Path(prep['result_receipt']['path']);source=read_json(source_manifest)
+build_receipt=Path(launch['result_receipt']['path']);build=read_json(build_receipt)
+assert source['schema_id']=='protstruct_refmac_diagnostic_source_manifest_v1'
+assert source['source_verification_status']=='verified_upstream_commit_tree'
+assert build['contract']=='protstruct_instrumented_build_receipt_v2' and build['passed'] is True
+assert source['upstream_source']['expected_commit']==audit['upstream_commit']=='be25e793829952f4f177d7dfd0c10a1eb6bbd180'
+assert source['upstream_source']['expected_tag']=='5.8.0431'
+root_paths={'vendor':Path(audit['source_root']),'prepared':Path(audit['prepared_root']),'build':Path(build['output'])}
+assert str(root_paths['prepared'])==build['source']==str(source_manifest.parent)
+assert build_receipt.parent==root_paths['build']
+verify_observed_argv(prep,producer_input(prep,'prepare_refmac_diagnostic.py'),root_paths['vendor'],root_paths['prepared'])
+verify_observed_argv(launch,producer_input(launch,'build-instrumented-v2.py'),root_paths['prepared'],root_paths['build'])
+audit_argv=audit['argv']
+assert type(audit_argv) is list and len(audit_argv)==7 and all(type(x) is str for x in audit_argv)
+assert audit_argv[1::2]==['--source','--prepared','--output']
+audit_cwd=Path(audit['cwd']);assert audit_cwd.is_absolute()
+def audit_path(raw):
+    path=Path(raw)
+    return (path if path.is_absolute() else audit_cwd/path).resolve(strict=True)
+assert audit_path(audit_argv[0])==Path(audit['auditor_path']).resolve(strict=True)
+assert audit_path(audit_argv[2])==root_paths['vendor']
+assert audit_path(audit_argv[4])==root_paths['prepared']
+assert audit_path(audit_argv[6])==a.source_audit.resolve(strict=True)
+for name,path in root_paths.items():
+    assert path.is_absolute() and '..' not in path.parts and path==path.resolve(strict=True)
+    assert not any(q.is_symlink() for q in [path,*path.parents])
+    for other,q in root_paths.items():
+        if other!=name:
+            assert not path.is_relative_to(q) and not q.is_relative_to(path)
+    inventory=members(path,exclude_git=name=='vendor')
+    roots[name]={'path':str(path),'file_ids':[]}
+    for rel,expected in sorted(inventory.items()):
+        roots[name]['file_ids'].append(register(path/rel,file_id=name+':'+rel,expected=expected))
+    if name=='vendor':
+        assert inventory=={k:{'sha256':v['sha256'],'size_bytes':v['size_bytes']} for k,v in audit['original_git_blob_inventory'].items()}
+    if name=='prepared':
+        assert inventory==audit['complete_prepared_inventory']==build['source_before']==build['source_after']
+assert digest(source_manifest)==audit['manifest_sha256']
+assert digest(root_paths['prepared']/'refmac_diagnostic_hooks.patch')==audit['patch_sha256']
+assert set(source['diagnostic_modules'])=={'trace_writer.f90','trace_hooks.f90'}
+for filename in ['trace_writer.f90','trace_hooks.f90']:
+    row=source['diagnostic_modules'][filename]
+    assert row['destination_path']==filename
+    register(root_paths['prepared']/filename,expected=row)
+    tested=Path(producer_input(prep,filename))
+    assert digest(tested)==digest(root_paths['prepared']/filename)==row['sha256']
+    assert tested.stat().st_size==row['size_bytes']
+assert build['tools_libraries_before']==build['tools_libraries_after']
+for name,row in build['external_inputs_after'].items():
+    assert build['external_inputs_before'].get(name)==row,name
+external=set()
+for key in ['tools_libraries_before','external_inputs_before','external_inputs_after']:
+    for name,row in build[key].items():
+        external.add(register(name,expected=row))
+for name,sha in build['intrinsic_modules_before'].items():
+    external.add(register(name,expected={'sha256':sha}))
+for name,sha in build['build_metadata'].items():
+    register(root_paths['build']/name,expected={'sha256':sha})
+labels=[]
+for command in build['commands']:
+    labels.append(command['label'])
+    assert command['outcome']=='completed' and type(command['returncode']) is int and command['returncode']==0
+    assert command['cwd']==str(root_paths['build'])
+    register(build_stream_path(command['log_path'],root_paths['build']),expected={'sha256':command['log_sha256'],'size_bytes':command['log_size_bytes']})
+    if command['log_stream']=='stderr':
+        register(build_stream_path(command['stdout_path'],root_paths['build']),expected={'sha256':command['stdout_sha256'],'size_bytes':command['stdout_size_bytes']})
+    else:
+        assert command['log_stream']=='stdout_and_stderr'
+assert len(labels)==len(set(labels)) and labels.index('configure')<labels.index('compile')<labels.index('adhoc-sign')<labels.index('otool-after')
+for name,path in root_paths.items():
+    prefix=Path(runtime['resolver_record']['configured_installation_prefix'])
+    assert not path.is_relative_to(prefix) and not prefix.is_relative_to(path)
+
+exact_role('source_manifest',source_manifest)
+exact_role('preparation_receipt',a.preparation)
+for name,filename in [('preparer','prepare_refmac_diagnostic.py'),('writer_input','trace_writer.f90'),('hooks_input','trace_hooks.f90')]:
+    exact_role(name,producer_input(prep,filename))
+exact_role('preparation_interpreter',prep['argv'][0])
+exact_role('source_auditor',audit['auditor_path'],{'sha256':audit['auditor_sha256']})
+exact_role('source_audit',a.source_audit)
+exact_role('source_audit_interpreter',audit['interpreter']['path'],audit['interpreter'])
+exact_role('build_receipt',build_receipt)
+exact_role('build_launch',a.build_launch)
+exact_role('build_interpreter',launch['argv'][0])
+for name,filename,pin_field in [('build_driver','build-instrumented-v2.py','driver_sha256'),
+                               ('build_journal','build-journal.py','journal_sha256'),
+                               ('build_runtime_config','installed-runtime.cmake','runtime_config_sha256')]:
+    original=Path(producer_input(launch,filename))
+    copy=root_paths['build']/('build-driver.py' if name=='build_driver' else filename)
+    assert digest(original)==digest(copy)==build[pin_field]
+    role(name,[original,copy])
+inventories=[]
+for filename in ['toolchain-inventory.json','effective-build-tools.json','assembler-tool.json','post-link-tools.json']:
+    original=Path(producer_input(launch,filename));copy=root_paths['build']/filename
+    assert digest(original)==digest(copy)
+    inventories.extend([original,copy])
+    payload=read_json(original)
+    for key in ['tools','libraries','files']:
+        for row in payload.get(key,{}).values():
+            ident=register(row['path'],expected=row);external.add(ident)
+role('build_inventories',inventories)
+roles['build_external_inputs']=sorted(external)
+exact_role('linked_executable',root_paths['build']/'refmac5.linked-unrelocated',{'sha256':build['linked_executable_sha256']})
+exact_role('diagnostic_executable',build['executable']['path'],build['executable'])
+exe=Path(build['executable']['path'])
+assert exe.is_relative_to(root_paths['build']) and os.access(exe,os.X_OK)
+exact_role('runtime_observation',a.runtime)
+exact_role('runtime_observer',runtime['observation_script']['path'],runtime['observation_script'])
+stock=runtime['resolver_record']['refmac5_binary']
+exact_role('installed_reference',stock['resolved_path'],stock)
+assert stock['sha256']!=build['executable']['sha256']
+setup=runtime['resolver_record']['setup_script']
+exact_role('ccp4_setup',setup['resolved_path'],setup)
+dependencies=[]
+for row in runtime['setup_source_files']:
+    ident=register(row['path'],expected=row)
+    if ident not in roles['ccp4_setup']:
+        dependencies.append(ident)
+roles['ccp4_setup_dependencies']=sorted(dependencies)
+roles['runtime_images']=sorted(register(row['library']['path'],expected=row['library']) for row in runtime['static_library_load_commands'])
+helper_names=['audit_1sar_retained_evidence.py','onesar_refmac.py','onesar_refmac_log.py','onesar_rerun.py',
+              't03_reflection_retention.py','toolchain.py','refmac_diagnostic_profile.py','refmac_diagnostic_trace.py']
+role('collector_helpers',[wt/'scripts'/name for name in helper_names])
+exact_role('launcher',a.launcher)
+exact_role('collection_interpreter',wt/'.venv/bin/python')
+assert set(runtime['resolver_implementation'])=={'onesar_refmac.py','toolchain.py'}
+for name,row in runtime['resolver_implementation'].items():
+    observed_id=register(row['path'],expected=row)
+    assert observed_id==roles['collector_helpers'][helper_names.index(name)],name
+assert register(runtime['interpreter']['path'],expected=runtime['interpreter'])==roles['collection_interpreter'][0]
+qc_selection=read_json(a.qc_list)
+assert type(qc_selection) is list and qc_selection and all(type(x) is str and Path(x).is_absolute() for x in qc_selection)
+assert len(qc_selection)==len(set(qc_selection))
+qc_paths=[Path(x) for x in qc_selection]
+qc_paths.extend([a.focused,Path(__file__)])
+roles['qc_evidence']=sorted(set(register(path) for path in qc_paths))
+
+# All detailed checks precede creation. QC and profile are outside closed roots,
+# and the launcher receives caller-held manifest pins, avoiding a hash cycle.
+for root in root_paths.values():
+    assert not out.is_relative_to(root) and not root.is_relative_to(out)
+exact_role('build_qc_implementation',__file__)
+recheck_registered_files_and_trees()
+qc={'contract':'primary_refmac_profile_composition_qc_v1','at':datetime.now(timezone.utc).isoformat(),
+    'passed':True,'source_manifest_sha256':digest(source_manifest),'build_receipt_sha256':digest(build_receipt),
+    'source_audit_sha256':digest(a.source_audit),'focused_result_sha256':digest(a.focused),
+    'composition_implementation_sha256':digest(__file__),'build_command_labels':labels,
+    'native_refmac_executed':False,
+    'assurance':'Reviewed source/build receipt composition and file pre/post pins; not atomic, scientific or reproducible-build proof'}
+qc_bytes=(json.dumps(qc,indent=2)+'\n').encode()
+qc_path=out/'composition-qc.json';qc_id='composition:qc'
+assert qc_id not in files and str(qc_path) not in by_path
+# This one new file is computed in memory; verify its persisted bytes below.
+files[qc_id]={'path':str(qc_path),'resolved_path':str(qc_path),'sha256':hashlib.sha256(qc_bytes).hexdigest(),
+              'size_bytes':len(qc_bytes),'symlinks':[]}
+by_path[str(qc_path)]=qc_id;roles['build_qc']=[qc_id]
+classified=set(x for root in roots.values() for x in root['file_ids'])|set(x for ids in roles.values() for x in ids)
+# Explicitly retain observer inputs and command streams not already in a root/role.
+roles['qc_evidence']=sorted(set(roles['qc_evidence'])|(set(files)-classified))
+manifest={'schema_id':'protstruct_refmac_diagnostic_profile_v1',
+    'profile_id':'refmac_5_8_0431_instrumented_attempt4_v1','subject_id':'R4',
+    'upstream':{'commit':audit['upstream_commit'],'tag':'5.8.0431'},
+    'roots':roots,'files':files,'roles':roles,
+    'runtime_environment':{'observation_file_id':roles['runtime_observation'][0],
+        'expected_values':runtime['selected_nonsecret_environment'],
+        'expected_absent':ABSENT_KEYS}}
+validate_closed_shape(manifest)
+out.mkdir()
+with qc_path.open('xb') as f:
+    f.write(qc_bytes)
+assert register(qc_path,expected=files[qc_id])==qc_id
+path=out/'diagnostic-profile.json';path.write_text(json.dumps(manifest,indent=2)+'\n')
+print(json.dumps({'manifest':str(path),'sha256':digest(path),'size_bytes':path.stat().st_size,
+    'files':len(files),'roles':len(roles),'diagnostic_executable':build['executable'],
+    'native_refmac_executed':False}),flush=True)

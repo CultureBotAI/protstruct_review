@@ -1,0 +1,21 @@
+{
+  "errors": [
+    "XYZOUT file is missing, empty, symlinked, or outside refmac_dir"
+  ],
+  "model_preservation_proven": false,
+  "model_preservation_unproven_reason": "XYZOUT file is missing, empty, symlinked, or outside refmac_dir",
+  "schema_version": 1,
+  "status": "rejected_invalid_or_unreadable",
+  "valid": false,
+  "xyzin_ancestor_chain_verified": true,
+  "xyzin_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt02/refmac/inputs/original_model.pdb",
+  "xyzin_post_run_sha256": "8cbc1650f8be5a3833f98833fa514ec7d490c2c3bb9aa930413abac05e2a510b",
+  "xyzin_post_run_size_bytes": 135240,
+  "xyzin_sha256": "8cbc1650f8be5a3833f98833fa514ec7d490c2c3bb9aa930413abac05e2a510b",
+  "xyzin_size_bytes": 135240,
+  "xyzin_verification_error": null,
+  "xyzin_verified_post_run": true,
+  "xyzout_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt02/refmac/refmac/refmac_xyzout.pdb",
+  "xyzout_sha256": null,
+  "xyzout_size_bytes": null
+}

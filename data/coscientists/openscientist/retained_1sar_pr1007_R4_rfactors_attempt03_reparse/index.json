@@ -1,0 +1,22 @@
+{
+  "record_kind": "retained_derived_diagnostic_receipt",
+  "original_native_attempt": "data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03",
+  "source_native_head": "e7ad32b420718cf6606610db060edb16c585c766",
+  "parser_source_sha256": "31908f40708ce2f8e0abc68b4b9f22b08ef0f63df0a9c7907141b82f1323d458",
+  "scientific_acceptance": false,
+  "note": "Historical log reparse and fresh retained-output recount, with original failed attempt unchanged. Source snapshots retain original invocation paths; source_candidate.json is the copied input manifest.",
+  "files": {
+    "diagnostic_reparse.json": {
+      "sha256": "da609863c10841af04f72918d7a36d6cff9cc127819293479b1f49335dbd9f19",
+      "size_bytes": 178547
+    },
+    "replay_driver.source.txt": {
+      "sha256": "42658063216bb7aed1d96a539a9558798e3bf66789810a8b26257458aa48b319",
+      "size_bytes": 17897
+    },
+    "source_candidate.json": {
+      "sha256": "e92b1b599c20a84a101a4d03b3bbfd9acc0e8634f386e7327f2446b5f9b39820",
+      "size_bytes": 12248
+    }
+  }
+}

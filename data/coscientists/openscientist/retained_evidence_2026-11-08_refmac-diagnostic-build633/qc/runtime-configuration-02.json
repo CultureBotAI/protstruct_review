@@ -1,0 +1,222 @@
+{
+  "contract": "primary_ccp4_runtime_configuration_observation_v1",
+  "at": "2026-11-08T22:14:48.585289+00:00",
+  "native_refmac_executed": false,
+  "pre_source_PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+  "resolver_record": {
+    "expected_ccp4_version": "9.0.015",
+    "configured_installation_prefix": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9",
+    "setup_script": {
+      "configured_path": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/bin/ccp4.setup-sh",
+      "resolved_path": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/bin/ccp4.setup-sh",
+      "is_symlink": false,
+      "within_prefix": true,
+      "sha256": "5f78b2c17e239732d26436a90fcaef8decf1d354ab915f1bf411b1c6f2ea445e",
+      "size_bytes": 4309
+    },
+    "refmac5_binary": {
+      "discovered_path": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/bin/refmac5",
+      "resolved_path": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/bin/refmac5",
+      "is_symlink": false,
+      "within_prefix": true,
+      "executable": true,
+      "sha256": "493f382202cdd6a62946d143c2a3fe675b346bef35b9b435ab008f7314bd48b4",
+      "size_bytes": 40738104
+    },
+    "bound_ccp4_configuration": {
+      "CCP4_MASTER": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm",
+      "CCP4": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9",
+      "CBIN": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/bin",
+      "CLIB": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib",
+      "CLIBD": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/data",
+      "CLIBD_MON": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/data/monomers/",
+      "CINCL": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/include"
+    },
+    "prefix_path_entries": [
+      "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/etc",
+      "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/bin"
+    ]
+  },
+  "selected_nonsecret_environment": {
+    "CBIN": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/bin",
+    "CCP4": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9",
+    "CCP4_MASTER": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm",
+    "CCP4_OPEN": "UNKNOWN",
+    "CCP4_SCR": "/tmp/marcin",
+    "CETC": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/etc",
+    "CINCL": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/include",
+    "CLIB": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib",
+    "CLIBD": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/data",
+    "CLIBD_MON": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/data/monomers/",
+    "GFORTRAN_UNBUFFERED_PRECONNECTED": "Y",
+    "MMCIFDIC": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/ccp4/cif_mmdic.lib",
+    "PATH": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/arp_warp_8.0/bin/bin-arm64-Darwin:/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/etc:/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+    "warpbin": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/arp_warp_8.0/bin/bin-arm64-Darwin",
+    "warpdoc": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/arp_warp_8.0/manual"
+  },
+  "setup_source_files": [
+    {
+      "path": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/bin/ccp4.setup-sh",
+      "resolved": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/bin/ccp4.setup-sh",
+      "sha256": "5f78b2c17e239732d26436a90fcaef8decf1d354ab915f1bf411b1c6f2ea445e",
+      "size_bytes": 4309
+    },
+    {
+      "path": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/arp_warp_8.0/arpwarp_setup.bash",
+      "resolved": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/arp_warp_8.0/arpwarp_setup.bash",
+      "sha256": "48144e02f63c4aad7e1b0944d1b5e6816827a62f8324e2de24690fec9753cc51",
+      "size_bytes": 1096
+    }
+  ],
+  "static_library_load_commands": [
+    {
+      "library": {
+        "path": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libccp4f.8.0.dylib",
+        "resolved": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libccp4f.8.0.dylib",
+        "sha256": "9925bad1f4e73478fafbeb057c7d84853e6eeeab24cd9f2fc2e78f1ad2427b41",
+        "size_bytes": 703056
+      },
+      "argv": [
+        "/usr/bin/otool",
+        "-L",
+        "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libccp4f.8.0.dylib"
+      ],
+      "returncode": 0,
+      "stdout": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libccp4f.8.0.dylib:\n\t/Users/Shared/ccb63/Jenkins/workspace/CCP4/release-9-osx-clang-m1/devtools/install/lib/libccp4f.8.0.dylib (compatibility version 8.0.0, current version 0.0.0)\n\t@loader_path/libccp4c.8.0.dylib (compatibility version 8.0.0, current version 0.0.0)\n\t@loader_path/libmmdb2.0.dylib (compatibility version 1.0.0, current version 1.0.0)\n\t@loader_path/libgfortran.5.dylib (compatibility version 6.0.0, current version 6.0.0)\n\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1311.0.0)\n",
+      "stderr": ""
+    },
+    {
+      "library": {
+        "path": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libccp4c.8.0.dylib",
+        "resolved": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libccp4c.8.0.dylib",
+        "sha256": "819a5ed173331d43cbeda5511d90869d29b953fca05d8c5bd345d2b7bbf49b74",
+        "size_bytes": 258592
+      },
+      "argv": [
+        "/usr/bin/otool",
+        "-L",
+        "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libccp4c.8.0.dylib"
+      ],
+      "returncode": 0,
+      "stdout": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libccp4c.8.0.dylib:\n\t/Users/Shared/ccb63/Jenkins/workspace/CCP4/release-9-osx-clang-m1/devtools/install/lib/libccp4c.8.0.dylib (compatibility version 8.0.0, current version 0.0.0)\n\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1311.0.0)\n",
+      "stderr": ""
+    },
+    {
+      "library": {
+        "path": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libmmdb2.0.dylib",
+        "resolved": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libmmdb2.0.dylib",
+        "sha256": "f924787f721cd153756f5f7dccf620891de95c7b77c093bc32d3b00e9d51698a",
+        "size_bytes": 947725
+      },
+      "argv": [
+        "/usr/bin/otool",
+        "-L",
+        "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libmmdb2.0.dylib"
+      ],
+      "returncode": 0,
+      "stdout": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libmmdb2.0.dylib:\n\t/Users/Shared/ccb63/Jenkins/workspace/CCP4/release-9-osx-clang-m1/devtools/install/lib/libmmdb2.0.dylib (compatibility version 1.0.0, current version 1.0.0)\n\t/usr/lib/libc++.1.dylib (compatibility version 1.0.0, current version 1200.3.0)\n\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1311.0.0)\n",
+      "stderr": ""
+    },
+    {
+      "library": {
+        "path": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/librfftw.2.dylib",
+        "resolved": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/librfftw.2.0.7.dylib",
+        "sha256": "861631f5926aded83f46479bce0ebd1ac103d5cd40d3e505e16fe952cacd1462",
+        "size_bytes": 182193
+      },
+      "argv": [
+        "/usr/bin/otool",
+        "-L",
+        "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/librfftw.2.dylib"
+      ],
+      "returncode": 0,
+      "stdout": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/librfftw.2.dylib:\n\t/Users/Shared/ccb63/Jenkins/workspace/CCP4/release-9-osx-clang-m1/devtools/install/lib/librfftw.2.dylib (compatibility version 3.0.0, current version 3.7.0)\n\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1311.0.0)\n",
+      "stderr": ""
+    },
+    {
+      "library": {
+        "path": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libfftw.2.dylib",
+        "resolved": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libfftw.2.0.7.dylib",
+        "sha256": "0ecef9bc57a6b594af89ac35bf46fe275d4b074e5bdc431991df78a76c6b3e24",
+        "size_bytes": 184384
+      },
+      "argv": [
+        "/usr/bin/otool",
+        "-L",
+        "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libfftw.2.dylib"
+      ],
+      "returncode": 0,
+      "stdout": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libfftw.2.dylib:\n\t/Users/Shared/ccb63/Jenkins/workspace/CCP4/release-9-osx-clang-m1/devtools/install/lib/libfftw.2.dylib (compatibility version 3.0.0, current version 3.7.0)\n\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1311.0.0)\n",
+      "stderr": ""
+    },
+    {
+      "library": {
+        "path": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libgfortran.5.dylib",
+        "resolved": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libgfortran.5.dylib",
+        "sha256": "7d0a91bfb27d35604f72168f696d5952569f5252219565650fdfa1b647755c48",
+        "size_bytes": 1617744
+      },
+      "argv": [
+        "/usr/bin/otool",
+        "-L",
+        "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libgfortran.5.dylib"
+      ],
+      "returncode": 0,
+      "stdout": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libgfortran.5.dylib:\n\t/Users/Shared/ccb63/Jenkins/workspace/CCP4/release-9-osx-clang-m1/devtools/install/lib/libgfortran.5.dylib (compatibility version 6.0.0, current version 6.0.0)\n\t@loader_path/libgcc_s.2.dylib (compatibility version 2.0.0, current version 2.0.0)\n\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1292.0.0)\n",
+      "stderr": ""
+    },
+    {
+      "library": {
+        "path": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libgcc_s.2.dylib",
+        "resolved": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libgcc_s.2.dylib",
+        "sha256": "94e10ad77d04b65a945b2ea24fb1d0c8d0071729788e739abe2e1623ebf415c1",
+        "size_bytes": 94000
+      },
+      "argv": [
+        "/usr/bin/otool",
+        "-L",
+        "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libgcc_s.2.dylib"
+      ],
+      "returncode": 0,
+      "stdout": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/libgcc_s.2.dylib (architecture arm64):\n\t/Users/Shared/ccb63/Jenkins/workspace/CCP4/release-9-osx-clang-m1/devtools/install/lib/libgcc_s.2.dylib (compatibility version 2.0.0, current version 2.0.0)\n\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1292.0.0)\n",
+      "stderr": ""
+    }
+  ],
+  "resolver_implementation": {
+    "onesar_refmac.py": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/onesar_refmac.py",
+      "resolved": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/onesar_refmac.py",
+      "sha256": "1a968e92b928718a25bd43a67b0600e70b25ca352d205d75fea550caeeed4360",
+      "size_bytes": 520074
+    },
+    "toolchain.py": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/toolchain.py",
+      "resolved": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/toolchain.py",
+      "sha256": "9d2d1e2c36a0dee1bede3252015384e5db70e5124e7b5e346c23558804eaf095",
+      "size_bytes": 40876
+    }
+  },
+  "interpreter": {
+    "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/.venv/bin/python",
+    "resolved": "/Users/marcin/.pyenv/versions/3.12.11/bin/python3.12",
+    "sha256": "fe1d249d8278c3ac1a8e7d0550394adfe0485a5f5802fe070c17bc1aa40b00f9",
+    "size_bytes": 33816
+  },
+  "observation_script": {
+    "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/observe-runtime-configuration-02.py",
+    "resolved": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/observe-runtime-configuration-02.py",
+    "sha256": "73035cb0532fcec692db8edffca4b66b9d6aa80ab106a0dea386568bd4726240",
+    "size_bytes": 3292
+  },
+  "os": {
+    "uname": [
+      "Darwin",
+      "marcins-MacBook-Pro-3.local",
+      "27.0.0",
+      "Darwin Kernel Version 27.0.0: Tue Aug 11 21:06:40 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6050",
+      "arm64"
+    ],
+    "sw_vers": "ProductName:\t\tmacOS\nProductVersion:\t\t27.0.1\nBuildVersion:\t\t26A434\n"
+  },
+  "limitation": "Static dependencies/configuration only; no observation of images loaded by Attempt4"
+}

@@ -1,0 +1,107 @@
+"""PRIMARY bounded observations/replay of an already envelope-validated raw trace.
+
+This is an analytical execution recipe, not an admission implementation. It
+reuses the accepted binary32 decoder and preregistered RN-even model. It neither
+proves native FP mode nor associates a trace call with a printed report. Native
+J/IFREE/flags are observed, never inferred from log intervals or output counts.
+"""
+from pathlib import Path
+from datetime import datetime,timezone
+from fractions import Fraction
+from collections import Counter
+import hashlib,importlib.util,json,sys
+E=Path(__file__).resolve().parent;W=E.parents[2].parent/'protstruct_review-wt-078'
+ROOT=W/'data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt04'
+OUT=E/'attempt04-observations794-01';OUT.mkdir(exist_ok=False)
+def pin(p):
+ p=Path(p);h=hashlib.sha256()
+ with p.open('rb') as f:
+  for b in iter(lambda:f.read(1048576),b''):h.update(b)
+ return {'path':str(p),'sha256':h.hexdigest(),'size_bytes':p.stat().st_size}
+inv=json.loads((E/'attempt04-raw790-inventory.json').read_text())
+for item in inv['files']:
+ assert pin(item['path'])=={k:item[k] for k in ('path','sha256','size_bytes')}
+raw_pins={v['relative_path']:{k:v[k] for k in ('path','sha256','size_bytes')} for v in inv['files']}
+reader=W/'scripts/refmac_diagnostic_trace.py';math=E/'binary32-diagnostic-model.py'
+source_pins={str(p):pin(p) for p in [Path(__file__),reader,math,E/'attempt04-reparse793-01/result.json',E/'attempt04-reparse793-01/envelope.json',E/'prepared-source-633-01/refmac_diagnostic_source_manifest.json']}
+assert pin(reader)['sha256']=='984aced8d794eb4454c6fab83e9d3202b497482f054698a075549d2b5a69a69f'
+assert pin(math)['sha256']=='6337d0ca97588a0bf610556029dab979bc1ff49017dbc762f50f528012386867'
+rep=json.loads((E/'attempt04-reparse793-01/result.json').read_text());assert rep['passed'] and rep['valid'] and rep['closed'] and rep['pins']['trace']==raw_pins['refmac/refmac_native_trace.jsonl']
+start={'at':datetime.now(timezone.utc).isoformat(),'raw_files':raw_pins,'sources':source_pins,'scope':'bounded observations and declared-model transition consistency only; no native execution or scientific admission'}
+(OUT/'started.json').write_text(json.dumps(start,indent=2)+'\n')
+denied=[]
+def guard(event,args):
+ if event.startswith(('subprocess.','os.exec','os.spawn','os.posix_spawn','os.fork','socket.')) or event=='os.system':denied.append(event);raise RuntimeError(event)
+sys.addaudithook(guard);sys.dont_write_bytecode=True;sys.path.insert(0,str(W/'scripts'))
+import refmac_diagnostic_trace as decoder
+spec=importlib.util.spec_from_file_location('declared_binary32_model',math);model=importlib.util.module_from_spec(spec);spec.loader.exec_module(model)
+def word(v):return decoder.decode_trace_real_object(v).bits_u32
+def exact(v):return decoder.decode_trace_real_object(v).exact_fraction
+checks=Counter();bad=Counter();examples=[]
+def check(kind,condition,record,details=None):
+ checks[kind]+=1
+ if not condition:
+  bad[kind]+=1
+  if len(examples)<100:examples.append({'check':kind,'line':line_no,'sequence':record.get('sequence'),'record':record,'details':details})
+ledger=json.loads((ROOT/'inputs/input_hkl_ledger.json').read_text());inputs={tuple(x['hkl']):x for x in ledger['raw_rows']};assert len(inputs)==len(ledger['raw_rows'])
+export=json.loads((ROOT/'refmac/refmac_hklout_raw_export.json').read_text())
+counts=Counter();calls={};rows={};sums={};before={};raw_slots={};ratios={};carriers=[];members=[];bounds=[];scale=[];comp={};comp_rows=[];comp_current={};comp_sums={};comp_summary=[]
+with (ROOT/'refmac/refmac_native_trace.jsonl').open() as stream:
+ for line_no,line in enumerate(stream,1):
+  d=json.loads(line);ev=d.get('event',d.get('record_type'));ns=d.get('namespace');counts[ev]+=1;c=d.get('call_id')
+  if ev=='lsq_coef_begin':calls[c]=d;scale.append({'line':line_no,'record':d})
+  elif ev=='lsq_coef_part_scale':scale.append({'line':line_no,'record':d})
+  elif ev=='lsq_coef_bin_bounds':bounds.append({'line':line_no,'record':d})
+  elif ev=='lsq_row_input':
+   key=(c,d['row_index']);hkl=(d['H'],d['K'],d['L']);rows[key]={'input':d,'input_line':line_no,'hkl':hkl};check('unique_exact_input_hkl_join',hkl in inputs,d)
+  elif ev=='sumsfs_ls_deriv_row':rows[c,d['row_index']]['s0']=d
+  elif ev=='lsq_row_operands':
+   row=rows[c,d['row_index']];row['operands']=d;s=row.get('s0',{})
+   check('DY_subtraction_rn32',model.subtract(word(d['YOS']),word(d['YC_ALL']))==word(d['DY']),d)
+   check('callee_caller_operand_identity',all(word(d[a])==word(s[b]) for a,b in [('YOS','YOS'),('YC_ALL','YC_ALL'),('SIGOS','SIGOS'),('DY','DELTA')]),d)
+   check('YOS_scale_rn32',model.divide(word(s['YO']),word(calls[c]['SCALE_LS_OVER']))==word(s['YOS']),d)
+   check('YC_ALL_scale_rn32',model.multiply(word(s['YC_ALL0']),word(s['EXPAN_BULK_SCALE']))==word(s['YC_ALL']),d)
+  elif ev in {'lsq_shell_match_before','lsq_overall_accum_before'}:
+   slot=d['J'] if ev=='lsq_shell_match_before' else d['NB1'];key=(c,d['IFREE'],slot);state=(d['nrefa_this_before'],word(d['AFOMFC_before']),word(d['AFO_before']))
+   check('accumulator_prestate_continuity',state==sums.get(key,(0,0,0)),d,{'previous':sums.get(key,(0,0,0))});before[key]=state
+  elif ev in {'lsq_shell_accum_after','lsq_overall_accum_after'}:
+   slot=d['J'] if ev=='lsq_shell_accum_after' else d['NB1'];key=(c,d['IFREE'],slot);old=before[key];op=rows[c,d['row_index']]['operands'];actual=(d['nrefa_this_after'],word(d['AFOMFC_after']),word(d['AFO_after']));expected=(old[0]+1,model.add(old[1],model.absolute(word(op['DY']))),model.add(old[2],word(op['YOS'])))
+   check('ordered_accumulator_transition_rn32',actual==expected,d,{'expected':expected,'actual':actual});sums[key]=actual
+  elif ev=='lsq_row_terminal':
+   row=rows.pop((c,d['row_index']));i=row['input'];hkl=row['hkl'];original=inputs.get(hkl);included=d['overall_added'];op=row.get('operands')
+   check('row_SO_branch_and_observed_events',bool(exact(i['SO'])>0)==bool(op) and bool(d['l3_operands_ran'])==bool(op) and d['shell_added']==included,d)
+   check('actual_partition_matches_native_flag',d['IFREE']==(2 if i['FREER_FLAG'] and i['native_FREER_value']==calls[c]['LFreeRexcludeVal'] else 1),d)
+   members.append({'call_id':c,'row_index':d['row_index'],'hkl':hkl,'input_line':row['input_line'],'terminal_line':line_no,'native_free_flag':i['native_FREER_value'],'IFREE':d['IFREE'],'SO':i['SO'],'YO':i['YO'],'source_input_eligible':original['eligible'] if original else None,'source_input_partition':original['partition'] if original else None,'source_input_F_word':original['f_obs_word_hex'] if original else None,'source_input_flag_word':original['r_free_flag_word_hex'] if original else None,'matched_bin_index':d['matched_bin_index'],'shell_added':d['shell_added'],'overall_added':included,'row_outcome':d['row_outcome'],'YOS':op['YOS'] if op else None,'YC_ALL':op['YC_ALL'] if op else None,'DY':op['DY'] if op else None})
+  elif ev=='lsq_raw_accumulator_slot':
+   key=(c,d['IFREE'],d['slot_index']);state=(d['nrefa_this'],word(d['AFOMFC_raw']),word(d['AFO_raw']));check('raw_slot_matches_last_update',state==sums.get(key,(0,0,0)),d);raw_slots[key]=d
+  elif ev in {'lsq_fresh_division_work','lsq_fresh_division_free'}:
+   part='work' if ev.endswith('work') else 'free';key=(c,d['IFREE'],d['slot_index']);raw=raw_slots[key];n=d[f'AFOMFC_{part}_numerator'];den=d[f'AFO_{part}_denominator'];out=d['HRFAC_SHELL_'+part.upper()]
+   check('fresh_division_operand_ancestry',word(n)==word(raw['AFOMFC_raw']) and word(den)==word(raw['AFO_raw']) and d['fresh_division_executed'] is True,d)
+   check('fresh_division_rn32',model.divide(word(n),word(den))==word(out),d);ratios[key]=out
+  elif ev in {'lsq_final_carrier_work','lsq_final_carrier_free'}:
+   part='WORK' if ev.endswith('work') else 'FREE';key=(c,1 if part=='WORK' else 2,d['NB1']);check('same_call_carrier_identity',d['fresh_division_in_current_call'] is True and word(d['RFACTOR_'+part])==word(ratios[key]),d)
+   carriers.append({'line':line_no,'record':d,'exact_fraction':str(exact(d['RFACTOR_'+part]))})
+  elif ev=='lsq_coef_end':
+   actual=[m for m in members if m['call_id']==c];check('residual_rows_coverage',d['expected_rows']==d['emitted_rows']==len(actual)==calls[c]['NREF'] and {x['row_index'] for x in actual}==set(range(1,calls[c]['NREF']+1)),d)
+  elif ev=='completeness_begin':comp[c]=d
+  elif ev=='completeness_row_input':comp_current[c,d['row_index']]={'input':d,'line':line_no,'shells':[],'overall':False}
+  elif ev in {'completeness_shell_increment','completeness_overall_increment'}:
+   slot=d['J'] if ev=='completeness_shell_increment' else d['NB1'];key=(c,d['IFREE'],slot);old=comp_sums.get(key,(0,0));observed=d['incremented_observed'];expected=(old[0]+int(observed),old[1]+int(not observed));actual=(d['NREFA_after'],d['NREFM_after']) if ev=='completeness_shell_increment' else (d['NREFA_NB1_after'],d['NREFM_NB1_after'])
+   check('completeness_integer_increment',actual==expected,d);comp_sums[key]=actual;row=comp_current[c,d['row_index']]
+   if ev=='completeness_shell_increment':row['shells'].append(d['J'])
+   else:row['overall']=True
+  elif ev=='completeness_row_terminal':
+   row=comp_current.pop((c,d['row_index']));check('completeness_terminal_coverage',len(row['shells'])==d['matched_shell_count'] and row['overall']==d['overall_incremented'],d)
+   comp_rows.append({'call_id':c,'row_index':d['row_index'],'input_line':row['line'],'terminal_line':line_no,'hkl':[row['input'][x] for x in ['asu_H','asu_K','asu_L']],'IFREE':d['IFREE'],'observed_code':d['completeness_observed_code'],'matched_bins':row['shells'],'row_outcome':d['row_outcome']})
+  elif ev=='completeness_summary_slot':
+   slot=d['slot_index'];check('completeness_summary_last_counts',comp_sums.get((c,1,slot),(0,0))==(d['NREFA_work'],d['NREFM_work']) and comp_sums.get((c,2,slot),(0,0))==(d['NREFA_free'],d['NREFM_free']),d);comp_summary.append({'line':line_no,'record':d})
+  elif ev=='completeness_end':
+   actual=[x for x in comp_rows if x['call_id']==c];check('completeness_rows_coverage',d['expected_rows']==d['emitted_rows']==len(actual)==comp[c]['NASYM'],d)
+assert not rows and not comp_current
+for name,data in [('residual_members.json',members),('completeness_members.json',comp_rows),('native_bin_bounds.json',bounds),('scale_state.json',scale),('native_slot_records.json',[{'call_id':k[0],'IFREE':k[1],'slot':k[2],'record':v} for k,v in raw_slots.items()]),('completeness_slot_records.json',comp_summary)]:
+ (OUT/name).write_text(json.dumps(data,indent=2)+'\n')
+summary={**start,'completed_at':datetime.now(timezone.utc).isoformat(),'event_counts':dict(counts),'residual_call_ids':sorted(calls),'completeness_call_ids':sorted(comp),'checks':dict(checks),'mismatches':dict(bad),'mismatch_examples':examples,'native_carriers':carriers,'residual_populations':[{'IFREE':part,'included':sum(x['IFREE']==part and x['overall_added'] for x in members),'excluded':sum(x['IFREE']==part and not x['overall_added'] for x in members)} for part in [1,2]],'residual_native_bins':[{'J':j,'work':sum(x['IFREE']==1 and x['shell_added'] and x['matched_bin_index']==j for x in members),'free':sum(x['IFREE']==2 and x['shell_added'] and x['matched_bin_index']==j for x in members)} for j in range(1,21)],'unmatched_exact_input_hkls':[x['hkl'] for x in members if x['source_input_eligible'] is None],'limits':['Selected captured transitions are checked under preregistered binary32 nearest-ties-even; native FP mode/evaluation equivalence is not proved.','This bounded analysis is not a complete scientific hook grammar validator or a new admission path.','Direct exact-HKL equality does not establish all active dataset/symmetry/representation lineage.','No trace-to-log/XML caller, cycle or print-site association is asserted.','No scientific gate is changed; model/dataset failures independently block readiness.'],'scientific_admission':False,'batch_eligible':False,'denied_events':denied}
+summary['raw_files_unchanged']=all(pin(v['path'])==v for v in raw_pins.values());summary['sources_unchanged']=all(pin(v['path'])==v for v in source_pins.values());summary['outputs']=[pin(p) for p in sorted(OUT.iterdir()) if p.name!='started.json']
+assert summary['raw_files_unchanged'] and summary['sources_unchanged'] and not denied
+(OUT/'result.json').write_text(json.dumps(summary,indent=2)+'\n')
+print(json.dumps({k:summary[k] for k in ['checks','mismatches','native_carriers','residual_populations','raw_files_unchanged','sources_unchanged','scientific_admission']}))

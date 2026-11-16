@@ -1,0 +1,196 @@
+"""PRIMARY synthetic profile fixture, built from written report635, no producer imports.
+
+Every file is inert text. The executable bit is an input to validation only;
+nothing in this module executes it. Call make_fixture on a fresh orchestration
+child, never on the real build or Attempt4 evidence directory.
+"""
+from pathlib import Path
+import hashlib
+import json
+import copy
+import os
+
+COMMIT = "be25e793829952f4f177d7dfd0c10a1eb6bbd180"
+HELPERS = (
+    "audit_1sar_retained_evidence.py", "onesar_refmac.py", "onesar_refmac_log.py",
+    "onesar_rerun.py", "t03_reflection_retention.py", "toolchain.py",
+    "refmac_diagnostic_profile.py", "refmac_diagnostic_trace.py",
+)
+ENV_KEYS = (
+    "CBIN", "CCP4", "CCP4_MASTER", "CCP4_OPEN", "CCP4_SCR", "CETC", "CINCL",
+    "CLIB", "CLIBD", "CLIBD_MON", "GFORTRAN_UNBUFFERED_PRECONNECTED", "MMCIFDIC",
+    "PATH", "warpbin", "warpdoc",
+)
+ABSENT = ["BASH_ENV", "ENV", "FCFOUT", "LD_LIBRARY_PATH", "REFMAC_DIAGNOSTIC_TRACE", "SFOUT"]
+
+
+def pin(path, target_key=None):
+    path = Path(path)
+    raw = path.read_bytes()
+    result = {"path": str(path), "sha256": hashlib.sha256(raw).hexdigest(), "size_bytes": len(raw)}
+    if target_key:
+        result[target_key] = str(path.resolve(strict=True))
+    return result
+
+
+def dump(path, value):
+    Path(path).write_text(json.dumps(value, indent=2) + "\n")
+
+
+def make_fixture(directory):
+    root = Path(directory).absolute()
+    if root.exists() or root.is_symlink():
+        raise ValueError("Fresh fixture directory required")
+    if "601-instrumented-build" not in root.parts or "attempt04" in root.name.lower():
+        raise ValueError("Synthetic orchestration fixture destination required")
+    root.mkdir()
+    trees = {name: root / name for name in ("vendor", "prepared", "build")}
+    for path in trees.values():
+        path.mkdir()
+    files = {}
+    roles = {}
+    paths = {}
+
+    def create(relative, content=None, executable=False):
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content if content is not None else "inert fixture: " + relative + "\n")
+        if executable:
+            path.chmod(0o755)
+        return path
+
+    def register(path):
+        path = Path(path)
+        key = str(path)
+        if key not in paths:
+            ident = "item" + str(len(paths))
+            paths[key] = ident
+        ident = paths[key]
+        edges = [{"path": str(q), "target": os.readlink(q)}
+                 for q in [path, *path.parents] if q.is_symlink()]
+        files[ident] = {**pin(path, "resolved_path"),
+                        "symlinks": sorted(edges, key=lambda row: row["path"])}
+        return ident
+
+    def one(role, relative, content=None, executable=False):
+        path = create(relative, content, executable)
+        roles[role] = [register(path)]
+        return path
+
+    def inventory(tree):
+        return {str(path.relative_to(tree)): {k: v for k, v in pin(path).items() if k != "path"}
+                for path in sorted(tree.rglob("*")) if path.is_file()}
+
+    original = create("vendor/source.f", "C inert upstream source\n")
+    create("prepared/source.f", original.read_text())
+    source_manifest = one("source_manifest", "prepared/refmac_diagnostic_source_manifest.json", "{}\n")
+    patch = create("prepared/refmac_diagnostic_hooks.patch", "inert patch\n")
+    writer = one("writer_input", "support/input/trace_writer.f90", "inert writer\n")
+    hooks = one("hooks_input", "support/input/trace_hooks.f90", "inert hooks\n")
+    create("prepared/trace_writer.f90", writer.read_text())
+    create("prepared/trace_hooks.f90", hooks.read_text())
+    for role, name in (
+        ("preparation_receipt", "preparation-completed.json"),
+        ("preparer", "prepare_refmac_diagnostic.py"),
+        ("preparation_interpreter", "preparation-python"),
+        ("source_auditor", "check-prepared-source.py"),
+        ("source_audit_interpreter", "audit-python"),
+        ("build_launch", "build-completed.json"),
+        ("build_interpreter", "build-python"),
+        ("build_qc", "focused-result.json"),
+        ("build_qc_implementation", "focused-check.py"),
+        ("runtime_observer", "observe-runtime.py"),
+        ("launcher", "launch-attempt04.py"),
+        ("collection_interpreter", "collection-python"),
+    ):
+        one(role, "support/" + name, "{}\n" if name.endswith(".json") else None)
+    for role, name in (("build_driver", "build-driver.py"), ("build_journal", "build-journal.py"),
+                       ("build_runtime_config", "installed-runtime.cmake")):
+        content = "inert pair: " + name + "\n"
+        original_name = "build-instrumented-v2.py" if role == "build_driver" else name
+        roles[role] = [register(create("support/original/" + original_name, content)),
+                       register(create("build/" + name, content))]
+    roles["build_inventories"] = []
+    for name in ("toolchain-inventory.json", "effective-build-tools.json", "assembler-tool.json", "post-link-tools.json"):
+        roles["build_inventories"].extend(register(create(prefix + name, "{}\n"))
+                                          for prefix in ("support/original/", "build/"))
+    roles["build_external_inputs"] = [register(create("support/compiler-input.txt"))]
+    one("linked_executable", "build/refmac5.linked-unrelocated", "inert linked producer\n", True)
+    executable = one("diagnostic_executable", "build/build/refmac5", "inert separate producer\n", True)
+    create("build/ordinary-object.o", "inert object without an explicit role\n")
+    reference = one("installed_reference", "installed/bin/refmac5", "inert installed producer\n", True)
+    setup = one("ccp4_setup", "installed/bin/ccp4.setup-sh", "inert setup, never sourced\n")
+    dependency = create("installed/setup-extra.sh", "inert setup dependency\n")
+    roles["ccp4_setup_dependencies"] = [register(dependency)]
+    library = create("installed/lib/libccp4.dylib", "inert library\n")
+    roles["runtime_images"] = [register(library)]
+    roles["collector_helpers"] = [register(create("support/scripts/" + name)) for name in HELPERS]
+    roles["qc_evidence"] = [register(create("support/qc-support.json", "{}\n"))]
+    alias_link = root / "support/python-alias"
+    alias_link.symlink_to("collection-python")
+    (root / "support/bin").mkdir()
+    alias_dotdot = root / "support/bin/../collection-python"
+    roles["qc_evidence"] = sorted(roles["qc_evidence"] + [roles["collection_interpreter"][0], register(alias_link), register(alias_dotdot)])
+    dump(source_manifest, {"schema_id": "protstruct_refmac_diagnostic_source_manifest_v1",
+                          "upstream_source": {"expected_commit": COMMIT, "expected_tag": "5.8.0431"},
+                          "extra_metadata_is_allowed": True})
+    auditor = Path(files[roles["source_auditor"][0]]["path"])
+    interpreter = Path(files[roles["source_audit_interpreter"][0]]["path"])
+    audit = one("source_audit", "support/source-audit.json", "{}\n")
+    dump(audit, {"contract": "primary_refmac_source_audit_v1", "passed": True,
+                 "source_root": str(trees["vendor"]), "prepared_root": str(trees["prepared"]),
+                 "upstream_commit": COMMIT, "manifest_sha256": pin(source_manifest)["sha256"],
+                 "auditor_sha256": pin(auditor)["sha256"], "patch_sha256": pin(patch)["sha256"],
+                 "auditor_path": str(auditor), "interpreter": pin(interpreter, "resolved_path"),
+                 "python_optimization": 0, "literal_git_objects": True,
+                 "original_git_blob_inventory": inventory(trees["vendor"]),
+                 "complete_prepared_inventory": inventory(trees["prepared"]),
+                 "extra_metadata_is_allowed": True})
+    build = one("build_receipt", "build/build-receipt.json", "{}\n")
+    record = {"contract": "protstruct_instrumented_build_receipt_v2", "passed": True,
+              "source": str(trees["prepared"]), "output": str(trees["build"]),
+              "executable": pin(executable), "extra_metadata_is_allowed": True}
+    for field, role in (("driver_sha256", "build_driver"), ("journal_sha256", "build_journal"),
+                        ("runtime_config_sha256", "build_runtime_config"),
+                        ("linked_executable_sha256", "linked_executable")):
+        record[field] = files[roles[role][0]]["sha256"]
+    dump(build, record)
+    env = {key: "fixture-" + key for key in ENV_KEYS}
+    env.update(CCP4=str(root / "installed"), CCP4_MASTER=str(root),
+               CBIN=str(root / "installed/bin"), CLIB=str(root / "installed/lib"))
+    bound = {key: env[key] for key in ("CCP4_MASTER", "CCP4", "CBIN", "CLIB", "CLIBD", "CLIBD_MON", "CINCL")}
+    installed = {"expected_ccp4_version": "9.0.015", "configured_installation_prefix": str(root / "installed"),
+                 "setup_script": {"configured_path": str(setup), "resolved_path": str(setup),
+                                  "is_symlink": False, "within_prefix": True,
+                                  "sha256": pin(setup)["sha256"], "size_bytes": pin(setup)["size_bytes"]},
+                 "refmac5_binary": {"discovered_path": str(reference), "resolved_path": str(reference),
+                                    "is_symlink": False, "within_prefix": True, "executable": True,
+                                    "sha256": pin(reference)["sha256"], "size_bytes": pin(reference)["size_bytes"]},
+                 "bound_ccp4_configuration": bound, "prefix_path_entries": [str(root / "installed/bin")]}
+    runtime = one("runtime_observation", "support/runtime-observation.json", "{}\n")
+    observer = Path(files[roles["runtime_observer"][0]]["path"])
+    dump(runtime, {"contract": "primary_ccp4_runtime_configuration_observation_v1",
+                   "selected_nonsecret_environment": env, "resolver_record": installed,
+                   "observation_script": pin(observer, "resolved"),
+                   "setup_source_files": [pin(setup, "resolved"), pin(dependency, "resolved")],
+                   "static_library_load_commands": [{"library": pin(library, "resolved"), "returncode": 0}],
+                   "extra_metadata_is_allowed": True})
+    for tree in trees.values():
+        for path in sorted(tree.rglob("*")):
+            if path.is_file():
+                register(path)
+    for path in list(paths):
+        register(path)
+    manifest = {"schema_id": "protstruct_refmac_diagnostic_profile_v1",
+                "profile_id": "refmac_5_8_0431_instrumented_attempt4_v1", "subject_id": "R4",
+                "upstream": {"commit": COMMIT, "tag": "5.8.0431"}, "files": files,
+                "roots": {name: {"path": str(tree), "file_ids": sorted(ident for ident, row in files.items()
+                                    if Path(row["path"]).is_relative_to(tree))} for name, tree in trees.items()},
+                "roles": roles, "runtime_environment": {"observation_file_id": roles["runtime_observation"][0],
+                    "expected_values": copy.deepcopy(env), "expected_absent": ABSENT[:]}}
+    manifest_path = root / "profile.json"
+    dump(manifest_path, manifest)
+    return {"manifest_path": manifest_path, "manifest": manifest,
+            "installed_record": copy.deepcopy(installed), "environment": copy.deepcopy(env),
+            "evidence_root": root / "collection-evidence-never-created",
+            "executable": executable, "root": root, "alias_paths": [alias_link, alias_dotdot]}

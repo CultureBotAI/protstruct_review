@@ -1,0 +1,171 @@
+"""PRIMARY isolated build driver. Does not execute the produced REFMAC binary."""
+from pathlib import Path
+from datetime import datetime, timezone
+import argparse, hashlib, json, os, shutil, subprocess, sys, importlib.util, re, shlex
+
+HERE=Path(__file__).resolve().parent
+REPO=HERE.parents[2]
+CCP=Path('/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9')
+parser=argparse.ArgumentParser()
+parser.add_argument('--source',type=Path,required=True)
+parser.add_argument('--output',type=Path,required=True)
+args=parser.parse_args()
+if sys.flags.optimize: raise RuntimeError("optimized Python disables build guards")
+source=args.source.absolute()
+output=args.output.absolute()
+def sha(p): return hashlib.sha256(p.read_bytes()).hexdigest()
+def contained(p,parent): return p==parent or parent in p.parents
+def inventory(root):
+    result={}
+    for p in sorted(root.rglob('*')):
+        if p.is_symlink(): raise ValueError(f'source symlink: {p}')
+        if p.is_file(): result[p.relative_to(root).as_posix()]={'sha256':sha(p),'size_bytes':p.stat().st_size}
+    return result
+for p in [source,output]:
+    assert '..' not in p.parts
+    assert contained(p,HERE) and not contained(p,CCP)
+    assert all(not q.is_symlink() for q in [p,*p.parents])
+assert source.is_dir() and not output.exists()
+assert not contained(source,output) and not contained(output,source)
+for name in ['CMakeLists.txt','trace_writer.f90','trace_hooks.f90']:
+    assert (source/name).is_file(),name
+assert os.uname().machine=='arm64'
+spec=importlib.util.spec_from_file_location('build_journal',HERE/'build-journal.py')
+mod=importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+output.mkdir()
+record={'contract':'protstruct_instrumented_build_receipt_v2',
+        'started_at':datetime.now(timezone.utc).isoformat(),
+        'source':str(source),'output':str(output),'native_refmac_executed':False,
+        'commands':[],'assurance':'Pinned observed build inputs and pre/post file identity; not an atomic or reproducible-build proof'}
+journal=mod.Journal(output,record,{})
+run=journal.run
+references={}
+def discover_external(build_dir, source_dir):
+    paths=set()
+    makefile=build_dir/'CMakeFiles/Makefile.cmake'
+    if not makefile.is_file(): raise ValueError('missing generated CMake dependency file')
+    matches=re.findall(r'set\(CMAKE_MAKEFILE_DEPENDS\s+(.*?)\n\s*\)',makefile.read_text(),re.S)
+    if len(matches)!=1: raise ValueError('missing or duplicate CMake dependency block')
+    names=re.findall(r'"([^"\n]+)"',matches[0])
+    if not names: raise ValueError('empty CMake dependency block')
+    for value in names:
+        q=Path(value);paths.add(q if q.is_absolute() else build_dir/q)
+    depfiles=list(build_dir.rglob('*.o.d'))
+    if not depfiles: raise ValueError('missing compiler header dependency files')
+    for dep in depfiles:
+        raw=dep.read_text().replace('\\\n',' ')
+        for value in shlex.split(raw.split(':',1)[1]): paths.add(Path(value))
+    result={}
+    for q in sorted(paths):
+        if not q.is_absolute(): q=build_dir/q
+        if contained(q,build_dir) or contained(q,source_dir) or contained(q,HERE): continue
+        if not q.is_file(): raise ValueError(f'dependency not found: {q}')
+        result[str(q.resolve())]={'resolved':str(q.resolve()),'sha256':sha(q),'size_bytes':q.stat().st_size}
+    return result
+build=output/'build'
+configure=['/opt/homebrew/bin/cmake','-S',source,'-B',build,'-G','Unix Makefiles',
+    '-DCMAKE_POLICY_VERSION_MINIMUM=3.5','-DCMAKE_C_COMPILER=/usr/bin/clang',
+    '-DCMAKE_CXX_COMPILER=/usr/bin/clang++','-DCMAKE_Fortran_COMPILER=/opt/homebrew/bin/gfortran',
+    '-DCMAKE_OSX_ARCHITECTURES=arm64','-DBLA_VENDOR=Apple','-DBLA_SIZEOF_INTEGER=4',
+    f'-DCCP4_DIR={CCP}/coot_py2/share/ccp4',f'-DCCP4C_LIBRARY={CCP}/lib/libccp4c.8.0.dylib',
+    f'-DCCP4F_LIBRARY={CCP}/lib/libccp4f.8.0.dylib',
+    f'-DCCP4C_INCLUDE_DIR={CCP}/Frameworks/Python.framework/Versions/3.9/lib/python3.9/site-packages/ccp4io/libccp4',
+    f'-DMMDB2_LIBRARY={CCP}/lib/libmmdb2.0.dylib',f'-DFFTW2_LIBRARY={CCP}/lib/libfftw.2.dylib',
+    f'-DRFFTW2_LIBRARY={CCP}/lib/librfftw.2.dylib','-DCMAKE_EXE_LINKER_FLAGS=-Wl,-headerpad_max_install_names',
+    f'-DCMAKE_PROJECT_refmac_INCLUDE={output}/installed-runtime.cmake']
+try:
+    record['driver_sha256']=sha(Path(__file__))
+    record['journal_sha256']=sha(HERE/'build-journal.py')
+    shutil.copyfile(__file__,output/'build-driver.py')
+    shutil.copyfile(HERE/'build-journal.py',output/'build-journal.py')
+    record['source_before']=inventory(source)
+    shutil.copyfile(HERE/'installed-runtime.cmake',output/'installed-runtime.cmake')
+    record['runtime_config_sha256']=sha(output/'installed-runtime.cmake')
+    effective=json.loads((HERE/'effective-build-tools.json').read_text())
+    developer=Path(effective['files']['xcrun_clang']['path']).parents[2]
+    sdk=Path(effective['sdk_real_path'])
+    make=effective['files']['xcrun_make']['path']
+    env={'PATH':str(developer/'usr/bin')+':/usr/bin:/bin:/usr/sbin:/sbin',
+         'HOME':os.environ['HOME'],'LC_ALL':'C','DEVELOPER_DIR':str(developer)}
+    journal.env=env
+    record['environment']=env
+    record['effective_selection']={'developer_dir':str(developer),'sdk':str(sdk),'make':make}
+    for filename in ['toolchain-inventory.json','effective-build-tools.json','assembler-tool.json','post-link-tools.json']:
+        payload=json.loads((HERE/filename).read_text())
+        for key in ['tools','libraries','files']:
+            for name,row in payload.get(key,{}).items():
+                q=Path(row['path'])
+                if sha(q)!=row['sha256']: raise ValueError(f'changed tool/library: {q}')
+                references[str(q)]={'resolved':str(q.resolve()),'sha256':sha(q),'size_bytes':q.stat().st_size}
+        shutil.copyfile(HERE/filename,output/filename)
+    record['tools_libraries_before']=references
+    posttools=json.loads((HERE/'post-link-tools.json').read_text())['files']
+    record['external_inputs_before']=discover_external(HERE/'stock-build-check',
+        HERE.parent/'594-attempt04-decision/vendor-refmac-5.8.0431')
+    journal.save()
+    for prog in ['clang','clang++','ld','ar','make','as']:
+        selected=run('select-'+prog.replace('+','p'),['/usr/bin/xcrun','--find',prog],capture_stdout=True).strip()
+        expected=effective['files'].get('xcrun_'+prog,{}).get('path')
+        if prog=='as': expected=json.loads((HERE/'assembler-tool.json').read_text())['files']['xcrun_as']['path']
+        if selected!=expected: raise ValueError(f'effective {prog} mismatch: {selected}')
+    for prog in ['f951','collect2']:
+        selected=run('select-'+prog,['/opt/homebrew/bin/gfortran','-print-prog-name='+prog],capture_stdout=True).strip()
+        if selected!=effective['files']['gfortran_'+prog]['path']: raise ValueError(f'effective {prog} mismatch')
+    for prog in ['otool','install_name_tool','codesign']:
+        selected=run('select-'+prog,['/usr/bin/xcrun','--find',prog],capture_stdout=True).strip()
+        if selected!=posttools['effective_'+prog]['path']: raise ValueError(f'effective {prog} mismatch')
+    finclude=run('select-fortran-includes',['/opt/homebrew/bin/gfortran','-print-file-name=finclude'],capture_stdout=True).strip()
+    if not Path(finclude).is_dir(): raise ValueError('missing compiler intrinsic module directory')
+    record['intrinsic_modules_before']={str(q):sha(q) for q in Path(finclude).rglob('*') if q.is_file()}
+    configure.extend([f'-DCMAKE_OSX_SYSROOT={sdk}',f'-DCMAKE_MAKE_PROGRAM={make}'])
+    run('configure',configure)
+    cache={}
+    for line in (build/'CMakeCache.txt').read_text().splitlines():
+        if '=' in line and not line.startswith(('#','//')):
+            left,value=line.split('=',1);cache[left.split(':')[0]]=value
+    expected_cache={'CMAKE_C_COMPILER':'/usr/bin/clang','CMAKE_CXX_COMPILER':'/usr/bin/clang++',
+        'CMAKE_Fortran_COMPILER':'/opt/homebrew/bin/gfortran','CMAKE_OSX_SYSROOT':str(sdk),'CMAKE_MAKE_PROGRAM':make}
+    record['configured_selection']={k:cache.get(k) for k in expected_cache}
+    if record['configured_selection']!=expected_cache: raise ValueError('configured tool selection mismatch')
+    journal.save()
+    run('compile',['/opt/homebrew/bin/cmake','--build',build,'--target','refmac5','--parallel','4','--verbose'])
+    exe=build/'refmac5'
+    record['linked_executable_sha256']=sha(exe)
+    shutil.copyfile(exe,output/'refmac5.linked-unrelocated')
+    before=run('otool-before',[posttools['effective_otool']['path'],'-L',exe])
+    changes=[]
+    for line in before.splitlines()[1:]:
+        old=line.strip().split(' (')[0]
+        if old.startswith('/Users/Shared/'):
+            new=CCP/'lib'/Path(old).name
+            assert str(new) in references,str(new)
+            run(f'rebind-{len(changes):02d}',[posttools['effective_install_name_tool']['path'],'-change',old,new,exe])
+            changes.append({'old':old,'new':str(new)})
+    record['new_executable_only_load_path_changes']=changes
+    run('adhoc-sign',[posttools['effective_codesign']['path'],'--force','--sign','-',exe])
+    after=run('otool-after',[posttools['effective_otool']['path'],'-L',exe])
+    assert '/Users/Shared/' not in after
+    assert '/System/Library/Frameworks/Accelerate.framework/' in after
+    record['executable']={'path':str(exe),'sha256':sha(exe),'size_bytes':exe.stat().st_size}
+    record['source_after']=inventory(source)
+    assert record['source_after']==record['source_before']
+    record['tools_libraries_after']={p:{'resolved':str(Path(p).resolve()),'sha256':sha(Path(p)),
+        'size_bytes':Path(p).stat().st_size} for p in references}
+    assert record['tools_libraries_after']==record['tools_libraries_before']
+    record['external_inputs_after']=discover_external(build,source)
+    for q,row in record['external_inputs_after'].items():
+        if record['external_inputs_before'].get(q)!=row:
+            raise ValueError(f'new or changed external build input: {q}')
+    for q,h in record['intrinsic_modules_before'].items():
+        if sha(Path(q))!=h: raise ValueError(f'compiler intrinsic changed: {q}')
+    record['build_metadata']={p.relative_to(output).as_posix():sha(p) for p in build.rglob('*')
+        if p.is_file() and (p.name in ['CMakeCache.txt','compile_commands.json','Makefile','link.txt',
+          'flags.make','build.make','depend.make','FortranDependInfo.json'] or p.suffix=='.cmake' or p.name.endswith('.o.d'))}
+    journal.finish()
+except BaseException as exc:
+    journal.finish(exc)
+finally:
+    journal.save()
+    print(json.dumps({k:record[k] for k in ['passed','failure','executable'] if k in record}))
+sys.exit(0 if record.get('passed') else 1)

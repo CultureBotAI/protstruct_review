@@ -1,0 +1,190 @@
+"""Task683: metadata-selected, read-only path traversal; no producer execution."""
+import hashlib
+import json
+import os
+from collections import deque
+from datetime import datetime, timezone
+from pathlib import Path
+import stat
+
+E = Path(__file__).absolute().parent.parent
+DEST = Path(__file__).absolute().parent
+documents = {}
+candidates = {}
+
+def read(path):
+    path = Path(path)
+    raw = path.read_bytes()
+    documents[str(path)] = {"sha256": hashlib.sha256(raw).hexdigest(), "size_bytes": len(raw)}
+    return json.loads(raw)
+
+def add(path, reason, expected=None):
+    raw = str(path)
+    assert raw.startswith("/"), raw
+    row = candidates.setdefault(raw, {"path": raw, "sources": [], "retained_resolved_paths": []})
+    if reason not in row["sources"]:
+        row["sources"].append(reason)
+    if isinstance(expected, dict):
+        for key in ("resolved", "resolved_path", "original_resolved_path"):
+            if key in expected and expected[key] not in row["retained_resolved_paths"]:
+                row["retained_resolved_paths"].append(expected[key])
+
+initial_names = ["runtime-configuration-02.json", "source-audit-633-02.json",
+                 "build-launch-633-01/completed.json", "preparation-633-01/completed.json",
+                 "portable-copy-plan-01.json"]
+runtime, audit, launch, prep, portable = [read(E / n) for n in initial_names]
+for name in initial_names[:-1]:
+    add(E / name, "composer input JSON")
+add(E / "compose-diagnostic-profile.py", "composer build_qc_implementation/qc_evidence")
+
+for name, observation in (("preparation", prep), ("build-launch", launch)):
+    for i, row in enumerate(observation["inputs_before"]):
+        add(row["path"], f"{name}.inputs_before[{i}]", row)
+    for field in ("stdout", "stderr", "result_receipt"):
+        row = observation[field]
+        add(row["path"], f"{name}.{field}", row)
+add(audit["auditor_path"], "source-audit.auditor_path")
+add(audit["interpreter"]["path"], "source-audit.interpreter", audit["interpreter"])
+
+build = read(launch["result_receipt"]["path"])
+read(prep["result_receipt"]["path"])
+build_root = Path(build["output"])
+for field in ("tools_libraries_before", "external_inputs_before", "external_inputs_after"):
+    for path, pin in build[field].items():
+        add(path, "build-receipt." + field, pin)
+for path in build["intrinsic_modules_before"]:
+    add(path, "build-receipt.intrinsic_modules_before")
+for path in build["build_metadata"]:
+    add(build_root / path, "build-receipt.build_metadata")
+for command in build["commands"]:
+    for field in ("log_path", "stdout_path"):
+        if field in command:
+            add(build_root / command[field], "build-receipt.commands." + command["label"] + "." + field)
+add(build["executable"]["path"], "build-receipt.executable", build["executable"])
+add(build_root / "refmac5.linked-unrelocated", "composer linked_executable")
+for filename in ("build-driver.py", "build-journal.py", "installed-runtime.cmake"):
+    add(build_root / filename, "composer paired build role")
+for filename in ("toolchain-inventory.json", "effective-build-tools.json", "assembler-tool.json", "post-link-tools.json"):
+    rows = [row for row in launch["inputs_before"] if Path(row["path"]).name == filename]
+    assert len(rows) == 1
+    payload = read(rows[0]["path"])
+    add(build_root / filename, "composer build_inventories copy")
+    for field in ("tools", "libraries", "files"):
+        for name, row in payload.get(field, {}).items():
+            add(row["path"], filename + "." + field + "." + name, row)
+for root_field, inventory_field in (("source_root", "original_git_blob_inventory"),
+                                    ("prepared_root", "complete_prepared_inventory")):
+    for rel in audit[inventory_field]:
+        add(Path(audit[root_field]) / rel, "source-audit." + inventory_field)
+
+for field in ("interpreter", "observation_script"):
+    add(runtime[field]["path"], "runtime." + field, runtime[field])
+for name, row in runtime["resolver_implementation"].items():
+    add(row["path"], "runtime.resolver_implementation." + name, row)
+for field in ("setup_script", "refmac5_binary"):
+    row = runtime["resolver_record"][field]
+    add(row["resolved_path"], "runtime.resolver_record." + field, row)
+for i, row in enumerate(runtime["setup_source_files"]):
+    add(row["path"], f"runtime.setup_source_files[{i}]", row)
+for i, record in enumerate(runtime["static_library_load_commands"]):
+    row = record["library"]
+    add(row["path"], f"runtime.static_library_load_commands[{i}].library", row)
+for i, row in enumerate(portable["files"]):
+    add(row["original_path"], f"portable-copy-plan.files[{i}]", row)
+worktree = E.parents[2].parent / "protstruct_review-wt-078"
+for name in ("audit_1sar_retained_evidence.py", "onesar_refmac.py", "onesar_refmac_log.py",
+             "onesar_rerun.py", "t03_reflection_retention.py", "toolchain.py",
+             "refmac_diagnostic_profile.py", "refmac_diagnostic_trace.py"):
+    add(worktree / "scripts" / name, "composer collector_helpers literal (metadata-only inspection)")
+
+def component_walk(raw):
+    """Expand each symlink before processing its unconsumed suffix or '..'."""
+    pending = deque(Path(raw).parts[1:])
+    current = Path("/")
+    edges = []
+    steps = 0
+    while pending:
+        steps += 1
+        assert steps < 10000, raw
+        part = pending.popleft()
+        if part == "..":
+            current = current.parent
+            continue
+        if part == ".":
+            continue
+        node = current / part
+        mode = node.lstat().st_mode
+        if stat.S_ISLNK(mode):
+            target = os.readlink(node)
+            edges.append({"path": str(node), "target": target, "unconsumed_suffix": list(pending)})
+            target_parts = Path(target).parts
+            if target_parts and target_parts[0] == "/":
+                current = Path("/")
+                target_parts = target_parts[1:]
+            pending.extendleft(reversed(target_parts))
+        else:
+            current = node
+    return str(current), edges
+
+def ancestry_prediction(raw):
+    """Independent transcription of the inspected lines 71-83; not imported/executed composer."""
+    pending = [Path(raw)]
+    seen = set()
+    edges = {}
+    while pending:
+        item = pending.pop()
+        for node in (item, *item.parents):
+            lexical = str(node)
+            if lexical in seen:
+                continue
+            seen.add(lexical)
+            if stat.S_ISLNK(node.lstat().st_mode):
+                target = os.readlink(node)
+                edges[lexical] = target
+                pending.append(Path(target) if Path(target).is_absolute() else node.parent / target)
+    return [{"path": k, "target": v,
+             "physical_link_path": str(Path(k).parent.resolve(strict=True) / Path(k).name)}
+            for k, v in sorted(edges.items())]
+
+for raw, row in sorted(candidates.items()):
+    try:
+        row["leaf_lstat_is_symlink"] = stat.S_ISLNK(Path(raw).lstat().st_mode)
+        resolved, edges = component_walk(raw)
+        row["resolved_path"] = str(Path(raw).resolve(strict=True))
+        assert resolved == row["resolved_path"], (raw, resolved, row["resolved_path"])
+        row["resolved_lstat_is_regular"] = stat.S_ISREG(Path(resolved).lstat().st_mode)
+        row["traversed_edges"] = edges
+        row["ancestor_symlink"] = any(e["unconsumed_suffix"] for e in edges)
+        row["predicted_composer_edges"] = ancestry_prediction(raw)
+        retained = {(e["physical_link_path"], e["target"]) for e in row["predicted_composer_edges"]}
+        row["unrepresented_traversed_edges"] = [e for e in edges if (e["path"], e["target"]) not in retained]
+        row["retained_resolved_match"] = all(p == resolved for p in row["retained_resolved_paths"])
+    except (OSError, AssertionError) as exc:
+        row["error"] = f"{type(exc).__name__}: {exc}"
+
+composer_bytes = (E / "compose-diagnostic-profile.py").read_bytes()
+result = {"contract": "task683_read_only_planned_alias_inventory_v1",
+          "at": datetime.now(timezone.utc).isoformat(), "metadata_read": documents,
+          "composer_review": {"path": str(E / "compose-diagnostic-profile.py"),
+                              "sha256": hashlib.sha256(composer_bytes).hexdigest(),
+                              "size_bytes": len(composer_bytes),
+                              "symlink_edges_lines": composer_bytes.decode().splitlines()[67:83]},
+          "scope": "Explicit metadata-selected candidates and composer literal helper names only; no recursive filesystem scan or producer execution",
+          "candidates": [candidates[k] for k in sorted(candidates)]}
+summary = {"candidates": len(candidates), "errors": [], "aliased": [], "ancestor_symlink_count": 0,
+           "multiple_hops_count": 0, "unrepresented_traversed_edges": [], "retained_resolved_mismatches": []}
+for raw, row in sorted(candidates.items()):
+    if "error" in row:
+        summary["errors"].append({"path": raw, "error": row["error"]})
+        continue
+    if row["traversed_edges"]:
+        summary["aliased"].append(raw)
+    summary["ancestor_symlink_count"] += int(row["ancestor_symlink"])
+    summary["multiple_hops_count"] += int(len(row["traversed_edges"]) > 1)
+    if row["unrepresented_traversed_edges"]:
+        summary["unrepresented_traversed_edges"].append({"path": raw, "edges": row["unrepresented_traversed_edges"]})
+    if not row["retained_resolved_match"]:
+        summary["retained_resolved_mismatches"].append(raw)
+result["summary"] = summary
+(DEST / "inventory.json").write_text(json.dumps(result, indent=2) + "\n")
+print(json.dumps(summary, indent=2))

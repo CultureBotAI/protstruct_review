@@ -1,0 +1,1093 @@
+{
+  "actual_parent_retention_anchor_baseline": null,
+  "actual_parent_retention_anchor_dir": null,
+  "actual_parent_retention_anchor_kind": null,
+  "additional_refmac_dir_files": {
+    "refmac_xyzout.mmcif": {
+      "error": null,
+      "exists": true,
+      "is_regular_file": true,
+      "is_symlink": false,
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_xyzout.mmcif",
+      "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_xyzout.mmcif",
+      "sha256": "61e107999e5e35b5c31c70ce079fe0ad1b9b63201363207d3558b74e1024344f",
+      "size_bytes": 440411,
+      "within_refmac_dir": true
+    }
+  },
+  "checkpoint_stage": "post_execution",
+  "child_dir_persistence_failures": [],
+  "collector_stage": "stage2_invocation_raw_retention_log_parse_and_output_audits",
+  "evidence_root": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+  "failed_stage": null,
+  "failures": [],
+  "helper_sources": {
+    "audit_1sar_retained_evidence_py": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/audit_1sar_retained_evidence.py",
+      "sha256": "8ed22c08212174057c3dea1d1ece57fb525c211fc9c4507add055f39f10fb7b5",
+      "size_bytes": 18087
+    },
+    "onesar_refmac_log_py": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/onesar_refmac_log.py",
+      "sha256": "ddc05ea4e9a4270f7e55e16887acbf8ddb4333ce773b1e59d0c2ca96e925a4ad",
+      "size_bytes": 88680
+    },
+    "onesar_refmac_py": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/onesar_refmac.py",
+      "sha256": "941a69249d7bfa27ff32f7081c371980736ffee6539ce0952c6d6d27bc45f2f5",
+      "size_bytes": 519887
+    },
+    "onesar_rerun_py": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/onesar_rerun.py",
+      "sha256": "13fac3428be7ab2a3bc43dfa8b720efdad2e7262d212b17ca7de36b44e264e81",
+      "size_bytes": 223088
+    },
+    "t03_reflection_retention_py": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/t03_reflection_retention.py",
+      "sha256": "fdf2b3650f844d6dd602b0b695586bff2b25a5b9202748b1f1c07b79ff353d4a",
+      "size_bytes": 10218
+    },
+    "toolchain_py": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/toolchain.py",
+      "sha256": "9d2d1e2c36a0dee1bede3252015384e5db70e5124e7b5e346c23558804eaf095",
+      "size_bytes": 40876
+    }
+  },
+  "helper_sources_baseline": {
+    "audit_1sar_retained_evidence_py": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/audit_1sar_retained_evidence.py",
+      "sha256": "8ed22c08212174057c3dea1d1ece57fb525c211fc9c4507add055f39f10fb7b5",
+      "size_bytes": 18087
+    },
+    "onesar_refmac_log_py": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/onesar_refmac_log.py",
+      "sha256": "ddc05ea4e9a4270f7e55e16887acbf8ddb4333ce773b1e59d0c2ca96e925a4ad",
+      "size_bytes": 88680
+    },
+    "onesar_refmac_py": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/onesar_refmac.py",
+      "sha256": "941a69249d7bfa27ff32f7081c371980736ffee6539ce0952c6d6d27bc45f2f5",
+      "size_bytes": 519887
+    },
+    "onesar_rerun_py": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/onesar_rerun.py",
+      "sha256": "13fac3428be7ab2a3bc43dfa8b720efdad2e7262d212b17ca7de36b44e264e81",
+      "size_bytes": 223088
+    },
+    "t03_reflection_retention_py": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/t03_reflection_retention.py",
+      "sha256": "fdf2b3650f844d6dd602b0b695586bff2b25a5b9202748b1f1c07b79ff353d4a",
+      "size_bytes": 10218
+    },
+    "toolchain_py": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/toolchain.py",
+      "sha256": "9d2d1e2c36a0dee1bede3252015384e5db70e5124e7b5e346c23558804eaf095",
+      "size_bytes": 40876
+    }
+  },
+  "input_immutability": {
+    "helper_sources_baseline": {
+      "audit_1sar_retained_evidence_py": {
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/audit_1sar_retained_evidence.py",
+        "sha256": "8ed22c08212174057c3dea1d1ece57fb525c211fc9c4507add055f39f10fb7b5",
+        "size_bytes": 18087
+      },
+      "onesar_refmac_log_py": {
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/onesar_refmac_log.py",
+        "sha256": "ddc05ea4e9a4270f7e55e16887acbf8ddb4333ce773b1e59d0c2ca96e925a4ad",
+        "size_bytes": 88680
+      },
+      "onesar_refmac_py": {
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/onesar_refmac.py",
+        "sha256": "941a69249d7bfa27ff32f7081c371980736ffee6539ce0952c6d6d27bc45f2f5",
+        "size_bytes": 519887
+      },
+      "onesar_rerun_py": {
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/onesar_rerun.py",
+        "sha256": "13fac3428be7ab2a3bc43dfa8b720efdad2e7262d212b17ca7de36b44e264e81",
+        "size_bytes": 223088
+      },
+      "t03_reflection_retention_py": {
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/t03_reflection_retention.py",
+        "sha256": "fdf2b3650f844d6dd602b0b695586bff2b25a5b9202748b1f1c07b79ff353d4a",
+        "size_bytes": 10218
+      },
+      "toolchain_py": {
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/toolchain.py",
+        "sha256": "9d2d1e2c36a0dee1bede3252015384e5db70e5124e7b5e346c23558804eaf095",
+        "size_bytes": 40876
+      }
+    },
+    "helper_sources_post_run": {
+      "audit_1sar_retained_evidence_py": {
+        "error": null,
+        "matches_baseline": true,
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/audit_1sar_retained_evidence.py",
+        "sha256": "8ed22c08212174057c3dea1d1ece57fb525c211fc9c4507add055f39f10fb7b5",
+        "size_bytes": 18087
+      },
+      "onesar_refmac_log_py": {
+        "error": null,
+        "matches_baseline": true,
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/onesar_refmac_log.py",
+        "sha256": "ddc05ea4e9a4270f7e55e16887acbf8ddb4333ce773b1e59d0c2ca96e925a4ad",
+        "size_bytes": 88680
+      },
+      "onesar_refmac_py": {
+        "error": null,
+        "matches_baseline": true,
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/onesar_refmac.py",
+        "sha256": "941a69249d7bfa27ff32f7081c371980736ffee6539ce0952c6d6d27bc45f2f5",
+        "size_bytes": 519887
+      },
+      "onesar_rerun_py": {
+        "error": null,
+        "matches_baseline": true,
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/onesar_rerun.py",
+        "sha256": "13fac3428be7ab2a3bc43dfa8b720efdad2e7262d212b17ca7de36b44e264e81",
+        "size_bytes": 223088
+      },
+      "t03_reflection_retention_py": {
+        "error": null,
+        "matches_baseline": true,
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/t03_reflection_retention.py",
+        "sha256": "fdf2b3650f844d6dd602b0b695586bff2b25a5b9202748b1f1c07b79ff353d4a",
+        "size_bytes": 10218
+      },
+      "toolchain_py": {
+        "error": null,
+        "matches_baseline": true,
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/toolchain.py",
+        "sha256": "9d2d1e2c36a0dee1bede3252015384e5db70e5124e7b5e346c23558804eaf095",
+        "size_bytes": 40876
+      }
+    },
+    "keywords_file_baseline": {
+      "ancestor_chain_baseline": [
+        {
+          "dev": 16777233,
+          "ino": 151397855,
+          "mode": 493,
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+          "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac"
+        },
+        {
+          "dev": 16777233,
+          "ino": 151397870,
+          "mode": 493,
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac",
+          "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac"
+        }
+      ],
+      "dev": 16777233,
+      "evidence_root_dev": 16777233,
+      "evidence_root_ino": 151397855,
+      "evidence_root_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+      "evidence_root_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+      "ino": 151397872,
+      "parent_dir_dev": 16777233,
+      "parent_dir_ino": 151397870,
+      "parent_dir_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac",
+      "parent_dir_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac",
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_keywords.txt",
+      "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_keywords.txt",
+      "sha256": "a7b3c3b750470e95377ca3c394000db94e648e24fc6e7e7474858ce35089663f",
+      "size_bytes": 171
+    },
+    "keywords_file_post_run": {
+      "ancestor_chain_verified": true,
+      "error": null,
+      "matches_baseline": true,
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_keywords.txt",
+      "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_keywords.txt",
+      "sha256": "a7b3c3b750470e95377ca3c394000db94e648e24fc6e7e7474858ce35089663f",
+      "size_bytes": 171
+    },
+    "mutations": [],
+    "parent_retention_directory_baseline": {
+      "dev": 16777233,
+      "evidence_root": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+      "evidence_root_dev": 16777233,
+      "evidence_root_ino": 151397855,
+      "evidence_root_mode": 493,
+      "evidence_root_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+      "ino": 151397871,
+      "mode": 493,
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac_parent_retention",
+      "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac_parent_retention",
+      "uid": 501
+    },
+    "parent_retention_directory_post_run": {
+      "dev": 16777233,
+      "errno": null,
+      "error": null,
+      "exception_message": null,
+      "exception_type": null,
+      "exists": true,
+      "expected_dev": 16777233,
+      "expected_ino": 151397871,
+      "expected_mode": 493,
+      "expected_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac_parent_retention",
+      "identity_verified": true,
+      "ino": 151397871,
+      "is_directory": true,
+      "is_symlink": false,
+      "mode": 493,
+      "mode_changed": false,
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac_parent_retention",
+      "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac_parent_retention",
+      "symlink_target": null,
+      "writable_post_run": true
+    },
+    "pre_execution_checkpoint_baseline": {
+      "ancestor_chain_baseline": [
+        {
+          "dev": 16777233,
+          "ino": 151397855,
+          "mode": 493,
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+          "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac"
+        },
+        {
+          "dev": 16777233,
+          "ino": 151397870,
+          "mode": 493,
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac",
+          "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac"
+        }
+      ],
+      "dev": 16777233,
+      "evidence_root_dev": 16777233,
+      "evidence_root_ino": 151397855,
+      "evidence_root_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+      "evidence_root_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+      "ino": 151397873,
+      "parent_dir_dev": 16777233,
+      "parent_dir_ino": 151397870,
+      "parent_dir_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac",
+      "parent_dir_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac",
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_pre_execution_checkpoint.json",
+      "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_pre_execution_checkpoint.json",
+      "sha256": "f0ff3cf1f0698c457a5839549c781b375c16909a3b406f905f08873a86c3a9d1",
+      "size_bytes": 28050
+    },
+    "pre_execution_checkpoint_post_run": {
+      "ancestor_chain_verified": true,
+      "errno": null,
+      "error": null,
+      "exception_message": null,
+      "exception_type": null,
+      "exists": true,
+      "expected_sha256": "f0ff3cf1f0698c457a5839549c781b375c16909a3b406f905f08873a86c3a9d1",
+      "expected_size_bytes": 28050,
+      "is_regular_file": true,
+      "is_symlink": false,
+      "matches_baseline": true,
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_pre_execution_checkpoint.json",
+      "reason": null,
+      "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_pre_execution_checkpoint.json",
+      "sha256": "f0ff3cf1f0698c457a5839549c781b375c16909a3b406f905f08873a86c3a9d1",
+      "size_bytes": 28050
+    },
+    "pre_execution_checkpoint_recovery_json": null,
+    "pre_execution_checkpoint_verified": true,
+    "refmac_directory_baseline": {
+      "dev": 16777233,
+      "evidence_root": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+      "evidence_root_dev": 16777233,
+      "evidence_root_ino": 151397855,
+      "evidence_root_mode": 493,
+      "evidence_root_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+      "ino": 151397870,
+      "mode": 493,
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac",
+      "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac",
+      "uid": 501
+    },
+    "refmac_directory_post_run": {
+      "dev": 16777233,
+      "errno": null,
+      "error": null,
+      "exception_message": null,
+      "exception_type": null,
+      "exists": true,
+      "expected_dev": 16777233,
+      "expected_ino": 151397870,
+      "expected_mode": 493,
+      "expected_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac",
+      "identity_verified": true,
+      "ino": 151397870,
+      "is_directory": true,
+      "is_symlink": false,
+      "mode": 493,
+      "mode_changed": false,
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac",
+      "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac",
+      "symlink_target": null,
+      "writable_post_run": true
+    },
+    "staged_inputs_baseline": {
+      "input_admission_json": {
+        "ancestor_chain_baseline": [
+          {
+            "dev": 16777233,
+            "ino": 151397855,
+            "mode": 493,
+            "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+            "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac"
+          },
+          {
+            "dev": 16777233,
+            "ino": 151397856,
+            "mode": 493,
+            "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs",
+            "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs"
+          }
+        ],
+        "dev": 16777233,
+        "evidence_root_dev": 16777233,
+        "evidence_root_ino": 151397855,
+        "evidence_root_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+        "evidence_root_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+        "ino": 151397869,
+        "parent_dir_dev": 16777233,
+        "parent_dir_ino": 151397856,
+        "parent_dir_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs",
+        "parent_dir_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs",
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/input_admission.json",
+        "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/input_admission.json",
+        "sha256": "b69530219b592ac426b9eecbdec076e1849e1ee18ac6e6a574833eda31a1a43a",
+        "size_bytes": 5827
+      },
+      "input_hkl_ledger_json": {
+        "ancestor_chain_baseline": [
+          {
+            "dev": 16777233,
+            "ino": 151397855,
+            "mode": 493,
+            "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+            "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac"
+          },
+          {
+            "dev": 16777233,
+            "ino": 151397856,
+            "mode": 493,
+            "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs",
+            "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs"
+          }
+        ],
+        "dev": 16777233,
+        "evidence_root_dev": 16777233,
+        "evidence_root_ino": 151397855,
+        "evidence_root_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+        "evidence_root_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+        "ino": 151397868,
+        "parent_dir_dev": 16777233,
+        "parent_dir_ino": 151397856,
+        "parent_dir_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs",
+        "parent_dir_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs",
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/input_hkl_ledger.json",
+        "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/input_hkl_ledger.json",
+        "sha256": "35543c5821665de8f65b5fbd153669556dfef766ac8b156dc001a0c5b667a51e",
+        "size_bytes": 6107091
+      },
+      "original_data_mtz": {
+        "ancestor_chain_baseline": [
+          {
+            "dev": 16777233,
+            "ino": 151397855,
+            "mode": 493,
+            "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+            "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac"
+          },
+          {
+            "dev": 16777233,
+            "ino": 151397856,
+            "mode": 493,
+            "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs",
+            "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs"
+          }
+        ],
+        "dev": 16777233,
+        "evidence_root_dev": 16777233,
+        "evidence_root_ino": 151397855,
+        "evidence_root_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+        "evidence_root_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+        "ino": 151397858,
+        "parent_dir_dev": 16777233,
+        "parent_dir_ino": 151397856,
+        "parent_dir_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs",
+        "parent_dir_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs",
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/original_data.mtz",
+        "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/original_data.mtz",
+        "sha256": "f36d5fe685a3e524e8809d17d19ce12073acdf339eba2cfd3b0347a818850ab2",
+        "size_bytes": 469312
+      },
+      "original_model_pdb": {
+        "ancestor_chain_baseline": [
+          {
+            "dev": 16777233,
+            "ino": 151397855,
+            "mode": 493,
+            "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+            "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac"
+          },
+          {
+            "dev": 16777233,
+            "ino": 151397856,
+            "mode": 493,
+            "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs",
+            "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs"
+          }
+        ],
+        "dev": 16777233,
+        "evidence_root_dev": 16777233,
+        "evidence_root_ino": 151397855,
+        "evidence_root_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+        "evidence_root_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+        "ino": 151397857,
+        "parent_dir_dev": 16777233,
+        "parent_dir_ino": 151397856,
+        "parent_dir_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs",
+        "parent_dir_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs",
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/original_model.pdb",
+        "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/original_model.pdb",
+        "sha256": "8cbc1650f8be5a3833f98833fa514ec7d490c2c3bb9aa930413abac05e2a510b",
+        "size_bytes": 135240
+      },
+      "projected_observations_mtz": {
+        "ancestor_chain_baseline": [
+          {
+            "dev": 16777233,
+            "ino": 151397855,
+            "mode": 493,
+            "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+            "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac"
+          },
+          {
+            "dev": 16777233,
+            "ino": 151397856,
+            "mode": 493,
+            "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs",
+            "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs"
+          }
+        ],
+        "dev": 16777233,
+        "evidence_root_dev": 16777233,
+        "evidence_root_ino": 151397855,
+        "evidence_root_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+        "evidence_root_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+        "ino": 151397859,
+        "parent_dir_dev": 16777233,
+        "parent_dir_ino": 151397856,
+        "parent_dir_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs",
+        "parent_dir_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs",
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/projected_observations.mtz",
+        "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/projected_observations.mtz",
+        "sha256": "6edbe54b2ec7b815f30b6bd20a7264a7c978721189670e39e20d876d9b4fece7",
+        "size_bytes": 176592
+      }
+    },
+    "staged_inputs_post_run": {
+      "input_admission_json": {
+        "ancestor_chain_verified": true,
+        "error": null,
+        "matches_baseline": true,
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/input_admission.json",
+        "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/input_admission.json",
+        "sha256": "b69530219b592ac426b9eecbdec076e1849e1ee18ac6e6a574833eda31a1a43a",
+        "size_bytes": 5827
+      },
+      "input_hkl_ledger_json": {
+        "ancestor_chain_verified": true,
+        "error": null,
+        "matches_baseline": true,
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/input_hkl_ledger.json",
+        "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/input_hkl_ledger.json",
+        "sha256": "35543c5821665de8f65b5fbd153669556dfef766ac8b156dc001a0c5b667a51e",
+        "size_bytes": 6107091
+      },
+      "original_data_mtz": {
+        "ancestor_chain_verified": true,
+        "error": null,
+        "matches_baseline": true,
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/original_data.mtz",
+        "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/original_data.mtz",
+        "sha256": "f36d5fe685a3e524e8809d17d19ce12073acdf339eba2cfd3b0347a818850ab2",
+        "size_bytes": 469312
+      },
+      "original_model_pdb": {
+        "ancestor_chain_verified": true,
+        "error": null,
+        "matches_baseline": true,
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/original_model.pdb",
+        "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/original_model.pdb",
+        "sha256": "8cbc1650f8be5a3833f98833fa514ec7d490c2c3bb9aa930413abac05e2a510b",
+        "size_bytes": 135240
+      },
+      "projected_observations_mtz": {
+        "ancestor_chain_verified": true,
+        "error": null,
+        "matches_baseline": true,
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/projected_observations.mtz",
+        "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/projected_observations.mtz",
+        "sha256": "6edbe54b2ec7b815f30b6bd20a7264a7c978721189670e39e20d876d9b4fece7",
+        "size_bytes": 176592
+      }
+    },
+    "verified": true
+  },
+  "inputs_dir": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs",
+  "inspection_errors": [],
+  "intended_parent_retention_dir": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac_parent_retention",
+  "invocation": {
+    "argv_matches_expected": true,
+    "ccp4_flag_passed_to_run_refmac": false,
+    "completed_argv": [
+      "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/bin/refmac5",
+      "XYZIN",
+      "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/original_model.pdb",
+      "HKLIN",
+      "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/projected_observations.mtz",
+      "XYZOUT",
+      "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_xyzout.pdb",
+      "HKLOUT",
+      "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_hklout.mtz",
+      "XMLOUT",
+      "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_xmlout.xml"
+    ],
+    "completed_argv_available": true,
+    "custom_runner_injected": false,
+    "cwd": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac",
+    "elapsed_seconds": 4.385742,
+    "executable": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/bin/refmac5",
+    "expected_argv": [
+      "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/bin/refmac5",
+      "XYZIN",
+      "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/original_model.pdb",
+      "HKLIN",
+      "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/projected_observations.mtz",
+      "XYZOUT",
+      "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_xyzout.pdb",
+      "HKLOUT",
+      "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_hklout.mtz",
+      "XMLOUT",
+      "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_xmlout.xml"
+    ],
+    "explicit_env_passed": true,
+    "finished_at_utc": "2026-11-08T02:45:18.456841+00:00",
+    "hklin_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/projected_observations.mtz",
+    "hklout_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_hklout.mtz",
+    "keywords_file_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_keywords.txt",
+    "launch_or_timeout_failure": null,
+    "log_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac.log",
+    "returncode": 0,
+    "started_at_utc": "2026-11-08T02:45:14.071051+00:00",
+    "stdin_keywords": "LABIN FP=F-obs SIGFP=SIGF-obs FREE=R-free-flags\nFREE 1\nREFI BREF MIXED\nNCYC 0\nMONI MANY\nLABOUT FC=FC PHIC=PHIC FWT=FWT PHWT=PHWT DELFWT=DELFWT PHDELWT=PHDELWT FOM=FOM\nEND\n",
+    "stdin_keywords_lines": [
+      "LABIN FP=F-obs SIGFP=SIGF-obs FREE=R-free-flags",
+      "FREE 1",
+      "REFI BREF MIXED",
+      "NCYC 0",
+      "MONI MANY",
+      "LABOUT FC=FC PHIC=PHIC FWT=FWT PHWT=PHWT DELFWT=DELFWT PHDELWT=PHDELWT FOM=FOM",
+      "END"
+    ],
+    "stdin_keywords_sha256": "a7b3c3b750470e95377ca3c394000db94e648e24fc6e7e7474858ce35089663f",
+    "timed_out": false,
+    "timeout_seconds": 900.0,
+    "wrapper": "toolchain.run_refmac",
+    "xmlout_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_xmlout.xml",
+    "xyzin_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/original_model.pdb",
+    "xyzout_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_xyzout.pdb"
+  },
+  "keywords_file_baseline": {
+    "ancestor_chain_baseline": [
+      {
+        "dev": 16777233,
+        "ino": 151397855,
+        "mode": 493,
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+        "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac"
+      },
+      {
+        "dev": 16777233,
+        "ino": 151397870,
+        "mode": 493,
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac",
+        "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac"
+      }
+    ],
+    "dev": 16777233,
+    "evidence_root_dev": 16777233,
+    "evidence_root_ino": 151397855,
+    "evidence_root_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+    "evidence_root_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+    "ino": 151397872,
+    "parent_dir_dev": 16777233,
+    "parent_dir_ino": 151397870,
+    "parent_dir_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac",
+    "parent_dir_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac",
+    "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_keywords.txt",
+    "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_keywords.txt",
+    "sha256": "a7b3c3b750470e95377ca3c394000db94e648e24fc6e7e7474858ce35089663f",
+    "size_bytes": 171
+  },
+  "missing_or_invalid_outputs": [],
+  "mtz": {
+    "member": "data/1sar.mtz",
+    "sha256": "f36d5fe685a3e524e8809d17d19ce12073acdf339eba2cfd3b0347a818850ab2",
+    "subject_ref": "mtz:sha256:f36d5fe685a3e524e8809d17d19ce12073acdf339eba2cfd3b0347a818850ab2"
+  },
+  "operation_checks": {
+    "all_raw_outputs_present_and_regular": true,
+    "argv_matches_expected": true,
+    "collector_succeeded": null,
+    "completed_argv_available": true,
+    "input_immutability_verified": true,
+    "parent_retention_dir_identity_verified": true,
+    "parent_retention_dir_writable_post_run": true,
+    "pre_execution_checkpoint_verified": true,
+    "preflight_toolchain_resolved": true,
+    "process_returncode_zero": true,
+    "refmac_dir_identity_verified": true,
+    "refmac_dir_writable_post_run": true,
+    "worker_launched": true
+  },
+  "parent_retention_dir": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac_parent_retention",
+  "parent_retention_directory_baseline": {
+    "dev": 16777233,
+    "evidence_root": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+    "evidence_root_dev": 16777233,
+    "evidence_root_ino": 151397855,
+    "evidence_root_mode": 493,
+    "evidence_root_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+    "ino": 151397871,
+    "mode": 493,
+    "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac_parent_retention",
+    "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac_parent_retention",
+    "uid": 501
+  },
+  "parent_retention_directory_post_run": {
+    "dev": 16777233,
+    "errno": null,
+    "error": null,
+    "exception_message": null,
+    "exception_type": null,
+    "exists": true,
+    "expected_dev": 16777233,
+    "expected_ino": 151397871,
+    "expected_mode": 493,
+    "expected_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac_parent_retention",
+    "identity_verified": true,
+    "ino": 151397871,
+    "is_directory": true,
+    "is_symlink": false,
+    "mode": 493,
+    "mode_changed": false,
+    "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac_parent_retention",
+    "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac_parent_retention",
+    "symlink_target": null,
+    "writable_post_run": true
+  },
+  "parent_retention_fallback_anchor": {
+    "actual_anchor_baseline": null,
+    "actual_anchor_dir": null,
+    "actual_anchor_kind": null,
+    "evidence_root_failure_reason": null,
+    "evidence_root_verified": null,
+    "failed_intended_parent_retention_dir": null,
+    "no_verified_anchor_available": false,
+    "parent_retention_dir_failure_reason": null,
+    "unpersisted_reason": null,
+    "used": false
+  },
+  "parent_retention_used": false,
+  "pre_execution_checkpoint_initial_json": {
+    "ancestor_chain_baseline": [
+      {
+        "dev": 16777233,
+        "ino": 151397855,
+        "mode": 493,
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+        "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac"
+      },
+      {
+        "dev": 16777233,
+        "ino": 151397870,
+        "mode": 493,
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac",
+        "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac"
+      }
+    ],
+    "dev": 16777233,
+    "evidence_root_dev": 16777233,
+    "evidence_root_ino": 151397855,
+    "evidence_root_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+    "evidence_root_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+    "ino": 151397873,
+    "parent_dir_dev": 16777233,
+    "parent_dir_ino": 151397870,
+    "parent_dir_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac",
+    "parent_dir_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac",
+    "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_pre_execution_checkpoint.json",
+    "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_pre_execution_checkpoint.json",
+    "sha256": "f0ff3cf1f0698c457a5839549c781b375c16909a3b406f905f08873a86c3a9d1",
+    "size_bytes": 28050
+  },
+  "pre_execution_checkpoint_json": {
+    "ancestor_chain_baseline": [
+      {
+        "dev": 16777233,
+        "ino": 151397855,
+        "mode": 493,
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+        "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac"
+      },
+      {
+        "dev": 16777233,
+        "ino": 151397870,
+        "mode": 493,
+        "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac",
+        "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac"
+      }
+    ],
+    "dev": 16777233,
+    "evidence_root_dev": 16777233,
+    "evidence_root_ino": 151397855,
+    "evidence_root_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+    "evidence_root_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+    "ino": 151397873,
+    "parent_dir_dev": 16777233,
+    "parent_dir_ino": 151397870,
+    "parent_dir_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac",
+    "parent_dir_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac",
+    "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_pre_execution_checkpoint.json",
+    "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_pre_execution_checkpoint.json",
+    "sha256": "f0ff3cf1f0698c457a5839549c781b375c16909a3b406f905f08873a86c3a9d1",
+    "size_bytes": 28050,
+    "verified_at_original_path": true
+  },
+  "pre_execution_checkpoint_post_run": {
+    "ancestor_chain_verified": true,
+    "errno": null,
+    "error": null,
+    "exception_message": null,
+    "exception_type": null,
+    "exists": true,
+    "expected_sha256": "f0ff3cf1f0698c457a5839549c781b375c16909a3b406f905f08873a86c3a9d1",
+    "expected_size_bytes": 28050,
+    "is_regular_file": true,
+    "is_symlink": false,
+    "matches_baseline": true,
+    "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_pre_execution_checkpoint.json",
+    "reason": null,
+    "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_pre_execution_checkpoint.json",
+    "sha256": "f0ff3cf1f0698c457a5839549c781b375c16909a3b406f905f08873a86c3a9d1",
+    "size_bytes": 28050
+  },
+  "pre_execution_checkpoint_recovery_json": null,
+  "pre_execution_checkpoint_verified": true,
+  "preflight_error": null,
+  "raw_outputs": {
+    "hklout": {
+      "error": null,
+      "exists": true,
+      "is_regular_file": true,
+      "is_symlink": false,
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_hklout.mtz",
+      "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_hklout.mtz",
+      "sha256": "8aad5ed89f524af0b8120e9a0bbb32ce81c20ad33bfe22008568765f5d222a5c",
+      "size_bytes": 497664,
+      "within_refmac_dir": true
+    },
+    "log": {
+      "error": null,
+      "exists": true,
+      "is_regular_file": true,
+      "is_symlink": false,
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac.log",
+      "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac.log",
+      "sha256": "8303f6898c6e9b22f70f6e9f5a51cf275d49775295ac09fb3396b67ff9e20b2c",
+      "size_bytes": 23762,
+      "within_refmac_dir": true
+    },
+    "xmlout": {
+      "error": null,
+      "exists": true,
+      "is_regular_file": true,
+      "is_symlink": false,
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_xmlout.xml",
+      "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_xmlout.xml",
+      "sha256": "f48854899048a94285fcfacc3e9570cff4b56857ed88749a537896071ae880eb",
+      "size_bytes": 6050,
+      "within_refmac_dir": true
+    },
+    "xyzout": {
+      "error": null,
+      "exists": true,
+      "is_regular_file": true,
+      "is_symlink": false,
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_xyzout.pdb",
+      "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac/refmac_xyzout.pdb",
+      "sha256": "7b8b33b6b05baf4069a4130526043b5b3e85ff9e982f99ff541f06891378af34",
+      "size_bytes": 135253,
+      "within_refmac_dir": true
+    }
+  },
+  "recorded_at_utc": "2026-11-08T02:45:18.468789+00:00",
+  "refmac_dir": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac",
+  "refmac_directory_baseline": {
+    "dev": 16777233,
+    "evidence_root": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+    "evidence_root_dev": 16777233,
+    "evidence_root_ino": 151397855,
+    "evidence_root_mode": 493,
+    "evidence_root_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+    "ino": 151397870,
+    "mode": 493,
+    "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac",
+    "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac",
+    "uid": 501
+  },
+  "refmac_directory_post_run": {
+    "dev": 16777233,
+    "errno": null,
+    "error": null,
+    "exception_message": null,
+    "exception_type": null,
+    "exists": true,
+    "expected_dev": 16777233,
+    "expected_ino": 151397870,
+    "expected_mode": 493,
+    "expected_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac",
+    "identity_verified": true,
+    "ino": 151397870,
+    "is_directory": true,
+    "is_symlink": false,
+    "mode": 493,
+    "mode_changed": false,
+    "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac",
+    "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/refmac",
+    "symlink_target": null,
+    "writable_post_run": true
+  },
+  "schema_version": 1,
+  "scientific_admission_proven": false,
+  "staged_files": {
+    "input_hkl_ledger_json": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/input_hkl_ledger.json",
+    "input_hkl_ledger_json_sha256": "35543c5821665de8f65b5fbd153669556dfef766ac8b156dc001a0c5b667a51e",
+    "original_data_mtz": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/original_data.mtz",
+    "original_data_mtz_sha256": "f36d5fe685a3e524e8809d17d19ce12073acdf339eba2cfd3b0347a818850ab2",
+    "original_model_pdb": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/original_model.pdb",
+    "original_model_pdb_sha256": "8cbc1650f8be5a3833f98833fa514ec7d490c2c3bb9aa930413abac05e2a510b",
+    "projected_observations_mtz": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/projected_observations.mtz",
+    "projected_observations_mtz_sha256": "6edbe54b2ec7b815f30b6bd20a7264a7c978721189670e39e20d876d9b4fece7"
+  },
+  "staged_inputs_baseline": {
+    "input_admission_json": {
+      "ancestor_chain_baseline": [
+        {
+          "dev": 16777233,
+          "ino": 151397855,
+          "mode": 493,
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+          "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac"
+        },
+        {
+          "dev": 16777233,
+          "ino": 151397856,
+          "mode": 493,
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs",
+          "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs"
+        }
+      ],
+      "dev": 16777233,
+      "evidence_root_dev": 16777233,
+      "evidence_root_ino": 151397855,
+      "evidence_root_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+      "evidence_root_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+      "ino": 151397869,
+      "parent_dir_dev": 16777233,
+      "parent_dir_ino": 151397856,
+      "parent_dir_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs",
+      "parent_dir_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs",
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/input_admission.json",
+      "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/input_admission.json",
+      "sha256": "b69530219b592ac426b9eecbdec076e1849e1ee18ac6e6a574833eda31a1a43a",
+      "size_bytes": 5827
+    },
+    "input_hkl_ledger_json": {
+      "ancestor_chain_baseline": [
+        {
+          "dev": 16777233,
+          "ino": 151397855,
+          "mode": 493,
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+          "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac"
+        },
+        {
+          "dev": 16777233,
+          "ino": 151397856,
+          "mode": 493,
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs",
+          "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs"
+        }
+      ],
+      "dev": 16777233,
+      "evidence_root_dev": 16777233,
+      "evidence_root_ino": 151397855,
+      "evidence_root_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+      "evidence_root_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+      "ino": 151397868,
+      "parent_dir_dev": 16777233,
+      "parent_dir_ino": 151397856,
+      "parent_dir_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs",
+      "parent_dir_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs",
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/input_hkl_ledger.json",
+      "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/input_hkl_ledger.json",
+      "sha256": "35543c5821665de8f65b5fbd153669556dfef766ac8b156dc001a0c5b667a51e",
+      "size_bytes": 6107091
+    },
+    "original_data_mtz": {
+      "ancestor_chain_baseline": [
+        {
+          "dev": 16777233,
+          "ino": 151397855,
+          "mode": 493,
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+          "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac"
+        },
+        {
+          "dev": 16777233,
+          "ino": 151397856,
+          "mode": 493,
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs",
+          "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs"
+        }
+      ],
+      "dev": 16777233,
+      "evidence_root_dev": 16777233,
+      "evidence_root_ino": 151397855,
+      "evidence_root_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+      "evidence_root_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+      "ino": 151397858,
+      "parent_dir_dev": 16777233,
+      "parent_dir_ino": 151397856,
+      "parent_dir_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs",
+      "parent_dir_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs",
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/original_data.mtz",
+      "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/original_data.mtz",
+      "sha256": "f36d5fe685a3e524e8809d17d19ce12073acdf339eba2cfd3b0347a818850ab2",
+      "size_bytes": 469312
+    },
+    "original_model_pdb": {
+      "ancestor_chain_baseline": [
+        {
+          "dev": 16777233,
+          "ino": 151397855,
+          "mode": 493,
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+          "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac"
+        },
+        {
+          "dev": 16777233,
+          "ino": 151397856,
+          "mode": 493,
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs",
+          "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs"
+        }
+      ],
+      "dev": 16777233,
+      "evidence_root_dev": 16777233,
+      "evidence_root_ino": 151397855,
+      "evidence_root_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+      "evidence_root_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+      "ino": 151397857,
+      "parent_dir_dev": 16777233,
+      "parent_dir_ino": 151397856,
+      "parent_dir_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs",
+      "parent_dir_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs",
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/original_model.pdb",
+      "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/original_model.pdb",
+      "sha256": "8cbc1650f8be5a3833f98833fa514ec7d490c2c3bb9aa930413abac05e2a510b",
+      "size_bytes": 135240
+    },
+    "projected_observations_mtz": {
+      "ancestor_chain_baseline": [
+        {
+          "dev": 16777233,
+          "ino": 151397855,
+          "mode": 493,
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+          "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac"
+        },
+        {
+          "dev": 16777233,
+          "ino": 151397856,
+          "mode": 493,
+          "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs",
+          "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs"
+        }
+      ],
+      "dev": 16777233,
+      "evidence_root_dev": 16777233,
+      "evidence_root_ino": 151397855,
+      "evidence_root_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+      "evidence_root_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac",
+      "ino": 151397859,
+      "parent_dir_dev": 16777233,
+      "parent_dir_ino": 151397856,
+      "parent_dir_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs",
+      "parent_dir_resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs",
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/projected_observations.mtz",
+      "resolved_path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt03/refmac/inputs/projected_observations.mtz",
+      "sha256": "6edbe54b2ec7b815f30b6bd20a7264a7c978721189670e39e20d876d9b4fece7",
+      "size_bytes": 176592
+    }
+  },
+  "status": "post_execution_checkpointed",
+  "subject": {
+    "member": "data/1sar_final.pdb",
+    "sha256": "8cbc1650f8be5a3833f98833fa514ec7d490c2c3bb9aa930413abac05e2a510b",
+    "stage": "final",
+    "subject_id": "R4",
+    "subject_ref": "artifact:cdba2c07-daff-4f60-ae96-12452b3a5fbb#data/1sar_final.pdb"
+  },
+  "subject_id": "R4",
+  "toolchain": {
+    "bound_ccp4_configuration": {
+      "CBIN": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/bin",
+      "CCP4": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9",
+      "CCP4_MASTER": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm",
+      "CINCL": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/include",
+      "CLIB": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib",
+      "CLIBD": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/data",
+      "CLIBD_MON": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/lib/data/monomers/"
+    },
+    "configured_installation_prefix": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9",
+    "expected_ccp4_version": "9.0.015",
+    "prefix_path_entries": [
+      "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/etc",
+      "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/bin"
+    ],
+    "refmac5_binary": {
+      "discovered_path": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/bin/refmac5",
+      "executable": true,
+      "is_symlink": false,
+      "resolved_path": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/bin/refmac5",
+      "sha256": "493f382202cdd6a62946d143c2a3fe675b346bef35b9b435ab008f7314bd48b4",
+      "size_bytes": 40738104,
+      "within_prefix": true
+    },
+    "setup_script": {
+      "configured_path": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/bin/ccp4.setup-sh",
+      "is_symlink": false,
+      "resolved_path": "/Applications/ccp4-9.0.015-shelx-arpwarp-macosarm/ccp4-9/bin/ccp4.setup-sh",
+      "sha256": "5f78b2c17e239732d26436a90fcaef8decf1d354ab915f1bf411b1c6f2ea445e",
+      "size_bytes": 4309,
+      "within_prefix": true
+    }
+  },
+  "unexpected_symlinks": []
+}

@@ -1,0 +1,64 @@
+"""PRIMARY public-profile admission for the real installation; permits only the audited setup adapter."""
+from pathlib import Path
+from datetime import datetime,timezone
+import hashlib,json,os,sys
+E=Path(__file__).resolve().parent
+W=E.parents[2].parent/'protstruct_review-wt-078'
+OUT=E/'real-profile783-admission01';OUT.mkdir(exist_ok=False)
+assert os.environ.get('TMUX_PANE')=='%0'
+runtime=json.loads((E/'runtime-configuration-03.json').read_text())
+iso=json.loads((E/'runtime-configuration-preflight-01.json').read_text())
+if 'LD_LIBRARY_PATH' in os.environ:
+ assert os.environ['LD_LIBRARY_PATH']==iso['removed_for_next_isolated_child']['LD_LIBRARY_PATH']
+ del os.environ['LD_LIBRARY_PATH']
+os.environ['PATH']='/usr/bin:/bin:/usr/sbin:/sbin'
+os.environ['PYTHONDONTWRITEBYTECODE']='1';sys.dont_write_bytecode=True
+expected=['/bin/bash','--noprofile','--norc','-c','set -a; . "$1" >/dev/null 2>&1; env -0','protstruct-ccp4',runtime['resolver_record']['setup_script']['resolved_path']]
+calls=[];denied=[]
+def guard(event,args):
+ if event=='subprocess.Popen':
+  argv=list(args[1]);calls.append({'executable':str(args[0]),'argv':argv})
+  if args[0]!='/bin/bash' or argv!=expected or len(calls)!=1:
+   denied.append(event);raise RuntimeError('Only one exact configured setup adapter is admitted')
+ elif event.startswith(('os.exec','os.spawn','os.posix_spawn','os.fork','socket.')) or event=='os.system':
+  denied.append(event);raise RuntimeError('Forbidden operation during public read-only profile admission: '+event)
+sys.addaudithook(guard)
+def pin(p):
+ b=p.read_bytes();return {'path':str(p),'sha256':hashlib.sha256(b).hexdigest(),'size_bytes':len(b)}
+script_before=pin(Path(__file__))
+manifest=E/'profile-final783-01/diagnostic-profile.json'
+assert pin(manifest)['sha256']=='1065026df4f77de26307cd5644691e49f2effe025dcc75bc1dda7b635e3ed5d1'
+exe=E/'instrumented-build-633-01/build/refmac5'
+assert pin(exe)['sha256']=='4f4c7045c73a9c2c725746b3d8ab73adbb98a2f6379b5493e9422d8da65db89b'
+source_names=['refmac_diagnostic_profile.py','onesar_refmac.py','toolchain.py','refmac_diagnostic_trace.py']
+sources={n:pin(W/'scripts'/n) for n in source_names}
+record={'at':datetime.now(timezone.utc).isoformat(),'driver':script_before,'manifest':pin(manifest),'executable':pin(exe),'sources':sources,'scope':'real installation public profile admission and immutable postcheck only; no collector/native/scientific admission','native_refmac_executed':False}
+(OUT/'started.json').write_text(json.dumps(record,indent=2)+'\n')
+try:
+ sys.path.insert(0,str(W/'scripts'))
+ import refmac_diagnostic_profile as dp
+ import onesar_refmac
+ dp.reject_conflicting_environment(os.environ)
+ installed,env,stock=onesar_refmac._resolve_ccp4_refmac_toolchain()
+ profile=dp.RefmacDiagnosticProfile('refmac_5_8_0431_instrumented_attempt4_v1',dp.FilePin(**pin(manifest)),dp.FilePin(**pin(exe)))
+ root=W/'data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt04'
+ assert not os.path.lexists(root) and not os.path.lexists(E/'attempt04-launch-01')
+ validated=dp.validate_profile(profile,installed,env,root)
+ provenance=validated.to_provenance()
+ (OUT/'provenance.json').write_text(json.dumps(provenance,indent=2)+'\n')
+ post=dp.recheck_profile(validated)
+ (OUT/'postcheck.json').write_text(json.dumps(post,indent=2)+'\n')
+ assert provenance['profile_files_verified'] is True and post['verified'] is True
+ assert provenance['runtime_image_coverage']=='not_assessed' and post['runtime_image_coverage']=='not_assessed'
+ assert len(calls)==1 and not denied
+ assert all(pin(W/'scripts'/n)==v for n,v in sources.items())
+ assert pin(Path(__file__))==script_before and pin(manifest)==record['manifest'] and pin(exe)==record['executable']
+ assert not os.path.lexists(root) and not os.path.lexists(E/'attempt04-launch-01')
+ record.update(passed=True,profile_files_verified=True,postcheck_verified=True,runtime_image_coverage='not_assessed',provenance=pin(OUT/'provenance.json'),postcheck=pin(OUT/'postcheck.json'))
+except BaseException as exc:
+ record.update(passed=False,error={'type':type(exc).__name__,'message':str(exc)})
+ raise
+finally:
+ record.update(completed_at=datetime.now(timezone.utc).isoformat(),process_calls=calls,denied_events=denied)
+ (OUT/'result.json').write_text(json.dumps(record,indent=2)+'\n')
+print(json.dumps({'passed':record['passed'],'profile_files_verified':record.get('profile_files_verified'),'postcheck_verified':record.get('postcheck_verified'),'native_refmac_executed':False}))

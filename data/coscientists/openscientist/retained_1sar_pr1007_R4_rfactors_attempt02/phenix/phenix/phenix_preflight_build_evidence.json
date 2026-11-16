@@ -1,0 +1,44 @@
+{
+  "parsed_build": "2.0-5936",
+  "reported_version": "-------------------------------------------------------------------------------\n  Phenix: Python-based Hierarchical ENvironment for Integrated Xtallography\n  Version: 2.0\n  Release tag: 5936\n  User: marcin\n-------------------------------------------------------------------------------",
+  "reported_version_source": "vendor_setup_environment",
+  "version_probe": {
+    "argv": [
+      "/Users/marcin/phenix-2.0-5936/bin/phenix.version"
+    ],
+    "configured_path": "/Users/marcin/phenix-2.0-5936/phenix_bin/phenix.version",
+    "configured_prefix": "/Users/marcin/phenix-2.0-5936",
+    "ignored_inherited_shell_hooks": [
+      "BASH_ENV"
+    ],
+    "ignored_inherited_version_variables": [],
+    "parsed_build": "2.0-5936",
+    "probe_mode": "vendor_setup_environment",
+    "resolved_path": "/Users/marcin/phenix-2.0-5936/bin/phenix.version",
+    "resolved_prefix": "/Users/marcin/phenix-2.0-5936",
+    "returncode": 0,
+    "setup_argv": [
+      "/bin/bash",
+      "--noprofile",
+      "--norc",
+      "-c",
+      "builtin unset -f export unset printf . exit 2>/dev/null || true; builtin unset PHENIX_VERSION PHENIX_RELEASE_TAG BASH_ENV ENV; builtin . \"$1\"; status=$?; if [ \"$status\" -ne 0 ]; then builtin exit \"$status\"; fi; builtin printf \"\\0PHENIX_VERSION=%s\\0PHENIX_RELEASE_TAG=%s\\0\" \"${PHENIX_VERSION+set}:${PHENIX_VERSION-}\" \"${PHENIX_RELEASE_TAG+set}:${PHENIX_RELEASE_TAG-}\"",
+      "protstruct-phenix-setup",
+      "/Users/marcin/phenix-2.0-5936/phenix_env.sh"
+    ],
+    "setup_configured_path": "/Users/marcin/phenix-2.0-5936/phenix_env.sh",
+    "setup_parsed_build": "2.0-5936",
+    "setup_resolved_path": "/Users/marcin/phenix-2.0-5936/phenix_env.sh",
+    "setup_returncode": 0,
+    "setup_sha256": "1e0d9ef0f77d31c216e5a297ef8695a0d1a8097e41b55aff2edc8bd6f5a3872c",
+    "setup_stderr": "",
+    "setup_stdout": "",
+    "setup_version_fields": {
+      "PHENIX_RELEASE_TAG": null,
+      "PHENIX_VERSION": "2.0-5936"
+    },
+    "sha256": "7892ca35343f3aafa50d548506c484561128a1e6c56e8fafd0fee9ccd866abd7",
+    "stderr": "",
+    "stdout": "-------------------------------------------------------------------------------\n  Phenix: Python-based Hierarchical ENvironment for Integrated Xtallography\n  Version: 2.0\n  Release tag: 5936\n  User: marcin\n-------------------------------------------------------------------------------\n\n"
+  }
+}

@@ -1,0 +1,120 @@
+"""Inert, bounded Task687 observer-binding review probes; no producer invocation."""
+import ast
+import hashlib
+import json
+import os
+from pathlib import Path
+import stat
+import sys
+import types
+
+scratch = Path(__file__).resolve().parent
+evidence = scratch.parent
+pins = {
+    'compose-diagnostic-profile-before1174.py': '112c8f7e86ddc8dbb43bd8f3f715b0f45a93a26efc97540024b0befb3c4e8b84',
+    'compose-diagnostic-profile.py': 'c712b315ac5dd4bdf896da8738db5f819b8a10be7d2c750113e1965ef797d565',
+    'profile685-focused-01/scripts/refmac_diagnostic_profile.py': '0d25f3e01bb3a99bb35a740a112e5a9386ee45c175da92ce93aeb34edf8f0f80',
+}
+raws = {name: (evidence / name).read_bytes() for name in pins}
+assert all(hashlib.sha256(raws[name]).hexdigest() == pin for name, pin in pins.items())
+
+def guard(event, args):
+    if event.startswith(('subprocess.', 'os.exec', 'os.spawn', 'os.posix_spawn', 'os.fork', 'socket.', 'ctypes.')) or event in ('os.system', 'os.kill', 'os.killpg'):
+        raise RuntimeError('Forbidden operation: ' + event)
+    paths = []
+    if event == 'open':
+        path, mode, flags = args
+        if (mode and any(c in mode for c in 'wax+')) or flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND):
+            paths.append(path)
+    elif event in ('os.mkdir', 'os.remove', 'os.rmdir'):
+        paths.append(args[0])
+    elif event == 'os.symlink':
+        paths.append(args[1])
+    elif event in ('os.rename', 'os.link'):
+        paths.extend(args[:2])
+    for path in paths:
+        if not isinstance(path, (str, bytes)) or not Path(os.fsdecode(path)).absolute().is_relative_to(scratch):
+            raise RuntimeError('Write outside review scratch: ' + str(path))
+
+sys.addaudithook(guard)
+
+def helpers(name):
+    ns = dict(Path=Path, os=os, stat=stat, hashlib=hashlib, json=json, types=types, sys=sys,
+              files={}, by_path={}, roles={}, roots={}, helper_names=['refmac_diagnostic_profile.py'])
+    nodes = [node for node in ast.parse(raws[name]).body if isinstance(node, ast.FunctionDef)]
+    exec(compile(ast.Module(body=nodes, type_ignores=[]), str(evidence / name), 'exec'), ns)
+    return ns
+
+current = helpers('compose-diagnostic-profile.py')
+before = helpers('compose-diagnostic-profile-before1174.py')
+observer_path = evidence / 'profile685-focused-01/scripts/refmac_diagnostic_profile.py'
+observer, source_pin = current['load_profile_observer'](observer_path)
+current['profile_observer'] = observer
+checks = []
+
+def reject(label, call, kind, message=None):
+    try:
+        call()
+    except kind as exc:
+        assert message is None or message in str(exc)
+        checks.append({'case': label, 'passed': True, 'exception': type(exc).__name__})
+    else:
+        raise AssertionError('Expected rejection: ' + label)
+
+case = scratch / 'fixture'
+case.mkdir()
+(case / 'sdk-real' / 'Versions' / 'A').mkdir(parents=True)
+(case / 'sdk-real' / 'Versions' / 'A' / 'lib').write_text('inert fixture\n')
+(case / 'sdk-real' / 'Versions' / 'Current').symlink_to('A')
+(case / 'sdk-real' / 'lib').symlink_to('Versions/Current/lib')
+(case / 'sdk').symlink_to('sdk-real')
+alias = case / 'sdk' / 'lib'
+expected = [
+    {'path': str(case / 'sdk'), 'target': 'sdk-real'},
+    {'path': str(case / 'sdk-real' / 'Versions' / 'Current'), 'target': 'A'},
+    {'path': str(case / 'sdk-real' / 'lib'), 'target': 'Versions/Current/lib'},
+]
+emitted = current['symlink_edges'](alias)
+assert emitted == expected
+assert before['symlink_edges'](alias) != expected
+assert emitted == [edge.to_dict() for edge in observer._discover_symlink_edges(str(alias))]
+checks.append({'case': 'nested_alias_exact_expected_edges_and_old_algorithm_discriminated', 'passed': True})
+parent_alias = case / '..' / case.name / 'sdk' / 'lib'
+assert current['symlink_edges'](parent_alias) == expected
+assert before['symlink_edges'](parent_alias) != expected
+checks.append({'case': 'parent_component_exact_expected_edges_and_old_algorithm_discriminated', 'passed': True})
+
+# Same-byte alternative source has a different lexical file ID and must fail the join.
+source = case / 'observer.py'
+copy = case / 'same-byte-copy.py'
+inert = b'# inert observer source\n'
+source.write_bytes(inert)
+copy.write_bytes(inert)
+_, pin = current['load_profile_observer'](source)
+current['profile_observer_source_pin'] = pin
+ident = current['register'](source, expected=pin)
+current['roles']['collector_helpers'] = [ident]
+assert current['bind_profile_observer_source']() == ident
+checks.append({'case': 'source_role_positive_control', 'passed': True})
+other_id = current['register'](copy)
+current['roles']['collector_helpers'] = [other_id]
+reject('same_bytes_other_path_role_rejected', current['bind_profile_observer_source'], AssertionError)
+current['roles']['collector_helpers'] = [ident]
+source.write_bytes(b'# changed after capture\n')
+reject('source_changed_after_capture_rejected_at_join', current['bind_profile_observer_source'], AssertionError, str(source))
+source.write_bytes(inert)
+assert current['bind_profile_observer_source']() == ident
+source.write_bytes(b'# changed after role join\n')
+reject('source_changed_after_join_rejected_at_final_recheck', current['recheck_registered_files_and_trees'], AssertionError, str(source))
+
+# The load executes captured inert bytes and rejects source mutation during that load.
+mutating = case / 'mutating.py'
+mutating.write_text('from pathlib import Path\nPath(__file__).write_text("# changed\\n")\n')
+reject('source_changed_during_load_rejected', lambda: current['load_profile_observer'](mutating), ValueError, 'changed during loading')
+
+assert all((evidence / name).read_bytes() == raw for name, raw in raws.items())
+result = {'passed': True, 'checks': checks, 'frozen_inputs_unchanged': True,
+          'full_composer_executed': False, 'producer_executed': False,
+          'synthetic_edges': emitted, 'old_algorithm_edges': before['symlink_edges'](alias)}
+(scratch / 'result.json').write_text(json.dumps(result, indent=2) + '\n')
+print(json.dumps({'passed': True, 'checks': len(checks)}))

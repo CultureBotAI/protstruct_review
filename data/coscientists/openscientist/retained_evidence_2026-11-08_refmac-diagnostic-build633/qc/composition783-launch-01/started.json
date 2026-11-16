@@ -1,0 +1,74 @@
+{
+  "at": "2026-11-09T08:39:32.585928+00:00",
+  "argv": [
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/.venv/bin/python",
+    "-B",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/compose-diagnostic-profile.py",
+    "--preparation",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/preparation-633-01/completed.json",
+    "--source-audit",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/source-audit-633-02.json",
+    "--focused",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/hooks-633-interim-01/result.json",
+    "--build-launch",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/build-launch-633-01/completed.json",
+    "--runtime",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/runtime-configuration-03.json",
+    "--qc-list",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/profile-qc-selection-final783.json",
+    "--launcher",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/launch-attempt04.py",
+    "--output-dir",
+    "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/profile-final783-01"
+  ],
+  "cwd": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078",
+  "inputs": [
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/compose-diagnostic-profile.py",
+      "sha256": "c712b315ac5dd4bdf896da8738db5f819b8a10be7d2c750113e1965ef797d565",
+      "size_bytes": 25317
+    },
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/run-composition783.py",
+      "sha256": "4d9b37070412d2228680619e0e576aacac71b7c25268dde9454aae94a3bc0270",
+      "size_bytes": 2514
+    },
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/preparation-633-01/completed.json",
+      "sha256": "d0a6576676b51784799247e02e40f5a6ed04ee6519a8857c683d56fea15c2627",
+      "size_bytes": 6922
+    },
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/source-audit-633-02.json",
+      "sha256": "b7797efddf4682e4528d8f48cb34a1cf64cf6ddc46a0fbfe63d4c5477379caaf",
+      "size_bytes": 116947
+    },
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/hooks-633-interim-01/result.json",
+      "sha256": "54cdedb7e4fef1fff98a3c0f04dabf2beec949d10adceffa235f8d4fe72ade02",
+      "size_bytes": 1983
+    },
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/build-launch-633-01/completed.json",
+      "sha256": "84aef52a5a695c55754b1dba02539f6724cd35642e78afd5aea8f5c72ba82585",
+      "size_bytes": 9694
+    },
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/runtime-configuration-03.json",
+      "sha256": "bb4e08d72fa43f7645fe1ca7ac6a82b877fd6820909b3286ab9a4fe5646583b5",
+      "size_bytes": 12661
+    },
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/profile-qc-selection-final783.json",
+      "sha256": "2d3d1c9563a91fa58bd9c7250da9998335811749f3161b4276db644c5ac017a9",
+      "size_bytes": 9003
+    },
+    {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/launch-attempt04.py",
+      "sha256": "a2e2b92ffe05f6c984de87171352ad288333eb49ec82a7975fcfbe27f2663eb3",
+      "size_bytes": 16844
+    }
+  ],
+  "native_refmac_executed": false,
+  "scope": "file-pin profile composition only"
+}

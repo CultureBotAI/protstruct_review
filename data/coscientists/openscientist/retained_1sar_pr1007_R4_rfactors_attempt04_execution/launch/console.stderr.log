@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/launch-attempt04.py", line 332, in <module>
+    main()
+  File "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/launch-attempt04.py", line 327, in main
+    result = run_claimed_once(start, onesar_refmac.run_refmac_rfactor_operation, profile)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/launch-attempt04.py", line 252, in run_claimed_once
+    raise error
+  File "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/launch-attempt04.py", line 202, in run_claimed_once
+    result = collector(root, subject_id='R4', repo_root=WT, timeout=900.0,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/onesar_refmac.py", line 13059, in run_refmac_rfactor_operation
+    raise err from None
+onesar_refmac.RefmacCollectorError: REFMAC5 collector failed at audit_refmac_hklout (ValueError): HKLOUT observation columns ('F-obs', 'SIGF-obs', 'R-free-flags') span multiple dataset IDs: ['0', '1']; HKLOUT dropped or invalidated 11 eligible observation(s)

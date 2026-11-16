@@ -1,0 +1,136 @@
+"""PRIMARY independent Git-object, inventory and additive-insertion audit."""
+import argparse
+from datetime import datetime, timezone
+import difflib
+import hashlib
+import json
+import os
+from pathlib import Path
+import stat
+import subprocess
+import sys
+
+if sys.flags.optimize:
+    raise RuntimeError('Optimized Python disables source audit guards')
+
+p = argparse.ArgumentParser()
+p.add_argument('--source', required=True, type=Path)
+p.add_argument('--prepared', required=True, type=Path)
+p.add_argument('--output', required=True, type=Path)
+a = p.parse_args()
+if a.output.exists():
+    raise ValueError('Audit output must be fresh')
+commit = 'be25e793829952f4f177d7dfd0c10a1eb6bbd180'
+env = {k:v for k,v in os.environ.items() if not k.startswith('GIT_')}
+env.update(GIT_NO_REPLACE_OBJECTS='1', GIT_OPTIONAL_LOCKS='0',
+           GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL='/dev/null')
+def git(*args):
+    return subprocess.check_output(['/usr/bin/git', '-C', str(a.source), *args], env=env)
+def sha(b):
+    return hashlib.sha256(b).hexdigest()
+def raise_walk_error(exc):
+    raise OSError(f'Cannot enumerate complete source inventory: {exc}') from exc
+def inventory(root, omit_git=False):
+    result = {}
+    for base, dirs, files in os.walk(root, followlinks=False, onerror=raise_walk_error):
+        if omit_git and Path(base) == root:
+            dirs[:] = [d for d in dirs if d != '.git']
+            files = [n for n in files if n != '.git']
+        for name in dirs + files:
+            q = Path(base) / name
+            if q.is_symlink():
+                raise ValueError(f'Symlink in source boundary: {q}')
+        for name in files:
+            q = Path(base) / name
+            if not stat.S_ISREG(q.stat().st_mode):
+                raise ValueError(f'Nonregular file: {q}')
+            b = q.read_bytes()
+            result[q.relative_to(root).as_posix()] = {'sha256': sha(b), 'size_bytes': len(b)}
+    return result
+assert git('rev-parse', 'HEAD').decode().strip() == commit
+assert git('rev-parse', 'refs/tags/5.8.0431^{commit}').decode().strip() == commit
+tree = {}
+for entry in git('ls-tree', '-r', '-z', '--full-tree', commit).split(b'\0'):
+    if not entry:
+        continue
+    meta, rawname = entry.split(b'\t', 1)
+    mode, typ, obj = meta.decode().split()
+    name = rawname.decode()
+    assert name not in tree and mode in ('100644', '100755') and typ == 'blob'
+    assert not Path(name).is_absolute() and '..' not in Path(name).parts
+    actual = (a.source/name).read_bytes()
+    committed = git('cat-file', 'blob', obj)
+    assert actual == committed, name
+    assert hashlib.sha1(b'blob '+str(len(actual)).encode()+b'\0'+actual).hexdigest() == obj
+    tree[name] = {'git_mode': mode, 'git_object_type': typ, 'git_blob_id': obj,
+                  'sha256': sha(actual), 'size_bytes': len(actual)}
+original = inventory(a.source, omit_git=True)
+assert set(original) == set(tree)
+manifest_path = a.prepared/'refmac_diagnostic_source_manifest.json'
+manifest = json.loads(manifest_path.read_bytes())
+assert manifest['schema_id'] == 'protstruct_refmac_diagnostic_source_manifest_v1'
+assert manifest['upstream_source']['expected_commit'] == commit
+assert len(manifest['source_inventory']) == len(tree)
+assert {r['path']: {'sha256':r['sha256'], 'size_bytes':r['size_bytes']}
+        for r in manifest['source_inventory']} == original
+prepared = inventory(a.prepared)
+expected_files = set(tree) | {'trace_writer.f90','trace_hooks.f90',
+    'refmac_diagnostic_hooks.patch','refmac_diagnostic_source_manifest.json'}
+assert set(prepared) == expected_files
+outputs = {r['path']: {'sha256':r['sha256'],'size_bytes':r['size_bytes']}
+           for r in manifest['output_source_inventory']}
+assert len(outputs) == len(manifest['output_source_inventory']) == len(tree)
+assert outputs == {k:prepared[k] for k in tree}
+modified = {n for n in tree if original[n] != prepared[n]}
+assert modified == {r['path'] for r in manifest['modified_vendor_files']}
+assert modified == {'CMakeLists.txt','subcf_scale1.f','ls_scaling_double.f',
+                    'refmac_xml.f','refmac_completeness.f90'}
+patch = []
+insertions = []
+ids = set()
+for name in sorted(modified):
+    orig = (a.source/name).read_bytes()
+    out = (a.prepared/name).read_bytes()
+    origlines, outlines = orig.splitlines(keepends=True), out.splitlines(keepends=True)
+    removed = set()
+    for hook in [h for h in manifest['hook_bindings'] if h['file'] == name]:
+        assert hook['source_hook_id'] not in ids
+        ids.add(hook['source_hook_id'])
+        start, end = hook['patched_start_line'], hook['patched_end_line']
+        indexes = set(range(start-1, end))
+        assert start >= 1 and end <= len(outlines) and indexes.isdisjoint(removed)
+        assert end-start+1 == hook['inserted_line_count']
+        assert origlines[hook['original_line']-1].decode().rstrip('\n') == hook['anchor_text']
+        removed.update(indexes)
+        insertions.append({'file':name, 'hook':hook['source_hook_id'],
+                           'start_line':start,'end_line':end,
+                           'inserted_sha256':sha(b''.join(outlines[start-1:end]))})
+    assert b''.join(line for i,line in enumerate(outlines) if i not in removed) == orig, name
+    patch.extend(difflib.unified_diff(orig.decode().splitlines(keepends=True),
+        out.decode().splitlines(keepends=True),fromfile='a/'+name,tofile='b/'+name,n=3))
+expected_patch = ''.join(patch).encode()
+assert (a.prepared/'refmac_diagnostic_hooks.patch').read_bytes() == expected_patch
+assert manifest['unified_patch']['sha256'] == sha(expected_patch)
+for name,row in manifest['diagnostic_modules'].items():
+    assert row['destination_path'] == name
+    assert prepared[name] == {'sha256':row['sha256'],'size_bytes':row['size_bytes']}
+record = {'contract':'primary_refmac_source_audit_v1',
+    'at':datetime.now(timezone.utc).isoformat(),'passed':True,
+    'argv':list(sys.argv),'cwd':str(Path.cwd()),
+    'interpreter':{'path':sys.executable,'resolved_path':str(Path(sys.executable).resolve()),
+                   'sha256':sha(Path(sys.executable).read_bytes()),
+                   'size_bytes':Path(sys.executable).stat().st_size},
+    'python_optimization':sys.flags.optimize,
+    'auditor_path':str(Path(__file__).resolve()),
+    'source_root':str(a.source),'prepared_root':str(a.prepared),
+    'upstream_commit':commit,'literal_git_objects':True,
+    'original_git_blob_inventory':tree,'complete_prepared_inventory':prepared,
+    'manifest_sha256':sha(manifest_path.read_bytes()),'patch_sha256':sha(expected_patch),
+    'insertions':insertions,'all_original_lines_preserved_in_order':True,
+    'auditor_sha256':sha(Path(__file__).read_bytes()),
+    'native_execution_performed':False,
+    'limitation':'Additive source identity does not prove compiled scientific equivalence'}
+with a.output.open('x') as f:
+    json.dump(record,f,indent=2);f.write('\n')
+print(json.dumps({'passed':True,'vendor_files':len(tree),'prepared_files':len(prepared),
+                  'insertions':len(insertions),'manifest_sha256':record['manifest_sha256']}))

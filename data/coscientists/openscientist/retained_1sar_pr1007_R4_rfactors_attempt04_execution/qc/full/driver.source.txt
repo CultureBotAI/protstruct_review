@@ -1,0 +1,46 @@
+"""PRIMARY required hermetic gate at the completed retained evidence and audit-note milestone."""
+from pathlib import Path
+from datetime import datetime, timezone
+import hashlib, json, os, stat, subprocess, sys
+E=Path(__file__).resolve().parent
+R=E.parents[2]
+W=R.parent/'protstruct_review-wt-078'
+OUT=E/'full-qc788-01'
+OUT.mkdir(exist_ok=False)
+SCRATCH=R/'.orchestration/evidence/788-qc-scratch01'
+SCRATCH.mkdir(exist_ok=False)
+assert not SCRATCH.is_relative_to(E) and not SCRATCH.is_relative_to(R/'.temp')
+wrapper=R/'.orchestration/evidence/036-safe-qc.sh'
+def pin(path):
+ p=Path(path);h=hashlib.sha256();st=p.lstat()
+ if stat.S_ISLNK(st.st_mode):
+  target=os.readlink(p);data=os.fsencode(target)
+  return {'path':str(p),'kind':'symlink','target':target,'sha256':hashlib.sha256(data).hexdigest(),'size_bytes':len(data),'mode':stat.S_IMODE(st.st_mode)}
+ if not stat.S_ISREG(st.st_mode):raise ValueError('Unexpected non-file input: '+str(p))
+ with p.open('rb') as f:
+  for b in iter(lambda:f.read(1024*1024),b''):h.update(b)
+ return {'path':str(p),'sha256':h.hexdigest(),'size_bytes':p.stat().st_size}
+def git(*a):return subprocess.check_output(['git','-C',str(W),*a])
+def inputs():
+ names=set(git('ls-files','-z').decode().split('\0'))|set(git('ls-files','--others','--exclude-standard','-z').decode().split('\0'))
+ return {n:pin(W/n) for n in sorted(names) if n}
+before=inputs();head=git('rev-parse','HEAD').decode().strip();status=git('status','--porcelain=v1','--untracked-files=all').decode()
+(OUT/'inputs-before.json').write_text(json.dumps(before,indent=2)+'\n')
+driver=pin(Path(__file__));wrapper_before=pin(wrapper)
+(OUT/'driver.source.txt').write_bytes(Path(__file__).read_bytes());(OUT/'wrapper.source.txt').write_bytes(wrapper.read_bytes())
+env=dict(os.environ)
+removed=sorted(k for k in env if k.startswith(('LD_','DYLD_','PROTSTRUCT_')) or k in {'BASH_ENV','ENV','REFMAC_DIAGNOSTIC_TRACE','SFOUT','FCFOUT'})
+for k in removed:env.pop(k)
+env.update(PATH='/usr/bin:/bin:/usr/sbin:/sbin',PYTHONDONTWRITEBYTECODE='1',TMPDIR=str(SCRATCH))
+argv=['/bin/bash','--noprofile','--norc',str(wrapper),str(W)]
+start={'at':datetime.now(timezone.utc).isoformat(),'argv':argv,'cwd':str(W),'python':sys.version,'head':head,'status':status,'driver':driver,'wrapper':wrapper_before,'interpreter':pin(Path(sys.executable).resolve()),'removed_environment_keys':removed,'temporary_directory':str(SCRATCH),'native_tools_disabled_by':'036-safe-qc.sh PROTSTRUCT absent-tool sentinel paths; offline locked benchmark extra','scope':'retained build evidence, audit note, and macOS fixture correction; no native or scientific acceptance'}
+(OUT/'started.json').write_text(json.dumps(start,indent=2)+'\n')
+with (OUT/'stdout.log').open('wb') as out,(OUT/'stderr.log').open('wb') as err:
+ proc=subprocess.run(argv,cwd=W,env=env,stdout=out,stderr=err)
+after=inputs();(OUT/'inputs-after.json').write_text(json.dumps(after,indent=2)+'\n')
+changes=[n for n in sorted(set(before)|set(after)) if before.get(n)!=after.get(n)]
+unchanged=(not changes and git('rev-parse','HEAD').decode().strip()==head and pin(Path(__file__))==driver and pin(wrapper)==wrapper_before and pin(OUT/'driver.source.txt')['sha256']==driver['sha256'] and pin(OUT/'wrapper.source.txt')['sha256']==wrapper_before['sha256'])
+result={**start,'completed_at':datetime.now(timezone.utc).isoformat(),'returncode':proc.returncode,'input_count':len(before),'changed_inputs':changes,'source_closure_unchanged':unchanged,'logs':[pin(OUT/'stdout.log'),pin(OUT/'stderr.log')],'passed':proc.returncode==0 and unchanged}
+(OUT/'result.json').write_text(json.dumps(result,indent=2)+'\n')
+print(json.dumps({'passed':result['passed'],'returncode':proc.returncode,'changed_inputs':changes,'result':str(OUT/'result.json')}))
+sys.exit(0 if result['passed'] else 1)

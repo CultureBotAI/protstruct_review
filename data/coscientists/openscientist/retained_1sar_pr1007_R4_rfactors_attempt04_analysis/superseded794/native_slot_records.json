@@ -1,0 +1,2740 @@
+[
+  {
+    "call_id": 1,
+    "IFREE": 1,
+    "slot": 1,
+    "record": {
+      "sequence": 94194,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 1,
+      "is_overall_slot": false,
+      "IFREE": 1,
+      "numeric_capture_valid": true,
+      "nrefa_this": 96,
+      "NREFA": 96,
+      "NREFM": 0,
+      "AFOMFC_raw": {
+        "bits_hex": "45D12DFC",
+        "decimal": "669374804687500E-11"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "4BBBDD77",
+        "decimal": "24623854"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "4BAB4E6C",
+        "decimal": "22453464"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4BA1CD68",
+        "decimal": "21207760"
+      },
+      "AFC_raw": {
+        "bits_hex": "470E1767",
+        "decimal": "3637540234375E-8"
+      },
+      "AFO_raw": {
+        "bits_hex": "4719EA13",
+        "decimal": "3940207421875E-8"
+      },
+      "ASIG_raw": {
+        "bits_hex": "443ED688",
+        "decimal": "76335205078125000E-14"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "449344E5",
+        "decimal": "11781529541015625E-13"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "46CE1C1D",
+        "decimal": "26382056640625E-9"
+      },
+      "WFO_raw": {
+        "bits_hex": "45C40351",
+        "decimal": "627241455078125E-11"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "49016B0E",
+        "decimal": "5300968750E-4"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 2,
+    "slot": 1,
+    "record": {
+      "sequence": 94195,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 1,
+      "is_overall_slot": false,
+      "IFREE": 2,
+      "numeric_capture_valid": true,
+      "nrefa_this": 10,
+      "NREFA": 10,
+      "NREFM": 0,
+      "AFOMFC_raw": {
+        "bits_hex": "43C1920B",
+        "decimal": "387140960693359375E-15"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "4A20A7BF",
+        "decimal": "263217575E-2"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "4A1E0D13",
+        "decimal": "258950875E-2"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4A1D60F7",
+        "decimal": "257849375E-2"
+      },
+      "AFC_raw": {
+        "bits_hex": "4563060A",
+        "decimal": "3632377441406250E-12"
+      },
+      "AFO_raw": {
+        "bits_hex": "4569426E",
+        "decimal": "3732151855468750E-12"
+      },
+      "ASIG_raw": {
+        "bits_hex": "428FAC3C",
+        "decimal": "7183639526367187500E-17"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "42BA2C3C",
+        "decimal": "9308639526367187500E-17"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "450DA936",
+        "decimal": "2266575683593750E-12"
+      },
+      "WFO_raw": {
+        "bits_hex": "440B2AFA",
+        "decimal": "55667150878906250E-14"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "47181039",
+        "decimal": "3892822265625E-8"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 1,
+    "slot": 2,
+    "record": {
+      "sequence": 94196,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 2,
+      "is_overall_slot": false,
+      "IFREE": 1,
+      "numeric_capture_valid": true,
+      "nrefa_this": 149,
+      "NREFA": 149,
+      "NREFM": 0,
+      "AFOMFC_raw": {
+        "bits_hex": "45E640FC",
+        "decimal": "736812304687500E-11"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "4BB1F526",
+        "decimal": "23325260"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "4BB24360",
+        "decimal": "23365312"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4BB72BA4",
+        "decimal": "24008520"
+      },
+      "AFC_raw": {
+        "bits_hex": "4745F705",
+        "decimal": "5067901953125E-8"
+      },
+      "AFO_raw": {
+        "bits_hex": "47427D2C",
+        "decimal": "4978917187500E-8"
+      },
+      "ASIG_raw": {
+        "bits_hex": "4441BDCB",
+        "decimal": "77496551513671875E-14"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "4507E0FD",
+        "decimal": "2174061767578125E-12"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "478F86CA",
+        "decimal": "734855781250E-7"
+      },
+      "WFO_raw": {
+        "bits_hex": "46208D84",
+        "decimal": "102753789062500E-10"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "4946734E",
+        "decimal": "8128528750E-4"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 2,
+    "slot": 2,
+    "record": {
+      "sequence": 94197,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 2,
+      "is_overall_slot": false,
+      "IFREE": 2,
+      "numeric_capture_valid": true,
+      "nrefa_this": 17,
+      "NREFA": 17,
+      "NREFM": 0,
+      "AFOMFC_raw": {
+        "bits_hex": "44875E7D",
+        "decimal": "10829527587890625E-13"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "4A30A9DF",
+        "decimal": "289445575E-2"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "4A2FC231",
+        "decimal": "287962825E-2"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4A34F13B",
+        "decimal": "296455875E-2"
+      },
+      "AFC_raw": {
+        "bits_hex": "45C89C1E",
+        "decimal": "641951464843750E-11"
+      },
+      "AFO_raw": {
+        "bits_hex": "45C47176",
+        "decimal": "628618261718750E-11"
+      },
+      "ASIG_raw": {
+        "bits_hex": "42C73BEB",
+        "decimal": "9961702728271484375E-17"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "438CFFF0",
+        "decimal": "281999511718750000E-15"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "46531270",
+        "decimal": "135086093750000E-10"
+      },
+      "WFO_raw": {
+        "bits_hex": "4493574B",
+        "decimal": "11787279052734375E-13"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "47AF83DE",
+        "decimal": "898637343750E-7"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 1,
+    "slot": 3,
+    "record": {
+      "sequence": 94198,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 3,
+      "is_overall_slot": false,
+      "IFREE": 1,
+      "numeric_capture_valid": true,
+      "nrefa_this": 186,
+      "NREFA": 186,
+      "NREFM": 0,
+      "AFOMFC_raw": {
+        "bits_hex": "45FF6491",
+        "decimal": "817257080078125E-11"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "4B97D449",
+        "decimal": "19900562"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "4B9E7CE6",
+        "decimal": "20773324"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4BA9CCAF",
+        "decimal": "22255966"
+      },
+      "AFC_raw": {
+        "bits_hex": "475688EB",
+        "decimal": "5492091796875E-8"
+      },
+      "AFO_raw": {
+        "bits_hex": "474B4B92",
+        "decimal": "5204357031250E-8"
+      },
+      "ASIG_raw": {
+        "bits_hex": "444CCE7C",
+        "decimal": "81922631835937500E-14"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "4511B3A4",
+        "decimal": "2331227539062500E-12"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "475883B1",
+        "decimal": "5542769140625E-8"
+      },
+      "WFO_raw": {
+        "bits_hex": "4643705B",
+        "decimal": "125080888671875E-10"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "4967FDD8",
+        "decimal": "9502375000E-4"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 2,
+    "slot": 3,
+    "record": {
+      "sequence": 94199,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 3,
+      "is_overall_slot": false,
+      "IFREE": 2,
+      "numeric_capture_valid": true,
+      "nrefa_this": 21,
+      "NREFA": 21,
+      "NREFM": 0,
+      "AFOMFC_raw": {
+        "bits_hex": "449D5E4C",
+        "decimal": "12589467773437500E-13"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "4A1AD634",
+        "decimal": "253684500E-2"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "4A284110",
+        "decimal": "275667600E-2"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4A3DF96C",
+        "decimal": "311253900E-2"
+      },
+      "AFC_raw": {
+        "bits_hex": "45D9D2EE",
+        "decimal": "697036621093750E-11"
+      },
+      "AFO_raw": {
+        "bits_hex": "45C159E8",
+        "decimal": "618723828125000E-11"
+      },
+      "ASIG_raw": {
+        "bits_hex": "42C1EDCE",
+        "decimal": "9696446228027343750E-17"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "43C3620C",
+        "decimal": "390765991210937500E-15"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "46583196",
+        "decimal": "138363964843750E-10"
+      },
+      "WFO_raw": {
+        "bits_hex": "44B6CEC9",
+        "decimal": "14624620361328125E-13"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "47DFAD9C",
+        "decimal": "1145232187500E-7"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 1,
+    "slot": 4,
+    "record": {
+      "sequence": 94200,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 4,
+      "is_overall_slot": false,
+      "IFREE": 1,
+      "numeric_capture_valid": true,
+      "nrefa_this": 218,
+      "NREFA": 218,
+      "NREFM": 0,
+      "AFOMFC_raw": {
+        "bits_hex": "461D59BE",
+        "decimal": "100704355468750E-10"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "4BBEAD7C",
+        "decimal": "24992504"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "4BCC7B2D",
+        "decimal": "26801754"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4BE06F19",
+        "decimal": "29417010"
+      },
+      "AFC_raw": {
+        "bits_hex": "47833484",
+        "decimal": "671770312500E-7"
+      },
+      "AFO_raw": {
+        "bits_hex": "47759753",
+        "decimal": "6287132421875E-8"
+      },
+      "ASIG_raw": {
+        "bits_hex": "447A9776",
+        "decimal": "100236657714843750E-14"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "4528B96E",
+        "decimal": "2699589355468750E-12"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "476D04B5",
+        "decimal": "6067670703125E-8"
+      },
+      "WFO_raw": {
+        "bits_hex": "466B3C1B",
+        "decimal": "150550263671875E-10"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "498F85D8",
+        "decimal": "1175739000E-3"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 2,
+    "slot": 4,
+    "record": {
+      "sequence": 94201,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 4,
+      "is_overall_slot": false,
+      "IFREE": 2,
+      "numeric_capture_valid": true,
+      "nrefa_this": 24,
+      "NREFA": 24,
+      "NREFM": 0,
+      "AFOMFC_raw": {
+        "bits_hex": "448CC7BA",
+        "decimal": "11262414550781250E-13"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "49DADB3E",
+        "decimal": "1792871750E-3"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "49E354A7",
+        "decimal": "1862292875E-3"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "49F6AFAF",
+        "decimal": "2020853875E-3"
+      },
+      "AFC_raw": {
+        "bits_hex": "45B523FE",
+        "decimal": "579649902343750E-11"
+      },
+      "AFO_raw": {
+        "bits_hex": "45A9C205",
+        "decimal": "543225244140625E-11"
+      },
+      "ASIG_raw": {
+        "bits_hex": "42CB23B9",
+        "decimal": "10156977081298828125E-17"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "43B5D060",
+        "decimal": "363627929687500000E-15"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "4616331D",
+        "decimal": "96127783203125E-10"
+      },
+      "WFO_raw": {
+        "bits_hex": "44CC7332",
+        "decimal": "16355998535156250E-13"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "48078AA6",
+        "decimal": "138794593750E-6"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 1,
+    "slot": 5,
+    "record": {
+      "sequence": 94202,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 5,
+      "is_overall_slot": false,
+      "IFREE": 1,
+      "numeric_capture_valid": true,
+      "nrefa_this": 244,
+      "NREFA": 244,
+      "NREFM": 0,
+      "AFOMFC_raw": {
+        "bits_hex": "462F8447",
+        "decimal": "112330693359375E-10"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "4C014F40",
+        "decimal": "33897728"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "4C05E68A",
+        "decimal": "35101224"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4C0D95B0",
+        "decimal": "37115584"
+      },
+      "AFC_raw": {
+        "bits_hex": "47A3867B",
+        "decimal": "837249609375E-7"
+      },
+      "AFO_raw": {
+        "bits_hex": "479BF7F2",
+        "decimal": "798558906250E-7"
+      },
+      "ASIG_raw": {
+        "bits_hex": "4499A674",
+        "decimal": "12292016601562500E-13"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "453F6436",
+        "decimal": "3062263183593750E-12"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "47A060CA",
+        "decimal": "821135781250E-7"
+      },
+      "WFO_raw": {
+        "bits_hex": "46855B82",
+        "decimal": "17069753906250E-9"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "49A31417",
+        "decimal": "1335938875E-3"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 2,
+    "slot": 5,
+    "record": {
+      "sequence": 94203,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 5,
+      "is_overall_slot": false,
+      "IFREE": 2,
+      "numeric_capture_valid": true,
+      "nrefa_this": 27,
+      "NREFA": 27,
+      "NREFM": 0,
+      "AFOMFC_raw": {
+        "bits_hex": "44CFA0F3",
+        "decimal": "16610296630859375E-13"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "4A6C9998",
+        "decimal": "387645400E-2"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "4A6F747F",
+        "decimal": "392323175E-2"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4A7C5745",
+        "decimal": "413435325E-2"
+      },
+      "AFC_raw": {
+        "bits_hex": "460E74FB",
+        "decimal": "91172451171875E-10"
+      },
+      "AFO_raw": {
+        "bits_hex": "460C3675",
+        "decimal": "89736142578125E-10"
+      },
+      "ASIG_raw": {
+        "bits_hex": "4305EA16",
+        "decimal": "1339143981933593750E-16"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "43F05CEF",
+        "decimal": "480726043701171875E-15"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "469044F3",
+        "decimal": "18466474609375E-9"
+      },
+      "WFO_raw": {
+        "bits_hex": "44E7F0F4",
+        "decimal": "18555297851562500E-13"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "4806C312",
+        "decimal": "137996281250E-6"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 1,
+    "slot": 6,
+    "record": {
+      "sequence": 94204,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 6,
+      "is_overall_slot": false,
+      "IFREE": 1,
+      "numeric_capture_valid": true,
+      "nrefa_this": 267,
+      "NREFA": 267,
+      "NREFM": 0,
+      "AFOMFC_raw": {
+        "bits_hex": "4657C108",
+        "decimal": "138082578125000E-10"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "4C262EA9",
+        "decimal": "43563684"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "4C294C12",
+        "decimal": "44380232"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4C30C60E",
+        "decimal": "46340152"
+      },
+      "AFC_raw": {
+        "bits_hex": "47B88CEA",
+        "decimal": "944898281250E-7"
+      },
+      "AFO_raw": {
+        "bits_hex": "47B3358B",
+        "decimal": "917550859375E-7"
+      },
+      "ASIG_raw": {
+        "bits_hex": "44BBE450",
+        "decimal": "15031347656250000E-13"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "45640EA3",
+        "decimal": "3648914794921875E-12"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "47CD6367",
+        "decimal": "1051588046875E-7"
+      },
+      "WFO_raw": {
+        "bits_hex": "468DB6C1",
+        "decimal": "18139376953125E-9"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "49AE04A0",
+        "decimal": "1425556000E-3"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 2,
+    "slot": 6,
+    "record": {
+      "sequence": 94205,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 6,
+      "is_overall_slot": false,
+      "IFREE": 2,
+      "numeric_capture_valid": true,
+      "nrefa_this": 30,
+      "NREFA": 30,
+      "NREFM": 0,
+      "AFOMFC_raw": {
+        "bits_hex": "44BF87C4",
+        "decimal": "15322426757812500E-13"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "4AB07559",
+        "decimal": "57821885E-1"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "4AACA417",
+        "decimal": "56570995E-1"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4AAC56A9",
+        "decimal": "56471885E-1"
+      },
+      "AFC_raw": {
+        "bits_hex": "4626772F",
+        "decimal": "106537958984375E-10"
+      },
+      "AFO_raw": {
+        "bits_hex": "4625C577",
+        "decimal": "106093662109375E-10"
+      },
+      "ASIG_raw": {
+        "bits_hex": "433221C2",
+        "decimal": "1781318664550781250E-16"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "43E7FBFC",
+        "decimal": "463968627929687500E-15"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "46699C6E",
+        "decimal": "149511074218750E-10"
+      },
+      "WFO_raw": {
+        "bits_hex": "45013D3E",
+        "decimal": "2067827636718750E-12"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "481E7F28",
+        "decimal": "162300625000E-6"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 1,
+    "slot": 7,
+    "record": {
+      "sequence": 94206,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 7,
+      "is_overall_slot": false,
+      "IFREE": 1,
+      "numeric_capture_valid": true,
+      "nrefa_this": 264,
+      "NREFA": 264,
+      "NREFM": 15,
+      "AFOMFC_raw": {
+        "bits_hex": "4635999D",
+        "decimal": "116224033203125E-10"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "4C21F4BD",
+        "decimal": "42455796"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "4C20A073",
+        "decimal": "42107340"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4C2267F1",
+        "decimal": "42573764"
+      },
+      "AFC_raw": {
+        "bits_hex": "47B49920",
+        "decimal": "924662500000E-7"
+      },
+      "AFO_raw": {
+        "bits_hex": "47B71DCD",
+        "decimal": "937556015625E-7"
+      },
+      "ASIG_raw": {
+        "bits_hex": "44B74621",
+        "decimal": "14661915283203125E-13"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "453216A2",
+        "decimal": "2849414550781250E-12"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "476297FF",
+        "decimal": "5800799609375E-8"
+      },
+      "WFO_raw": {
+        "bits_hex": "4690FDD7",
+        "decimal": "18558919921875E-9"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "49B177FF",
+        "decimal": "1453823875E-3"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 2,
+    "slot": 7,
+    "record": {
+      "sequence": 94207,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 7,
+      "is_overall_slot": false,
+      "IFREE": 2,
+      "numeric_capture_valid": true,
+      "nrefa_this": 30,
+      "NREFA": 30,
+      "NREFM": 0,
+      "AFOMFC_raw": {
+        "bits_hex": "44CB3AC7",
+        "decimal": "16258367919921875E-13"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "4A402B02",
+        "decimal": "314848050E-2"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "4A333BC0",
+        "decimal": "293656000E-2"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4A2F35A9",
+        "decimal": "287063425E-2"
+      },
+      "AFC_raw": {
+        "bits_hex": "45FF6352",
+        "decimal": "817241503906250E-11"
+      },
+      "AFO_raw": {
+        "bits_hex": "4607F4C0",
+        "decimal": "87011875000000E-10"
+      },
+      "ASIG_raw": {
+        "bits_hex": "42FE88D2",
+        "decimal": "12726722717285156250E-17"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "43F7EF3A",
+        "decimal": "495868957519531250E-15"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "46BDBA95",
+        "decimal": "24285291015625E-9"
+      },
+      "WFO_raw": {
+        "bits_hex": "45024E63",
+        "decimal": "2084899169921875E-12"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "4817BFF4",
+        "decimal": "155391812500E-6"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 1,
+    "slot": 8,
+    "record": {
+      "sequence": 94208,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 8,
+      "is_overall_slot": false,
+      "IFREE": 1,
+      "numeric_capture_valid": true,
+      "nrefa_this": 297,
+      "NREFA": 297,
+      "NREFM": 8,
+      "AFOMFC_raw": {
+        "bits_hex": "4658C97E",
+        "decimal": "138743730468750E-10"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "4C2B2199",
+        "decimal": "44861028"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "4C24AAED",
+        "decimal": "43166644"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4C221F56",
+        "decimal": "42499416"
+      },
+      "AFC_raw": {
+        "bits_hex": "47C25B6C",
+        "decimal": "995108437500E-7"
+      },
+      "AFO_raw": {
+        "bits_hex": "47CA144D",
+        "decimal": "1034646015625E-7"
+      },
+      "ASIG_raw": {
+        "bits_hex": "44BF1613",
+        "decimal": "15286898193359375E-13"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "45532EA5",
+        "decimal": "3378915283203125E-12"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "4790FFA1",
+        "decimal": "742392578125E-7"
+      },
+      "WFO_raw": {
+        "bits_hex": "46A5FD94",
+        "decimal": "21246789062500E-9"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "49CBE4F9",
+        "decimal": "1670303125E-3"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 2,
+    "slot": 8,
+    "record": {
+      "sequence": 94209,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 8,
+      "is_overall_slot": false,
+      "IFREE": 2,
+      "numeric_capture_valid": true,
+      "nrefa_this": 33,
+      "NREFA": 33,
+      "NREFM": 0,
+      "AFOMFC_raw": {
+        "bits_hex": "44DAC64A",
+        "decimal": "17501965332031250E-13"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "4A613F51",
+        "decimal": "369045225E-2"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "4A550EC1",
+        "decimal": "349073625E-2"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4A513FC1",
+        "decimal": "342833625E-2"
+      },
+      "AFC_raw": {
+        "bits_hex": "460C33F9",
+        "decimal": "89729931640625E-10"
+      },
+      "AFO_raw": {
+        "bits_hex": "46134625",
+        "decimal": "94255361328125E-10"
+      },
+      "ASIG_raw": {
+        "bits_hex": "4301606E",
+        "decimal": "1293766784667968750E-16"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "442C8621",
+        "decimal": "69009576416015625E-14"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "46CB9060",
+        "decimal": "26056187500000E-9"
+      },
+      "WFO_raw": {
+        "bits_hex": "452163DA",
+        "decimal": "2582240722656250E-12"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "48577D31",
+        "decimal": "220660765625E-6"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 1,
+    "slot": 9,
+    "record": {
+      "sequence": 94210,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 9,
+      "is_overall_slot": false,
+      "IFREE": 1,
+      "numeric_capture_valid": true,
+      "nrefa_this": 319,
+      "NREFA": 319,
+      "NREFM": 8,
+      "AFOMFC_raw": {
+        "bits_hex": "4671551B",
+        "decimal": "154452763671875E-10"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "4C213077",
+        "decimal": "42254812"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "4C15D89F",
+        "decimal": "39281276"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4C0F0D37",
+        "decimal": "37500124"
+      },
+      "AFC_raw": {
+        "bits_hex": "47B8C6DB",
+        "decimal": "946057109375E-7"
+      },
+      "AFO_raw": {
+        "bits_hex": "47C4B146",
+        "decimal": "1007065468750E-7"
+      },
+      "ASIG_raw": {
+        "bits_hex": "44C1EB4C",
+        "decimal": "15513530273437500E-13"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "458149EB",
+        "decimal": "413723974609375E-11"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "47DBE5B5",
+        "decimal": "1125874140625E-7"
+      },
+      "WFO_raw": {
+        "bits_hex": "46AB3A24",
+        "decimal": "21917070312500E-9"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "49CF397B",
+        "decimal": "1697583375E-3"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 2,
+    "slot": 9,
+    "record": {
+      "sequence": 94211,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 9,
+      "is_overall_slot": false,
+      "IFREE": 2,
+      "numeric_capture_valid": true,
+      "nrefa_this": 36,
+      "NREFA": 36,
+      "NREFM": 0,
+      "AFOMFC_raw": {
+        "bits_hex": "4511237D",
+        "decimal": "2322218017578125E-12"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "4A97A03D",
+        "decimal": "49684785E-1"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "4A8E2068",
+        "decimal": "46572040E-1"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4A8ADE7F",
+        "decimal": "45504635E-1"
+      },
+      "AFC_raw": {
+        "bits_hex": "4633E41D",
+        "decimal": "115130283203125E-10"
+      },
+      "AFO_raw": {
+        "bits_hex": "463BD4F5",
+        "decimal": "120212392578125E-10"
+      },
+      "ASIG_raw": {
+        "bits_hex": "43334BAA",
+        "decimal": "1792955627441406250E-16"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "441C7112",
+        "decimal": "62576672363281250E-14"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "468D15AF",
+        "decimal": "18058841796875E-9"
+      },
+      "WFO_raw": {
+        "bits_hex": "4521A328",
+        "decimal": "2586197265625000E-12"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "48452CA8",
+        "decimal": "201906625000E-6"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 1,
+    "slot": 10,
+    "record": {
+      "sequence": 94212,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 10,
+      "is_overall_slot": false,
+      "IFREE": 1,
+      "numeric_capture_valid": true,
+      "nrefa_this": 328,
+      "NREFA": 328,
+      "NREFM": 1,
+      "AFOMFC_raw": {
+        "bits_hex": "467882D4",
+        "decimal": "159047070312500E-10"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "4C1A5972",
+        "decimal": "40461768"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "4C0CF314",
+        "decimal": "36949072"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4C03F4D0",
+        "decimal": "34591552"
+      },
+      "AFC_raw": {
+        "bits_hex": "47B6EA34",
+        "decimal": "936524062500E-7"
+      },
+      "AFO_raw": {
+        "bits_hex": "47C5D361",
+        "decimal": "1012867578125E-7"
+      },
+      "ASIG_raw": {
+        "bits_hex": "44BCDC35",
+        "decimal": "15108814697265625E-13"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "45856624",
+        "decimal": "426876757812500E-11"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "47BD1406",
+        "decimal": "968080468750E-7"
+      },
+      "WFO_raw": {
+        "bits_hex": "46B44FC0",
+        "decimal": "23079875000000E-9"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "49DBCAFD",
+        "decimal": "1800543625E-3"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 2,
+    "slot": 10,
+    "record": {
+      "sequence": 94213,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 10,
+      "is_overall_slot": false,
+      "IFREE": 2,
+      "numeric_capture_valid": true,
+      "nrefa_this": 35,
+      "NREFA": 35,
+      "NREFM": 0,
+      "AFOMFC_raw": {
+        "bits_hex": "44C8FFDB",
+        "decimal": "16079954833984375E-13"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "4A4E9120",
+        "decimal": "338439200E-2"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "4A41F5AE",
+        "decimal": "317783550E-2"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4A3CDB21",
+        "decimal": "309421625E-2"
+      },
+      "AFC_raw": {
+        "bits_hex": "460CD962",
+        "decimal": "90143457031250E-10"
+      },
+      "AFO_raw": {
+        "bits_hex": "46136F2A",
+        "decimal": "94357910156250E-10"
+      },
+      "ASIG_raw": {
+        "bits_hex": "43092501",
+        "decimal": "1371445465087890625E-16"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "43DDBD6E",
+        "decimal": "443479919433593750E-15"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "4612E69F",
+        "decimal": "94016552734375E-10"
+      },
+      "WFO_raw": {
+        "bits_hex": "4513B823",
+        "decimal": "2363508544921875E-12"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "48289942",
+        "decimal": "172645031250E-6"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 1,
+    "slot": 11,
+    "record": {
+      "sequence": 94214,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 11,
+      "is_overall_slot": false,
+      "IFREE": 1,
+      "numeric_capture_valid": true,
+      "nrefa_this": 351,
+      "NREFA": 351,
+      "NREFM": 2,
+      "AFOMFC_raw": {
+        "bits_hex": "468B5A5D",
+        "decimal": "17837181640625E-9"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "4C21C49D",
+        "decimal": "42406516"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "4C0FFCD4",
+        "decimal": "37745488"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4C03AE1A",
+        "decimal": "34519144"
+      },
+      "AFC_raw": {
+        "bits_hex": "47BC5F45",
+        "decimal": "964465390625E-7"
+      },
+      "AFO_raw": {
+        "bits_hex": "47D17FFC",
+        "decimal": "1072639687500E-7"
+      },
+      "ASIG_raw": {
+        "bits_hex": "44CC7F28",
+        "decimal": "16359736328125000E-13"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "458CACB9",
+        "decimal": "450159033203125E-11"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "47B75482",
+        "decimal": "938650156250E-7"
+      },
+      "WFO_raw": {
+        "bits_hex": "46BFC1F3",
+        "decimal": "24544974609375E-9"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "49E8B744",
+        "decimal": "1906408500E-3"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 2,
+    "slot": 11,
+    "record": {
+      "sequence": 94215,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 11,
+      "is_overall_slot": false,
+      "IFREE": 2,
+      "numeric_capture_valid": true,
+      "nrefa_this": 40,
+      "NREFA": 40,
+      "NREFM": 0,
+      "AFOMFC_raw": {
+        "bits_hex": "451851B5",
+        "decimal": "2437106689453125E-12"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "4AA23AC7",
+        "decimal": "53159395E-1"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "4A94A2A7",
+        "decimal": "48704835E-1"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4A8DF0AF",
+        "decimal": "46510955E-1"
+      },
+      "AFC_raw": {
+        "bits_hex": "46383C09",
+        "decimal": "117910087890625E-10"
+      },
+      "AFO_raw": {
+        "bits_hex": "46482CB0",
+        "decimal": "128111718750000E-10"
+      },
+      "ASIG_raw": {
+        "bits_hex": "434A440D",
+        "decimal": "2022658233642578125E-16"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "4412BBED",
+        "decimal": "58693634033203125E-14"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "4649ED85",
+        "decimal": "129233798828125E-10"
+      },
+      "WFO_raw": {
+        "bits_hex": "4532233A",
+        "decimal": "2850201660156250E-12"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "4856DAB3",
+        "decimal": "220010796875E-6"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 1,
+    "slot": 12,
+    "record": {
+      "sequence": 94216,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 12,
+      "is_overall_slot": false,
+      "IFREE": 1,
+      "numeric_capture_valid": true,
+      "nrefa_this": 371,
+      "NREFA": 371,
+      "NREFM": 0,
+      "AFOMFC_raw": {
+        "bits_hex": "4685623D",
+        "decimal": "17073119140625E-9"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "4C015330",
+        "decimal": "33901760"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "4BEEF884",
+        "decimal": "31322376"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4BE4FA2C",
+        "decimal": "30012504"
+      },
+      "AFC_raw": {
+        "bits_hex": "47B47E81",
+        "decimal": "924130078125E-7"
+      },
+      "AFO_raw": {
+        "bits_hex": "47C08B9A",
+        "decimal": "985832031250E-7"
+      },
+      "ASIG_raw": {
+        "bits_hex": "44BC7246",
+        "decimal": "15075710449218750E-13"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "4598C0E0",
+        "decimal": "488810937500000E-11"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "47D708CF",
+        "decimal": "1100976171875E-7"
+      },
+      "WFO_raw": {
+        "bits_hex": "46C5AE90",
+        "decimal": "25303281250000E-9"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "49EEEC70",
+        "decimal": "1957262000E-3"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 2,
+    "slot": 12,
+    "record": {
+      "sequence": 94217,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 12,
+      "is_overall_slot": false,
+      "IFREE": 2,
+      "numeric_capture_valid": true,
+      "nrefa_this": 41,
+      "NREFA": 41,
+      "NREFM": 0,
+      "AFOMFC_raw": {
+        "bits_hex": "45243C25",
+        "decimal": "2627759033203125E-12"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "4A7191BD",
+        "decimal": "395787125E-2"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "4A585E4F",
+        "decimal": "354497975E-2"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4A50D6E2",
+        "decimal": "342162450E-2"
+      },
+      "AFC_raw": {
+        "bits_hex": "462118EE",
+        "decimal": "103102324218750E-10"
+      },
+      "AFO_raw": {
+        "bits_hex": "46301A32",
+        "decimal": "112705488281250E-10"
+      },
+      "ASIG_raw": {
+        "bits_hex": "4330DBF9",
+        "decimal": "1768592681884765625E-16"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "442730E3",
+        "decimal": "66876385498046875E-14"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "46885DC0",
+        "decimal": "17454875000000E-9"
+      },
+      "WFO_raw": {
+        "bits_hex": "453292F9",
+        "decimal": "2857185791015625E-12"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "4859AE72",
+        "decimal": "222905781250E-6"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 1,
+    "slot": 13,
+    "record": {
+      "sequence": 94218,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 13,
+      "is_overall_slot": false,
+      "IFREE": 1,
+      "numeric_capture_valid": true,
+      "nrefa_this": 381,
+      "NREFA": 381,
+      "NREFM": 1,
+      "AFOMFC_raw": {
+        "bits_hex": "468AFF53",
+        "decimal": "17791662109375E-9"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "4BFE435A",
+        "decimal": "33326772"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "4BE7559C",
+        "decimal": "30321464"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4BDB782E",
+        "decimal": "28766300"
+      },
+      "AFC_raw": {
+        "bits_hex": "47B0EAEF",
+        "decimal": "905818671875E-7"
+      },
+      "AFO_raw": {
+        "bits_hex": "47C11DB9",
+        "decimal": "988754453125E-7"
+      },
+      "ASIG_raw": {
+        "bits_hex": "44C1C8C4",
+        "decimal": "15502739257812500E-13"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "45A156A7",
+        "decimal": "516283154296875E-11"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "47F70090",
+        "decimal": "1264651250000E-7"
+      },
+      "WFO_raw": {
+        "bits_hex": "46C99AB8",
+        "decimal": "25805359375000E-9"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "49F22BAB",
+        "decimal": "1983861375E-3"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 2,
+    "slot": 13,
+    "record": {
+      "sequence": 94219,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 13,
+      "is_overall_slot": false,
+      "IFREE": 2,
+      "numeric_capture_valid": true,
+      "nrefa_this": 42,
+      "NREFA": 42,
+      "NREFM": 0,
+      "AFOMFC_raw": {
+        "bits_hex": "452158A6",
+        "decimal": "2581540527343750E-12"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "4A419C4C",
+        "decimal": "317211500E-2"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "4A322B96",
+        "decimal": "291914150E-2"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4A31A4C6",
+        "decimal": "291051350E-2"
+      },
+      "AFC_raw": {
+        "bits_hex": "46154B47",
+        "decimal": "95548193359375E-10"
+      },
+      "AFO_raw": {
+        "bits_hex": "4621EF36",
+        "decimal": "103638027343750E-10"
+      },
+      "ASIG_raw": {
+        "bits_hex": "432A8C90",
+        "decimal": "1705490722656250000E-16"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "4435DBAC",
+        "decimal": "72743237304687500E-14"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "46ADF14E",
+        "decimal": "22264652343750E-9"
+      },
+      "WFO_raw": {
+        "bits_hex": "452826B4",
+        "decimal": "2690418945312500E-12"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "4847B359",
+        "decimal": "204493390625E-6"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 1,
+    "slot": 14,
+    "record": {
+      "sequence": 94220,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 14,
+      "is_overall_slot": false,
+      "IFREE": 1,
+      "numeric_capture_valid": true,
+      "nrefa_this": 384,
+      "NREFA": 384,
+      "NREFM": 2,
+      "AFOMFC_raw": {
+        "bits_hex": "46620FDE",
+        "decimal": "144679667968750E-10"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "4BBB2103",
+        "decimal": "24527366"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "4BAE26FE",
+        "decimal": "22826492"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4BA81B4D",
+        "decimal": "22034074"
+      },
+      "AFC_raw": {
+        "bits_hex": "479D1DAE",
+        "decimal": "804433593750E-7"
+      },
+      "AFO_raw": {
+        "bits_hex": "47A63005",
+        "decimal": "850880390625E-7"
+      },
+      "ASIG_raw": {
+        "bits_hex": "44AF779F",
+        "decimal": "14037381591796875E-13"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "458E9B97",
+        "decimal": "456344873046875E-11"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "47B6FE69",
+        "decimal": "936928203125E-7"
+      },
+      "WFO_raw": {
+        "bits_hex": "46C51957",
+        "decimal": "25228669921875E-9"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "49E97498",
+        "decimal": "1912467000E-3"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 2,
+    "slot": 14,
+    "record": {
+      "sequence": 94221,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 14,
+      "is_overall_slot": false,
+      "IFREE": 2,
+      "numeric_capture_valid": true,
+      "nrefa_this": 43,
+      "NREFA": 43,
+      "NREFM": 0,
+      "AFOMFC_raw": {
+        "bits_hex": "450145E5",
+        "decimal": "2068368408203125E-12"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "4A3CB363",
+        "decimal": "309167275E-2"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "4A31E843",
+        "decimal": "291483275E-2"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4A316939",
+        "decimal": "290670225E-2"
+      },
+      "AFC_raw": {
+        "bits_hex": "46179EB0",
+        "decimal": "97036718750000E-10"
+      },
+      "AFO_raw": {
+        "bits_hex": "462038CF",
+        "decimal": "102542021484375E-10"
+      },
+      "ASIG_raw": {
+        "bits_hex": "431AC9E1",
+        "decimal": "1547885894775390625E-16"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "442AF6E5",
+        "decimal": "68385772705078125E-14"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "46A7EFA4",
+        "decimal": "21495820312500E-9"
+      },
+      "WFO_raw": {
+        "bits_hex": "4536DF97",
+        "decimal": "2925974365234375E-12"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "485A04BF",
+        "decimal": "223250984375E-6"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 1,
+    "slot": 15,
+    "record": {
+      "sequence": 94222,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 15,
+      "is_overall_slot": false,
+      "IFREE": 1,
+      "numeric_capture_valid": true,
+      "nrefa_this": 422,
+      "NREFA": 422,
+      "NREFM": 1,
+      "AFOMFC_raw": {
+        "bits_hex": "46840135",
+        "decimal": "16896603515625E-9"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "4BAAD164",
+        "decimal": "22389448"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "4B9E128C",
+        "decimal": "20718872"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4B9A276C",
+        "decimal": "20205272"
+      },
+      "AFC_raw": {
+        "bits_hex": "479AD01C",
+        "decimal": "792642187500E-7"
+      },
+      "AFO_raw": {
+        "bits_hex": "47A438C9",
+        "decimal": "840815703125E-7"
+      },
+      "ASIG_raw": {
+        "bits_hex": "44BCC186",
+        "decimal": "15100476074218750E-13"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "45A836DB",
+        "decimal": "538285693359375E-11"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "47E16E07",
+        "decimal": "1154200546875E-7"
+      },
+      "WFO_raw": {
+        "bits_hex": "46C77BAD",
+        "decimal": "25533837890625E-9"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "49E3A74A",
+        "decimal": "1864937250E-3"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 2,
+    "slot": 15,
+    "record": {
+      "sequence": 94223,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 15,
+      "is_overall_slot": false,
+      "IFREE": 2,
+      "numeric_capture_valid": true,
+      "nrefa_this": 47,
+      "NREFA": 47,
+      "NREFM": 0,
+      "AFOMFC_raw": {
+        "bits_hex": "45185930",
+        "decimal": "2437574218750000E-12"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "4A24ACD2",
+        "decimal": "269803650E-2"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "4A19DE3A",
+        "decimal": "252097450E-2"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4A1A29A8",
+        "decimal": "252580200E-2"
+      },
+      "AFC_raw": {
+        "bits_hex": "4612959C",
+        "decimal": "93814023437500E-10"
+      },
+      "AFO_raw": {
+        "bits_hex": "461A47F4",
+        "decimal": "98739882812500E-10"
+      },
+      "ASIG_raw": {
+        "bits_hex": "4322B300",
+        "decimal": "1626992187500000000E-16"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "445A9E42",
+        "decimal": "87447277832031250E-14"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "46D29758",
+        "decimal": "26955671875000E-9"
+      },
+      "WFO_raw": {
+        "bits_hex": "453BCB57",
+        "decimal": "3004708740234375E-12"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "48500E81",
+        "decimal": "213050015625E-6"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 1,
+    "slot": 16,
+    "record": {
+      "sequence": 94224,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 16,
+      "is_overall_slot": false,
+      "IFREE": 1,
+      "numeric_capture_valid": true,
+      "nrefa_this": 407,
+      "NREFA": 407,
+      "NREFM": 0,
+      "AFOMFC_raw": {
+        "bits_hex": "466542A3",
+        "decimal": "146726591796875E-10"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "4B891F1D",
+        "decimal": "17972794"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "4B819000",
+        "decimal": "16982016"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4B805B55",
+        "decimal": "16823978"
+      },
+      "AFC_raw": {
+        "bits_hex": "478D9426",
+        "decimal": "724882968750E-7"
+      },
+      "AFO_raw": {
+        "bits_hex": "47933F87",
+        "decimal": "753910546875E-7"
+      },
+      "ASIG_raw": {
+        "bits_hex": "44A9CF3D",
+        "decimal": "13584761962890625E-13"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "45A2E3E2",
+        "decimal": "521248535156250E-11"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "47E99132",
+        "decimal": "1195863906250E-7"
+      },
+      "WFO_raw": {
+        "bits_hex": "46C29885",
+        "decimal": "24908259765625E-9"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "49DE180B",
+        "decimal": "1819393375E-3"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 2,
+    "slot": 16,
+    "record": {
+      "sequence": 94225,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 16,
+      "is_overall_slot": false,
+      "IFREE": 2,
+      "numeric_capture_valid": true,
+      "nrefa_this": 46,
+      "NREFA": 46,
+      "NREFM": 0,
+      "AFOMFC_raw": {
+        "bits_hex": "4506DD44",
+        "decimal": "2157829101562500E-12"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "49E76374",
+        "decimal": "1895534500E-3"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "49C55491",
+        "decimal": "1616530125E-3"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "49B861F9",
+        "decimal": "1510463125E-3"
+      },
+      "AFC_raw": {
+        "bits_hex": "45E157F4",
+        "decimal": "721099414062500E-11"
+      },
+      "AFO_raw": {
+        "bits_hex": "45FBB0B3",
+        "decimal": "805408740234375E-11"
+      },
+      "ASIG_raw": {
+        "bits_hex": "431D9921",
+        "decimal": "1575981597900390625E-16"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "444666D1",
+        "decimal": "79360650634765625E-14"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "46B20B87",
+        "decimal": "22789763671875E-9"
+      },
+      "WFO_raw": {
+        "bits_hex": "452BC5F7",
+        "decimal": "2748372802734375E-12"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "484A0FF4",
+        "decimal": "206911812500E-6"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 1,
+    "slot": 17,
+    "record": {
+      "sequence": 94226,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 17,
+      "is_overall_slot": false,
+      "IFREE": 1,
+      "numeric_capture_valid": true,
+      "nrefa_this": 431,
+      "NREFA": 431,
+      "NREFM": 2,
+      "AFOMFC_raw": {
+        "bits_hex": "4669EA9C",
+        "decimal": "149706523437500E-10"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "4B736330",
+        "decimal": "15950640"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "4B6BE3ED",
+        "decimal": "15459309"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4B714E0B",
+        "decimal": "15814155"
+      },
+      "AFC_raw": {
+        "bits_hex": "478D6DDC",
+        "decimal": "724117187500E-7"
+      },
+      "AFO_raw": {
+        "bits_hex": "478EF5BD",
+        "decimal": "731954765625E-7"
+      },
+      "ASIG_raw": {
+        "bits_hex": "44AC0FA9",
+        "decimal": "13764893798828125E-13"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "45A87527",
+        "decimal": "539064404296875E-11"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "47E85ADA",
+        "decimal": "1189657031250E-7"
+      },
+      "WFO_raw": {
+        "bits_hex": "46C6E52E",
+        "decimal": "25458589843750E-9"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "49DCC6F9",
+        "decimal": "1808607125E-3"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 2,
+    "slot": 17,
+    "record": {
+      "sequence": 94227,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 17,
+      "is_overall_slot": false,
+      "IFREE": 2,
+      "numeric_capture_valid": true,
+      "nrefa_this": 48,
+      "NREFA": 48,
+      "NREFM": 0,
+      "AFOMFC_raw": {
+        "bits_hex": "45160FCC",
+        "decimal": "2400987304687500E-12"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "49F6AFDA",
+        "decimal": "2020859250E-3"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "49F76A7C",
+        "decimal": "2026831500E-3"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4A072D85",
+        "decimal": "221475325E-2"
+      },
+      "AFC_raw": {
+        "bits_hex": "46093C7A",
+        "decimal": "87831191406250E-10"
+      },
+      "AFO_raw": {
+        "bits_hex": "4605B38B",
+        "decimal": "85568857421875E-10"
+      },
+      "ASIG_raw": {
+        "bits_hex": "431E6C45",
+        "decimal": "1584229278564453125E-16"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "444CCE3A",
+        "decimal": "81922229003906250E-14"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "46A8021B",
+        "decimal": "21505052734375E-9"
+      },
+      "WFO_raw": {
+        "bits_hex": "452C7FE6",
+        "decimal": "2759993652343750E-12"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "4838D0AD",
+        "decimal": "189250703125E-6"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 1,
+    "slot": 18,
+    "record": {
+      "sequence": 94228,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 18,
+      "is_overall_slot": false,
+      "IFREE": 1,
+      "numeric_capture_valid": true,
+      "nrefa_this": 460,
+      "NREFA": 460,
+      "NREFM": 1,
+      "AFOMFC_raw": {
+        "bits_hex": "4678A2CA",
+        "decimal": "159126972656250E-10"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "4B7DBC48",
+        "decimal": "16628808"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "4B7A4C5E",
+        "decimal": "16403550"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4B81E06E",
+        "decimal": "17023196"
+      },
+      "AFC_raw": {
+        "bits_hex": "479433C7",
+        "decimal": "758795546875E-7"
+      },
+      "AFO_raw": {
+        "bits_hex": "4794FD01",
+        "decimal": "762820078125E-7"
+      },
+      "ASIG_raw": {
+        "bits_hex": "44C8F0B9",
+        "decimal": "16075225830078125E-13"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "45AE64D4",
+        "decimal": "558060351562500E-11"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "47E58C7C",
+        "decimal": "1175289687500E-7"
+      },
+      "WFO_raw": {
+        "bits_hex": "46C61083",
+        "decimal": "25352255859375E-9"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "49D33CB5",
+        "decimal": "1730454625E-3"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 2,
+    "slot": 18,
+    "record": {
+      "sequence": 94229,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 18,
+      "is_overall_slot": false,
+      "IFREE": 2,
+      "numeric_capture_valid": true,
+      "nrefa_this": 50,
+      "NREFA": 50,
+      "NREFM": 0,
+      "AFOMFC_raw": {
+        "bits_hex": "44F48D3F",
+        "decimal": "19564139404296875E-13"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "49B2160E",
+        "decimal": "1458881750E-3"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "49B87FAA",
+        "decimal": "1511413250E-3"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "49CF8C9B",
+        "decimal": "1700243375E-3"
+      },
+      "AFC_raw": {
+        "bits_hex": "45F92BAA",
+        "decimal": "797345800781250E-11"
+      },
+      "AFO_raw": {
+        "bits_hex": "45ED743F",
+        "decimal": "759853076171875E-11"
+      },
+      "ASIG_raw": {
+        "bits_hex": "4315DC7F",
+        "decimal": "1498613128662109375E-16"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "4432442B",
+        "decimal": "71306512451171875E-14"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "4695DB01",
+        "decimal": "19181501953125E-9"
+      },
+      "WFO_raw": {
+        "bits_hex": "452E390F",
+        "decimal": "2787566162109375E-12"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "48389CBC",
+        "decimal": "189042937500E-6"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 1,
+    "slot": 19,
+    "record": {
+      "sequence": 94230,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 19,
+      "is_overall_slot": false,
+      "IFREE": 1,
+      "numeric_capture_valid": true,
+      "nrefa_this": 449,
+      "NREFA": 449,
+      "NREFM": 1,
+      "AFOMFC_raw": {
+        "bits_hex": "466E6656",
+        "decimal": "152575839843750E-10"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "4B5BEEA8",
+        "decimal": "14413480"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "4B652136",
+        "decimal": "15016246"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4B7B5660",
+        "decimal": "16471648"
+      },
+      "AFC_raw": {
+        "bits_hex": "479199C4",
+        "decimal": "745475312500E-7"
+      },
+      "AFO_raw": {
+        "bits_hex": "4788AC14",
+        "decimal": "699761562500E-7"
+      },
+      "ASIG_raw": {
+        "bits_hex": "44B73A6E",
+        "decimal": "14658259277343750E-13"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "45AB01D3",
+        "decimal": "547222802734375E-11"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "47F05877",
+        "decimal": "1230569296875E-7"
+      },
+      "WFO_raw": {
+        "bits_hex": "46BCA32C",
+        "decimal": "24145585937500E-9"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "49C5768A",
+        "decimal": "1617617250E-3"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 2,
+    "slot": 19,
+    "record": {
+      "sequence": 94231,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 19,
+      "is_overall_slot": false,
+      "IFREE": 2,
+      "numeric_capture_valid": true,
+      "nrefa_this": 50,
+      "NREFA": 50,
+      "NREFM": 0,
+      "AFOMFC_raw": {
+        "bits_hex": "44F6FCF1",
+        "decimal": "19759044189453125E-13"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "49B92B1A",
+        "decimal": "1516899250E-3"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "49B8DFBF",
+        "decimal": "1514487875E-3"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "49C685AF",
+        "decimal": "1626293875E-3"
+      },
+      "AFC_raw": {
+        "bits_hex": "45FCCD82",
+        "decimal": "808968847656250E-11"
+      },
+      "AFO_raw": {
+        "bits_hex": "45F31C2D",
+        "decimal": "777952197265625E-11"
+      },
+      "ASIG_raw": {
+        "bits_hex": "432389F3",
+        "decimal": "1635388641357421875E-16"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "4431E0AC",
+        "decimal": "71151049804687500E-14"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "4680998A",
+        "decimal": "16460769531250E-9"
+      },
+      "WFO_raw": {
+        "bits_hex": "452F4E4B",
+        "decimal": "2804893310546875E-12"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "48458E0B",
+        "decimal": "202296171875E-6"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 1,
+    "slot": 20,
+    "record": {
+      "sequence": 94232,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 20,
+      "is_overall_slot": false,
+      "IFREE": 1,
+      "numeric_capture_valid": true,
+      "nrefa_this": 470,
+      "NREFA": 470,
+      "NREFM": 3,
+      "AFOMFC_raw": {
+        "bits_hex": "4663B265",
+        "decimal": "145725986328125E-10"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "4B632A74",
+        "decimal": "14887540"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "4B6B1F8D",
+        "decimal": "15409037"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4B7E2040",
+        "decimal": "16654400"
+      },
+      "AFC_raw": {
+        "bits_hex": "47947674",
+        "decimal": "760129062500E-7"
+      },
+      "AFO_raw": {
+        "bits_hex": "478E1F53",
+        "decimal": "727666484375E-7"
+      },
+      "ASIG_raw": {
+        "bits_hex": "44C1E3F4",
+        "decimal": "15511235351562500E-13"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "459E36FF",
+        "decimal": "506287451171875E-11"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "47BAE820",
+        "decimal": "956962500000E-7"
+      },
+      "WFO_raw": {
+        "bits_hex": "46C190A4",
+        "decimal": "24776320312500E-9"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "49C7EC5F",
+        "decimal": "1637771875E-3"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 2,
+    "slot": 20,
+    "record": {
+      "sequence": 94233,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 20,
+      "is_overall_slot": false,
+      "IFREE": 2,
+      "numeric_capture_valid": true,
+      "nrefa_this": 53,
+      "NREFA": 53,
+      "NREFM": 0,
+      "AFOMFC_raw": {
+        "bits_hex": "4507DA8D",
+        "decimal": "2173659423828125E-12"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "49A07E60",
+        "decimal": "1314764000E-3"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "49AC65A4",
+        "decimal": "1412276500E-3"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "49CB150F",
+        "decimal": "1663649875E-3"
+      },
+      "AFC_raw": {
+        "bits_hex": "46027053",
+        "decimal": "83480810546875E-10"
+      },
+      "AFO_raw": {
+        "bits_hex": "45E4DBC5",
+        "decimal": "732347119140625E-11"
+      },
+      "ASIG_raw": {
+        "bits_hex": "43396EE7",
+        "decimal": "1854332122802734375E-16"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "443DF3DA",
+        "decimal": "75981018066406250E-14"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "46A99DBD",
+        "decimal": "21710869140625E-9"
+      },
+      "WFO_raw": {
+        "bits_hex": "45199F60",
+        "decimal": "2457960937500000E-12"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "4814A4E9",
+        "decimal": "152211640625E-6"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 1,
+    "slot": 21,
+    "record": {
+      "sequence": 94234,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 21,
+      "is_overall_slot": true,
+      "IFREE": 1,
+      "numeric_capture_valid": true,
+      "nrefa_this": 6494,
+      "NREFA": 6494,
+      "NREFM": 45,
+      "AFOMFC_raw": {
+        "bits_hex": "48859DAC",
+        "decimal": "27364537500E-5"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "4E098186",
+        "decimal": "576741760"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "4E04B34B",
+        "decimal": "556585664"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4E04858C",
+        "decimal": "555836160"
+      },
+      "AFC_raw": {
+        "bits_hex": "49C0A353",
+        "decimal": "1578090375E-3"
+      },
+      "AFO_raw": {
+        "bits_hex": "49C55195",
+        "decimal": "1616434625E-3"
+      },
+      "ASIG_raw": {
+        "bits_hex": "46D3D8C3",
+        "decimal": "27116380859375E-9"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "479E191B",
+        "decimal": "809462109375E-7"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "49E2F5EF",
+        "decimal": "1859261875E-3"
+      },
+      "WFO_raw": {
+        "bits_hex": "48CAB980",
+        "decimal": "41518000000E-5"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "4BED34FB",
+        "decimal": "31091190"
+      },
+      "FXRAY": {
+        "bits_hex": "49E2F5EF",
+        "decimal": "1859261875E-3"
+      }
+    }
+  },
+  {
+    "call_id": 1,
+    "IFREE": 2,
+    "slot": 21,
+    "record": {
+      "sequence": 94235,
+      "event": "lsq_raw_accumulator_slot",
+      "namespace": "residual_lsq",
+      "source_hook_id": "L8",
+      "call_id": 1,
+      "NBIN": 20,
+      "NB1": 21,
+      "slot_index": 21,
+      "is_overall_slot": true,
+      "IFREE": 2,
+      "numeric_capture_valid": true,
+      "nrefa_this": 723,
+      "NREFA": 723,
+      "NREFM": 0,
+      "AFOMFC_raw": {
+        "bits_hex": "471133F5",
+        "decimal": "3717195703125E-8"
+      },
+      "AFOFO_raw": {
+        "bits_hex": "4C694433",
+        "decimal": "61149388"
+      },
+      "AFOFC_raw": {
+        "bits_hex": "4C603D09",
+        "decimal": "58782756"
+      },
+      "AFCFC_raw": {
+        "bits_hex": "4C63197B",
+        "decimal": "59532780"
+      },
+      "AFC_raw": {
+        "bits_hex": "48276447",
+        "decimal": "171409109375E-6"
+      },
+      "AFO_raw": {
+        "bits_hex": "482A98B2",
+        "decimal": "174690781250E-6"
+      },
+      "ASIG_raw": {
+        "bits_hex": "4537922A",
+        "decimal": "2937135253906250E-12"
+      },
+      "WFOMFC_raw": {
+        "bits_hex": "4636503F",
+        "decimal": "116680615234375E-10"
+      },
+      "WFOMFC2_raw": {
+        "bits_hex": "48AC7448",
+        "decimal": "35318625000E-5"
+      },
+      "WFO_raw": {
+        "bits_hex": "4734B4F5",
+        "decimal": "4626095703125E-8"
+      },
+      "WFOFO_raw": {
+        "bits_hex": "4A52F6C9",
+        "decimal": "345643425E-2"
+      },
+      "FXFREE": {
+        "bits_hex": "48AC7448",
+        "decimal": "35318625000E-5"
+      }
+    }
+  }
+]

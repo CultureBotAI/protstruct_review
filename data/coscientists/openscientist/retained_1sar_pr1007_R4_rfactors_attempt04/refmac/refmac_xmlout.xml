@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="ASCII" standalone="yes"?>
+<!-- refmac output -->
+ <REFMAC>
+Error <err_level>          0 </err_level> <br/>
+Message <err_message> normal termination </err_message> <br/>
+Job <job> refmac </job> <br/>
+ <Overall_stats>
+ <n_cycle>      1 </n_cycle> <br/>
+ <ml_esu>  -999.0000 </ml_esu> <br/>
+ <n_reflections_all>         7217 </n_reflections_all> <br/>
+ <n_reflections_free>          723 </n_reflections_free> <br/>
+ <data_completeness>     99.380 </data_completeness> <br/>
+ <resolution_low>     49.972 </resolution_low> <br/>
+ <resolution_high>      2.500 </resolution_high> <br/>
+ <r2_weighted_factor_work>      0.245 </r2_weighted_factor_work> <br/>
+ <r2_weighted_factor_free>      0.320 </r2_weighted_factor_free> <br/>
+ <stats_vs_cycle>
+ <new_cycle>
+  <cycle>       0 </cycle>  <r_factor>      0.169 </r_factor>  <r_free>      0.213 </r_free>  <fscAver>     0.9807 </fscAver>  <fscAverFree>     0.9675 </fscAverFree>  <rmsBOND>     0.0105 </rmsBOND>  <rmsANGLE>      1.496 </rmsANGLE>  <rmsCHIRAL>      0.066 </rmsCHIRAL> <br />
+</new_cycle>
+</stats_vs_cycle>
+ <bvalue_stats>
+ <overall>
+ <all>
+  <number>       2967 </number>  <average>    15.3419 </average>  <sigma>     8.5146 </sigma> <br />
+</all>
+ <main_chain>
+  <number>       1124 </number>  <average>    14.0207 </average>  <sigma>     5.6573 </sigma> <br />
+</main_chain>
+ <side_chain>
+  <number>       1690 </number>  <average>    15.7253 </average>  <sigma>     9.7466 </sigma> <br />
+</side_chain>
+</overall>
+ <chain_by_chain>
+ <new_chain>
+ <chain_name> A </chain_name> <br/>
+ <all>
+  <number>       1407 </number>  <average>    13.9352 </average>  <sigma>     6.7711 </sigma> <br />
+</all>
+ <main_chain>
+  <number>        562 </number>  <average>    12.7635 </average>  <sigma>     4.6948 </sigma> <br />
+</main_chain>
+ <side_chain>
+  <number>        845 </number>  <average>    14.7145 </average>  <sigma>     7.7564 </sigma> <br />
+</side_chain>
+</new_chain>
+ <new_chain>
+ <chain_name> A </chain_name> <br/>
+ <all>
+  <number>          5 </number>  <average>    17.5880 </average>  <sigma>     1.1107 </sigma> <br />
+</all>
+ <main_chain>
+  <number>          0 </number>  <average>     0.0000 </average>  <sigma>     0.0000 </sigma> <br />
+</main_chain>
+ <side_chain>
+  <number>          0 </number>  <average>     0.0000 </average>  <sigma>     0.0000 </sigma> <br />
+</side_chain>
+</new_chain>
+ <new_chain>
+ <chain_name> B </chain_name> <br/>
+ <all>
+  <number>       1407 </number>  <average>    16.1536 </average>  <sigma>     9.6310 </sigma> <br />
+</all>
+ <main_chain>
+  <number>        562 </number>  <average>    15.2779 </average>  <sigma>     6.2296 </sigma> <br />
+</main_chain>
+ <side_chain>
+  <number>        845 </number>  <average>    16.7361 </average>  <sigma>    11.3043 </sigma> <br />
+</side_chain>
+</new_chain>
+ <new_chain>
+ <chain_name> A </chain_name> <br/>
+ <all>
+  <number>          1 </number>  <average>    42.7300 </average>  <sigma>     0.0020 </sigma> <br />
+</all>
+ <main_chain>
+  <number>          0 </number>  <average>     0.0000 </average>  <sigma>     0.0000 </sigma> <br />
+</main_chain>
+ <side_chain>
+  <number>          0 </number>  <average>     0.0000 </average>  <sigma>     0.0000 </sigma> <br />
+</side_chain>
+</new_chain>
+ <new_chain>
+ <chain_name> S </chain_name> <br/>
+ <all>
+  <number>        124 </number>  <average>    19.2850 </average>  <sigma>     7.4359 </sigma> <br />
+</all>
+ <main_chain>
+  <number>          0 </number>  <average>     0.0000 </average>  <sigma>     0.0000 </sigma> <br />
+</main_chain>
+ <side_chain>
+  <number>          0 </number>  <average>     0.0000 </average>  <sigma>     0.0000 </sigma> <br />
+</side_chain>
+</new_chain>
+ <new_chain>
+ <chain_name> B </chain_name> <br/>
+ <all>
+  <number>          1 </number>  <average>    22.8500 </average>  <sigma>     0.0025 </sigma> <br />
+</all>
+ <main_chain>
+  <number>          0 </number>  <average>     0.0000 </average>  <sigma>     0.0000 </sigma> <br />
+</main_chain>
+ <side_chain>
+  <number>          0 </number>  <average>     0.0000 </average>  <sigma>     0.0000 </sigma> <br />
+</side_chain>
+</new_chain>
+ <new_chain>
+ <chain_name> S </chain_name> <br/>
+ <all>
+  <number>         22 </number>  <average>    29.0659 </average>  <sigma>    10.8856 </sigma> <br />
+</all>
+ <main_chain>
+  <number>          0 </number>  <average>     0.0000 </average>  <sigma>     0.0000 </sigma> <br />
+</main_chain>
+ <side_chain>
+  <number>          0 </number>  <average>     0.0000 </average>  <sigma>     0.0000 </sigma> <br />
+</side_chain>
+</new_chain>
+</chain_by_chain>
+</bvalue_stats>
+</Overall_stats>
+ <solvent_info>
+ <params_rfree>
+  <vdw_probe_radius>     1.2000 </vdw_probe_radius>  <ion_probe_radius>     0.8000 </ion_probe_radius>  <shrinkage_radius>     0.8000 </shrinkage_radius> <br />
+</params_rfree>
+ <params_rfactor>
+  <vdw_probe_radius>     1.2000 </vdw_probe_radius>  <ion_probe_radius>     0.8000 </ion_probe_radius>  <shrinkage_radius>     0.8000 </shrinkage_radius> <br />
+</params_rfactor>
+</solvent_info>
+ <twin_info>
+ <ntwin_domain>     1 </ntwin_domain> <br/>
+</twin_info>
+ <input_pdb_file> /Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt04/refmac/refmac_xyzout.pdb </input_pdb_file> <br/>
+ <solution_file> /Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt04/refmac/refmac_xyzout.pdb </solution_file> <br/>
+ <input_mtz_file> /Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt04/inputs/projected_observations.mtz </input_mtz_file> <br/>
+ <input_labin> LABIN FP=F-obs SIGFP=SIGF-obs FREE=R-free-flags </input_labin> <br/>
+ <mtz_file> /Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt04/refmac/refmac_hklout.mtz </mtz_file> <br/>
+</REFMAC>

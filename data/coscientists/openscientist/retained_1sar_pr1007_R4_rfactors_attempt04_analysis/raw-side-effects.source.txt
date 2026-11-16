@@ -1,0 +1,51 @@
+"""PRIMARY independent binary/fixed-width checks of immutable Attempt4 artifacts."""
+from pathlib import Path
+from datetime import datetime,timezone
+from fractions import Fraction
+import hashlib,json,math,struct
+E=Path(__file__).resolve().parent;W=E.parents[2].parent/'protstruct_review-wt-078';R=W/'data/coscientists/openscientist/retained_1sar_pr1007_R4_rfactors_attempt04'
+def pin(p):
+ b=Path(p).read_bytes();return {'path':str(p),'sha256':hashlib.sha256(b).hexdigest(),'size_bytes':len(b)}
+files=[R/'inputs/original_data.mtz',R/'inputs/projected_observations.mtz',R/'refmac/refmac_hklout.mtz',R/'inputs/original_model.pdb',R/'refmac/refmac_xyzout.pdb',R/'inputs/input_hkl_ledger.json']
+pins={str(p):pin(p) for p in files+[Path(__file__)]}
+def mtz(p):
+ b=p.read_bytes();assert b[:4]==b'MTZ ';off=(struct.unpack_from('<i',b,4)[0]-1)*4;cards=[]
+ for pos in range(off,len(b),80):
+  t=b[pos:pos+80].decode('ascii');cards.append((pos,t))
+  if t.startswith('END '):break
+ nc=next(t.split() for _,t in cards if t.startswith('NCOL '));ncol,nrows=int(nc[1]),int(nc[2]);cols=[(pos,t.split()) for pos,t in cards if t.startswith('COLUMN ')];assert len(cols)==ncol
+ values=[[struct.unpack_from('<f',b,80+4*(i*ncol+j))[0] for j in range(ncol)] for i in range(nrows)]
+ words=[[f'{struct.unpack_from("<I",b,80+4*(i*ncol+j))[0]:08x}' for j in range(ncol)] for i in range(nrows)]
+ names=[t[1] for _,t in cols];ext=[]
+ for j,(pos,t) in enumerate(cols):
+  if t[1] in ['H','K','L']:ext.append({'label':t[1],'header_offset':pos,'declared_min':t[3],'declared_max':t[4],'actual_min':min(x[j] for x in values),'actual_max':max(x[j] for x in values)})
+ return {'path':str(p),'names':names,'columns':[{'label':t[1],'dataset_id':int(t[-1]),'header_offset':pos} for pos,t in cols],'nrows':nrows,'ncols':ncol,'extrema':ext},values,words
+orig,ov,ow=mtz(files[0]);proj,pv,pw=mtz(files[1]);output,xv,xw=mtz(files[2]);on={n:i for i,n in enumerate(orig['names'])};pn={n:i for i,n in enumerate(proj['names'])};xn={n:i for i,n in enumerate(output['names'])}
+assert orig['nrows']==proj['nrows']==output['nrows']
+projection_exact=all(pw[i][j]==ow[i][on[n]] for i in range(proj['nrows']) for j,n in enumerate(proj['names']))
+def hkl(row,names):return tuple(int(row[names[n]]) for n in ['H','K','L'])
+xmap={hkl(row,xn):(row,xw[i]) for i,row in enumerate(xv)};assert len(xmap)==len(xv)
+ledger=json.loads(files[5].read_text());ledger_matches=True;invalidated=[];padding=[];usable_counts={0:0,1:0};num={0:Fraction(0),1:Fraction(0)};den={0:Fraction(0),1:Fraction(0)}
+for i,row in enumerate(ledger['raw_rows']):
+ key=tuple(row['hkl']);ledger_matches &= hkl(pv[i],pn)==key and pw[i][pn['F-obs']]==row['f_obs_word_hex'] and pw[i][pn['SIGF-obs']]==row['sigf_obs_word_hex'] and pw[i][pn['R-free-flags']]==row['r_free_flag_word_hex']
+ vals,words=xmap[key];fo,so,flag=(vals[xn[n]] for n in ['F-obs','SIGF-obs','R-free-flags']);usable=math.isfinite(fo) and math.isfinite(so) and so>0 and flag in (0,1)
+ if row['eligible'] and not usable:invalidated.append({'input_row_index':row['row_index'],'hkl':key,'input_F_word':row['f_obs_word_hex'],'output_F_word':words[xn['F-obs']],'output_SIGF_word':words[xn['SIGF-obs']]})
+ if not row['eligible']:padding.append({'hkl':key,'input_flag_word':row['r_free_flag_word_hex'],'output_flag_word':words[xn['R-free-flags']]})
+ if usable:
+  fc=vals[xn['FC_ALL_LS']];assert math.isfinite(fc);part=int(flag);usable_counts[part]+=1;f=Fraction.from_float(fo);num[part]+=abs(f-Fraction.from_float(fc));den[part]+=f
+
+def pdb(p):
+ rows=[]
+ for lineno,line in enumerate(p.read_text().splitlines(),1):
+  if line[:6].strip() in {'ATOM','HETATM'}:
+   key=(line[21:22],line[22:26],line[26:27],line[17:20],line[12:16],line[16:17]);rows.append((key,lineno,line))
+ assert len({x[0] for x in rows})==len(rows)
+ return rows
+pa,pb=pdb(files[3]),pdb(files[4]);a={x[0]:x for x in pa};b={x[0]:x for x in pb};common=set(a)&set(b);diffs={}
+for field,lo,hi in [('record_type',0,6),('coordinates',30,54),('occupancy',54,60),('B',60,66),('serial',6,11),('segment',72,76),('element',76,78),('charge',78,80)]:
+ rows=[{'key':k,'input_line':a[k][1],'output_line':b[k][1],'before':a[k][2][lo:hi],'after':b[k][2][lo:hi]} for k in sorted(common) if a[k][2][lo:hi]!=b[k][2][lo:hi]]
+ diffs[field]={'count':len(rows),'examples':rows[:10]}
+result={'at':datetime.now(timezone.utc).isoformat(),'sources':pins,'mtz_headers':[orig,proj,output],'projection_selected_words_identical':projection_exact,'ledger_matches_projected_words':ledger_matches,'input_counts':ledger['counts'],'invalidated_eligible':invalidated,'padding_flag_observations':padding,'usable_output_counts':usable_counts,'candidate_R_from_output_columns':{str(k):{'exact_numerator_sum':str(num[k]),'exact_denominator_sum':str(den[k]),'exact_ratio':str(num[k]/den[k]),'approximate_float':float(num[k]/den[k])} for k in [0,1]},'model':{'input_count':len(pa),'output_count':len(pb),'same_key_set':set(a)==set(b),'same_key_order':[x[0] for x in pa]==[x[0] for x in pb],'field_differences':diffs,'input_HD':sum(x[2][76:78].strip().upper() in {'H','D'} for x in pa),'output_HD':sum(x[2][76:78].strip().upper() in {'H','D'} for x in pb)},'scope':'independent raw-byte side effects; output-column R candidate is not native arithmetic or scientific admission','scientific_admission':False}
+result['sources_unchanged']=all(pin(p)==v for p,v in pins.items());assert result['sources_unchanged'] and projection_exact and ledger_matches
+with (E/'raw-side-effects797.json').open('x') as f:json.dump(result,f,indent=2);f.write('\n')
+print(json.dumps({'invalidated':len(invalidated),'usable_output_counts':usable_counts,'candidate_R':{k:float(num[k]/den[k]) for k in [0,1]},'model_differences':{k:v['count'] for k,v in diffs.items()},'sources_unchanged':result['sources_unchanged']}))

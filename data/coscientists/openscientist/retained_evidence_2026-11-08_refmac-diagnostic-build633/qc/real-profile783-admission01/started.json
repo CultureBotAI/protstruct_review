@@ -1,0 +1,42 @@
+{
+  "at": "2026-11-09T08:41:02.716864+00:00",
+  "driver": {
+    "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/check-real-profile783.py",
+    "sha256": "642bafb19dbe5ce9c0667ad25bf490218ff942832b5b9d47fc3ab7f68e9984b2",
+    "size_bytes": 4479
+  },
+  "manifest": {
+    "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/profile-final783-01/diagnostic-profile.json",
+    "sha256": "1065026df4f77de26307cd5644691e49f2effe025dcc75bc1dda7b635e3ed5d1",
+    "size_bytes": 1196465
+  },
+  "executable": {
+    "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build/refmac5",
+    "sha256": "4f4c7045c73a9c2c725746b3d8ab73adbb98a2f6379b5493e9422d8da65db89b",
+    "size_bytes": 40983744
+  },
+  "sources": {
+    "refmac_diagnostic_profile.py": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/refmac_diagnostic_profile.py",
+      "sha256": "082b4703d75150e02ae253bb4a262cf333f49f91d89fd49c576548b8667b2d42",
+      "size_bytes": 320519
+    },
+    "onesar_refmac.py": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/onesar_refmac.py",
+      "sha256": "98ce55f63c07881425bfade47b39e59e09f0224780b70b65ac4195193a9385a9",
+      "size_bytes": 564972
+    },
+    "toolchain.py": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/toolchain.py",
+      "sha256": "9d2d1e2c36a0dee1bede3252015384e5db70e5124e7b5e346c23558804eaf095",
+      "size_bytes": 40876
+    },
+    "refmac_diagnostic_trace.py": {
+      "path": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review-wt-078/scripts/refmac_diagnostic_trace.py",
+      "sha256": "984aced8d794eb4454c6fab83e9d3202b497482f054698a075549d2b5a69a69f",
+      "size_bytes": 57659
+    }
+  },
+  "scope": "real installation public profile admission and immutable postcheck only; no collector/native/scientific admission",
+  "native_refmac_executed": false
+}

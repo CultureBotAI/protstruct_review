@@ -1,0 +1,1160 @@
+[
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/trace_writer.f90 -o CMakeFiles/refmac5.dir/trace_writer.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/trace_writer.f90",
+  "output": "CMakeFiles/refmac5.dir/trace_writer.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/trace_hooks.f90 -o CMakeFiles/refmac5.dir/trace_hooks.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/trace_hooks.f90",
+  "output": "CMakeFiles/refmac5.dir/trace_hooks.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/stats_calc.f90 -o CMakeFiles/refmac5.dir/stats_calc.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/stats_calc.f90",
+  "output": "CMakeFiles/refmac5.dir/stats_calc.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/makecif_pars.f90 -o CMakeFiles/refmac5.dir/makecif_pars.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/makecif_pars.f90",
+  "output": "CMakeFiles/refmac5.dir/makecif_pars.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/vitals.f90 -o CMakeFiles/refmac5.dir/vitals.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/vitals.f90",
+  "output": "CMakeFiles/refmac5.dir/vitals.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/const.f90 -o CMakeFiles/refmac5.dir/const.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/const.f90",
+  "output": "CMakeFiles/refmac5.dir/const.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/refi_flags.f90 -o CMakeFiles/refmac5.dir/refi_flags.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/refi_flags.f90",
+  "output": "CMakeFiles/refmac5.dir/refi_flags.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/comcif_info.f90 -o CMakeFiles/refmac5.dir/comcif_info.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/comcif_info.f90",
+  "output": "CMakeFiles/refmac5.dir/comcif_info.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ener_pars.f90 -o CMakeFiles/refmac5.dir/ener_pars.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ener_pars.f90",
+  "output": "CMakeFiles/refmac5.dir/ener_pars.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/makecif_version.f90 -o CMakeFiles/refmac5.dir/makecif_version.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/makecif_version.f90",
+  "output": "CMakeFiles/refmac5.dir/makecif_version.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/lib_com.f90 -o CMakeFiles/refmac5.dir/lib_com.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/lib_com.f90",
+  "output": "CMakeFiles/refmac5.dir/lib_com.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/sfread_ng.f90 -o CMakeFiles/refmac5.dir/sfread_ng.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/sfread_ng.f90",
+  "output": "CMakeFiles/refmac5.dir/sfread_ng.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/tls.f90 -o CMakeFiles/refmac5.dir/tls.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/tls.f90",
+  "output": "CMakeFiles/refmac5.dir/tls.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/rigid_body.f90 -o CMakeFiles/refmac5.dir/rigid_body.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/rigid_body.f90",
+  "output": "CMakeFiles/refmac5.dir/rigid_body.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/monitor.f90 -o CMakeFiles/refmac5.dir/monitor.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/monitor.f90",
+  "output": "CMakeFiles/refmac5.dir/monitor.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/atom_grads.f90 -o CMakeFiles/refmac5.dir/atom_grads.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/atom_grads.f90",
+  "output": "CMakeFiles/refmac5.dir/atom_grads.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/refmac_signals.f90 -o CMakeFiles/refmac5.dir/refmac_signals.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/refmac_signals.f90",
+  "output": "CMakeFiles/refmac5.dir/refmac_signals.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/weights.f90 -o CMakeFiles/refmac5.dir/weights.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/weights.f90",
+  "output": "CMakeFiles/refmac5.dir/weights.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/agreem.f90 -o CMakeFiles/refmac5.dir/agreem.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/agreem.f90",
+  "output": "CMakeFiles/refmac5.dir/agreem.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ncs_constr.f90 -o CMakeFiles/refmac5.dir/ncs_constr.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ncs_constr.f90",
+  "output": "CMakeFiles/refmac5.dir/ncs_constr.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/atom_com.f90 -o CMakeFiles/refmac5.dir/atom_com.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/atom_com.f90",
+  "output": "CMakeFiles/refmac5.dir/atom_com.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/atom_com_str.f90 -o CMakeFiles/refmac5.dir/atom_com_str.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/atom_com_str.f90",
+  "output": "CMakeFiles/refmac5.dir/atom_com_str.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/map_stats.f90 -o CMakeFiles/refmac5.dir/map_stats.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/map_stats.f90",
+  "output": "CMakeFiles/refmac5.dir/map_stats.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/atomf77mod.f90 -o CMakeFiles/refmac5.dir/atomf77mod.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/atomf77mod.f90",
+  "output": "CMakeFiles/refmac5.dir/atomf77mod.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/models.f90 -o CMakeFiles/refmac5.dir/models.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/models.f90",
+  "output": "CMakeFiles/refmac5.dir/models.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/hessian_impl.f90 -o CMakeFiles/refmac5.dir/hessian_impl.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/hessian_impl.f90",
+  "output": "CMakeFiles/refmac5.dir/hessian_impl.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ncs_rest_mod.f90 -o CMakeFiles/refmac5.dir/ncs_rest_mod.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ncs_rest_mod.f90",
+  "output": "CMakeFiles/refmac5.dir/ncs_rest_mod.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/crd_com.f90 -o CMakeFiles/refmac5.dir/crd_com.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/crd_com.f90",
+  "output": "CMakeFiles/refmac5.dir/crd_com.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/rharvest_mod.f90 -o CMakeFiles/refmac5.dir/rharvest_mod.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/rharvest_mod.f90",
+  "output": "CMakeFiles/refmac5.dir/rharvest_mod.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/twin_refmac.f90 -o CMakeFiles/refmac5.dir/twin_refmac.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/twin_refmac.f90",
+  "output": "CMakeFiles/refmac5.dir/twin_refmac.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/celsym.f90 -o CMakeFiles/refmac5.dir/celsym.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/celsym.f90",
+  "output": "CMakeFiles/refmac5.dir/celsym.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/mtz_things.f90 -o CMakeFiles/refmac5.dir/mtz_things.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/mtz_things.f90",
+  "output": "CMakeFiles/refmac5.dir/mtz_things.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/restr_params.f90 -o CMakeFiles/refmac5.dir/restr_params.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/restr_params.f90",
+  "output": "CMakeFiles/refmac5.dir/restr_params.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/conf_select.f90 -o CMakeFiles/refmac5.dir/conf_select.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/conf_select.f90",
+  "output": "CMakeFiles/refmac5.dir/conf_select.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/random.f90 -o CMakeFiles/refmac5.dir/random.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/random.f90",
+  "output": "CMakeFiles/refmac5.dir/random.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/qnorm.f -o CMakeFiles/refmac5.dir/qnorm.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/qnorm.f",
+  "output": "CMakeFiles/refmac5.dir/qnorm.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/derivs_form_all.f90 -o CMakeFiles/refmac5.dir/derivs_form_all.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/derivs_form_all.f90",
+  "output": "CMakeFiles/refmac5.dir/derivs_form_all.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/puckers_rotamers_etc.f90 -o CMakeFiles/refmac5.dir/puckers_rotamers_etc.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/puckers_rotamers_etc.f90",
+  "output": "CMakeFiles/refmac5.dir/puckers_rotamers_etc.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/refmac_histograms.f90 -o CMakeFiles/refmac5.dir/refmac_histograms.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/refmac_histograms.f90",
+  "output": "CMakeFiles/refmac5.dir/refmac_histograms.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/align_refmac.f90 -o CMakeFiles/refmac5.dir/align_refmac.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/align_refmac.f90",
+  "output": "CMakeFiles/refmac5.dir/align_refmac.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/gibbs_gm_sampler.f90 -o CMakeFiles/refmac5.dir/gibbs_gm_sampler.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/gibbs_gm_sampler.f90",
+  "output": "CMakeFiles/refmac5.dir/gibbs_gm_sampler.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/integrate.f90 -o CMakeFiles/refmac5.dir/integrate.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/integrate.f90",
+  "output": "CMakeFiles/refmac5.dir/integrate.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/refmac_completeness.f90 -o CMakeFiles/refmac5.dir/refmac_completeness.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/refmac_completeness.f90",
+  "output": "CMakeFiles/refmac5.dir/refmac_completeness.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/dna_rna_base.f90 -o CMakeFiles/refmac5.dir/dna_rna_base.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/dna_rna_base.f90",
+  "output": "CMakeFiles/refmac5.dir/dna_rna_base.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/basepair_paralell.f90 -o CMakeFiles/refmac5.dir/basepair_paralell.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/basepair_paralell.f90",
+  "output": "CMakeFiles/refmac5.dir/basepair_paralell.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/restr_files.f90 -o CMakeFiles/refmac5.dir/restr_files.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/restr_files.f90",
+  "output": "CMakeFiles/refmac5.dir/restr_files.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/hkl_pack.f90 -o CMakeFiles/refmac5.dir/hkl_pack.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/hkl_pack.f90",
+  "output": "CMakeFiles/refmac5.dir/hkl_pack.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/linalgebra.f -o CMakeFiles/refmac5.dir/linalgebra.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/linalgebra.f",
+  "output": "CMakeFiles/refmac5.dir/linalgebra.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/atom_select.f90 -o CMakeFiles/refmac5.dir/atom_select.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/atom_select.f90",
+  "output": "CMakeFiles/refmac5.dir/atom_select.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/linalgebra_f90.f90 -o CMakeFiles/refmac5.dir/linalgebra_f90.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/linalgebra_f90.f90",
+  "output": "CMakeFiles/refmac5.dir/linalgebra_f90.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/rotation_and_others.f90 -o CMakeFiles/refmac5.dir/rotation_and_others.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/rotation_and_others.f90",
+  "output": "CMakeFiles/refmac5.dir/rotation_and_others.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/tensor_derivatives.f90 -o CMakeFiles/refmac5.dir/tensor_derivatives.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/tensor_derivatives.f90",
+  "output": "CMakeFiles/refmac5.dir/tensor_derivatives.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/map_prepare.f90 -o CMakeFiles/refmac5.dir/map_prepare.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/map_prepare.f90",
+  "output": "CMakeFiles/refmac5.dir/map_prepare.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/sfcalc_refmac.f90 -o CMakeFiles/refmac5.dir/sfcalc_refmac.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/sfcalc_refmac.f90",
+  "output": "CMakeFiles/refmac5.dir/sfcalc_refmac.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/form_factor_refine.f90 -o CMakeFiles/refmac5.dir/form_factor_refine.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/form_factor_refine.f90",
+  "output": "CMakeFiles/refmac5.dir/form_factor_refine.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/refine_group_props.f90 -o CMakeFiles/refmac5.dir/refine_group_props.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/refine_group_props.f90",
+  "output": "CMakeFiles/refmac5.dir/refine_group_props.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/bvalue_routines.f90 -o CMakeFiles/refmac5.dir/bvalue_routines.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/bvalue_routines.f90",
+  "output": "CMakeFiles/refmac5.dir/bvalue_routines.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/optimise_solvent_all.f90 -o CMakeFiles/refmac5.dir/optimise_solvent_all.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/optimise_solvent_all.f90",
+  "output": "CMakeFiles/refmac5.dir/optimise_solvent_all.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/refmac_xml.f -o CMakeFiles/refmac5.dir/refmac_xml.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/refmac_xml.f",
+  "output": "CMakeFiles/refmac5.dir/refmac_xml.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/solvent_contr_mask.f -o CMakeFiles/refmac5.dir/solvent_contr_mask.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/solvent_contr_mask.f",
+  "output": "CMakeFiles/refmac5.dir/solvent_contr_mask.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/density_routines.f -o CMakeFiles/refmac5.dir/density_routines.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/density_routines.f",
+  "output": "CMakeFiles/refmac5.dir/density_routines.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ncs_simil.f90 -o CMakeFiles/refmac5.dir/ncs_simil.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ncs_simil.f90",
+  "output": "CMakeFiles/refmac5.dir/ncs_simil.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/nmr_targets.f90 -o CMakeFiles/refmac5.dir/nmr_targets.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/nmr_targets.f90",
+  "output": "CMakeFiles/refmac5.dir/nmr_targets.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/hkon_secder_tch.f -o CMakeFiles/refmac5.dir/hkon_secder_tch.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/hkon_secder_tch.f",
+  "output": "CMakeFiles/refmac5.dir/hkon_secder_tch.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/fast_hessian_tabulation.f -o CMakeFiles/refmac5.dir/fast_hessian_tabulation.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/fast_hessian_tabulation.f",
+  "output": "CMakeFiles/refmac5.dir/fast_hessian_tabulation.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/subvag1.f -o CMakeFiles/refmac5.dir/subvag1.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/subvag1.f",
+  "output": "CMakeFiles/refmac5.dir/subvag1.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ridge.f90 -o CMakeFiles/refmac5.dir/ridge.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ridge.f90",
+  "output": "CMakeFiles/refmac5.dir/ridge.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/dist_routines.f90 -o CMakeFiles/refmac5.dir/dist_routines.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/dist_routines.f90",
+  "output": "CMakeFiles/refmac5.dir/dist_routines.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/lsq_exp2.f -o CMakeFiles/refmac5.dir/lsq_exp2.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/lsq_exp2.f",
+  "output": "CMakeFiles/refmac5.dir/lsq_exp2.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/local_tls.f90 -o CMakeFiles/refmac5.dir/local_tls.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/local_tls.f90",
+  "output": "CMakeFiles/refmac5.dir/local_tls.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/filter_params.f90 -o CMakeFiles/refmac5.dir/filter_params.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/filter_params.f90",
+  "output": "CMakeFiles/refmac5.dir/filter_params.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/oppro_allocate.f -o CMakeFiles/refmac5.dir/oppro_allocate.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/oppro_allocate.f",
+  "output": "CMakeFiles/refmac5.dir/oppro_allocate.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/rcard_tor1.f -o CMakeFiles/refmac5.dir/rcard_tor1.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/rcard_tor1.f",
+  "output": "CMakeFiles/refmac5.dir/rcard_tor1.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/subcf_scale1.f -o CMakeFiles/refmac5.dir/subcf_scale1.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/subcf_scale1.f",
+  "output": "CMakeFiles/refmac5.dir/subcf_scale1.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/subag_scale_hessian.f -o CMakeFiles/refmac5.dir/subag_scale_hessian.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/subag_scale_hessian.f",
+  "output": "CMakeFiles/refmac5.dir/subag_scale_hessian.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/extra_eigen.f -o CMakeFiles/refmac5.dir/extra_eigen.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/extra_eigen.f",
+  "output": "CMakeFiles/refmac5.dir/extra_eigen.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/rigid_allocate.f -o CMakeFiles/refmac5.dir/rigid_allocate.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/rigid_allocate.f",
+  "output": "CMakeFiles/refmac5.dir/rigid_allocate.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/aniso_ref_eigen.f -o CMakeFiles/refmac5.dir/aniso_ref_eigen.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/aniso_ref_eigen.f",
+  "output": "CMakeFiles/refmac5.dir/aniso_ref_eigen.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/interpolate_mod.f -o CMakeFiles/refmac5.dir/interpolate_mod.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/interpolate_mod.f",
+  "output": "CMakeFiles/refmac5.dir/interpolate_mod.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/write_atoms_mmcif.f90 -o CMakeFiles/refmac5.dir/write_atoms_mmcif.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/write_atoms_mmcif.f90",
+  "output": "CMakeFiles/refmac5.dir/write_atoms_mmcif.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_CIF.f -o CMakeFiles/refmac5.dir/make_CIF.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_CIF.f",
+  "output": "CMakeFiles/refmac5.dir/make_CIF.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_subr.f -o CMakeFiles/refmac5.dir/make_subr.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_subr.f",
+  "output": "CMakeFiles/refmac5.dir/make_subr.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_subr_refmac.f -o CMakeFiles/refmac5.dir/make_subr_refmac.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_subr_refmac.f",
+  "output": "CMakeFiles/refmac5.dir/make_subr_refmac.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/tls_allocate.f -o CMakeFiles/refmac5.dir/tls_allocate.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/tls_allocate.f",
+  "output": "CMakeFiles/refmac5.dir/tls_allocate.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/vdw_nosymm.f90 -o CMakeFiles/refmac5.dir/vdw_nosymm.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/vdw_nosymm.f90",
+  "output": "CMakeFiles/refmac5.dir/vdw_nosymm.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/vdw_and_contacts.f -o CMakeFiles/refmac5.dir/vdw_and_contacts.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/vdw_and_contacts.f",
+  "output": "CMakeFiles/refmac5.dir/vdw_and_contacts.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/vdw_flexible.f -o CMakeFiles/refmac5.dir/vdw_flexible.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/vdw_flexible.f",
+  "output": "CMakeFiles/refmac5.dir/vdw_flexible.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/elements_module.f90 -o CMakeFiles/refmac5.dir/elements_module.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/elements_module.f90",
+  "output": "CMakeFiles/refmac5.dir/elements_module.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/odb_files.f90 -o CMakeFiles/refmac5.dir/odb_files.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/odb_files.f90",
+  "output": "CMakeFiles/refmac5.dir/odb_files.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_lib11.f -o CMakeFiles/refmac5.dir/make_lib11.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_lib11.f",
+  "output": "CMakeFiles/refmac5.dir/make_lib11.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_lib12.f -o CMakeFiles/refmac5.dir/make_lib12.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_lib12.f",
+  "output": "CMakeFiles/refmac5.dir/make_lib12.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_lib2.f -o CMakeFiles/refmac5.dir/make_lib2.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_lib2.f",
+  "output": "CMakeFiles/refmac5.dir/make_lib2.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_crd1.f -o CMakeFiles/refmac5.dir/make_crd1.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_crd1.f",
+  "output": "CMakeFiles/refmac5.dir/make_crd1.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_crd2.f -o CMakeFiles/refmac5.dir/make_crd2.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_crd2.f",
+  "output": "CMakeFiles/refmac5.dir/make_crd2.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_new1.f -o CMakeFiles/refmac5.dir/make_new1.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_new1.f",
+  "output": "CMakeFiles/refmac5.dir/make_new1.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_new2.f -o CMakeFiles/refmac5.dir/make_new2.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_new2.f",
+  "output": "CMakeFiles/refmac5.dir/make_new2.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/set_num.f -o CMakeFiles/refmac5.dir/set_num.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/set_num.f",
+  "output": "CMakeFiles/refmac5.dir/set_num.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_rst1.f -o CMakeFiles/refmac5.dir/make_rst1.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_rst1.f",
+  "output": "CMakeFiles/refmac5.dir/make_rst1.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_rst2.f -o CMakeFiles/refmac5.dir/make_rst2.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_rst2.f",
+  "output": "CMakeFiles/refmac5.dir/make_rst2.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_PDB.f -o CMakeFiles/refmac5.dir/make_PDB.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_PDB.f",
+  "output": "CMakeFiles/refmac5.dir/make_PDB.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/makecif.f -o CMakeFiles/refmac5.dir/makecif.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/makecif.f",
+  "output": "CMakeFiles/refmac5.dir/makecif.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_refmac_dummy.f -o CMakeFiles/refmac5.dir/make_refmac_dummy.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_refmac_dummy.f",
+  "output": "CMakeFiles/refmac5.dir/make_refmac_dummy.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ls_scaling_double.f -o CMakeFiles/refmac5.dir/ls_scaling_double.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ls_scaling_double.f",
+  "output": "CMakeFiles/refmac5.dir/ls_scaling_double.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/rharvest_subr.f -o CMakeFiles/refmac5.dir/rharvest_subr.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/rharvest_subr.f",
+  "output": "CMakeFiles/refmac5.dir/rharvest_subr.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/newentry_idealise.f -o CMakeFiles/refmac5.dir/newentry_idealise.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/newentry_idealise.f",
+  "output": "CMakeFiles/refmac5.dir/newentry_idealise.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ml_scaling_double.f -o CMakeFiles/refmac5.dir/ml_scaling_double.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ml_scaling_double.f",
+  "output": "CMakeFiles/refmac5.dir/ml_scaling_double.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/gaussian_int.f -o CMakeFiles/refmac5.dir/gaussian_int.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/gaussian_int.f",
+  "output": "CMakeFiles/refmac5.dir/gaussian_int.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/subnumrec.f -o CMakeFiles/refmac5.dir/subnumrec.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/subnumrec.f",
+  "output": "CMakeFiles/refmac5.dir/subnumrec.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/math_refmac.f -o CMakeFiles/refmac5.dir/math_refmac.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/math_refmac.f",
+  "output": "CMakeFiles/refmac5.dir/math_refmac.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/read_extra_restraints.f -o CMakeFiles/refmac5.dir/read_extra_restraints.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/read_extra_restraints.f",
+  "output": "CMakeFiles/refmac5.dir/read_extra_restraints.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/inout_routines.f -o CMakeFiles/refmac5.dir/inout_routines.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/inout_routines.f",
+  "output": "CMakeFiles/refmac5.dir/inout_routines.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/errwrt.f -o CMakeFiles/refmac5.dir/errwrt.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/errwrt.f",
+  "output": "CMakeFiles/refmac5.dir/errwrt.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/xml_writer.f -o CMakeFiles/refmac5.dir/xml_writer.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/xml_writer.f",
+  "output": "CMakeFiles/refmac5.dir/xml_writer.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ncs_ncs_generate.f90 -o CMakeFiles/refmac5.dir/ncs_ncs_generate.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ncs_ncs_generate.f90",
+  "output": "CMakeFiles/refmac5.dir/ncs_ncs_generate.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ncs_rest.f -o CMakeFiles/refmac5.dir/ncs_rest.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ncs_rest.f",
+  "output": "CMakeFiles/refmac5.dir/ncs_rest.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/occupancy_only_refine.f -o CMakeFiles/refmac5.dir/occupancy_only_refine.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/occupancy_only_refine.f",
+  "output": "CMakeFiles/refmac5.dir/occupancy_only_refine.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/cell_symm_subrs.f -o CMakeFiles/refmac5.dir/cell_symm_subrs.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/cell_symm_subrs.f",
+  "output": "CMakeFiles/refmac5.dir/cell_symm_subrs.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/iheap_sort.f -o CMakeFiles/refmac5.dir/iheap_sort.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/iheap_sort.f",
+  "output": "CMakeFiles/refmac5.dir/iheap_sort.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/wave2f2prime.f -o CMakeFiles/refmac5.dir/wave2f2prime.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/wave2f2prime.f",
+  "output": "CMakeFiles/refmac5.dir/wave2f2prime.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/lnumrec.f -o CMakeFiles/refmac5.dir/lnumrec.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/lnumrec.f",
+  "output": "CMakeFiles/refmac5.dir/lnumrec.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/coords.f90 -o CMakeFiles/refmac5.dir/coords.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/coords.f90",
+  "output": "CMakeFiles/refmac5.dir/coords.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/refpre_twin.f -o CMakeFiles/refmac5.dir/refpre_twin.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/refpre_twin.f",
+  "output": "CMakeFiles/refmac5.dir/refpre_twin.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/refall_twin.f -o CMakeFiles/refmac5.dir/refall_twin.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/refall_twin.f",
+  "output": "CMakeFiles/refmac5.dir/refall_twin.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ls_scaling_twin_save.f -o CMakeFiles/refmac5.dir/ls_scaling_twin_save.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ls_scaling_twin_save.f",
+  "output": "CMakeFiles/refmac5.dir/ls_scaling_twin_save.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/max_with_ints.f -o CMakeFiles/refmac5.dir/max_with_ints.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/max_with_ints.f",
+  "output": "CMakeFiles/refmac5.dir/max_with_ints.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ml_params_refine.f -o CMakeFiles/refmac5.dir/ml_params_refine.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ml_params_refine.f",
+  "output": "CMakeFiles/refmac5.dir/ml_params_refine.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/block_organization.f -o CMakeFiles/refmac5.dir/block_organization.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/block_organization.f",
+  "output": "CMakeFiles/refmac5.dir/block_organization.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/merohedr_twin.f -o CMakeFiles/refmac5.dir/merohedr_twin.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/merohedr_twin.f",
+  "output": "CMakeFiles/refmac5.dir/merohedr_twin.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/decide_twin_opers_0.f -o CMakeFiles/refmac5.dir/decide_twin_opers_0.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/decide_twin_opers_0.f",
+  "output": "CMakeFiles/refmac5.dir/decide_twin_opers_0.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/read_data.f -o CMakeFiles/refmac5.dir/read_data.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/read_data.f",
+  "output": "CMakeFiles/refmac5.dir/read_data.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/asym_list.f -o CMakeFiles/refmac5.dir/asym_list.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/asym_list.f",
+  "output": "CMakeFiles/refmac5.dir/asym_list.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/calc_stats_twin.f -o CMakeFiles/refmac5.dir/calc_stats_twin.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/calc_stats_twin.f",
+  "output": "CMakeFiles/refmac5.dir/calc_stats_twin.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/mtz_write_twin.f -o CMakeFiles/refmac5.dir/mtz_write_twin.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/mtz_write_twin.f",
+  "output": "CMakeFiles/refmac5.dir/mtz_write_twin.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/libT.f -o CMakeFiles/refmac5.dir/libT.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/libT.f",
+  "output": "CMakeFiles/refmac5.dir/libT.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/automorphism.f90 -o CMakeFiles/refmac5.dir/automorphism.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/automorphism.f90",
+  "output": "CMakeFiles/refmac5.dir/automorphism.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/messy_pdb.f -o CMakeFiles/refmac5.dir/messy_pdb.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/messy_pdb.f",
+  "output": "CMakeFiles/refmac5.dir/messy_pdb.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/print_geom_params.f90 -o CMakeFiles/refmac5.dir/print_geom_params.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/print_geom_params.f90",
+  "output": "CMakeFiles/refmac5.dir/print_geom_params.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/usr/bin/clang++  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -o CMakeFiles/refmac5.dir/bridge.cpp.o -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/bridge.cpp",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/bridge.cpp",
+  "output": "CMakeFiles/refmac5.dir/bridge.cpp.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/cell_refine.f90 -o CMakeFiles/refmac5.dir/cell_refine.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/cell_refine.f90",
+  "output": "CMakeFiles/refmac5.dir/cell_refine.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/usr/bin/clang  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -o CMakeFiles/refmac5.dir/i0.c.o -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/i0.c",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/i0.c",
+  "output": "CMakeFiles/refmac5.dir/i0.c.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/usr/bin/clang  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -o CMakeFiles/refmac5.dir/i1.c.o -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/i1.c",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/i1.c",
+  "output": "CMakeFiles/refmac5.dir/i1.c.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/usr/bin/clang  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -o CMakeFiles/refmac5.dir/chbevl.c.o -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/chbevl.c",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/chbevl.c",
+  "output": "CMakeFiles/refmac5.dir/chbevl.c.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_unix_ccp4.f -o CMakeFiles/refmac5.dir/make_unix_ccp4.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_unix_ccp4.f",
+  "output": "CMakeFiles/refmac5.dir/make_unix_ccp4.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/GS_scale.f90 -o CMakeFiles/refmac5.dir/GS_scale.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/GS_scale.f90",
+  "output": "CMakeFiles/refmac5.dir/GS_scale.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/refmac_derivatives.f90 -o CMakeFiles/refmac5.dir/refmac_derivatives.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/refmac_derivatives.f90",
+  "output": "CMakeFiles/refmac5.dir/refmac_derivatives.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/external_dist_restraints.f90 -o CMakeFiles/refmac5.dir/external_dist_restraints.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/external_dist_restraints.f90",
+  "output": "CMakeFiles/refmac5.dir/external_dist_restraints.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/hd_mixture_refine.f90 -o CMakeFiles/refmac5.dir/hd_mixture_refine.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/hd_mixture_refine.f90",
+  "output": "CMakeFiles/refmac5.dir/hd_mixture_refine.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/const.f90 -o CMakeFiles/libcheck.dir/const.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/const.f90",
+  "output": "CMakeFiles/libcheck.dir/const.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/makecif_pars.f90 -o CMakeFiles/libcheck.dir/makecif_pars.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/makecif_pars.f90",
+  "output": "CMakeFiles/libcheck.dir/makecif_pars.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/rstr_com.f90 -o CMakeFiles/libcheck.dir/rstr_com.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/rstr_com.f90",
+  "output": "CMakeFiles/libcheck.dir/rstr_com.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/atom_com_str.f90 -o CMakeFiles/libcheck.dir/atom_com_str.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/atom_com_str.f90",
+  "output": "CMakeFiles/libcheck.dir/atom_com_str.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ncs_rest_mod.f90 -o CMakeFiles/libcheck.dir/ncs_rest_mod.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ncs_rest_mod.f90",
+  "output": "CMakeFiles/libcheck.dir/ncs_rest_mod.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/refi_flags.f90 -o CMakeFiles/libcheck.dir/refi_flags.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/refi_flags.f90",
+  "output": "CMakeFiles/libcheck.dir/refi_flags.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/comcif_info.f90 -o CMakeFiles/libcheck.dir/comcif_info.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/comcif_info.f90",
+  "output": "CMakeFiles/libcheck.dir/comcif_info.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ener_pars.f90 -o CMakeFiles/libcheck.dir/ener_pars.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ener_pars.f90",
+  "output": "CMakeFiles/libcheck.dir/ener_pars.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/restr_files.f90 -o CMakeFiles/libcheck.dir/restr_files.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/restr_files.f90",
+  "output": "CMakeFiles/libcheck.dir/restr_files.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ncs_constr.f90 -o CMakeFiles/libcheck.dir/ncs_constr.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/ncs_constr.f90",
+  "output": "CMakeFiles/libcheck.dir/ncs_constr.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/tls.f90 -o CMakeFiles/libcheck.dir/tls.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/tls.f90",
+  "output": "CMakeFiles/libcheck.dir/tls.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/atom_com.f90 -o CMakeFiles/libcheck.dir/atom_com.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/atom_com.f90",
+  "output": "CMakeFiles/libcheck.dir/atom_com.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/atomf77mod.f90 -o CMakeFiles/libcheck.dir/atomf77mod.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/atomf77mod.f90",
+  "output": "CMakeFiles/libcheck.dir/atomf77mod.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/models.f90 -o CMakeFiles/libcheck.dir/models.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/models.f90",
+  "output": "CMakeFiles/libcheck.dir/models.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/crd_com.f90 -o CMakeFiles/libcheck.dir/crd_com.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/crd_com.f90",
+  "output": "CMakeFiles/libcheck.dir/crd_com.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/lib_com.f90 -o CMakeFiles/libcheck.dir/lib_com.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/lib_com.f90",
+  "output": "CMakeFiles/libcheck.dir/lib_com.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/elements_module.f90 -o CMakeFiles/libcheck.dir/elements_module.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/elements_module.f90",
+  "output": "CMakeFiles/libcheck.dir/elements_module.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/main_libcheck.f -o CMakeFiles/libcheck.dir/main_libcheck.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/main_libcheck.f",
+  "output": "CMakeFiles/libcheck.dir/main_libcheck.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_subr_2.f -o CMakeFiles/libcheck.dir/make_subr_2.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_subr_2.f",
+  "output": "CMakeFiles/libcheck.dir/make_subr_2.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_subr.f -o CMakeFiles/libcheck.dir/make_subr.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_subr.f",
+  "output": "CMakeFiles/libcheck.dir/make_subr.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_lib11.f -o CMakeFiles/libcheck.dir/make_lib11.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_lib11.f",
+  "output": "CMakeFiles/libcheck.dir/make_lib11.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_lib12.f -o CMakeFiles/libcheck.dir/make_lib12.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_lib12.f",
+  "output": "CMakeFiles/libcheck.dir/make_lib12.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_lib2.f -o CMakeFiles/libcheck.dir/make_lib2.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_lib2.f",
+  "output": "CMakeFiles/libcheck.dir/make_lib2.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_crd1.f -o CMakeFiles/libcheck.dir/make_crd1.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_crd1.f",
+  "output": "CMakeFiles/libcheck.dir/make_crd1.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_crd2.f -o CMakeFiles/libcheck.dir/make_crd2.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_crd2.f",
+  "output": "CMakeFiles/libcheck.dir/make_crd2.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/odb_files.f90 -o CMakeFiles/libcheck.dir/odb_files.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/odb_files.f90",
+  "output": "CMakeFiles/libcheck.dir/odb_files.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/pdb2libcheck.f90 -o CMakeFiles/libcheck.dir/pdb2libcheck.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/pdb2libcheck.f90",
+  "output": "CMakeFiles/libcheck.dir/pdb2libcheck.f90.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/libcheck.f -o CMakeFiles/libcheck.dir/libcheck.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/libcheck.f",
+  "output": "CMakeFiles/libcheck.dir/libcheck.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_PDB.f -o CMakeFiles/libcheck.dir/make_PDB.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_PDB.f",
+  "output": "CMakeFiles/libcheck.dir/make_PDB.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_CIF.f -o CMakeFiles/libcheck.dir/make_CIF.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_CIF.f",
+  "output": "CMakeFiles/libcheck.dir/make_CIF.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_new1.f -o CMakeFiles/libcheck.dir/make_new1.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_new1.f",
+  "output": "CMakeFiles/libcheck.dir/make_new1.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_new2.f -o CMakeFiles/libcheck.dir/make_new2.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_new2.f",
+  "output": "CMakeFiles/libcheck.dir/make_new2.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/set_num.f -o CMakeFiles/libcheck.dir/set_num.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/set_num.f",
+  "output": "CMakeFiles/libcheck.dir/set_num.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_unix_ccp4.f -o CMakeFiles/libcheck.dir/make_unix_ccp4.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/make_unix_ccp4.f",
+  "output": "CMakeFiles/libcheck.dir/make_unix_ccp4.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/emin.f -o CMakeFiles/libcheck.dir/emin.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/emin.f",
+  "output": "CMakeFiles/libcheck.dir/emin.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/libcheck_min.f -o CMakeFiles/libcheck.dir/libcheck_min.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/libcheck_min.f",
+  "output": "CMakeFiles/libcheck.dir/libcheck_min.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/mol2_file.f -o CMakeFiles/libcheck.dir/mol2_file.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/mol2_file.f",
+  "output": "CMakeFiles/libcheck.dir/mol2_file.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/sdf_files.f -o CMakeFiles/libcheck.dir/sdf_files.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/sdf_files.f",
+  "output": "CMakeFiles/libcheck.dir/sdf_files.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/inout_routines.f -o CMakeFiles/libcheck.dir/inout_routines.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/inout_routines.f",
+  "output": "CMakeFiles/libcheck.dir/inout_routines.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/vdw_flexible.f -o CMakeFiles/libcheck.dir/vdw_flexible.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/vdw_flexible.f",
+  "output": "CMakeFiles/libcheck.dir/vdw_flexible.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/cell_symm_subrs.f -o CMakeFiles/libcheck.dir/cell_symm_subrs.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/cell_symm_subrs.f",
+  "output": "CMakeFiles/libcheck.dir/cell_symm_subrs.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/iheap_sort.f -o CMakeFiles/libcheck.dir/iheap_sort.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/iheap_sort.f",
+  "output": "CMakeFiles/libcheck.dir/iheap_sort.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/linalgebra.f -o CMakeFiles/libcheck.dir/linalgebra.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/linalgebra.f",
+  "output": "CMakeFiles/libcheck.dir/linalgebra.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/math_refmac.f -o CMakeFiles/libcheck.dir/math_refmac.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/math_refmac.f",
+  "output": "CMakeFiles/libcheck.dir/math_refmac.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran  -F/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks  -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/subnumrec.f -o CMakeFiles/libcheck.dir/subnumrec.f.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/subnumrec.f",
+  "output": "CMakeFiles/libcheck.dir/subnumrec.f.o"
+},
+{
+  "directory": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/instrumented-build-633-01/build",
+  "command": "/opt/homebrew/bin/gfortran    -fallow-argument-mismatch -O3 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk -c /Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/header2matr.f90 -o CMakeFiles/header2matr.dir/header2matr.f90.o",
+  "file": "/Users/marcin/Documents/VIMSS/ontology/protstruct_review/.orchestration/evidence/601-instrumented-build/prepared-source-633-01/header2matr.f90",
+  "output": "CMakeFiles/header2matr.dir/header2matr.f90.o"
+}
+]

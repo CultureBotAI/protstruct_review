@@ -1,0 +1,99 @@
+"""PRIMARY read-only diagnostic arithmetic: exact binary32 RN-even consistency model.
+
+This is a declared analytical model, not evidence of the native process's FP
+mode, evaluation order, call/print association, or scientific eligibility.
+Finite operands only. Overflow/nonfinite inputs stay explicitly unavailable.
+No process, environment, filesystem, or native-tool access occurs here.
+"""
+from fractions import Fraction
+
+
+def checked_word(word):
+    if type(word) is not int or not 0 <= word <= 0xffffffff:
+        raise ValueError('Expected one unsigned binary32 word')
+    return word
+
+
+def exact(word):
+    word = checked_word(word)
+    sign = word >> 31
+    exponent = (word >> 23) & 255
+    fraction = word & 0x7fffff
+    if exponent == 255:
+        raise ValueError('Nonfinite operand: no finite rational consistency result')
+    if exponent == 0:
+        mantissa, power = fraction, -149
+    else:
+        mantissa, power = (1 << 23) + fraction, exponent - 150
+    value = (Fraction(mantissa << power) if power >= 0
+             else Fraction(mantissa, 1 << (-power)))
+    return -value if sign else value
+
+
+def nearest_integer_even(numerator, denominator):
+    if numerator < 0 or denominator <= 0:
+        raise ValueError('Expected nonnegative numerator and positive denominator')
+    q, r = divmod(numerator, denominator)
+    twice = r * 2
+    return q + int(twice > denominator or (twice == denominator and q % 2 == 1))
+
+
+def round_word(value, *, zero_sign=0):
+    """Round an exact Fraction to finite binary32, nearest with ties to even.
+
+    zero_sign is required only when the exact value is zero and the operation
+    gives a sign for it. Underflow of a nonzero value retains that value's sign.
+    """
+    if not isinstance(value, Fraction) or type(zero_sign) is not int or zero_sign not in (0, 1):
+        raise ValueError('Expected exact Fraction and zero_sign 0 or 1')
+    if value == 0:
+        return zero_sign << 31
+    sign = int(value < 0)
+    value = abs(value)
+    n, d = value.numerator, value.denominator
+    exponent = n.bit_length() - d.bit_length()
+    if (n < (d << exponent)) if exponent >= 0 else ((n << -exponent) < d):
+        exponent -= 1
+    if exponent < -126:
+        mantissa = nearest_integer_even(n << 149, d)
+        # Includes the subnormal/normal boundary (mantissa == 2**23).
+        return (sign << 31) | mantissa
+    unit_power = exponent - 23
+    if unit_power >= 0:
+        mantissa = nearest_integer_even(n, d << unit_power)
+    else:
+        mantissa = nearest_integer_even(n << -unit_power, d)
+    if mantissa == (1 << 24):
+        exponent += 1
+        mantissa >>= 1
+    if exponent > 127:
+        raise ValueError('Binary32 overflow: no finite consistency result')
+    return (sign << 31) | ((exponent + 127) << 23) | (mantissa - (1 << 23))
+
+
+def add(left, right):
+    a, b = exact(left), exact(right)
+    # Under RN-even only a sum of two negative zeros gives a negative exact zero.
+    zero_sign = int(a == 0 and b == 0 and (left >> 31) == 1 and (right >> 31) == 1)
+    return round_word(a + b, zero_sign=zero_sign)
+
+
+def subtract(left, right):
+    return add(checked_word(left), checked_word(right) ^ 0x80000000)
+
+
+def multiply(left, right):
+    a, b = exact(left), exact(right)
+    return round_word(a * b, zero_sign=(left >> 31) ^ (right >> 31))
+
+
+def divide(left, right):
+    a, b = exact(left), exact(right)
+    if b == 0:
+        raise ValueError('Zero denominator: no finite consistency result')
+    return round_word(a / b, zero_sign=(left >> 31) ^ (right >> 31))
+
+
+def absolute(word):
+    exact(word)  # Reject nonfinite operands; signed zero becomes positive zero.
+    return word & 0x7fffffff

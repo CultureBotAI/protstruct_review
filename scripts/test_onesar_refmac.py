@@ -29676,12 +29676,29 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 pre_cp_causes: list[Exception | None] = []
                 opened_cp: list[int] = []
                 kw_verified: list[bool] = []
+                refmac_dir_st = real_lstat(refmac_dir)
+                self.assertTrue(stat.S_ISDIR(refmac_dir_st.st_mode))
+                refmac_dir_identity = (
+                    int(refmac_dir_st.st_dev),
+                    int(refmac_dir_st.st_ino),
+                )
 
                 def op_cp(
                     path_arg: Any, flags: int, *args: Any, **kwargs: Any
                 ) -> int:
                     decoded = os.fsdecode(path_arg)
-                    if decoded == str(kw_file):
+                    dir_fd = kwargs.get("dir_fd")
+                    is_kw_leaf = False
+                    if dir_fd is None and decoded == str(kw_file):
+                        is_kw_leaf = True
+                    elif dir_fd is not None and decoded == kw_file.name:
+                        dir_st = real_fstat(dir_fd)
+                        is_kw_leaf = (
+                            stat.S_ISDIR(dir_st.st_mode)
+                            and (int(dir_st.st_dev), int(dir_st.st_ino))
+                            == refmac_dir_identity
+                        )
+                    if is_kw_leaf:
                         kw_verified.append(True)
                     if kw_verified and decoded == str(refmac_dir):
                         events_cp.append("open_failed")
@@ -37476,6 +37493,2891 @@ class TestRefmacCollectorFirstSlice(unittest.TestCase):
                 )
             finally:
                 _cleanup_tracked_fds(tracked_fds)
+
+    def test_collector_readers_nonblocking_regular_file_admission(self) -> None:
+        """Collector regular-file readers open with O_NONBLOCK and reject FIFO replacement before reading (#1308)."""
+        if not hasattr(os, "mkfifo"):
+            self.skipTest("os.mkfifo is required for FIFO replacement tests")
+
+        pid = os.getpid()
+        real_open = os.open
+        real_read = os.read
+        real_fdopen = os.fdopen
+        real_close = os.close
+        real_fstat = os.fstat
+        real_lstat = os.lstat
+        real_replace = os.replace
+        real_unlink = os.unlink
+        real_remove = os.remove
+        real_path_unlink = Path.unlink
+
+        nonblock_flag = getattr(os, "O_NONBLOCK", 0)
+        self.assertNotEqual(nonblock_flag, 0)
+        expected_open_flags = (
+            os.O_RDONLY
+            | nonblock_flag
+            | getattr(os, "O_NOFOLLOW", 0)
+            | getattr(os, "O_CLOEXEC", 0)
+        )
+
+        suite_root = (
+            self.repo_root / "runs" / f"case_collector_reader_nonblock_{pid}"
+        )
+        suite_root.mkdir(parents=True, exist_ok=True)
+
+        def _assert_fd_closed(fd: int) -> None:
+            with self.assertRaises(OSError) as ebadf_cm:
+                real_fstat(fd)
+            self.assertEqual(ebadf_cm.exception.errno, errno.EBADF)
+
+        def _cleanup_tracked_fds(
+            tracked: Sequence[tuple[int, tuple[int, int]]],
+        ) -> None:
+            for tracked_fd, tracked_ident in reversed(tracked):
+                try:
+                    live_st = real_fstat(tracked_fd)
+                except OSError:
+                    continue
+                if (
+                    int(live_st.st_dev),
+                    int(live_st.st_ino),
+                ) == tracked_ident:
+                    try:
+                        real_close(tracked_fd)
+                    except OSError:
+                        pass
+
+        def _build_regular_baseline(
+            file_path: Path, payload: bytes, *, evidence_root: Path
+        ) -> tuple[dict[str, Any], tuple[int, int], str]:
+            file_path.write_bytes(payload)
+            st_obj = real_lstat(file_path)
+            ident = (int(st_obj.st_dev), int(st_obj.st_ino))
+            digest = _sha256_bytes(payload)
+            baseline = {
+                "path": str(file_path),
+                "resolved_path": str(file_path.resolve(strict=True)),
+                "sha256": digest,
+                "size_bytes": len(payload),
+                **onesar_refmac._build_file_ancestor_chain_baseline(
+                    file_path, evidence_root=evidence_root
+                ),
+            }
+            return baseline, ident, digest
+
+        def _make_deletion_spies(
+            owned_root: Path, unlink_events: list[tuple[str, str]]
+        ) -> tuple[Callable[..., None], Callable[..., None], Callable[..., None]]:
+            owned_root_str = os.path.abspath(os.fspath(owned_root))
+
+            def _is_owned(p: Any) -> tuple[bool, str]:
+                try:
+                    p_str = os.path.abspath(os.fsdecode(os.fspath(p)))
+                except Exception:
+                    return (False, repr(p))
+                return (
+                    p_str == owned_root_str
+                    or p_str.startswith(owned_root_str + os.sep),
+                    p_str,
+                )
+
+            def _spy_unlink(
+                path: Any, *, dir_fd: int | None = None
+            ) -> None:
+                is_owned, p_str = _is_owned(path)
+                if is_owned or dir_fd is not None:
+                    unlink_events.append(("os.unlink", p_str))
+                if dir_fd is not None:
+                    real_unlink(path, dir_fd=dir_fd)
+                else:
+                    real_unlink(path)
+
+            def _spy_remove(path: Any) -> None:
+                is_owned, p_str = _is_owned(path)
+                if is_owned:
+                    unlink_events.append(("os.remove", p_str))
+                real_remove(path)
+
+            def _spy_path_unlink(
+                self_path: Path, missing_ok: bool = False
+            ) -> None:
+                is_owned, p_str = _is_owned(self_path)
+                if is_owned:
+                    unlink_events.append(("Path.unlink", p_str))
+                real_path_unlink(self_path, missing_ok=missing_ok)
+
+            return _spy_unlink, _spy_remove, _spy_path_unlink
+
+        def _match_active_fd_ident(
+            fd: int,
+            active_map: Mapping[int, tuple[int, int]],
+            expected_ident: tuple[int, int] | None,
+        ) -> tuple[int, int] | None:
+            try:
+                live_st = real_fstat(fd)
+            except OSError:
+                return None
+            live_ident = (int(live_st.st_dev), int(live_st.st_ino))
+            active_ident = active_map.get(fd)
+            if active_ident is not None and live_ident == active_ident:
+                return live_ident
+            if expected_ident is not None and live_ident == expected_ident:
+                return live_ident
+            return None
+
+        def _resolve_watched_target_for_open(
+            path: Any,
+            dir_fd: int | None,
+            watched_targets: Mapping[Path, tuple[int, int]],
+        ) -> Path | None:
+            try:
+                raw_path = os.fsdecode(os.fspath(path))
+            except Exception:
+                return None
+            if dir_fd is None:
+                if not os.path.isabs(raw_path):
+                    return None
+                candidate = Path(os.path.abspath(raw_path))
+                return candidate if candidate in watched_targets else None
+            if os.sep in raw_path or (
+                os.altsep is not None and os.altsep in raw_path
+            ):
+                return None
+            try:
+                dir_st = real_fstat(dir_fd)
+            except OSError:
+                return None
+            if not stat.S_ISDIR(dir_st.st_mode):
+                return None
+            live_parent_ident = (int(dir_st.st_dev), int(dir_st.st_ino))
+            for target_path, expected_parent_ident in watched_targets.items():
+                if (
+                    target_path.name == raw_path
+                    and live_parent_ident == expected_parent_ident
+                ):
+                    return target_path
+            return None
+
+        # 1. Healthy regular-file controls across all three collector reader entry paths.
+        with self.subTest(
+            scenario="healthy_regular_file_controls_all_three_entry_paths"
+        ):
+            ev_root_ctrl = suite_root / "s1_healthy_controls"
+            inputs_dir_ctrl = ev_root_ctrl / "inputs"
+            refmac_dir_ctrl = ev_root_ctrl / "refmac"
+            inputs_dir_ctrl.mkdir(parents=True, exist_ok=True)
+            refmac_dir_ctrl.mkdir(parents=True, exist_ok=True)
+
+            admitted_pdb_ctrl = inputs_dir_ctrl / "admitted_xyzin.pdb"
+            admitted_bytes_ctrl = (
+                b"HEADER    HEALTHY ADMITTED INPUT CONTROL\nEND\n"
+            )
+            (
+                admitted_base_ctrl,
+                admitted_ident_ctrl,
+                admitted_sha_ctrl,
+            ) = _build_regular_baseline(
+                admitted_pdb_ctrl,
+                admitted_bytes_ctrl,
+                evidence_root=ev_root_ctrl,
+            )
+
+            staged_pdb_ctrl = inputs_dir_ctrl / "original_model.pdb"
+            staged_bytes_ctrl = (
+                b"HEADER    HEALTHY STAGED INPUT POSTFLIGHT CONTROL\nEND\n"
+            )
+            (
+                staged_base_ctrl,
+                staged_ident_ctrl,
+                staged_sha_ctrl,
+            ) = _build_regular_baseline(
+                staged_pdb_ctrl,
+                staged_bytes_ctrl,
+                evidence_root=ev_root_ctrl,
+            )
+
+            kw_path_ctrl = refmac_dir_ctrl / "refmac_keywords.txt"
+            kw_bytes_ctrl = b"NCYC 0\nEND\n"
+            (
+                kw_base_ctrl,
+                kw_ident_ctrl,
+                kw_sha_ctrl,
+            ) = _build_regular_baseline(
+                kw_path_ctrl, kw_bytes_ctrl, evidence_root=ev_root_ctrl
+            )
+
+            watched_ctrl_targets: dict[Path, tuple[int, int]] = {
+                admitted_pdb_ctrl: (
+                    int(admitted_base_ctrl["parent_dir_dev"]),
+                    int(admitted_base_ctrl["parent_dir_ino"]),
+                ),
+                staged_pdb_ctrl: (
+                    int(staged_base_ctrl["parent_dir_dev"]),
+                    int(staged_base_ctrl["parent_dir_ino"]),
+                ),
+                kw_path_ctrl: (
+                    int(kw_base_ctrl["parent_dir_dev"]),
+                    int(kw_base_ctrl["parent_dir_ino"]),
+                ),
+            }
+            open_events_ctrl: dict[Path, list[tuple[int, int, tuple[int, int]]]] = {
+                p: [] for p in watched_ctrl_targets
+            }
+            active_ctrl_fds: dict[int, tuple[int, int]] = {}
+            fdopen_events_ctrl: list[tuple[int, tuple[int, int]]] = []
+            read_events_ctrl: list[tuple[int, tuple[int, int]]] = []
+            close_events_ctrl: list[tuple[int, tuple[int, int]]] = []
+            unlink_events_ctrl: list[tuple[str, str]] = []
+            tracked_fds_ctrl: list[tuple[int, tuple[int, int]]] = []
+
+            def _open_ctrl(
+                path: Any,
+                flags: int,
+                mode: int = 0o777,
+                *,
+                dir_fd: int | None = None,
+            ) -> int:
+                resolved_candidate = _resolve_watched_target_for_open(
+                    path, dir_fd, watched_ctrl_targets
+                )
+                if resolved_candidate in open_events_ctrl:
+                    self.assertTrue(
+                        bool(int(flags) & nonblock_flag),
+                        f"Expected O_NONBLOCK in os.open flags for {resolved_candidate}, got {flags:#x}",
+                    )
+                    self.assertEqual(
+                        int(flags) & expected_open_flags, expected_open_flags
+                    )
+                fd = (
+                    real_open(path, flags, mode, dir_fd=dir_fd)
+                    if dir_fd is not None
+                    else real_open(path, flags, mode)
+                )
+                if resolved_candidate in open_events_ctrl:
+                    st_obj = real_fstat(fd)
+                    ident = (int(st_obj.st_dev), int(st_obj.st_ino))
+                    active_ctrl_fds[fd] = ident
+                    open_events_ctrl[resolved_candidate].append(
+                        (int(flags), fd, ident)
+                    )
+                    tracked_fds_ctrl.append((fd, ident))
+                return fd
+
+            def _fdopen_ctrl(fd: int, *args: Any, **kwargs: Any) -> Any:
+                matched_ident = _match_active_fd_ident(
+                    fd, active_ctrl_fds, admitted_ident_ctrl
+                )
+                if matched_ident is not None:
+                    fdopen_events_ctrl.append((fd, matched_ident))
+                return real_fdopen(fd, *args, **kwargs)
+
+            def _read_ctrl(fd: int, n: int) -> bytes:
+                for exp_ident in (staged_ident_ctrl, kw_ident_ctrl):
+                    matched_ident = _match_active_fd_ident(
+                        fd, active_ctrl_fds, exp_ident
+                    )
+                    if matched_ident is not None:
+                        read_events_ctrl.append((fd, matched_ident))
+                        break
+                return real_read(fd, n)
+
+            def _close_ctrl(fd: int) -> None:
+                matched_ident: tuple[int, int] | None = None
+                for exp_ident in (
+                    admitted_ident_ctrl,
+                    staged_ident_ctrl,
+                    kw_ident_ctrl,
+                ):
+                    matched_ident = _match_active_fd_ident(
+                        fd, active_ctrl_fds, exp_ident
+                    )
+                    if matched_ident is not None:
+                        break
+                real_close(fd)
+                if matched_ident is not None:
+                    _assert_fd_closed(fd)
+                    active_ctrl_fds.pop(fd, None)
+                    close_events_ctrl.append((fd, matched_ident))
+
+            spy_unlink_c, spy_remove_c, spy_path_unlink_c = (
+                _make_deletion_spies(ev_root_ctrl, unlink_events_ctrl)
+            )
+            caught_ctrl: list[Exception] = []
+            causes_ctrl: list[Exception | None] = []
+            try:
+                with (
+                    patch.object(onesar_refmac.os, "open", _open_ctrl),
+                    patch.object(onesar_refmac.os, "fdopen", _fdopen_ctrl),
+                    patch.object(onesar_refmac.os, "read", _read_ctrl),
+                    patch.object(onesar_refmac.os, "close", _close_ctrl),
+                    patch.object(onesar_refmac.os, "unlink", spy_unlink_c),
+                    patch.object(onesar_refmac.os, "remove", spy_remove_c),
+                    patch.object(Path, "unlink", spy_path_unlink_c),
+                ):
+                    admitted_res = (
+                        onesar_refmac._verify_and_read_admitted_input_file(
+                            admitted_pdb_ctrl,
+                            admitted_base_ctrl,
+                            label="XYzin PDB",
+                        )
+                    )
+                    self.assertEqual(
+                        len(open_events_ctrl[admitted_pdb_ctrl]), 1
+                    )
+                    admitted_fd_ctrl = open_events_ctrl[admitted_pdb_ctrl][0][1]
+                    _assert_fd_closed(admitted_fd_ctrl)
+                    active_ctrl_fds.pop(admitted_fd_ctrl, None)
+
+                    imm_res_ctrl = (
+                        onesar_refmac._verify_immutable_baselines_post_run(
+                            {"original_model_pdb": staged_base_ctrl},
+                            {},
+                            kw_base_ctrl,
+                            caught_exceptions=caught_ctrl,
+                            mutation_causes_out=causes_ctrl,
+                        )
+                    )
+
+                self.assertEqual(unlink_events_ctrl, [])
+                self.assertIs(admitted_res["verified"], True)
+                self.assertEqual(admitted_res["bytes"], admitted_bytes_ctrl)
+                self.assertEqual(
+                    admitted_res["post_run_sha256"], admitted_sha_ctrl
+                )
+                self.assertEqual(
+                    admitted_res["post_run_size_bytes"],
+                    len(admitted_bytes_ctrl),
+                )
+                self.assertIs(admitted_res["ancestor_chain_verified"], True)
+                self.assertIsNone(admitted_res["error"])
+                self.assertIsNone(admitted_res["exception_type"])
+                self.assertIsNone(admitted_res["exception_message"])
+
+                self.assertIs(imm_res_ctrl["verified"], True)
+                self.assertEqual(imm_res_ctrl["mutations"], [])
+                self.assertEqual(caught_ctrl, [])
+                self.assertEqual(causes_ctrl, [])
+                staged_post_ctrl = imm_res_ctrl["staged_inputs_post_run"][
+                    "original_model_pdb"
+                ]
+                self.assertIs(staged_post_ctrl["matches_baseline"], True)
+                self.assertIs(staged_post_ctrl["ancestor_chain_verified"], True)
+                self.assertEqual(staged_post_ctrl["sha256"], staged_sha_ctrl)
+                self.assertEqual(
+                    staged_post_ctrl["size_bytes"], len(staged_bytes_ctrl)
+                )
+                self.assertIsNone(staged_post_ctrl["error"])
+
+                kw_post_ctrl = imm_res_ctrl["keywords_file_post_run"]
+                self.assertIs(kw_post_ctrl["matches_baseline"], True)
+                self.assertIs(kw_post_ctrl["ancestor_chain_verified"], True)
+                self.assertEqual(kw_post_ctrl["sha256"], kw_sha_ctrl)
+                self.assertEqual(kw_post_ctrl["size_bytes"], len(kw_bytes_ctrl))
+                self.assertIsNone(kw_post_ctrl["error"])
+
+                self.assertEqual(
+                    fdopen_events_ctrl,
+                    [(admitted_fd_ctrl, admitted_ident_ctrl)],
+                )
+                self.assertEqual(active_ctrl_fds, {})
+                for p_ctrl, exp_ident in (
+                    (admitted_pdb_ctrl, admitted_ident_ctrl),
+                    (staged_pdb_ctrl, staged_ident_ctrl),
+                    (kw_path_ctrl, kw_ident_ctrl),
+                ):
+                    self.assertEqual(len(open_events_ctrl[p_ctrl]), 1)
+                    _, fd_ctrl, obs_ident = open_events_ctrl[p_ctrl][0]
+                    self.assertEqual(obs_ident, exp_ident)
+                    _assert_fd_closed(fd_ctrl)
+                for p_post_ctrl, exp_ident in (
+                    (staged_pdb_ctrl, staged_ident_ctrl),
+                    (kw_path_ctrl, kw_ident_ctrl),
+                ):
+                    fd_post_ctrl = open_events_ctrl[p_post_ctrl][0][1]
+                    self.assertTrue(
+                        any(
+                            ident == exp_ident for _, ident in read_events_ctrl
+                        )
+                    )
+                    self.assertIn(
+                        (fd_post_ctrl, exp_ident), close_events_ctrl
+                    )
+            finally:
+                _cleanup_tracked_fds(tracked_fds_ctrl)
+
+        # 2. _verify_and_read_admitted_input_file: regular leaf replaced with a real
+        # FIFO immediately before os.open is opened nonblockingly, rejected by fstat
+        # before any fdopen/read, closed cleanly, and left intact on disk.
+        with self.subTest(
+            scenario="admitted_input_reader_leaf_replaced_by_fifo_before_open"
+        ):
+            ev_root_s2 = suite_root / "s2_admitted_input_fifo"
+            inputs_dir_s2 = ev_root_s2 / "inputs"
+            inputs_dir_s2.mkdir(parents=True, exist_ok=True)
+            target_s2 = inputs_dir_s2 / "1sar.pdb"
+            parked_s2 = inputs_dir_s2 / "1sar.parked_orig.pdb"
+            orig_bytes_s2 = b"HEADER    ADMITTED INPUT BEFORE FIFO SWAP\nEND\n"
+            base_s2, orig_ident_s2, orig_sha_s2 = _build_regular_baseline(
+                target_s2, orig_bytes_s2, evidence_root=ev_root_s2
+            )
+
+            open_events_s2: list[tuple[int, int, tuple[int, int]]] = []
+            active_fifo_fds_s2: dict[int, tuple[int, int]] = {}
+            fifo_read_calls_s2: list[tuple[int, tuple[int, int]]] = []
+            fifo_fdopen_calls_s2: list[tuple[int, tuple[int, int]]] = []
+            fifo_close_calls_s2: list[tuple[int, tuple[int, int]]] = []
+            unlink_events_s2: list[tuple[str, str]] = []
+            tracked_fds_s2: list[tuple[int, tuple[int, int]]] = []
+
+            def _open_s2(
+                path: Any,
+                flags: int,
+                mode: int = 0o777,
+                *,
+                dir_fd: int | None = None,
+            ) -> int:
+                if (
+                    dir_fd is None
+                    and Path(os.path.abspath(os.fsdecode(os.fspath(path))))
+                    == target_s2
+                ):
+                    self.assertTrue(
+                        bool(int(flags) & nonblock_flag),
+                        f"Expected O_NONBLOCK before opening FIFO at {target_s2}, got {flags:#x}",
+                    )
+                    self.assertEqual(
+                        int(flags) & expected_open_flags, expected_open_flags
+                    )
+                    real_replace(target_s2, parked_s2)
+                    os.mkfifo(target_s2, 0o600)
+                    fifo_st = real_lstat(target_s2)
+                    self.assertTrue(stat.S_ISFIFO(fifo_st.st_mode))
+                    fifo_ident = (int(fifo_st.st_dev), int(fifo_st.st_ino))
+                    fd = real_open(path, flags, mode)
+                    fd_st = real_fstat(fd)
+                    self.assertTrue(stat.S_ISFIFO(fd_st.st_mode))
+                    self.assertEqual(
+                        (int(fd_st.st_dev), int(fd_st.st_ino)), fifo_ident
+                    )
+                    active_fifo_fds_s2[fd] = fifo_ident
+                    open_events_s2.append((int(flags), fd, fifo_ident))
+                    tracked_fds_s2.append((fd, fifo_ident))
+                    return fd
+                return (
+                    real_open(path, flags, mode, dir_fd=dir_fd)
+                    if dir_fd is not None
+                    else real_open(path, flags, mode)
+                )
+
+            def _read_s2(fd: int, n: int) -> bytes:
+                matched_ident = _match_active_fd_ident(
+                    fd,
+                    active_fifo_fds_s2,
+                    open_events_s2[0][2] if open_events_s2 else None,
+                )
+                if matched_ident is not None:
+                    fifo_read_calls_s2.append((fd, matched_ident))
+                return real_read(fd, n)
+
+            def _fdopen_s2(fd: int, *args: Any, **kwargs: Any) -> Any:
+                matched_ident = _match_active_fd_ident(
+                    fd,
+                    active_fifo_fds_s2,
+                    open_events_s2[0][2] if open_events_s2 else None,
+                )
+                if matched_ident is not None:
+                    fifo_fdopen_calls_s2.append((fd, matched_ident))
+                return real_fdopen(fd, *args, **kwargs)
+
+            def _close_s2(fd: int) -> None:
+                matched_ident = _match_active_fd_ident(
+                    fd,
+                    active_fifo_fds_s2,
+                    open_events_s2[0][2] if open_events_s2 else None,
+                )
+                real_close(fd)
+                if matched_ident is not None:
+                    _assert_fd_closed(fd)
+                    active_fifo_fds_s2.pop(fd, None)
+                    fifo_close_calls_s2.append((fd, matched_ident))
+
+            spy_unlink_2, spy_remove_2, spy_path_unlink_2 = (
+                _make_deletion_spies(ev_root_s2, unlink_events_s2)
+            )
+            try:
+                with (
+                    patch.object(onesar_refmac.os, "open", _open_s2),
+                    patch.object(onesar_refmac.os, "read", _read_s2),
+                    patch.object(onesar_refmac.os, "fdopen", _fdopen_s2),
+                    patch.object(onesar_refmac.os, "close", _close_s2),
+                    patch.object(onesar_refmac.os, "unlink", spy_unlink_2),
+                    patch.object(onesar_refmac.os, "remove", spy_remove_2),
+                    patch.object(Path, "unlink", spy_path_unlink_2),
+                ):
+                    res_s2 = (
+                        onesar_refmac._verify_and_read_admitted_input_file(
+                            target_s2, base_s2, label="XYzin PDB"
+                        )
+                    )
+
+                self.assertEqual(len(open_events_s2), 1)
+                _, fifo_fd_s2, fifo_ident_s2 = open_events_s2[0]
+                self.assertEqual(fifo_read_calls_s2, [])
+                self.assertEqual(fifo_fdopen_calls_s2, [])
+                self.assertEqual(
+                    fifo_close_calls_s2, [(fifo_fd_s2, fifo_ident_s2)]
+                )
+                self.assertEqual(active_fifo_fds_s2, {})
+                self.assertEqual(unlink_events_s2, [])
+                _assert_fd_closed(fifo_fd_s2)
+
+                self.assertIs(res_s2["verified"], False)
+                self.assertIsNone(res_s2["bytes"])
+                self.assertEqual(res_s2["path"], str(target_s2))
+                self.assertEqual(res_s2["baseline_sha256"], orig_sha_s2)
+                self.assertEqual(
+                    res_s2["baseline_size_bytes"], len(orig_bytes_s2)
+                )
+                self.assertIsNone(res_s2["post_run_sha256"])
+                self.assertIsNone(res_s2["post_run_size_bytes"])
+                self.assertIs(res_s2["ancestor_chain_verified"], True)
+                self.assertIsNone(res_s2["ancestor_check"])
+                self.assertEqual(res_s2["exception_type"], "ValueError")
+                self.assertEqual(
+                    res_s2["exception_message"],
+                    f"XYzin PDB opened descriptor is not a regular file: {target_s2}",
+                )
+                self.assertIn(
+                    f"XYzin PDB opened descriptor is not a regular file: {target_s2}",
+                    str(res_s2["error"]),
+                )
+
+                fifo_after_s2 = real_lstat(target_s2)
+                self.assertTrue(stat.S_ISFIFO(fifo_after_s2.st_mode))
+                self.assertEqual(
+                    (int(fifo_after_s2.st_dev), int(fifo_after_s2.st_ino)),
+                    fifo_ident_s2,
+                )
+                parked_after_s2 = real_lstat(parked_s2)
+                self.assertTrue(stat.S_ISREG(parked_after_s2.st_mode))
+                self.assertEqual(
+                    (int(parked_after_s2.st_dev), int(parked_after_s2.st_ino)),
+                    orig_ident_s2,
+                )
+                self.assertEqual(parked_s2.read_bytes(), orig_bytes_s2)
+            finally:
+                _cleanup_tracked_fds(tracked_fds_s2)
+
+        # 3. _verify_immutable_baselines_post_run staged-input postflight: regular
+        # staged input leaf replaced with a real FIFO immediately before os.open is
+        # opened nonblockingly, rejected by fstat before any os.read, closed cleanly,
+        # and preserved on disk while the subsequent healthy keywords continuation
+        # (even if the kernel reuses the closed descriptor number) is attributed by
+        # active descriptor lifetime and (st_dev, st_ino) identity.
+        with self.subTest(
+            scenario="post_run_staged_input_leaf_replaced_by_fifo_before_open"
+        ):
+            ev_root_s3 = suite_root / "s3_staged_input_fifo"
+            inputs_dir_s3 = ev_root_s3 / "inputs"
+            refmac_dir_s3 = ev_root_s3 / "refmac"
+            inputs_dir_s3.mkdir(parents=True, exist_ok=True)
+            refmac_dir_s3.mkdir(parents=True, exist_ok=True)
+
+            staged_s3 = inputs_dir_s3 / "original_model.pdb"
+            parked_staged_s3 = inputs_dir_s3 / "original_model.parked_orig.pdb"
+            staged_bytes_s3 = (
+                b"HEADER    STAGED INPUT BEFORE FIFO SWAP\nEND\n"
+            )
+            staged_base_s3, staged_ident_s3, staged_sha_s3 = (
+                _build_regular_baseline(
+                    staged_s3, staged_bytes_s3, evidence_root=ev_root_s3
+                )
+            )
+
+            kw_s3 = refmac_dir_s3 / "refmac_keywords.txt"
+            kw_bytes_s3 = b"NCYC 0\nEND\n"
+            kw_base_s3, kw_ident_s3, kw_sha_s3 = _build_regular_baseline(
+                kw_s3, kw_bytes_s3, evidence_root=ev_root_s3
+            )
+
+            watched_s3_targets: dict[Path, tuple[int, int]] = {
+                staged_s3: (
+                    int(staged_base_s3["parent_dir_dev"]),
+                    int(staged_base_s3["parent_dir_ino"]),
+                ),
+                kw_s3: (
+                    int(kw_base_s3["parent_dir_dev"]),
+                    int(kw_base_s3["parent_dir_ino"]),
+                ),
+            }
+            open_events_s3: list[tuple[int, int, tuple[int, int]]] = []
+            active_fifo_fds_s3: dict[int, tuple[int, int]] = {}
+            fifo_read_calls_s3: list[tuple[int, tuple[int, int]]] = []
+            fifo_close_calls_s3: list[tuple[int, tuple[int, int]]] = []
+            kw_open_events_s3: list[tuple[int, int, tuple[int, int]]] = []
+            active_kw_fds_s3: dict[int, tuple[int, int]] = {}
+            kw_read_calls_s3: list[tuple[int, tuple[int, int]]] = []
+            kw_close_calls_s3: list[tuple[int, tuple[int, int]]] = []
+            unlink_events_s3: list[tuple[str, str]] = []
+            tracked_fds_s3: list[tuple[int, tuple[int, int]]] = []
+
+            def _open_s3(
+                path: Any,
+                flags: int,
+                mode: int = 0o777,
+                *,
+                dir_fd: int | None = None,
+            ) -> int:
+                resolved_candidate = _resolve_watched_target_for_open(
+                    path, dir_fd, watched_s3_targets
+                )
+                if resolved_candidate == staged_s3:
+                    self.assertTrue(
+                        bool(int(flags) & nonblock_flag),
+                        f"Expected O_NONBLOCK before opening staged-input FIFO at {staged_s3}, got {flags:#x}",
+                    )
+                    self.assertEqual(
+                        int(flags) & expected_open_flags, expected_open_flags
+                    )
+                    real_replace(staged_s3, parked_staged_s3)
+                    os.mkfifo(staged_s3, 0o600)
+                    fifo_st = real_lstat(staged_s3)
+                    self.assertTrue(stat.S_ISFIFO(fifo_st.st_mode))
+                    fifo_ident = (int(fifo_st.st_dev), int(fifo_st.st_ino))
+                    fd = (
+                        real_open(path, flags, mode, dir_fd=dir_fd)
+                        if dir_fd is not None
+                        else real_open(path, flags, mode)
+                    )
+                    fd_st = real_fstat(fd)
+                    self.assertTrue(stat.S_ISFIFO(fd_st.st_mode))
+                    self.assertEqual(
+                        (int(fd_st.st_dev), int(fd_st.st_ino)), fifo_ident
+                    )
+                    active_fifo_fds_s3[fd] = fifo_ident
+                    open_events_s3.append((int(flags), fd, fifo_ident))
+                    tracked_fds_s3.append((fd, fifo_ident))
+                    return fd
+                if resolved_candidate == kw_s3:
+                    self.assertTrue(
+                        bool(int(flags) & nonblock_flag),
+                        f"Expected O_NONBLOCK before opening healthy keywords file at {kw_s3}, got {flags:#x}",
+                    )
+                    self.assertEqual(
+                        int(flags) & expected_open_flags, expected_open_flags
+                    )
+                    fd = (
+                        real_open(path, flags, mode, dir_fd=dir_fd)
+                        if dir_fd is not None
+                        else real_open(path, flags, mode)
+                    )
+                    fd_st = real_fstat(fd)
+                    self.assertTrue(stat.S_ISREG(fd_st.st_mode))
+                    obs_kw_ident = (int(fd_st.st_dev), int(fd_st.st_ino))
+                    self.assertEqual(obs_kw_ident, kw_ident_s3)
+                    self.assertNotIn(fd, active_fifo_fds_s3)
+                    active_kw_fds_s3[fd] = obs_kw_ident
+                    kw_open_events_s3.append((int(flags), fd, obs_kw_ident))
+                    tracked_fds_s3.append((fd, obs_kw_ident))
+                    return fd
+                return (
+                    real_open(path, flags, mode, dir_fd=dir_fd)
+                    if dir_fd is not None
+                    else real_open(path, flags, mode)
+                )
+
+            def _read_s3(fd: int, n: int) -> bytes:
+                fifo_match = _match_active_fd_ident(
+                    fd,
+                    active_fifo_fds_s3,
+                    open_events_s3[0][2] if open_events_s3 else None,
+                )
+                if fifo_match is not None:
+                    fifo_read_calls_s3.append((fd, fifo_match))
+                kw_match = _match_active_fd_ident(
+                    fd, active_kw_fds_s3, kw_ident_s3
+                )
+                if kw_match is not None:
+                    kw_read_calls_s3.append((fd, kw_match))
+                return real_read(fd, n)
+
+            def _close_s3(fd: int) -> None:
+                fifo_match = _match_active_fd_ident(
+                    fd,
+                    active_fifo_fds_s3,
+                    open_events_s3[0][2] if open_events_s3 else None,
+                )
+                kw_match = _match_active_fd_ident(
+                    fd, active_kw_fds_s3, kw_ident_s3
+                )
+                real_close(fd)
+                if fifo_match is not None:
+                    _assert_fd_closed(fd)
+                    active_fifo_fds_s3.pop(fd, None)
+                    fifo_close_calls_s3.append((fd, fifo_match))
+                if kw_match is not None:
+                    _assert_fd_closed(fd)
+                    active_kw_fds_s3.pop(fd, None)
+                    kw_close_calls_s3.append((fd, kw_match))
+
+            spy_unlink_3, spy_remove_3, spy_path_unlink_3 = (
+                _make_deletion_spies(ev_root_s3, unlink_events_s3)
+            )
+            caught_s3: list[Exception] = []
+            causes_s3: list[Exception | None] = []
+            try:
+                with (
+                    patch.object(onesar_refmac.os, "open", _open_s3),
+                    patch.object(onesar_refmac.os, "read", _read_s3),
+                    patch.object(onesar_refmac.os, "close", _close_s3),
+                    patch.object(onesar_refmac.os, "unlink", spy_unlink_3),
+                    patch.object(onesar_refmac.os, "remove", spy_remove_3),
+                    patch.object(Path, "unlink", spy_path_unlink_3),
+                ):
+                    imm_s3 = (
+                        onesar_refmac._verify_immutable_baselines_post_run(
+                            {"original_model_pdb": staged_base_s3},
+                            {},
+                            kw_base_s3,
+                            caught_exceptions=caught_s3,
+                            mutation_causes_out=causes_s3,
+                        )
+                    )
+
+                self.assertEqual(len(open_events_s3), 1)
+                _, fifo_fd_s3, fifo_ident_s3 = open_events_s3[0]
+                self.assertEqual(fifo_read_calls_s3, [])
+                self.assertEqual(
+                    fifo_close_calls_s3, [(fifo_fd_s3, fifo_ident_s3)]
+                )
+                self.assertEqual(active_fifo_fds_s3, {})
+                self.assertEqual(len(kw_open_events_s3), 1)
+                _, kw_fd_s3, kw_obs_ident_s3 = kw_open_events_s3[0]
+                self.assertEqual(kw_obs_ident_s3, kw_ident_s3)
+                self.assertGreaterEqual(len(kw_read_calls_s3), 1)
+                self.assertTrue(
+                    all(ident == kw_ident_s3 for _, ident in kw_read_calls_s3)
+                )
+                self.assertEqual(
+                    kw_close_calls_s3, [(kw_fd_s3, kw_ident_s3)]
+                )
+                self.assertEqual(active_kw_fds_s3, {})
+                self.assertEqual(unlink_events_s3, [])
+                _assert_fd_closed(fifo_fd_s3)
+                _assert_fd_closed(kw_fd_s3)
+
+                self.assertIs(imm_s3["verified"], False)
+                staged_post_s3 = imm_s3["staged_inputs_post_run"][
+                    "original_model_pdb"
+                ]
+                self.assertEqual(staged_post_s3["path"], str(staged_s3))
+                self.assertIsNone(staged_post_s3["resolved_path"])
+                self.assertIsNone(staged_post_s3["sha256"])
+                self.assertIsNone(staged_post_s3["size_bytes"])
+                self.assertIs(staged_post_s3["ancestor_chain_verified"], True)
+                self.assertIs(staged_post_s3["matches_baseline"], False)
+                self.assertEqual(
+                    staged_post_s3["error"],
+                    f"ValueError: Staged input file inode changed while opening descriptor: {staged_s3}",
+                )
+
+                kw_post_s3 = imm_s3["keywords_file_post_run"]
+                self.assertIs(kw_post_s3["matches_baseline"], True)
+                self.assertEqual(kw_post_s3["sha256"], kw_sha_s3)
+                kw_after_s3 = real_lstat(kw_s3)
+                self.assertEqual(
+                    (int(kw_after_s3.st_dev), int(kw_after_s3.st_ino)),
+                    kw_ident_s3,
+                )
+
+                self.assertEqual(len(imm_s3["mutations"]), 1)
+                mut_s3 = imm_s3["mutations"][0]
+                self.assertEqual(mut_s3["category"], "staged_input")
+                self.assertEqual(mut_s3["key"], "original_model_pdb")
+                self.assertEqual(mut_s3["path"], str(staged_s3))
+                self.assertEqual(mut_s3["expected_sha256"], staged_sha_s3)
+                self.assertIsNone(mut_s3["actual_sha256"])
+                self.assertIn(
+                    f"Staged input file inode changed while opening descriptor: {staged_s3}",
+                    str(mut_s3["reason"]),
+                )
+                self.assertEqual(len(caught_s3), 1)
+                self.assertIsInstance(caught_s3[0], ValueError)
+                self.assertEqual(causes_s3, [caught_s3[0]])
+
+                fifo_after_s3 = real_lstat(staged_s3)
+                self.assertTrue(stat.S_ISFIFO(fifo_after_s3.st_mode))
+                self.assertEqual(
+                    (int(fifo_after_s3.st_dev), int(fifo_after_s3.st_ino)),
+                    fifo_ident_s3,
+                )
+                parked_after_s3 = real_lstat(parked_staged_s3)
+                self.assertTrue(stat.S_ISREG(parked_after_s3.st_mode))
+                self.assertEqual(
+                    (int(parked_after_s3.st_dev), int(parked_after_s3.st_ino)),
+                    staged_ident_s3,
+                )
+                self.assertEqual(
+                    parked_staged_s3.read_bytes(), staged_bytes_s3
+                )
+            finally:
+                _cleanup_tracked_fds(tracked_fds_s3)
+
+        # 4. _verify_immutable_baselines_post_run keywords postflight: regular
+        # keywords leaf replaced with a real FIFO immediately before os.open is
+        # opened nonblockingly, rejected by fstat before any os.read, closed cleanly,
+        # and preserved on disk while the preceding healthy staged-input read/close
+        # is attributed by active descriptor lifetime and (st_dev, st_ino) identity.
+        with self.subTest(
+            scenario="post_run_keywords_leaf_replaced_by_fifo_before_open"
+        ):
+            ev_root_s4 = suite_root / "s4_keywords_fifo"
+            inputs_dir_s4 = ev_root_s4 / "inputs"
+            refmac_dir_s4 = ev_root_s4 / "refmac"
+            inputs_dir_s4.mkdir(parents=True, exist_ok=True)
+            refmac_dir_s4.mkdir(parents=True, exist_ok=True)
+
+            staged_s4 = inputs_dir_s4 / "original_model.pdb"
+            staged_bytes_s4 = (
+                b"HEADER    HEALTHY STAGED INPUT FOR KEYWORDS FIFO TEST\nEND\n"
+            )
+            staged_base_s4, staged_ident_s4, staged_sha_s4 = (
+                _build_regular_baseline(
+                    staged_s4, staged_bytes_s4, evidence_root=ev_root_s4
+                )
+            )
+
+            kw_s4 = refmac_dir_s4 / "refmac_keywords.txt"
+            parked_kw_s4 = refmac_dir_s4 / "refmac_keywords.parked_orig.txt"
+            kw_bytes_s4 = b"NCYC 0\nEND\n"
+            kw_base_s4, kw_ident_s4, kw_sha_s4 = _build_regular_baseline(
+                kw_s4, kw_bytes_s4, evidence_root=ev_root_s4
+            )
+
+            watched_s4_targets: dict[Path, tuple[int, int]] = {
+                staged_s4: (
+                    int(staged_base_s4["parent_dir_dev"]),
+                    int(staged_base_s4["parent_dir_ino"]),
+                ),
+                kw_s4: (
+                    int(kw_base_s4["parent_dir_dev"]),
+                    int(kw_base_s4["parent_dir_ino"]),
+                ),
+            }
+            staged_open_events_s4: list[tuple[int, int, tuple[int, int]]] = []
+            active_staged_fds_s4: dict[int, tuple[int, int]] = {}
+            staged_read_calls_s4: list[tuple[int, tuple[int, int]]] = []
+            staged_close_calls_s4: list[tuple[int, tuple[int, int]]] = []
+            open_events_s4: list[tuple[int, int, tuple[int, int]]] = []
+            active_fifo_fds_s4: dict[int, tuple[int, int]] = {}
+            fifo_read_calls_s4: list[tuple[int, tuple[int, int]]] = []
+            fifo_close_calls_s4: list[tuple[int, tuple[int, int]]] = []
+            unlink_events_s4: list[tuple[str, str]] = []
+            tracked_fds_s4: list[tuple[int, tuple[int, int]]] = []
+
+            def _open_s4(
+                path: Any,
+                flags: int,
+                mode: int = 0o777,
+                *,
+                dir_fd: int | None = None,
+            ) -> int:
+                resolved_candidate = _resolve_watched_target_for_open(
+                    path, dir_fd, watched_s4_targets
+                )
+                if resolved_candidate == staged_s4:
+                    self.assertTrue(
+                        bool(int(flags) & nonblock_flag),
+                        f"Expected O_NONBLOCK before opening healthy staged input at {staged_s4}, got {flags:#x}",
+                    )
+                    self.assertEqual(
+                        int(flags) & expected_open_flags, expected_open_flags
+                    )
+                    fd = (
+                        real_open(path, flags, mode, dir_fd=dir_fd)
+                        if dir_fd is not None
+                        else real_open(path, flags, mode)
+                    )
+                    fd_st = real_fstat(fd)
+                    self.assertTrue(stat.S_ISREG(fd_st.st_mode))
+                    obs_staged_ident = (int(fd_st.st_dev), int(fd_st.st_ino))
+                    self.assertEqual(obs_staged_ident, staged_ident_s4)
+                    active_staged_fds_s4[fd] = obs_staged_ident
+                    staged_open_events_s4.append(
+                        (int(flags), fd, obs_staged_ident)
+                    )
+                    tracked_fds_s4.append((fd, obs_staged_ident))
+                    return fd
+                if resolved_candidate == kw_s4:
+                    self.assertTrue(
+                        bool(int(flags) & nonblock_flag),
+                        f"Expected O_NONBLOCK before opening keywords FIFO at {kw_s4}, got {flags:#x}",
+                    )
+                    self.assertEqual(
+                        int(flags) & expected_open_flags, expected_open_flags
+                    )
+                    real_replace(kw_s4, parked_kw_s4)
+                    os.mkfifo(kw_s4, 0o600)
+                    fifo_st = real_lstat(kw_s4)
+                    self.assertTrue(stat.S_ISFIFO(fifo_st.st_mode))
+                    fifo_ident = (int(fifo_st.st_dev), int(fifo_st.st_ino))
+                    fd = (
+                        real_open(path, flags, mode, dir_fd=dir_fd)
+                        if dir_fd is not None
+                        else real_open(path, flags, mode)
+                    )
+                    fd_st = real_fstat(fd)
+                    self.assertTrue(stat.S_ISFIFO(fd_st.st_mode))
+                    self.assertEqual(
+                        (int(fd_st.st_dev), int(fd_st.st_ino)), fifo_ident
+                    )
+                    self.assertNotIn(fd, active_staged_fds_s4)
+                    active_fifo_fds_s4[fd] = fifo_ident
+                    open_events_s4.append((int(flags), fd, fifo_ident))
+                    tracked_fds_s4.append((fd, fifo_ident))
+                    return fd
+                return (
+                    real_open(path, flags, mode, dir_fd=dir_fd)
+                    if dir_fd is not None
+                    else real_open(path, flags, mode)
+                )
+
+            def _read_s4(fd: int, n: int) -> bytes:
+                staged_match = _match_active_fd_ident(
+                    fd, active_staged_fds_s4, staged_ident_s4
+                )
+                if staged_match is not None:
+                    staged_read_calls_s4.append((fd, staged_match))
+                fifo_match = _match_active_fd_ident(
+                    fd,
+                    active_fifo_fds_s4,
+                    open_events_s4[0][2] if open_events_s4 else None,
+                )
+                if fifo_match is not None:
+                    fifo_read_calls_s4.append((fd, fifo_match))
+                return real_read(fd, n)
+
+            def _close_s4(fd: int) -> None:
+                staged_match = _match_active_fd_ident(
+                    fd, active_staged_fds_s4, staged_ident_s4
+                )
+                fifo_match = _match_active_fd_ident(
+                    fd,
+                    active_fifo_fds_s4,
+                    open_events_s4[0][2] if open_events_s4 else None,
+                )
+                real_close(fd)
+                if staged_match is not None:
+                    _assert_fd_closed(fd)
+                    active_staged_fds_s4.pop(fd, None)
+                    staged_close_calls_s4.append((fd, staged_match))
+                if fifo_match is not None:
+                    _assert_fd_closed(fd)
+                    active_fifo_fds_s4.pop(fd, None)
+                    fifo_close_calls_s4.append((fd, fifo_match))
+
+            spy_unlink_4, spy_remove_4, spy_path_unlink_4 = (
+                _make_deletion_spies(ev_root_s4, unlink_events_s4)
+            )
+            caught_s4: list[Exception] = []
+            causes_s4: list[Exception | None] = []
+            try:
+                with (
+                    patch.object(onesar_refmac.os, "open", _open_s4),
+                    patch.object(onesar_refmac.os, "read", _read_s4),
+                    patch.object(onesar_refmac.os, "close", _close_s4),
+                    patch.object(onesar_refmac.os, "unlink", spy_unlink_4),
+                    patch.object(onesar_refmac.os, "remove", spy_remove_4),
+                    patch.object(Path, "unlink", spy_path_unlink_4),
+                ):
+                    imm_s4 = (
+                        onesar_refmac._verify_immutable_baselines_post_run(
+                            {"original_model_pdb": staged_base_s4},
+                            {},
+                            kw_base_s4,
+                            caught_exceptions=caught_s4,
+                            mutation_causes_out=causes_s4,
+                        )
+                    )
+
+                self.assertEqual(len(staged_open_events_s4), 1)
+                _, staged_fd_s4, staged_obs_ident_s4 = staged_open_events_s4[0]
+                self.assertEqual(staged_obs_ident_s4, staged_ident_s4)
+                self.assertGreaterEqual(len(staged_read_calls_s4), 1)
+                self.assertTrue(
+                    all(
+                        ident == staged_ident_s4
+                        for _, ident in staged_read_calls_s4
+                    )
+                )
+                self.assertEqual(
+                    staged_close_calls_s4, [(staged_fd_s4, staged_ident_s4)]
+                )
+                self.assertEqual(active_staged_fds_s4, {})
+
+                self.assertEqual(len(open_events_s4), 1)
+                _, fifo_fd_s4, fifo_ident_s4 = open_events_s4[0]
+                self.assertEqual(fifo_read_calls_s4, [])
+                self.assertEqual(
+                    fifo_close_calls_s4, [(fifo_fd_s4, fifo_ident_s4)]
+                )
+                self.assertEqual(active_fifo_fds_s4, {})
+                self.assertEqual(unlink_events_s4, [])
+                _assert_fd_closed(staged_fd_s4)
+                _assert_fd_closed(fifo_fd_s4)
+
+                self.assertIs(imm_s4["verified"], False)
+                staged_post_s4 = imm_s4["staged_inputs_post_run"][
+                    "original_model_pdb"
+                ]
+                self.assertIs(staged_post_s4["matches_baseline"], True)
+                self.assertEqual(staged_post_s4["sha256"], staged_sha_s4)
+                staged_after_s4 = real_lstat(staged_s4)
+                self.assertEqual(
+                    (int(staged_after_s4.st_dev), int(staged_after_s4.st_ino)),
+                    staged_ident_s4,
+                )
+
+                kw_post_s4 = imm_s4["keywords_file_post_run"]
+                self.assertEqual(kw_post_s4["path"], str(kw_s4))
+                self.assertIsNone(kw_post_s4["resolved_path"])
+                self.assertIsNone(kw_post_s4["sha256"])
+                self.assertIsNone(kw_post_s4["size_bytes"])
+                self.assertIs(kw_post_s4["ancestor_chain_verified"], True)
+                self.assertIs(kw_post_s4["matches_baseline"], False)
+                self.assertEqual(
+                    kw_post_s4["error"],
+                    f"ValueError: Keywords file inode changed while opening descriptor: {kw_s4}",
+                )
+
+                self.assertEqual(len(imm_s4["mutations"]), 1)
+                mut_s4 = imm_s4["mutations"][0]
+                self.assertEqual(mut_s4["category"], "keywords_file")
+                self.assertEqual(mut_s4["key"], "refmac_keywords_txt")
+                self.assertEqual(mut_s4["path"], str(kw_s4))
+                self.assertEqual(mut_s4["expected_sha256"], kw_sha_s4)
+                self.assertIsNone(mut_s4["actual_sha256"])
+                self.assertIn(
+                    f"Keywords file inode changed while opening descriptor: {kw_s4}",
+                    str(mut_s4["reason"]),
+                )
+                self.assertEqual(len(caught_s4), 1)
+                self.assertIsInstance(caught_s4[0], ValueError)
+                self.assertEqual(causes_s4, [caught_s4[0]])
+
+                fifo_after_s4 = real_lstat(kw_s4)
+                self.assertTrue(stat.S_ISFIFO(fifo_after_s4.st_mode))
+                self.assertEqual(
+                    (int(fifo_after_s4.st_dev), int(fifo_after_s4.st_ino)),
+                    fifo_ident_s4,
+                )
+                parked_after_s4 = real_lstat(parked_kw_s4)
+                self.assertTrue(stat.S_ISREG(parked_after_s4.st_mode))
+                self.assertEqual(
+                    (int(parked_after_s4.st_dev), int(parked_after_s4.st_ino)),
+                    kw_ident_s4,
+                )
+                self.assertEqual(parked_kw_s4.read_bytes(), kw_bytes_s4)
+            finally:
+                _cleanup_tracked_fds(tracked_fds_s4)
+
+    def test_immutable_postflight_retains_capture_when_leaf_replaced_during_read(
+        self,
+    ) -> None:
+        """Postflight staged/keywords verification retains captured digest and refuses leaf replacement during first os.read (#1307)."""
+        pid = os.getpid()
+        real_open = os.open
+        real_read = os.read
+        real_close = os.close
+        real_fstat = os.fstat
+        real_lstat = os.lstat
+        real_replace = os.replace
+
+        nonblock_flag = getattr(os, "O_NONBLOCK", 0)
+        expected_leaf_open_flags = (
+            os.O_RDONLY
+            | nonblock_flag
+            | getattr(os, "O_NOFOLLOW", 0)
+            | getattr(os, "O_CLOEXEC", 0)
+        )
+        suite_root = (
+            self.repo_root / "runs" / f"case_postread_leaf_replace_{pid}"
+        )
+        suite_root.mkdir(parents=True, exist_ok=True)
+
+        def _assert_fd_closed(fd: int) -> None:
+            with self.assertRaises(OSError) as ebadf_cm:
+                real_fstat(fd)
+            self.assertEqual(ebadf_cm.exception.errno, errno.EBADF)
+
+        def _cleanup_tracked_fds(
+            tracked: Sequence[tuple[int, tuple[int, int]]],
+        ) -> None:
+            for tracked_fd, tracked_ident in reversed(tracked):
+                try:
+                    live_st = real_fstat(tracked_fd)
+                except OSError:
+                    continue
+                if (int(live_st.st_dev), int(live_st.st_ino)) == tracked_ident:
+                    try:
+                        real_close(tracked_fd)
+                    except OSError:
+                        pass
+
+        def _build_full_baseline(
+            file_path: Path, payload: bytes, *, evidence_root: Path
+        ) -> tuple[dict[str, Any], tuple[int, int], str]:
+            file_path.write_bytes(payload)
+            st_obj = real_lstat(file_path)
+            ident = (int(st_obj.st_dev), int(st_obj.st_ino))
+            digest = _sha256_bytes(payload)
+            baseline = {
+                "path": str(file_path),
+                "resolved_path": str(file_path.resolve(strict=True)),
+                "sha256": digest,
+                "size_bytes": len(payload),
+                **onesar_refmac._build_file_ancestor_chain_baseline(
+                    file_path, evidence_root=evidence_root
+                ),
+            }
+            return baseline, ident, digest
+
+        def _resolve_relative_leaf_target(
+            path: Any,
+            dir_fd: int | None,
+            watched_targets: Mapping[Path, tuple[int, int]],
+        ) -> Path | None:
+            try:
+                raw_path = os.fsdecode(os.fspath(path))
+            except Exception:
+                return None
+            if dir_fd is None or os.sep in raw_path or (
+                os.altsep is not None and os.altsep in raw_path
+            ):
+                return None
+            try:
+                dir_st = real_fstat(dir_fd)
+            except OSError:
+                return None
+            if not stat.S_ISDIR(dir_st.st_mode):
+                return None
+            live_parent_ident = (int(dir_st.st_dev), int(dir_st.st_ino))
+            for target_path, expected_parent_ident in watched_targets.items():
+                if (
+                    target_path.name == raw_path
+                    and live_parent_ident == expected_parent_ident
+                ):
+                    return target_path
+            return None
+
+        def _match_active_fd_ident(
+            fd: int,
+            active_map: Mapping[int, tuple[int, int]],
+            expected_ident: tuple[int, int] | None,
+        ) -> tuple[int, int] | None:
+            try:
+                live_st = real_fstat(fd)
+            except OSError:
+                return None
+            live_ident = (int(live_st.st_dev), int(live_st.st_ino))
+            active_ident = active_map.get(fd)
+            if active_ident is not None and live_ident == active_ident:
+                return live_ident
+            if expected_ident is not None and live_ident == expected_ident:
+                return live_ident
+            return None
+
+        # 1. Healthy full baseline and legacy minimal shapes + ordinary byte mutation control.
+        with self.subTest(
+            scenario="healthy_full_and_legacy_minimal_controls_and_ordinary_byte_mutation"
+        ):
+            ev_ctrl = suite_root / "ctrl_shapes_and_mutation"
+            inputs_ctrl = ev_ctrl / "inputs"
+            refmac_ctrl = ev_ctrl / "refmac"
+            inputs_ctrl.mkdir(parents=True, exist_ok=True)
+            refmac_ctrl.mkdir(parents=True, exist_ok=True)
+
+            adm_ctrl = inputs_ctrl / "input_admission.json"
+            adm_bytes = b'{"admitted": true, "control": "full_and_minimal"}\n'
+            adm_full_base, _, adm_sha = _build_full_baseline(
+                adm_ctrl, adm_bytes, evidence_root=ev_ctrl
+            )
+            kw_ctrl = refmac_ctrl / "refmac_keywords.txt"
+            kw_bytes = b"NCYC 0\nEND\n"
+            kw_full_base, _, kw_sha = _build_full_baseline(
+                kw_ctrl, kw_bytes, evidence_root=ev_ctrl
+            )
+
+            caught_full: list[Exception] = []
+            causes_full: list[Exception | None] = []
+            res_full = onesar_refmac._verify_immutable_baselines_post_run(
+                {"input_admission_json": adm_full_base},
+                {},
+                kw_full_base,
+                caught_exceptions=caught_full,
+                mutation_causes_out=causes_full,
+            )
+            self.assertIs(res_full["verified"], True)
+            self.assertEqual(res_full["mutations"], [])
+            self.assertEqual(caught_full, [])
+            self.assertEqual(causes_full, [])
+            for post_doc, exp_sha, exp_len in (
+                (
+                    res_full["staged_inputs_post_run"]["input_admission_json"],
+                    adm_sha,
+                    len(adm_bytes),
+                ),
+                (
+                    res_full["keywords_file_post_run"],
+                    kw_sha,
+                    len(kw_bytes),
+                ),
+            ):
+                self.assertIs(post_doc["matches_baseline"], True)
+                self.assertIs(post_doc["ancestor_chain_verified"], True)
+                self.assertIs(post_doc["final_leaf_binding_verified"], True)
+                self.assertIs(post_doc["parent_dir_reverified"], True)
+                self.assertEqual(post_doc["sha256"], exp_sha)
+                self.assertEqual(post_doc["size_bytes"], exp_len)
+                self.assertIsNone(post_doc["error"])
+
+            # Legacy minimal baseline shapes (no dev/ino/ancestor_chain_baseline; keywords also omits resolved_path).
+            adm_min_base = {
+                "path": str(adm_ctrl),
+                "resolved_path": str(adm_ctrl.resolve(strict=True)),
+                "sha256": adm_sha,
+                "size_bytes": len(adm_bytes),
+            }
+            kw_min_base = {
+                "path": str(kw_ctrl),
+                "sha256": kw_sha,
+                "size_bytes": len(kw_bytes),
+            }
+            caught_min: list[Exception] = []
+            causes_min: list[Exception | None] = []
+            res_min = onesar_refmac._verify_immutable_baselines_post_run(
+                {"input_admission_json": adm_min_base},
+                {},
+                kw_min_base,
+                caught_exceptions=caught_min,
+                mutation_causes_out=causes_min,
+            )
+            self.assertIs(res_min["verified"], True)
+            self.assertEqual(res_min["mutations"], [])
+            self.assertEqual(caught_min, [])
+            self.assertEqual(causes_min, [])
+            self.assertIs(
+                res_min["staged_inputs_post_run"]["input_admission_json"][
+                    "matches_baseline"
+                ],
+                True,
+            )
+            self.assertIs(
+                res_min["keywords_file_post_run"]["matches_baseline"], True
+            )
+
+            # Ordinary in-place byte mutation preserves exact existing reason strings.
+            mut_adm_bytes = adm_bytes + b"// mutated in place\n"
+            adm_ctrl.write_bytes(mut_adm_bytes)
+            mut_kw_bytes = kw_bytes + b"# mutated keywords\n"
+            kw_ctrl.write_bytes(mut_kw_bytes)
+            causes_mut: list[Exception | None] = []
+            res_mut = onesar_refmac._verify_immutable_baselines_post_run(
+                {"input_admission_json": adm_full_base},
+                {},
+                kw_full_base,
+                mutation_causes_out=causes_mut,
+            )
+            self.assertIs(res_mut["verified"], False)
+            self.assertEqual(causes_mut, [None, None])
+            self.assertEqual(len(res_mut["mutations"]), 2)
+            self.assertEqual(
+                res_mut["mutations"][0]["reason"],
+                "Staged input file mutated during REFMAC operation",
+            )
+            self.assertEqual(
+                res_mut["mutations"][0]["actual_sha256"],
+                _sha256_bytes(mut_adm_bytes),
+            )
+            self.assertEqual(
+                res_mut["mutations"][1]["reason"],
+                "Staged refmac_keywords.txt mutated during REFMAC operation",
+            )
+            self.assertEqual(
+                res_mut["mutations"][1]["actual_sha256"],
+                _sha256_bytes(mut_kw_bytes),
+            )
+
+        # 2. Persistent regular-file replacement during first os.read across staged
+        # input_admission_json, staged input_hkl_ledger_json, and keywords_file
+        # (both different-byte and equal-byte/different-inode foreign replacements).
+        swap_cases: tuple[tuple[str, str, str, bytes, bytes], ...] = (
+            (
+                "staged_admission_diff_bytes",
+                "staged_input",
+                "input_admission_json",
+                b'{"stage": "original_admission", "status": "ok"}\n',
+                b'{"stage": "foreign_replacement_admission", "tampered": true}\n',
+            ),
+            (
+                "staged_admission_equal_bytes_diff_inode",
+                "staged_input",
+                "input_admission_json",
+                b'{"stage": "original_admission", "status": "ok"}\n',
+                b'{"stage": "original_admission", "status": "ok"}\n',
+            ),
+            (
+                "staged_hkl_ledger_diff_bytes",
+                "staged_input",
+                "input_hkl_ledger_json",
+                b'{"ledger": "original_hkl_ledger", "rows": 42}\n',
+                b'{"ledger": "foreign_hkl_ledger", "rows": 0}\n',
+            ),
+            (
+                "keywords_diff_bytes",
+                "keywords_file",
+                "refmac_keywords_txt",
+                b"LABIN FP=F-obs SIGFP=SIGF-obs FREE=R-free-flags\nNCYC 0\nEND\n",
+                b"LABIN FP=F-obs SIGFP=SIGF-obs FREE=R-free-flags\nNCYC 99\nEND\n",
+            ),
+            (
+                "keywords_equal_bytes_diff_inode",
+                "keywords_file",
+                "refmac_keywords_txt",
+                b"LABIN FP=F-obs SIGFP=SIGF-obs FREE=R-free-flags\nNCYC 0\nEND\n",
+                b"LABIN FP=F-obs SIGFP=SIGF-obs FREE=R-free-flags\nNCYC 0\nEND\n",
+            ),
+        )
+
+        for (
+            sub_label,
+            target_category,
+            target_key,
+            orig_payload,
+            foreign_payload,
+        ) in swap_cases:
+            with self.subTest(scenario=sub_label):
+                ev_case = suite_root / f"swap_{sub_label}"
+                inputs_dir = ev_case / "inputs"
+                refmac_dir = ev_case / "refmac"
+                scratch_dir = ev_case / "scratch"
+                inputs_dir.mkdir(parents=True, exist_ok=True)
+                refmac_dir.mkdir(parents=True, exist_ok=True)
+                scratch_dir.mkdir(parents=True, exist_ok=True)
+
+                adm_path = inputs_dir / "input_admission.json"
+                ledger_path = inputs_dir / "input_hkl_ledger.json"
+                kw_path = refmac_dir / "refmac_keywords.txt"
+
+                if target_key == "input_admission_json":
+                    target_path = adm_path
+                    adm_base, orig_ident, orig_sha = _build_full_baseline(
+                        adm_path, orig_payload, evidence_root=ev_case
+                    )
+                    ledger_base, _, _ = _build_full_baseline(
+                        ledger_path,
+                        b'{"ledger": "healthy_control"}\n',
+                        evidence_root=ev_case,
+                    )
+                    kw_base, _, _ = _build_full_baseline(
+                        kw_path, b"NCYC 0\nEND\n", evidence_root=ev_case
+                    )
+                    target_parent_ident = (
+                        int(adm_base["parent_dir_dev"]),
+                        int(adm_base["parent_dir_ino"]),
+                    )
+                elif target_key == "input_hkl_ledger_json":
+                    target_path = ledger_path
+                    adm_base, _, _ = _build_full_baseline(
+                        adm_path,
+                        b'{"admission": "healthy_control"}\n',
+                        evidence_root=ev_case,
+                    )
+                    ledger_base, orig_ident, orig_sha = _build_full_baseline(
+                        ledger_path, orig_payload, evidence_root=ev_case
+                    )
+                    kw_base, _, _ = _build_full_baseline(
+                        kw_path, b"NCYC 0\nEND\n", evidence_root=ev_case
+                    )
+                    target_parent_ident = (
+                        int(ledger_base["parent_dir_dev"]),
+                        int(ledger_base["parent_dir_ino"]),
+                    )
+                else:
+                    target_path = kw_path
+                    adm_base, _, _ = _build_full_baseline(
+                        adm_path,
+                        b'{"admission": "healthy_control"}\n',
+                        evidence_root=ev_case,
+                    )
+                    ledger_base, _, _ = _build_full_baseline(
+                        ledger_path,
+                        b'{"ledger": "healthy_control"}\n',
+                        evidence_root=ev_case,
+                    )
+                    kw_base, orig_ident, orig_sha = _build_full_baseline(
+                        kw_path, orig_payload, evidence_root=ev_case
+                    )
+                    target_parent_ident = (
+                        int(kw_base["parent_dir_dev"]),
+                        int(kw_base["parent_dir_ino"]),
+                    )
+
+                parked_orig = scratch_dir / f"{target_path.name}.parked_orig"
+                foreign_src = scratch_dir / f"{target_path.name}.foreign_src"
+                foreign_src.write_bytes(foreign_payload)
+                foreign_st = real_lstat(foreign_src)
+                foreign_ident = (
+                    int(foreign_st.st_dev),
+                    int(foreign_st.st_ino),
+                )
+                self.assertNotEqual(foreign_ident, orig_ident)
+
+                watched_map = {target_path: target_parent_ident}
+                active_leaf_fds: dict[int, tuple[int, int]] = {}
+                active_parent_fds: dict[int, tuple[int, int]] = {}
+                leaf_open_events: list[tuple[int, int, tuple[int, int]]] = []
+                parent_open_events: list[tuple[int, tuple[int, int]]] = []
+                leaf_read_events: list[tuple[int, tuple[int, int], int]] = []
+                foreign_access_events: list[tuple[str, int]] = []
+                leaf_close_events: list[tuple[int, tuple[int, int]]] = []
+                parent_close_events: list[tuple[int, tuple[int, int]]] = []
+                tracked_fds: list[tuple[int, tuple[int, int]]] = []
+                swapped_on_read = False
+
+                def _open_swap(
+                    path: Any,
+                    flags: int,
+                    mode: int = 0o777,
+                    *,
+                    dir_fd: int | None = None,
+                ) -> int:
+                    matched_leaf = _resolve_relative_leaf_target(
+                        path, dir_fd, watched_map
+                    )
+                    if matched_leaf == target_path:
+                        self.assertTrue(bool(int(flags) & nonblock_flag))
+                        self.assertEqual(
+                            int(flags) & expected_leaf_open_flags,
+                            expected_leaf_open_flags,
+                        )
+                        self.assertEqual(
+                            int(flags) & os.O_ACCMODE,
+                            os.O_RDONLY,
+                        )
+                    fd = (
+                        real_open(path, flags, mode, dir_fd=dir_fd)
+                        if dir_fd is not None
+                        else real_open(path, flags, mode)
+                    )
+                    fd_st = real_fstat(fd)
+                    fd_ident = (int(fd_st.st_dev), int(fd_st.st_ino))
+                    if fd_ident == foreign_ident:
+                        foreign_access_events.append(("open", fd))
+                    if matched_leaf == target_path:
+                        self.assertEqual(fd_ident, orig_ident)
+                        active_leaf_fds[fd] = fd_ident
+                        leaf_open_events.append((int(flags), fd, fd_ident))
+                        tracked_fds.append((fd, fd_ident))
+                    elif (
+                        dir_fd is None
+                        and stat.S_ISDIR(fd_st.st_mode)
+                        and fd_ident == target_parent_ident
+                    ):
+                        active_parent_fds[fd] = fd_ident
+                        parent_open_events.append((fd, fd_ident))
+                        tracked_fds.append((fd, fd_ident))
+                    return fd
+
+                def _read_swap(fd: int, n: int) -> bytes:
+                    nonlocal swapped_on_read
+                    live_st = real_fstat(fd)
+                    live_ident = (int(live_st.st_dev), int(live_st.st_ino))
+                    if live_ident == foreign_ident:
+                        foreign_access_events.append(("read", fd))
+                    matched_orig = _match_active_fd_ident(
+                        fd, active_leaf_fds, orig_ident
+                    )
+                    chunk = real_read(fd, n)
+                    if matched_orig is not None:
+                        leaf_read_events.append((fd, matched_orig, len(chunk)))
+                        if not swapped_on_read:
+                            swapped_on_read = True
+                            real_replace(target_path, parked_orig)
+                            real_replace(foreign_src, target_path)
+                    return chunk
+
+                def _close_swap(fd: int) -> None:
+                    matched_leaf_ident = _match_active_fd_ident(
+                        fd, active_leaf_fds, orig_ident
+                    )
+                    matched_parent_ident = _match_active_fd_ident(
+                        fd, active_parent_fds, target_parent_ident
+                    )
+                    real_close(fd)
+                    if matched_leaf_ident is not None:
+                        _assert_fd_closed(fd)
+                        active_leaf_fds.pop(fd, None)
+                        leaf_close_events.append((fd, matched_leaf_ident))
+                    if matched_parent_ident is not None:
+                        _assert_fd_closed(fd)
+                        active_parent_fds.pop(fd, None)
+                        parent_close_events.append((fd, matched_parent_ident))
+
+                caught_case: list[Exception] = []
+                causes_case: list[Exception | None] = []
+                try:
+                    with (
+                        patch.object(onesar_refmac.os, "open", _open_swap),
+                        patch.object(onesar_refmac.os, "read", _read_swap),
+                        patch.object(onesar_refmac.os, "close", _close_swap),
+                    ):
+                        imm_case = (
+                            onesar_refmac._verify_immutable_baselines_post_run(
+                                {
+                                    "input_admission_json": adm_base,
+                                    "input_hkl_ledger_json": ledger_base,
+                                },
+                                {},
+                                kw_base,
+                                caught_exceptions=caught_case,
+                                mutation_causes_out=causes_case,
+                            )
+                        )
+
+                    self.assertTrue(swapped_on_read)
+                    self.assertEqual(foreign_access_events, [])
+                    self.assertEqual(len(leaf_open_events), 1)
+                    _, leaf_fd_obs, leaf_ident_obs = leaf_open_events[0]
+                    self.assertEqual(leaf_ident_obs, orig_ident)
+                    self.assertEqual(
+                        leaf_close_events, [(leaf_fd_obs, orig_ident)]
+                    )
+                    self.assertEqual(active_leaf_fds, {})
+                    self.assertGreaterEqual(len(parent_open_events), 1)
+                    self.assertEqual(
+                        len(parent_close_events), len(parent_open_events)
+                    )
+                    self.assertEqual(active_parent_fds, {})
+                    _assert_fd_closed(leaf_fd_obs)
+                    for p_fd, _ in parent_open_events:
+                        _assert_fd_closed(p_fd)
+
+                    # Foreign file at target_path and parked original file remain intact.
+                    after_target_st = real_lstat(target_path)
+                    self.assertEqual(
+                        (
+                            int(after_target_st.st_dev),
+                            int(after_target_st.st_ino),
+                        ),
+                        foreign_ident,
+                    )
+                    self.assertEqual(target_path.read_bytes(), foreign_payload)
+                    after_parked_st = real_lstat(parked_orig)
+                    self.assertEqual(
+                        (
+                            int(after_parked_st.st_dev),
+                            int(after_parked_st.st_ino),
+                        ),
+                        orig_ident,
+                    )
+                    self.assertEqual(parked_orig.read_bytes(), orig_payload)
+
+                    # Post-run receipt retains original captured hash/size while refusing final binding.
+                    self.assertIs(imm_case["verified"], False)
+                    post_doc = (
+                        imm_case["keywords_file_post_run"]
+                        if target_category == "keywords_file"
+                        else imm_case["staged_inputs_post_run"][target_key]
+                    )
+                    self.assertEqual(post_doc["path"], str(target_path))
+                    self.assertEqual(
+                        post_doc["resolved_path"],
+                        str(target_path.resolve(strict=True)),
+                    )
+                    self.assertEqual(post_doc["sha256"], orig_sha)
+                    self.assertEqual(
+                        post_doc["size_bytes"], len(orig_payload)
+                    )
+                    self.assertIs(post_doc["ancestor_chain_verified"], True)
+                    self.assertIs(
+                        post_doc["final_leaf_binding_verified"], False
+                    )
+                    self.assertIs(post_doc["parent_dir_reverified"], False)
+                    self.assertEqual(
+                        post_doc["failure_phase"], "final_leaf_stat"
+                    )
+                    self.assertIs(post_doc["matches_baseline"], False)
+                    self.assertIn(
+                        "final relative leaf inode changed during read",
+                        str(post_doc["error"]),
+                    )
+
+                    self.assertEqual(len(imm_case["mutations"]), 1)
+                    mut_doc = imm_case["mutations"][0]
+                    self.assertEqual(mut_doc["category"], target_category)
+                    self.assertEqual(mut_doc["key"], target_key)
+                    self.assertEqual(mut_doc["expected_sha256"], orig_sha)
+                    self.assertEqual(mut_doc["actual_sha256"], orig_sha)
+                    self.assertEqual(
+                        mut_doc["failure_phase"], "final_leaf_stat"
+                    )
+                    self.assertIs(
+                        mut_doc["final_leaf_binding_verified"], False
+                    )
+                    self.assertIn(
+                        "final leaf binding invalid after REFMAC operation",
+                        str(mut_doc["reason"]),
+                    )
+                    self.assertEqual(len(caught_case), 1)
+                    self.assertIsInstance(caught_case[0], ValueError)
+                    self.assertEqual(causes_case, [caught_case[0]])
+                finally:
+                    _cleanup_tracked_fds(tracked_fds)
+
+    def test_immutable_postflight_final_leaf_type_refusal(self) -> None:
+        """Final relative leaf lookup refuses missing, symlink, FIFO, or directory replacement after read while retaining captured digest (#1307)."""
+        pid = os.getpid()
+        real_open = os.open
+        real_read = os.read
+        real_close = os.close
+        real_fstat = os.fstat
+        real_lstat = os.lstat
+        real_replace = os.replace
+        nonblock_flag = getattr(os, "O_NONBLOCK", 0)
+
+        suite_root = (
+            self.repo_root / "runs" / f"case_postread_leaf_types_{pid}"
+        )
+        suite_root.mkdir(parents=True, exist_ok=True)
+
+        replacement_modes: list[str] = [
+            "missing",
+            "symlink",
+            "symlink_to_parked_orig",
+            "directory",
+        ]
+        if hasattr(os, "mkfifo"):
+            replacement_modes.append("fifo")
+
+        for target_kind in ("staged_input", "keywords_file"):
+            for mode_kind in replacement_modes:
+                with self.subTest(
+                    target_kind=target_kind, replacement_mode=mode_kind
+                ):
+                    ev_dir = suite_root / f"{target_kind}_{mode_kind}"
+                    inputs_dir = ev_dir / "inputs"
+                    refmac_dir = ev_dir / "refmac"
+                    scratch_dir = ev_dir / "scratch"
+                    inputs_dir.mkdir(parents=True, exist_ok=True)
+                    refmac_dir.mkdir(parents=True, exist_ok=True)
+                    scratch_dir.mkdir(parents=True, exist_ok=True)
+
+                    adm_path = inputs_dir / "input_admission.json"
+                    adm_bytes = b'{"admission": "original_before_type_swap"}\n'
+                    adm_path.write_bytes(adm_bytes)
+                    adm_st = real_lstat(adm_path)
+                    adm_ident = (int(adm_st.st_dev), int(adm_st.st_ino))
+                    adm_sha = _sha256_bytes(adm_bytes)
+                    adm_base = {
+                        "path": str(adm_path),
+                        "resolved_path": str(adm_path.resolve(strict=True)),
+                        "sha256": adm_sha,
+                        "size_bytes": len(adm_bytes),
+                        **onesar_refmac._build_file_ancestor_chain_baseline(
+                            adm_path, evidence_root=ev_dir
+                        ),
+                    }
+
+                    kw_path = refmac_dir / "refmac_keywords.txt"
+                    kw_bytes = b"NCYC 0\nEND\n"
+                    kw_path.write_bytes(kw_bytes)
+                    kw_st = real_lstat(kw_path)
+                    kw_ident = (int(kw_st.st_dev), int(kw_st.st_ino))
+                    kw_sha = _sha256_bytes(kw_bytes)
+                    kw_base = {
+                        "path": str(kw_path),
+                        "resolved_path": str(kw_path.resolve(strict=True)),
+                        "sha256": kw_sha,
+                        "size_bytes": len(kw_bytes),
+                        **onesar_refmac._build_file_ancestor_chain_baseline(
+                            kw_path, evidence_root=ev_dir
+                        ),
+                    }
+
+                    if target_kind == "staged_input":
+                        target_path = adm_path
+                        orig_ident = adm_ident
+                        orig_bytes = adm_bytes
+                        orig_sha = adm_sha
+                        target_key = "input_admission_json"
+                        expected_reason_prefix = "Staged input file"
+                    else:
+                        target_path = kw_path
+                        orig_ident = kw_ident
+                        orig_bytes = kw_bytes
+                        orig_sha = kw_sha
+                        target_key = "refmac_keywords_txt"
+                        expected_reason_prefix = "Staged refmac_keywords.txt"
+
+                    parked_orig = scratch_dir / "parked_original_leaf"
+                    sym_target = scratch_dir / "symlink_target_payload.txt"
+                    sym_target.write_bytes(b"FOREIGN SYMLINK TARGET\n")
+                    sym_st = real_lstat(sym_target)
+                    sym_target_ident = (int(sym_st.st_dev), int(sym_st.st_ino))
+                    replacement_ident_holder: list[tuple[int, int]] = []
+                    replacement_access_events: list[tuple[str, int]] = []
+                    opened_orig_fds: list[int] = []
+                    orig_read_events: list[tuple[int, int]] = []
+                    active_orig_fds: dict[int, tuple[int, int]] = {}
+                    closed_orig_fds: list[int] = []
+                    swapped = False
+
+                    def _open_type_guard(
+                        path: Any,
+                        flags: int,
+                        mode: int = 0o777,
+                        *,
+                        dir_fd: int | None = None,
+                    ) -> int:
+                        if not (int(flags) & getattr(os, "O_DIRECTORY", 0)):
+                            self.assertTrue(
+                                bool(int(flags) & nonblock_flag),
+                                f"Expected O_NONBLOCK on regular/FIFO open for {path!r}, got {flags:#x}",
+                            )
+                        fd = (
+                            real_open(path, flags, mode, dir_fd=dir_fd)
+                            if dir_fd is not None
+                            else real_open(path, flags, mode)
+                        )
+                        st_fd = real_fstat(fd)
+                        ident_fd = (int(st_fd.st_dev), int(st_fd.st_ino))
+                        if ident_fd == orig_ident:
+                            if not swapped and not opened_orig_fds:
+                                opened_orig_fds.append(fd)
+                                active_orig_fds[fd] = ident_fd
+                            else:
+                                replacement_access_events.append(("open", fd))
+                        if (
+                            ident_fd == sym_target_ident
+                            or ident_fd in replacement_ident_holder
+                        ):
+                            replacement_access_events.append(("open", fd))
+                        return fd
+
+                    def _read_type_swap(fd: int, n: int) -> bytes:
+                        nonlocal swapped
+                        st_fd = real_fstat(fd)
+                        ident_fd = (int(st_fd.st_dev), int(st_fd.st_ino))
+                        if (
+                            ident_fd == sym_target_ident
+                            or ident_fd in replacement_ident_holder
+                            or (
+                                ident_fd == orig_ident
+                                and active_orig_fds.get(fd) != orig_ident
+                            )
+                        ):
+                            replacement_access_events.append(("read", fd))
+                        chunk = real_read(fd, n)
+                        if (
+                            active_orig_fds.get(fd) == orig_ident
+                            and ident_fd == orig_ident
+                        ):
+                            orig_read_events.append((fd, len(chunk)))
+                            if not swapped:
+                                swapped = True
+                                real_replace(target_path, parked_orig)
+                                if mode_kind == "symlink":
+                                    os.symlink(sym_target, target_path)
+                                    rep_st = real_lstat(target_path)
+                                    replacement_ident_holder.append(
+                                        (int(rep_st.st_dev), int(rep_st.st_ino))
+                                    )
+                                elif mode_kind == "symlink_to_parked_orig":
+                                    os.symlink(parked_orig, target_path)
+                                    rep_st = real_lstat(target_path)
+                                    replacement_ident_holder.append(
+                                        (int(rep_st.st_dev), int(rep_st.st_ino))
+                                    )
+                                elif mode_kind == "fifo":
+                                    os.mkfifo(target_path, 0o600)
+                                    rep_st = real_lstat(target_path)
+                                    replacement_ident_holder.append(
+                                        (int(rep_st.st_dev), int(rep_st.st_ino))
+                                    )
+                                elif mode_kind == "directory":
+                                    target_path.mkdir()
+                                    rep_st = real_lstat(target_path)
+                                    replacement_ident_holder.append(
+                                        (int(rep_st.st_dev), int(rep_st.st_ino))
+                                    )
+                        return chunk
+
+                    def _close_type_swap(fd: int) -> None:
+                        was_orig = active_orig_fds.get(fd) == orig_ident
+                        real_close(fd)
+                        if was_orig:
+                            active_orig_fds.pop(fd, None)
+                            closed_orig_fds.append(fd)
+
+                    caught_type: list[Exception] = []
+                    causes_type: list[Exception | None] = []
+                    with (
+                        patch.object(
+                            onesar_refmac.os, "open", _open_type_guard
+                        ),
+                        patch.object(onesar_refmac.os, "read", _read_type_swap),
+                        patch.object(
+                            onesar_refmac.os, "close", _close_type_swap
+                        ),
+                    ):
+                        imm_type = (
+                            onesar_refmac._verify_immutable_baselines_post_run(
+                                {"input_admission_json": adm_base},
+                                {},
+                                kw_base,
+                                caught_exceptions=caught_type,
+                                mutation_causes_out=causes_type,
+                            )
+                        )
+
+                    self.assertTrue(swapped)
+                    self.assertEqual(replacement_access_events, [])
+                    self.assertEqual(len(opened_orig_fds), 1)
+                    self.assertGreaterEqual(len(orig_read_events), 1)
+                    self.assertEqual(
+                        sum(n_read for _, n_read in orig_read_events),
+                        len(orig_bytes),
+                    )
+                    self.assertEqual(active_orig_fds, {})
+                    self.assertEqual(closed_orig_fds, opened_orig_fds)
+                    with self.assertRaises(OSError) as ebadf_type:
+                        real_fstat(closed_orig_fds[0])
+                    self.assertEqual(ebadf_type.exception.errno, errno.EBADF)
+                    parked_after_st = real_lstat(parked_orig)
+                    self.assertTrue(stat.S_ISREG(parked_after_st.st_mode))
+                    self.assertEqual(
+                        (
+                            int(parked_after_st.st_dev),
+                            int(parked_after_st.st_ino),
+                        ),
+                        orig_ident,
+                    )
+                    self.assertEqual(parked_orig.read_bytes(), orig_bytes)
+                    if mode_kind == "missing":
+                        self.assertFalse(target_path.exists())
+                    elif mode_kind == "symlink":
+                        self.assertTrue(
+                            stat.S_ISLNK(real_lstat(target_path).st_mode)
+                        )
+                        self.assertEqual(
+                            Path(os.readlink(target_path)), sym_target
+                        )
+                    elif mode_kind == "symlink_to_parked_orig":
+                        self.assertTrue(
+                            stat.S_ISLNK(real_lstat(target_path).st_mode)
+                        )
+                        self.assertEqual(
+                            Path(os.readlink(target_path)), parked_orig
+                        )
+                    elif mode_kind == "fifo":
+                        self.assertTrue(
+                            stat.S_ISFIFO(real_lstat(target_path).st_mode)
+                        )
+                    elif mode_kind == "directory":
+                        self.assertTrue(
+                            stat.S_ISDIR(real_lstat(target_path).st_mode)
+                        )
+
+                    self.assertIs(imm_type["verified"], False)
+                    post_doc = (
+                        imm_type["staged_inputs_post_run"][
+                            "input_admission_json"
+                        ]
+                        if target_kind == "staged_input"
+                        else imm_type["keywords_file_post_run"]
+                    )
+                    self.assertEqual(post_doc["sha256"], orig_sha)
+                    self.assertEqual(post_doc["size_bytes"], len(orig_bytes))
+                    self.assertIs(post_doc["matches_baseline"], False)
+                    self.assertIs(
+                        post_doc["final_leaf_binding_verified"], False
+                    )
+                    self.assertEqual(
+                        post_doc["failure_phase"], "final_leaf_stat"
+                    )
+                    self.assertEqual(len(imm_type["mutations"]), 1)
+                    mut_doc = imm_type["mutations"][0]
+                    self.assertEqual(mut_doc["key"], target_key)
+                    self.assertEqual(mut_doc["actual_sha256"], orig_sha)
+                    self.assertEqual(
+                        mut_doc["failure_phase"], "final_leaf_stat"
+                    )
+                    self.assertEqual(len(caught_type), 1)
+                    self.assertEqual(len(causes_type), 1)
+                    self.assertIs(causes_type[0], caught_type[0])
+                    if mode_kind == "missing":
+                        self.assertIsInstance(
+                            causes_type[0], FileNotFoundError
+                        )
+                    elif mode_kind in ("symlink", "symlink_to_parked_orig"):
+                        self.assertIsInstance(causes_type[0], ValueError)
+                        expected_symlink_msg = (
+                            f"{expected_reason_prefix} final relative leaf lookup "
+                            f"resolved to a symlink at {target_path}"
+                        )
+                        self.assertIn(
+                            expected_symlink_msg, str(causes_type[0])
+                        )
+                        self.assertIn(
+                            expected_symlink_msg, str(post_doc["error"])
+                        )
+                        self.assertIn(
+                            expected_symlink_msg, str(mut_doc["reason"])
+                        )
+                    else:
+                        self.assertIsInstance(causes_type[0], ValueError)
+
+    def test_immutable_postflight_rechecks_parent_and_ancestors(self) -> None:
+        """Postflight re-verifies ancestor chain and admitted parent binding after leaf read, and preserves primary causes across close errors (#1307)."""
+        pid = os.getpid()
+        real_read = os.read
+        real_close = os.close
+        real_fstat = os.fstat
+        real_lstat = os.lstat
+        real_replace = os.replace
+
+        suite_root = (
+            self.repo_root / "runs" / f"case_postread_parent_anc_{pid}"
+        )
+        suite_root.mkdir(parents=True, exist_ok=True)
+
+        # 1. Pinned parent/ancestor moved during read while original parent_cap.fd still resolves the original leaf.
+        for move_level in ("parent_dir", "evidence_root_ancestor"):
+            with self.subTest(scenario=f"pinned_{move_level}_moved_during_read"):
+                case_dir = suite_root / f"move_{move_level}"
+                ev_root = case_dir / "ev_root"
+                inputs_dir = ev_root / "inputs"
+                refmac_dir = ev_root / "refmac"
+                inputs_dir.mkdir(parents=True, exist_ok=True)
+                refmac_dir.mkdir(parents=True, exist_ok=True)
+
+                adm_path = inputs_dir / "input_admission.json"
+                adm_bytes = b'{"admission": "parent_moved_during_read"}\n'
+                adm_path.write_bytes(adm_bytes)
+                adm_st = real_lstat(adm_path)
+                adm_ident = (int(adm_st.st_dev), int(adm_st.st_ino))
+                adm_sha = _sha256_bytes(adm_bytes)
+                adm_base = {
+                    "path": str(adm_path),
+                    "resolved_path": str(adm_path.resolve(strict=True)),
+                    "sha256": adm_sha,
+                    "size_bytes": len(adm_bytes),
+                    **onesar_refmac._build_file_ancestor_chain_baseline(
+                        adm_path, evidence_root=ev_root
+                    ),
+                }
+
+                kw_path = refmac_dir / "refmac_keywords.txt"
+                kw_bytes = b"NCYC 0\nEND\n"
+                kw_path.write_bytes(kw_bytes)
+                kw_sha = _sha256_bytes(kw_bytes)
+                kw_base = {
+                    "path": str(kw_path),
+                    "resolved_path": str(kw_path.resolve(strict=True)),
+                    "sha256": kw_sha,
+                    "size_bytes": len(kw_bytes),
+                    **onesar_refmac._build_file_ancestor_chain_baseline(
+                        kw_path, evidence_root=ev_root
+                    ),
+                }
+
+                displaced_dir = case_dir / f"displaced_{move_level}"
+                swapped_dir = False
+
+                def _read_move_dir(fd: int, n: int) -> bytes:
+                    nonlocal swapped_dir
+                    st_fd = real_fstat(fd)
+                    ident_fd = (int(st_fd.st_dev), int(st_fd.st_ino))
+                    chunk = real_read(fd, n)
+                    if not swapped_dir and ident_fd == adm_ident:
+                        swapped_dir = True
+                        if move_level == "parent_dir":
+                            real_replace(inputs_dir, displaced_dir)
+                            inputs_dir.mkdir(parents=True, exist_ok=True)
+                        else:
+                            real_replace(ev_root, displaced_dir)
+                            (ev_root / "inputs").mkdir(
+                                parents=True, exist_ok=True
+                            )
+                            (ev_root / "refmac").mkdir(
+                                parents=True, exist_ok=True
+                            )
+                            (ev_root / "refmac" / "refmac_keywords.txt").write_bytes(
+                                kw_bytes
+                            )
+                    return chunk
+
+                causes_move: list[Exception | None] = []
+                with patch.object(onesar_refmac.os, "read", _read_move_dir):
+                    imm_move = (
+                        onesar_refmac._verify_immutable_baselines_post_run(
+                            {"input_admission_json": adm_base},
+                            {},
+                            kw_base,
+                            mutation_causes_out=causes_move,
+                        )
+                    )
+
+                self.assertTrue(swapped_dir)
+                self.assertIs(imm_move["verified"], False)
+                post_adm = imm_move["staged_inputs_post_run"][
+                    "input_admission_json"
+                ]
+                # Original leaf remained inside old parent_cap.fd, so final_leaf_binding_verified is True,
+                # but post_read_ancestor_chain catches the detached directory and retains captured digest/size!
+                self.assertEqual(post_adm["sha256"], adm_sha)
+                self.assertEqual(post_adm["size_bytes"], len(adm_bytes))
+                self.assertIs(post_adm["final_leaf_binding_verified"], True)
+                self.assertIs(post_adm["ancestor_chain_verified"], False)
+                self.assertIs(post_adm["parent_dir_reverified"], False)
+                self.assertEqual(
+                    post_adm["failure_phase"], "post_read_ancestor_chain"
+                )
+                self.assertIs(post_adm["matches_baseline"], False)
+                self.assertIsNotNone(post_adm.get("damaged_ancestor_path"))
+                mut_adm = imm_move["mutations"][0]
+                self.assertEqual(mut_adm["key"], "input_admission_json")
+                self.assertEqual(mut_adm["actual_sha256"], adm_sha)
+                self.assertEqual(
+                    mut_adm["failure_phase"], "post_read_ancestor_chain"
+                )
+                self.assertIs(mut_adm["ancestor_chain_verified"], False)
+                self.assertIsNotNone(causes_move[0])
+
+        # 2. Unpinned legacy minimal baseline where parent directory is replaced during read:
+        # _verify_admitted_ancestor_chain passes (no pre-run parent inode pin), and
+        # _reverify_admitted_directory_binding(parent_cap) catches the detached parent descriptor!
+        with self.subTest(
+            scenario="legacy_unpinned_parent_replaced_caught_by_parent_reverify"
+        ):
+            case_unpinned = suite_root / "unpinned_parent_reverify"
+            inputs_unp = case_unpinned / "inputs"
+            refmac_unp = case_unpinned / "refmac"
+            inputs_unp.mkdir(parents=True, exist_ok=True)
+            refmac_unp.mkdir(parents=True, exist_ok=True)
+
+            adm_unp = inputs_unp / "input_admission.json"
+            adm_bytes = b'{"admission": "healthy_for_unpinned_kw_test"}\n'
+            adm_unp.write_bytes(adm_bytes)
+            adm_min_base = {
+                "path": str(adm_unp),
+                "resolved_path": str(adm_unp.resolve(strict=True)),
+                "sha256": _sha256_bytes(adm_bytes),
+                "size_bytes": len(adm_bytes),
+            }
+
+            kw_unp = refmac_unp / "refmac_keywords.txt"
+            kw_bytes = b"NCYC 0\nEND\n"
+            kw_unp.write_bytes(kw_bytes)
+            kw_st = real_lstat(kw_unp)
+            kw_ident = (int(kw_st.st_dev), int(kw_st.st_ino))
+            kw_sha = _sha256_bytes(kw_bytes)
+            kw_min_base = {
+                "path": str(kw_unp),
+                "sha256": kw_sha,
+                "size_bytes": len(kw_bytes),
+            }
+
+            displaced_refmac = case_unpinned / "refmac_displaced"
+            swapped_unp = False
+
+            def _read_swap_unpinned_parent(fd: int, n: int) -> bytes:
+                nonlocal swapped_unp
+                st_fd = real_fstat(fd)
+                ident_fd = (int(st_fd.st_dev), int(st_fd.st_ino))
+                chunk = real_read(fd, n)
+                if not swapped_unp and ident_fd == kw_ident:
+                    swapped_unp = True
+                    real_replace(refmac_unp, displaced_refmac)
+                    refmac_unp.mkdir(parents=True, exist_ok=True)
+                return chunk
+
+            causes_unp: list[Exception | None] = []
+            with patch.object(
+                onesar_refmac.os, "read", _read_swap_unpinned_parent
+            ):
+                imm_unp = onesar_refmac._verify_immutable_baselines_post_run(
+                    {"input_admission_json": adm_min_base},
+                    {},
+                    kw_min_base,
+                    mutation_causes_out=causes_unp,
+                )
+
+            self.assertTrue(swapped_unp)
+            self.assertIs(imm_unp["verified"], False)
+            kw_post = imm_unp["keywords_file_post_run"]
+            self.assertEqual(kw_post["sha256"], kw_sha)
+            self.assertEqual(kw_post["size_bytes"], len(kw_bytes))
+            self.assertIs(kw_post["final_leaf_binding_verified"], True)
+            self.assertIs(kw_post["ancestor_chain_verified"], True)
+            self.assertIs(kw_post["parent_dir_reverified"], False)
+            self.assertEqual(
+                kw_post["failure_phase"], "post_read_parent_reverify"
+            )
+            self.assertIs(kw_post["matches_baseline"], False)
+            self.assertEqual(len(imm_unp["mutations"]), 1)
+            self.assertEqual(
+                imm_unp["mutations"][0]["failure_phase"],
+                "post_read_parent_reverify",
+            )
+            self.assertEqual(imm_unp["mutations"][0]["actual_sha256"], kw_sha)
+            self.assertEqual(len(causes_unp), 1)
+            self.assertIsInstance(causes_unp[0], ValueError)
+
+        # 3. Primary binding/read exception + secondary close error preserves primary cause and 1:1 cardinality;
+        # close-only error refuses while retaining captured digest; partial read does not claim complete digest.
+        with self.subTest(
+            scenario="close_fault_precedence_and_partial_read_non_retention"
+        ):
+            case_close = suite_root / "close_faults"
+            inputs_cl = case_close / "inputs"
+            refmac_cl = case_close / "refmac"
+            scratch_cl = case_close / "scratch"
+            inputs_cl.mkdir(parents=True, exist_ok=True)
+            refmac_cl.mkdir(parents=True, exist_ok=True)
+            scratch_cl.mkdir(parents=True, exist_ok=True)
+
+            adm_cl = inputs_cl / "input_admission.json"
+            adm_bytes = b'{"admission": "close_fault_and_partial_read_test"}\n'
+            adm_cl.write_bytes(adm_bytes)
+            adm_st = real_lstat(adm_cl)
+            adm_ident = (int(adm_st.st_dev), int(adm_st.st_ino))
+            adm_sha = _sha256_bytes(adm_bytes)
+            adm_base = {
+                "path": str(adm_cl),
+                "resolved_path": str(adm_cl.resolve(strict=True)),
+                "sha256": adm_sha,
+                "size_bytes": len(adm_bytes),
+                **onesar_refmac._build_file_ancestor_chain_baseline(
+                    adm_cl, evidence_root=case_close
+                ),
+            }
+
+            kw_cl = refmac_cl / "refmac_keywords.txt"
+            kw_bytes = b"NCYC 0\nEND\n"
+            kw_cl.write_bytes(kw_bytes)
+            kw_sha = _sha256_bytes(kw_bytes)
+            kw_base = {
+                "path": str(kw_cl),
+                "resolved_path": str(kw_cl.resolve(strict=True)),
+                "sha256": kw_sha,
+                "size_bytes": len(kw_bytes),
+                **onesar_refmac._build_file_ancestor_chain_baseline(
+                    kw_cl, evidence_root=case_close
+                ),
+            }
+
+            # 3a. Binding failure + secondary close OSError: primary ValueError preserved, 1 mutation & 1 cause.
+            parked_cl = scratch_cl / "adm_parked"
+            foreign_cl = scratch_cl / "adm_foreign"
+            foreign_cl.write_bytes(b'{"foreign": true}\n')
+            swapped_cl = False
+
+            def _read_and_swap_cl(fd: int, n: int) -> bytes:
+                nonlocal swapped_cl
+                st_fd = real_fstat(fd)
+                chunk = real_read(fd, n)
+                if (
+                    not swapped_cl
+                    and (int(st_fd.st_dev), int(st_fd.st_ino)) == adm_ident
+                ):
+                    swapped_cl = True
+                    real_replace(adm_cl, parked_cl)
+                    real_replace(foreign_cl, adm_cl)
+                return chunk
+
+            def _close_with_secondary_eio(fd: int) -> None:
+                try:
+                    st_fd = real_fstat(fd)
+                    is_adm = (int(st_fd.st_dev), int(st_fd.st_ino)) == adm_ident
+                except OSError:
+                    is_adm = False
+                real_close(fd)
+                if is_adm:
+                    raise OSError(errno.EIO, "simulated secondary close EIO")
+
+            caught_3a: list[Exception] = []
+            causes_3a: list[Exception | None] = []
+            with (
+                patch.object(onesar_refmac.os, "read", _read_and_swap_cl),
+                patch.object(
+                    onesar_refmac.os, "close", _close_with_secondary_eio
+                ),
+            ):
+                imm_3a = onesar_refmac._verify_immutable_baselines_post_run(
+                    {"input_admission_json": adm_base},
+                    {},
+                    kw_base,
+                    caught_exceptions=caught_3a,
+                    mutation_causes_out=causes_3a,
+                )
+
+            self.assertEqual(len(imm_3a["mutations"]), 1)
+            self.assertEqual(len(causes_3a), 1)
+            self.assertIsInstance(causes_3a[0], ValueError)
+            self.assertIn(
+                "final relative leaf inode changed during read",
+                str(causes_3a[0]),
+            )
+            self.assertIsInstance(
+                getattr(causes_3a[0], "cleanup_close_error", None), OSError
+            )
+            post_3a = imm_3a["staged_inputs_post_run"]["input_admission_json"]
+            self.assertEqual(post_3a["sha256"], adm_sha)
+            self.assertEqual(post_3a["failure_phase"], "final_leaf_stat")
+            self.assertEqual(len(post_3a["close_errors"]), 1)
+
+            # Restore original file for 3b (close-only error) and 3c (partial read error).
+            real_replace(adm_cl, foreign_cl)
+            real_replace(parked_cl, adm_cl)
+
+            # 3b. Close-only error after complete read and valid binding refuses acceptance while retaining digest.
+            def _close_only_eio(fd: int) -> None:
+                try:
+                    st_fd = real_fstat(fd)
+                    is_adm = (int(st_fd.st_dev), int(st_fd.st_ino)) == adm_ident
+                except OSError:
+                    is_adm = False
+                real_close(fd)
+                if is_adm:
+                    raise OSError(errno.EIO, "simulated close-only EIO")
+
+            causes_3b: list[Exception | None] = []
+            with patch.object(onesar_refmac.os, "close", _close_only_eio):
+                imm_3b = onesar_refmac._verify_immutable_baselines_post_run(
+                    {"input_admission_json": adm_base},
+                    {},
+                    kw_base,
+                    mutation_causes_out=causes_3b,
+                )
+            self.assertIs(imm_3b["verified"], False)
+            post_3b = imm_3b["staged_inputs_post_run"]["input_admission_json"]
+            self.assertEqual(post_3b["sha256"], adm_sha)
+            self.assertEqual(post_3b["size_bytes"], len(adm_bytes))
+            self.assertIs(post_3b["matches_baseline"], False)
+            self.assertEqual(post_3b["failure_phase"], "descriptor_close")
+            self.assertEqual(len(causes_3b), 1)
+            self.assertIsInstance(causes_3b[0], OSError)
+
+            # 3c. Partial read failure (error after first 8 bytes) must NOT claim a completed file digest.
+            partial_calls = 0
+
+            def _partial_read_eio(fd: int, n: int) -> bytes:
+                nonlocal partial_calls
+                st_fd = real_fstat(fd)
+                if (int(st_fd.st_dev), int(st_fd.st_ino)) == adm_ident:
+                    partial_calls += 1
+                    if partial_calls == 1:
+                        return real_read(fd, 8)
+                    raise OSError(errno.EIO, "simulated mid-stream read EIO")
+                return real_read(fd, n)
+
+            causes_3c: list[Exception | None] = []
+            with patch.object(onesar_refmac.os, "read", _partial_read_eio):
+                imm_3c = onesar_refmac._verify_immutable_baselines_post_run(
+                    {"input_admission_json": adm_base},
+                    {},
+                    kw_base,
+                    mutation_causes_out=causes_3c,
+                )
+            self.assertIs(imm_3c["verified"], False)
+            post_3c = imm_3c["staged_inputs_post_run"]["input_admission_json"]
+            self.assertIsNone(post_3c["sha256"])
+            self.assertIsNone(post_3c["size_bytes"])
+            self.assertEqual(post_3c["failure_phase"], "leaf_read")
+            self.assertIsNone(imm_3c["mutations"][0]["actual_sha256"])
+            self.assertEqual(len(causes_3c), 1)
+            self.assertIsInstance(causes_3c[0], OSError)
+
+    def test_collector_postflight_staged_leaf_replaced_during_first_read(
+        self,
+    ) -> None:
+        """Fake-runner collector run arms leaf replacement only after runner returns and fails verify_input_immutability while retaining captured digest (#1307)."""
+        real_open = os.open
+        real_read = os.read
+        real_close = os.close
+        real_fstat = os.fstat
+        real_lstat = os.lstat
+        real_replace = os.replace
+        nonblock_flag = getattr(os, "O_NONBLOCK", 0)
+
+        state: dict[str, Any] = {
+            "armed": False,
+            "swapped": False,
+            "target_adm": None,
+            "parked_adm": None,
+            "foreign_src": None,
+            "orig_ident": None,
+            "foreign_ident": None,
+            "inputs_parent_ident": None,
+            "orig_bytes": None,
+            "orig_sha256": None,
+            "foreign_bytes": b'{"tampered_during_postflight_read": true}\n',
+        }
+        active_adm_fds: dict[int, tuple[int, int]] = {}
+        adm_open_events: list[tuple[int, int, tuple[int, int]]] = []
+        adm_close_events: list[tuple[int, tuple[int, int]]] = []
+        foreign_access_events: list[tuple[str, int]] = []
+
+        def runner(
+            xyzin: Path,
+            hklin: Path,
+            xyzout: Path,
+            hklout: Path,
+            log_path: Path,
+            keywords: str,
+            *,
+            cwd: Path,
+            timeout: float,
+            xml_output: Path,
+            executable: Path,
+            env: Mapping[str, str],
+            ccp4: bool,
+        ) -> subprocess.CompletedProcess[str]:
+            self._write_capture_success_outputs(
+                xyzin, hklin, xyzout, hklout, log_path
+            )
+            inputs_dir = xyzin.parent
+            evidence_root = inputs_dir.parent
+            target_adm = inputs_dir / "input_admission.json"
+            orig_bytes = target_adm.read_bytes()
+            adm_st = real_lstat(target_adm)
+            parent_st = real_lstat(inputs_dir)
+
+            scratch_dir = (
+                evidence_root.parent
+                / f"{evidence_root.name}_swap_scratch"
+            )
+            scratch_dir.mkdir(parents=True, exist_ok=True)
+            parked_adm = scratch_dir / "input_admission.parked_orig.json"
+            foreign_src = scratch_dir / "input_admission.foreign.json"
+            foreign_src.write_bytes(state["foreign_bytes"])
+            foreign_st = real_lstat(foreign_src)
+
+            state["target_adm"] = target_adm
+            state["parked_adm"] = parked_adm
+            state["foreign_src"] = foreign_src
+            state["orig_ident"] = (int(adm_st.st_dev), int(adm_st.st_ino))
+            state["foreign_ident"] = (
+                int(foreign_st.st_dev),
+                int(foreign_st.st_ino),
+            )
+            state["inputs_parent_ident"] = (
+                int(parent_st.st_dev),
+                int(parent_st.st_ino),
+            )
+            state["orig_bytes"] = orig_bytes
+            state["orig_sha256"] = _sha256_bytes(orig_bytes)
+            # Arm only as the child runner returns so staging/pre-checkpointing are unaffected.
+            state["armed"] = True
+
+            argv = [
+                str(executable),
+                "XYZIN",
+                str(xyzin),
+                "HKLIN",
+                str(hklin),
+                "XYZOUT",
+                str(xyzout),
+                "HKLOUT",
+                str(hklout),
+                "XMLOUT",
+                str(xml_output),
+            ]
+            return subprocess.CompletedProcess(
+                args=argv,
+                returncode=0,
+                stdout=SYNTHETIC_SINGLE_CYCLE_NCYC0_LOG,
+                stderr="",
+            )
+
+        def _open_collector_spy(
+            path: Any,
+            flags: int,
+            mode: int = 0o777,
+            *,
+            dir_fd: int | None = None,
+        ) -> int:
+            is_watched_adm = False
+            if state["armed"] and dir_fd is not None:
+                try:
+                    raw_path = os.fsdecode(os.fspath(path))
+                    dir_st = real_fstat(dir_fd)
+                    if (
+                        raw_path == "input_admission.json"
+                        and stat.S_ISDIR(dir_st.st_mode)
+                        and (int(dir_st.st_dev), int(dir_st.st_ino))
+                        == state["inputs_parent_ident"]
+                    ):
+                        is_watched_adm = True
+                except Exception:
+                    is_watched_adm = False
+            if is_watched_adm:
+                self.assertTrue(bool(int(flags) & nonblock_flag))
+            fd = (
+                real_open(path, flags, mode, dir_fd=dir_fd)
+                if dir_fd is not None
+                else real_open(path, flags, mode)
+            )
+            if state["armed"]:
+                try:
+                    fd_st = real_fstat(fd)
+                    fd_ident = (int(fd_st.st_dev), int(fd_st.st_ino))
+                except OSError:
+                    fd_ident = (-1, -1)
+                if fd_ident == state["foreign_ident"]:
+                    foreign_access_events.append(("open", fd))
+                if is_watched_adm:
+                    self.assertEqual(fd_ident, state["orig_ident"])
+                    active_adm_fds[fd] = fd_ident
+                    adm_open_events.append((int(flags), fd, fd_ident))
+            return fd
+
+        def _read_collector_spy(fd: int, n: int) -> bytes:
+            if state["armed"]:
+                try:
+                    fd_st = real_fstat(fd)
+                    fd_ident = (int(fd_st.st_dev), int(fd_st.st_ino))
+                except OSError:
+                    fd_ident = (-1, -1)
+                if fd_ident == state["foreign_ident"]:
+                    foreign_access_events.append(("read", fd))
+                if (
+                    not state["swapped"]
+                    and active_adm_fds.get(fd) == state["orig_ident"]
+                    and fd_ident == state["orig_ident"]
+                ):
+                    chunk = real_read(fd, n)
+                    state["swapped"] = True
+                    real_replace(state["target_adm"], state["parked_adm"])
+                    real_replace(state["foreign_src"], state["target_adm"])
+                    return chunk
+            return real_read(fd, n)
+
+        def _close_collector_spy(fd: int) -> None:
+            matched_adm = False
+            if state["armed"] and active_adm_fds.get(fd) == state["orig_ident"]:
+                try:
+                    fd_st = real_fstat(fd)
+                    if (
+                        int(fd_st.st_dev),
+                        int(fd_st.st_ino),
+                    ) == state["orig_ident"]:
+                        matched_adm = True
+                except OSError:
+                    matched_adm = False
+            real_close(fd)
+            if matched_adm:
+                active_adm_fds.pop(fd, None)
+                adm_close_events.append((fd, state["orig_ident"]))
+
+        with (
+            patch.object(onesar_refmac.os, "open", _open_collector_spy),
+            patch.object(onesar_refmac.os, "read", _read_collector_spy),
+            patch.object(onesar_refmac.os, "close", _close_collector_spy),
+            self.assertRaises(onesar_refmac.RefmacCollectorError) as ctx,
+        ):
+            self._run_with_fake_ccp4(
+                "case_postread_admission_leaf_replaced", runner
+            )
+
+        self.assertTrue(state["armed"])
+        self.assertTrue(state["swapped"])
+        self.assertEqual(foreign_access_events, [])
+        self.assertEqual(len(adm_open_events), 1)
+        self.assertEqual(len(adm_close_events), 1)
+        self.assertEqual(active_adm_fds, {})
+
+        err = ctx.exception
+        self.assertEqual(err.failed_stage, "verify_input_immutability")
+        self.assertEqual(err.returncode, 0)
+        self.assertIsInstance(err.primary_cause, ValueError)
+        self.assertIn(
+            "final relative leaf inode changed during read",
+            str(err.primary_cause),
+        )
+        self.assertIs(err.__cause__, err.primary_cause)
+        self.assertIs(err.publication_pair_complete, True)
+
+        # Foreign replacement at target_adm and parked original are untouched on disk.
+        target_adm_path = Path(state["target_adm"])
+        parked_adm_path = Path(state["parked_adm"])
+        self.assertEqual(target_adm_path.read_bytes(), state["foreign_bytes"])
+        self.assertEqual(parked_adm_path.read_bytes(), state["orig_bytes"])
+        target_after_st = real_lstat(target_adm_path)
+        self.assertEqual(
+            (int(target_after_st.st_dev), int(target_after_st.st_ino)),
+            state["foreign_ident"],
+        )
+
+        assert err.manifest_payload is not None
+        manifest_disk = self._reopen_and_verify_json_artifact(
+            {
+                "path": str(err.manifest_path),
+                "sha256": _sha256_bytes(Path(err.manifest_path).read_bytes()),
+                "size_bytes": Path(err.manifest_path).stat().st_size,
+            }
+        )
+        diagnostics_disk = self._reopen_and_verify_json_artifact(
+            err.manifest_payload["diagnostics_json"]
+        )
+        pre_ckpt = self._reopen_and_verify_json_artifact(
+            diagnostics_disk["pre_execution_checkpoint_json"]
+        )
+        post_ckpt = self._reopen_and_verify_json_artifact(
+            diagnostics_disk["post_execution_checkpoint_json"]
+        )
+
+        self.assertEqual(
+            pre_ckpt["staged_inputs_baseline"]["input_admission_json"][
+                "sha256"
+            ],
+            state["orig_sha256"],
+        )
+        immut = diagnostics_disk["input_immutability"]
+        self.assertIs(immut["verified"], False)
+        post_adm = immut["staged_inputs_post_run"]["input_admission_json"]
+        self.assertEqual(post_adm["sha256"], state["orig_sha256"])
+        self.assertEqual(post_adm["size_bytes"], len(state["orig_bytes"]))
+        self.assertIs(post_adm["matches_baseline"], False)
+        self.assertIs(post_adm["final_leaf_binding_verified"], False)
+        self.assertEqual(post_adm["failure_phase"], "final_leaf_stat")
+
+        self.assertEqual(len(immut["mutations"]), 1)
+        mut_adm = immut["mutations"][0]
+        self.assertEqual(mut_adm["category"], "staged_input")
+        self.assertEqual(mut_adm["key"], "input_admission_json")
+        self.assertEqual(mut_adm["expected_sha256"], state["orig_sha256"])
+        self.assertEqual(mut_adm["actual_sha256"], state["orig_sha256"])
+        self.assertEqual(mut_adm["failure_phase"], "final_leaf_stat")
+        self.assertIs(mut_adm["final_leaf_binding_verified"], False)
+
+        for doc in (post_ckpt, diagnostics_disk, manifest_disk):
+            self.assertEqual(doc["failed_stage"], "verify_input_immutability")
+            self.assertEqual(
+                [f["failed_stage"] for f in doc["failures"]],
+                ["verify_input_immutability"],
+            )
+            self.assertEqual(doc["failures"][0]["mutations"], immut["mutations"])
+            self.assertIs(
+                doc["operation_checks"]["input_immutability_verified"], False
+            )
+
+        self._assert_all_scientific_admission_flags_false(diagnostics_disk)
+        self._assert_all_scientific_admission_flags_false(manifest_disk)
+
+    def test_immutable_postflight_final_leaf_size_consistency(self) -> None:
+        """Final relative leaf stat rejects same-inode append or truncation after post-EOF fstat while retaining captured digest/size (#1307)."""
+        pid = os.getpid()
+        real_open = os.open
+        real_close = os.close
+        real_stat = os.stat
+        real_fstat = os.fstat
+        real_lstat = os.lstat
+
+        suite_root = (
+            self.repo_root / "runs" / f"case_postread_final_size_{pid}"
+        )
+        suite_root.mkdir(parents=True, exist_ok=True)
+
+        for target_kind in ("staged_input", "keywords_file"):
+            for mutation_mode in ("unchanged", "append", "truncate"):
+                with self.subTest(
+                    target_kind=target_kind, mutation_mode=mutation_mode
+                ):
+                    ev_dir = suite_root / f"{target_kind}_{mutation_mode}"
+                    inputs_dir = ev_dir / "inputs"
+                    refmac_dir = ev_dir / "refmac"
+                    inputs_dir.mkdir(parents=True, exist_ok=True)
+                    refmac_dir.mkdir(parents=True, exist_ok=True)
+
+                    adm_path = inputs_dir / "input_admission.json"
+                    adm_bytes = b'{"admission": "final_size_check"}\n'
+                    adm_path.write_bytes(adm_bytes)
+                    adm_st = real_lstat(adm_path)
+                    adm_sha = _sha256_bytes(adm_bytes)
+                    adm_base = {
+                        "path": str(adm_path),
+                        "resolved_path": str(adm_path.resolve(strict=True)),
+                        "sha256": adm_sha,
+                        "size_bytes": len(adm_bytes),
+                        "dev": int(adm_st.st_dev),
+                        "ino": int(adm_st.st_ino),
+                        **onesar_refmac._build_file_ancestor_chain_baseline(
+                            adm_path, evidence_root=ev_dir
+                        ),
+                    }
+
+                    kw_path = refmac_dir / "refmac_keywords.txt"
+                    kw_bytes = b"LABIN FP=F-obs\nNCYC 0\nEND\n"
+                    kw_path.write_bytes(kw_bytes)
+                    kw_st = real_lstat(kw_path)
+                    kw_sha = _sha256_bytes(kw_bytes)
+                    kw_base = {
+                        "path": str(kw_path),
+                        "resolved_path": str(kw_path.resolve(strict=True)),
+                        "sha256": kw_sha,
+                        "size_bytes": len(kw_bytes),
+                        "dev": int(kw_st.st_dev),
+                        "ino": int(kw_st.st_ino),
+                        **onesar_refmac._build_file_ancestor_chain_baseline(
+                            kw_path, evidence_root=ev_dir
+                        ),
+                    }
+
+                    if target_kind == "staged_input":
+                        target_path = adm_path
+                        target_parent_ident = (
+                            int(adm_base["parent_dir_dev"]),
+                            int(adm_base["parent_dir_ino"]),
+                        )
+                        orig_ident = (
+                            int(adm_base["dev"]),
+                            int(adm_base["ino"]),
+                        )
+                        orig_bytes = adm_bytes
+                        orig_sha = adm_sha
+                        target_key = "input_admission_json"
+                        target_category = "staged_input"
+                        expected_reason_prefix = "Staged input file"
+                    else:
+                        target_path = kw_path
+                        target_parent_ident = (
+                            int(kw_base["parent_dir_dev"]),
+                            int(kw_base["parent_dir_ino"]),
+                        )
+                        orig_ident = (
+                            int(kw_base["dev"]),
+                            int(kw_base["ino"]),
+                        )
+                        orig_bytes = kw_bytes
+                        orig_sha = kw_sha
+                        target_key = "refmac_keywords_txt"
+                        target_category = "keywords_file"
+                        expected_reason_prefix = "Staged refmac_keywords.txt"
+
+                    if mutation_mode == "append":
+                        expected_final_bytes = orig_bytes + b"//APPENDED\n"
+                    elif mutation_mode == "truncate":
+                        expected_final_bytes = orig_bytes[:3]
+                    else:
+                        expected_final_bytes = orig_bytes
+
+                    relative_stat_obs: list[dict[str, int]] = []
+                    mutation_events: list[str] = []
+                    opened_fds: list[int] = []
+                    closed_fds: list[int] = []
+                    active_fds: dict[int, tuple[int, int]] = {}
+
+                    def _stat_spy(
+                        path_arg: Any, *args: Any, **kwargs: Any
+                    ) -> os.stat_result:
+                        dir_fd = kwargs.get("dir_fd")
+                        follow_symlinks = kwargs.get("follow_symlinks", True)
+                        is_target_rel_stat = False
+                        if dir_fd is not None and follow_symlinks is False:
+                            try:
+                                raw_name = os.fsdecode(os.fspath(path_arg))
+                                dir_st = real_fstat(dir_fd)
+                                is_target_rel_stat = (
+                                    raw_name == target_path.name
+                                    and stat.S_ISDIR(dir_st.st_mode)
+                                    and (
+                                        int(dir_st.st_dev),
+                                        int(dir_st.st_ino),
+                                    )
+                                    == target_parent_ident
+                                )
+                            except OSError:
+                                is_target_rel_stat = False
+                        if is_target_rel_stat and len(relative_stat_obs) == 1:
+                            if mutation_mode == "append":
+                                w_fd = real_open(
+                                    target_path, os.O_WRONLY | os.O_APPEND
+                                )
+                                try:
+                                    os.write(w_fd, b"//APPENDED\n")
+                                finally:
+                                    real_close(w_fd)
+                                mutation_events.append(
+                                    "inplace_append_before_final_stat"
+                                )
+                            elif mutation_mode == "truncate":
+                                os.truncate(target_path, 3)
+                                mutation_events.append(
+                                    "inplace_truncate_before_final_stat"
+                                )
+                        st_res = real_stat(path_arg, *args, **kwargs)
+                        if is_target_rel_stat:
+                            relative_stat_obs.append(
+                                {
+                                    "size": int(st_res.st_size),
+                                    "dev": int(st_res.st_dev),
+                                    "ino": int(st_res.st_ino),
+                                }
+                            )
+                        return st_res
+
+                    def _open_spy(
+                        path_arg: Any, flags: int, *args: Any, **kwargs: Any
+                    ) -> int:
+                        fd = real_open(path_arg, flags, *args, **kwargs)
+                        st_fd = real_fstat(fd)
+                        opened_fds.append(fd)
+                        active_fds[fd] = (
+                            int(st_fd.st_dev),
+                            int(st_fd.st_ino),
+                        )
+                        return fd
+
+                    def _close_spy(fd: int) -> None:
+                        real_close(fd)
+                        active_fds.pop(fd, None)
+                        closed_fds.append(fd)
+
+                    caught_excs: list[Exception] = []
+                    mut_causes: list[Exception | None] = []
+                    with (
+                        patch.object(onesar_refmac.os, "stat", _stat_spy),
+                        patch.object(onesar_refmac.os, "open", _open_spy),
+                        patch.object(onesar_refmac.os, "close", _close_spy),
+                    ):
+                        imm_res = (
+                            onesar_refmac._verify_immutable_baselines_post_run(
+                                {"input_admission_json": adm_base},
+                                {},
+                                kw_base,
+                                caught_exceptions=caught_excs,
+                                mutation_causes_out=mut_causes,
+                            )
+                        )
+
+                    self.assertEqual(len(relative_stat_obs), 2)
+                    self.assertEqual(
+                        (
+                            relative_stat_obs[0]["dev"],
+                            relative_stat_obs[0]["ino"],
+                        ),
+                        orig_ident,
+                    )
+                    self.assertEqual(
+                        (
+                            relative_stat_obs[1]["dev"],
+                            relative_stat_obs[1]["ino"],
+                        ),
+                        orig_ident,
+                    )
+                    self.assertEqual(
+                        relative_stat_obs[0]["size"], len(orig_bytes)
+                    )
+                    self.assertEqual(
+                        relative_stat_obs[1]["size"], len(expected_final_bytes)
+                    )
+
+                    after_st = real_lstat(target_path)
+                    self.assertEqual(
+                        (int(after_st.st_dev), int(after_st.st_ino)),
+                        orig_ident,
+                    )
+                    self.assertEqual(
+                        int(after_st.st_size), len(expected_final_bytes)
+                    )
+                    self.assertEqual(
+                        target_path.read_bytes(), expected_final_bytes
+                    )
+
+                    self.assertGreaterEqual(len(opened_fds), 4)
+                    self.assertEqual(active_fds, {})
+                    self.assertEqual(len(closed_fds), len(opened_fds))
+                    for closed_fd in set(opened_fds):
+                        with self.assertRaises(OSError) as ebadf_cm:
+                            real_fstat(closed_fd)
+                        self.assertEqual(ebadf_cm.exception.errno, errno.EBADF)
+
+                    post_doc = (
+                        imm_res["staged_inputs_post_run"][
+                            "input_admission_json"
+                        ]
+                        if target_kind == "staged_input"
+                        else imm_res["keywords_file_post_run"]
+                    )
+                    if mutation_mode == "unchanged":
+                        self.assertEqual(mutation_events, [])
+                        self.assertIs(imm_res["verified"], True)
+                        self.assertEqual(imm_res["mutations"], [])
+                        self.assertEqual(caught_excs, [])
+                        self.assertEqual(mut_causes, [])
+                        self.assertIs(post_doc["matches_baseline"], True)
+                        self.assertIs(
+                            post_doc["final_leaf_binding_verified"], True
+                        )
+                        self.assertIs(
+                            post_doc["ancestor_chain_verified"], True
+                        )
+                        self.assertIs(post_doc["parent_dir_reverified"], True)
+                        self.assertEqual(post_doc["sha256"], orig_sha)
+                        self.assertEqual(
+                            post_doc["size_bytes"], len(orig_bytes)
+                        )
+                        self.assertIsNone(post_doc["error"])
+                    else:
+                        self.assertEqual(len(mutation_events), 1)
+                        self.assertNotEqual(
+                            len(expected_final_bytes), len(orig_bytes)
+                        )
+                        self.assertIs(imm_res["verified"], False)
+                        self.assertIs(post_doc["matches_baseline"], False)
+                        self.assertIs(
+                            post_doc["final_leaf_binding_verified"], False
+                        )
+                        self.assertIs(post_doc["parent_dir_reverified"], False)
+                        self.assertIs(
+                            post_doc["ancestor_chain_verified"], True
+                        )
+                        self.assertEqual(
+                            post_doc["failure_phase"], "final_leaf_stat"
+                        )
+                        self.assertEqual(post_doc["sha256"], orig_sha)
+                        self.assertEqual(
+                            post_doc["size_bytes"], len(orig_bytes)
+                        )
+                        self.assertEqual(len(imm_res["mutations"]), 1)
+                        mut_doc = imm_res["mutations"][0]
+                        self.assertEqual(mut_doc["category"], target_category)
+                        self.assertEqual(mut_doc["key"], target_key)
+                        self.assertEqual(mut_doc["expected_sha256"], orig_sha)
+                        self.assertEqual(mut_doc["actual_sha256"], orig_sha)
+                        self.assertEqual(
+                            mut_doc["failure_phase"], "final_leaf_stat"
+                        )
+                        self.assertIs(
+                            mut_doc["final_leaf_binding_verified"], False
+                        )
+                        self.assertIs(mut_doc["parent_dir_reverified"], False)
+                        self.assertEqual(len(caught_excs), 1)
+                        self.assertEqual(len(mut_causes), 1)
+                        self.assertIsInstance(caught_excs[0], ValueError)
+                        self.assertIs(mut_causes[0], caught_excs[0])
+                        expected_size_msg = (
+                            f"{expected_reason_prefix} final relative leaf size "
+                            f"changed after read at {target_path}: "
+                            f"captured size_bytes={len(orig_bytes)}, "
+                            f"final size_bytes={len(expected_final_bytes)}"
+                        )
+                        self.assertIn(expected_size_msg, str(caught_excs[0]))
+                        self.assertIn(expected_size_msg, str(post_doc["error"]))
+                        self.assertIn(expected_size_msg, str(mut_doc["reason"]))
 
 
 if __name__ == "__main__":

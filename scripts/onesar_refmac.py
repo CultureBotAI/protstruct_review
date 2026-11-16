@@ -847,7 +847,12 @@ def _verify_and_read_admitted_input_file(
             "exception_message": err_msg,
         }
 
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_NONBLOCK", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_CLOEXEC", 0)
+    )
     fd_owned_by_fileobj = False
     fd = -1
     try:
@@ -861,8 +866,9 @@ def _verify_and_read_admitted_input_file(
             raise ValueError(
                 f"{label} inode changed between lstat and open at {normalized_path}"
             )
+        handle = os.fdopen(fd, "rb")
         fd_owned_by_fileobj = True
-        with os.fdopen(fd, "rb") as handle:
+        with handle:
             raw_bytes = handle.read()
     except Exception as exc:
         if fd >= 0 and not fd_owned_by_fileobj:
@@ -9149,16 +9155,466 @@ def _verify_immutable_baselines_post_run(
 ) -> dict[str, Any]:
     """Re-hash staged inputs, helper sources, keywords file, and pre-execution checkpoint after child execution.
 
-    Saved pre-execution checkpoint leaf verification opens the relative entry under the admitted
-    parent descriptor with ``O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC``, verifies pre-read
-    and post-EOF ``fstat`` regular-file identity and size on the opened descriptor, and performs
-    a final admitted-parent-relative ``os.stat(..., dir_fd=..., follow_symlinks=False)`` before
-    closing the leaf descriptor. Final relative-name verification proves only the observed
-    directory-entry binding at the check, not a timeless snapshot or atomic namespace exclusion.
+    Staged inputs, the staged keywords file, and the saved pre-execution checkpoint open each
+    relative leaf entry under its admitted parent directory descriptor with
+    ``O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC``, verify pre-read and post-EOF ``fstat``
+    regular-file identity and size on the opened descriptor, perform a final
+    admitted-parent-relative ``os.stat(..., dir_fd=..., follow_symlinks=False)`` (verifying
+    regular-file type, inode identity, and size consistency against the captured read) while the
+    descriptors remain open, and re-verify the ancestor chain and admitted parent directory
+    binding before acceptance. Final relative-name and ancestor/parent verification proves only
+    the point-in-time binding observed at the checks, not a timeless snapshot or atomic
+    namespace exclusion.
     """
     mutations: list[dict[str, Any]] = []
     post_staged_inputs: dict[str, dict[str, Any]] = {}
     post_helper_sources: dict[str, dict[str, Any]] = {}
+
+    def _verify_admitted_leaf_post_run(
+        *,
+        path: Path,
+        expected: Mapping[str, Any],
+        initial_anc_check: Mapping[str, Any],
+        category: str,
+        item_key: str,
+        reason_prefix: str,
+        is_keywords: bool,
+        require_expected_resolved_path: bool,
+    ) -> dict[str, Any]:
+        normalized_path = Path(os.path.abspath(os.fspath(path)))
+        leaf_name = normalized_path.name
+        parent_dir = normalized_path.parent
+
+        captured_sha256: str | None = None
+        captured_size_bytes: int | None = None
+        captured_resolved_path: str | None = None
+        read_completed = False
+        opened_dev: int | None = None
+        opened_ino: int | None = None
+        final_leaf_binding_verified = False
+        parent_dir_reverified = False
+        post_read_ancestor_verified = True
+        damaged_ancestor_path: str | None = None
+        damaged_ancestor_is_symlink: bool | None = None
+        damaged_ancestor_symlink_target: str | None = None
+        failure_phase: str | None = None
+        close_errors: list[str] = []
+        parent_cap: _AdmittedDirectory | None = None
+        leaf_fd: int | None = None
+        primary_exc: Exception | None = None
+        local_helper_causes: list[Exception] = []
+
+        try:
+            failure_phase = "parent_dir_admission"
+            if (
+                expected.get("parent_dir_path") is not None
+                and os.path.abspath(str(expected["parent_dir_path"]))
+                != str(parent_dir)
+            ):
+                raise ValueError(
+                    f"{reason_prefix} expected parent_dir_path "
+                    f"{expected['parent_dir_path']!r} does not match actual "
+                    f"parent directory {str(parent_dir)!r}"
+                )
+            verified_parent_entry: Mapping[str, Any] | None = None
+            for va_item in initial_anc_check.get("verified_ancestors") or ():
+                if (
+                    isinstance(va_item, Mapping)
+                    and va_item.get("path") is not None
+                    and os.path.abspath(str(va_item["path"])) == str(parent_dir)
+                ):
+                    verified_parent_entry = va_item
+                    break
+            if verified_parent_entry is None:
+                raise ValueError(
+                    f"{reason_prefix} verified ancestor chain does not contain "
+                    f"actual parent directory: {parent_dir}"
+                )
+            parent_baseline: dict[str, Any] = {
+                "path": str(parent_dir),
+                "resolved_path": (
+                    str(expected["parent_dir_resolved_path"])
+                    if expected.get("parent_dir_resolved_path") is not None
+                    else str(verified_parent_entry["resolved_path"])
+                ),
+                "dev": (
+                    int(expected["parent_dir_dev"])
+                    if expected.get("parent_dir_dev") is not None
+                    else int(verified_parent_entry["dev"])
+                ),
+                "ino": (
+                    int(expected["parent_dir_ino"])
+                    if expected.get("parent_dir_ino") is not None
+                    else int(verified_parent_entry["ino"])
+                ),
+                "mode": (
+                    int(verified_parent_entry["mode"])
+                    if verified_parent_entry.get("mode") is not None
+                    else None
+                ),
+            }
+            if expected.get("evidence_root_path") is not None:
+                parent_baseline["evidence_root"] = str(
+                    expected["evidence_root_path"]
+                )
+            elif expected.get("evidence_root") is not None:
+                parent_baseline["evidence_root"] = str(
+                    expected["evidence_root"]
+                )
+            for ev_key in (
+                "evidence_root_resolved_path",
+                "evidence_root_dev",
+                "evidence_root_ino",
+            ):
+                if expected.get(ev_key) is not None:
+                    parent_baseline[ev_key] = expected[ev_key]
+
+            parent_cap = _open_admitted_directory(
+                parent_dir,
+                dir_baseline=parent_baseline,
+                caught_exceptions=local_helper_causes,
+            )
+
+            failure_phase = "leaf_initial_stat"
+            st = os.stat(leaf_name, dir_fd=parent_cap.fd, follow_symlinks=False)
+            if is_keywords:
+                if stat.S_ISLNK(st.st_mode):
+                    raise ValueError(f"Refusing symlink keywords file: {path}")
+                if not stat.S_ISREG(st.st_mode):
+                    raise ValueError(
+                        f"Keywords file is not a regular file: {path}"
+                    )
+            else:
+                if stat.S_ISLNK(st.st_mode) or not stat.S_ISREG(st.st_mode):
+                    raise ValueError(
+                        f"Staged input path is not a regular non-symlink file: {path}"
+                    )
+            actual_resolved = str(Path(parent_cap.resolved_path) / leaf_name)
+
+            failure_phase = "leaf_open"
+            leaf_open_flags = (
+                os.O_RDONLY
+                | getattr(os, "O_NONBLOCK", 0)
+                | getattr(os, "O_NOFOLLOW", 0)
+                | getattr(os, "O_CLOEXEC", 0)
+            )
+            leaf_fd = os.open(
+                leaf_name, leaf_open_flags, dir_fd=parent_cap.fd
+            )
+
+            failure_phase = "leaf_pre_read_fstat"
+            leaf_fd_st = os.fstat(leaf_fd)
+            if not stat.S_ISREG(leaf_fd_st.st_mode) or (
+                int(leaf_fd_st.st_dev),
+                int(leaf_fd_st.st_ino),
+            ) != (int(st.st_dev), int(st.st_ino)):
+                if is_keywords:
+                    raise ValueError(
+                        f"Keywords file inode changed while opening descriptor: {path}"
+                    )
+                raise ValueError(
+                    f"Staged input file inode changed while opening descriptor: {path}"
+                )
+            opened_dev = int(leaf_fd_st.st_dev)
+            opened_ino = int(leaf_fd_st.st_ino)
+            initial_size = int(st.st_size)
+            pre_read_size = int(leaf_fd_st.st_size)
+
+            failure_phase = "leaf_read"
+            chunks: list[bytes] = []
+            while True:
+                chunk = os.read(leaf_fd, 65536)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+
+            failure_phase = "leaf_post_read_fstat"
+            post_fd_st = os.fstat(leaf_fd)
+            if not stat.S_ISREG(post_fd_st.st_mode) or (
+                int(post_fd_st.st_dev),
+                int(post_fd_st.st_ino),
+            ) != (opened_dev, opened_ino):
+                if is_keywords:
+                    raise ValueError(
+                        f"Keywords file inode changed while reading descriptor: {path}"
+                    )
+                raise ValueError(
+                    f"Staged input file inode changed while reading descriptor: {path}"
+                )
+            raw_bytes = b"".join(chunks)
+            if (
+                int(post_fd_st.st_size) != len(raw_bytes)
+                or pre_read_size != len(raw_bytes)
+                or initial_size != len(raw_bytes)
+            ):
+                if is_keywords:
+                    raise ValueError(
+                        f"Keywords file size changed while reading descriptor: {path}"
+                    )
+                raise ValueError(
+                    f"Staged input file size changed while reading descriptor: {path}"
+                )
+
+            captured_sha256 = _sha256_bytes(raw_bytes)
+            captured_size_bytes = len(raw_bytes)
+            captured_resolved_path = actual_resolved
+            read_completed = True
+
+            failure_phase = "final_leaf_stat"
+            final_st = os.stat(
+                leaf_name, dir_fd=parent_cap.fd, follow_symlinks=False
+            )
+            if stat.S_ISLNK(final_st.st_mode):
+                raise ValueError(
+                    f"{reason_prefix} final relative leaf lookup resolved to a symlink at {path}"
+                )
+            if not stat.S_ISREG(final_st.st_mode):
+                raise ValueError(
+                    f"{reason_prefix} final relative leaf lookup is not a regular file at {path}: "
+                    f"mode={oct(final_st.st_mode)}"
+                )
+            if (int(final_st.st_dev), int(final_st.st_ino)) != (
+                opened_dev,
+                opened_ino,
+            ):
+                raise ValueError(
+                    f"{reason_prefix} final relative leaf inode changed during read at {path}: "
+                    f"opened (dev={opened_dev}, ino={opened_ino}), "
+                    f"final (dev={int(final_st.st_dev)}, ino={int(final_st.st_ino)})"
+                )
+            if (
+                expected.get("dev") is not None
+                and expected.get("ino") is not None
+                and (int(final_st.st_dev), int(final_st.st_ino))
+                != (int(expected["dev"]), int(expected["ino"]))
+            ):
+                raise ValueError(
+                    f"{reason_prefix} final relative leaf inode does not match baseline at {path}: "
+                    f"expected (dev={int(expected['dev'])}, ino={int(expected['ino'])}), "
+                    f"observed (dev={int(final_st.st_dev)}, ino={int(final_st.st_ino)})"
+                )
+            if int(final_st.st_size) != captured_size_bytes:
+                raise ValueError(
+                    f"{reason_prefix} final relative leaf size changed after read at {path}: "
+                    f"captured size_bytes={captured_size_bytes}, "
+                    f"final size_bytes={int(final_st.st_size)}"
+                )
+            final_leaf_binding_verified = True
+
+            failure_phase = "post_read_ancestor_chain"
+            post_anc_check = _verify_admitted_ancestor_chain(path, expected)
+            if not post_anc_check["verified"]:
+                post_read_ancestor_verified = False
+                parent_dir_reverified = False
+                damaged_ancestor_path = post_anc_check["damaged_ancestor_path"]
+                damaged_ancestor_is_symlink = bool(
+                    post_anc_check["damaged_ancestor_is_symlink"]
+                )
+                damaged_ancestor_symlink_target = post_anc_check.get(
+                    "damaged_ancestor_symlink_target"
+                )
+                raw_anc_exc = post_anc_check.get("exception")
+                anc_err_msg = str(post_anc_check["error"])
+                raise (
+                    raw_anc_exc
+                    if isinstance(raw_anc_exc, Exception)
+                    else ValueError(anc_err_msg)
+                )
+
+            failure_phase = "post_read_parent_reverify"
+            reverify_causes: list[Exception] = []
+            try:
+                _reverify_admitted_directory_binding(
+                    parent_cap,
+                    caught_exceptions=reverify_causes,
+                )
+            except Exception as rev_exc:
+                raise reverify_causes[0] if reverify_causes else rev_exc
+            parent_dir_reverified = True
+            failure_phase = None
+        except Exception as exc:
+            primary_exc = local_helper_causes[0] if local_helper_causes else exc
+            if caught_exceptions is not None:
+                caught_exceptions.append(primary_exc)
+        finally:
+            for fd_to_close in (
+                leaf_fd,
+                parent_cap.fd if parent_cap is not None else None,
+            ):
+                if fd_to_close is None:
+                    continue
+                try:
+                    os.close(fd_to_close)
+                except OSError as close_exc:
+                    close_errors.append(
+                        f"{type(close_exc).__name__}: {close_exc}"
+                    )
+                    if primary_exc is not None:
+                        try:
+                            setattr(close_exc, "_is_cleanup_close_error", True)
+                            setattr(
+                                primary_exc, "cleanup_close_error", close_exc
+                            )
+                            setattr(primary_exc, "close_error", close_exc)
+                        except Exception:
+                            pass
+                        if caught_exceptions is not None:
+                            caught_exceptions.append(close_exc)
+                    else:
+                        primary_exc = close_exc
+                        failure_phase = "descriptor_close"
+                        if caught_exceptions is not None:
+                            caught_exceptions.append(close_exc)
+
+        if primary_exc is None:
+            assert (
+                read_completed
+                and captured_sha256 is not None
+                and captured_size_bytes is not None
+                and captured_resolved_path is not None
+                and opened_dev is not None
+                and opened_ino is not None
+            )
+            resolved_ok = (
+                captured_resolved_path == expected["resolved_path"]
+                if require_expected_resolved_path
+                else (
+                    expected.get("resolved_path") is None
+                    or captured_resolved_path == str(expected["resolved_path"])
+                )
+            )
+            inode_ok = (
+                expected.get("dev") is None
+                or expected.get("ino") is None
+                or (opened_dev, opened_ino)
+                == (int(expected["dev"]), int(expected["ino"]))
+            )
+            matches = (
+                captured_sha256 == expected["sha256"]
+                and captured_size_bytes == expected["size_bytes"]
+                and resolved_ok
+                and inode_ok
+            )
+            post_entry: dict[str, Any] = {
+                "path": str(path),
+                "resolved_path": captured_resolved_path,
+                "sha256": captured_sha256,
+                "size_bytes": captured_size_bytes,
+                "ancestor_chain_verified": True,
+                "final_leaf_binding_verified": True,
+                "parent_dir_reverified": True,
+                "matches_baseline": matches,
+                "error": None,
+            }
+            if not matches:
+                mutations.append(
+                    {
+                        "category": category,
+                        "key": item_key,
+                        "path": str(path),
+                        "expected_sha256": expected["sha256"],
+                        "actual_sha256": captured_sha256,
+                        "reason": f"{reason_prefix} mutated during REFMAC operation",
+                    }
+                )
+                if mutation_causes_out is not None:
+                    mutation_causes_out.append(None)
+            return post_entry
+
+        if not read_completed:
+            post_entry = {
+                "path": str(path),
+                "resolved_path": None,
+                "sha256": None,
+                "size_bytes": None,
+                "ancestor_chain_verified": True,
+                "final_leaf_binding_verified": False,
+                "parent_dir_reverified": False,
+                "failure_phase": failure_phase,
+                "matches_baseline": False,
+                "error": f"{type(primary_exc).__name__}: {primary_exc}",
+            }
+            if close_errors:
+                post_entry["close_errors"] = list(close_errors)
+            mutations.append(
+                {
+                    "category": category,
+                    "key": item_key,
+                    "path": str(path),
+                    "expected_sha256": expected["sha256"],
+                    "actual_sha256": None,
+                    "reason": (
+                        f"{reason_prefix} missing or invalid after REFMAC operation: {primary_exc}"
+                    ),
+                }
+            )
+            if mutation_causes_out is not None:
+                mutation_causes_out.append(primary_exc)
+            return post_entry
+
+        if failure_phase == "final_leaf_stat":
+            mutation_reason = (
+                f"{reason_prefix} final leaf binding invalid after REFMAC operation: {primary_exc}"
+            )
+        elif failure_phase == "post_read_ancestor_chain":
+            mutation_reason = (
+                f"{reason_prefix} ancestor chain invalid after REFMAC operation: {primary_exc}"
+            )
+        elif failure_phase == "post_read_parent_reverify":
+            mutation_reason = (
+                f"{reason_prefix} admitted parent directory binding invalid after REFMAC operation: {primary_exc}"
+            )
+        else:
+            mutation_reason = (
+                f"{reason_prefix} descriptor close failed after REFMAC operation: {primary_exc}"
+            )
+
+        post_entry = {
+            "path": str(path),
+            "resolved_path": captured_resolved_path,
+            "sha256": captured_sha256,
+            "size_bytes": captured_size_bytes,
+            "ancestor_chain_verified": post_read_ancestor_verified,
+            "final_leaf_binding_verified": final_leaf_binding_verified,
+            "parent_dir_reverified": parent_dir_reverified,
+            "failure_phase": failure_phase,
+            "matches_baseline": False,
+            "error": f"{type(primary_exc).__name__}: {primary_exc}",
+        }
+        if not post_read_ancestor_verified:
+            post_entry["damaged_ancestor_path"] = damaged_ancestor_path
+            post_entry["damaged_ancestor_is_symlink"] = bool(
+                damaged_ancestor_is_symlink
+            )
+            if is_keywords:
+                post_entry["damaged_ancestor_symlink_target"] = (
+                    damaged_ancestor_symlink_target
+                )
+        if close_errors:
+            post_entry["close_errors"] = list(close_errors)
+
+        mut_entry: dict[str, Any] = {
+            "category": category,
+            "key": item_key,
+            "path": str(path),
+            "expected_sha256": expected["sha256"],
+            "actual_sha256": captured_sha256,
+            "failure_phase": failure_phase,
+            "final_leaf_binding_verified": final_leaf_binding_verified,
+            "parent_dir_reverified": parent_dir_reverified,
+            "reason": mutation_reason,
+        }
+        if not post_read_ancestor_verified:
+            mut_entry["ancestor_chain_verified"] = False
+            mut_entry["damaged_ancestor_path"] = damaged_ancestor_path
+            if is_keywords:
+                mut_entry["damaged_ancestor_is_symlink"] = bool(
+                    damaged_ancestor_is_symlink
+                )
+        mutations.append(mut_entry)
+        if mutation_causes_out is not None:
+            mutation_causes_out.append(primary_exc)
+        return post_entry
 
     for key, expected in sorted(staged_input_baseline.items()):
         path = Path(expected["path"])
@@ -9200,103 +9656,16 @@ def _verify_immutable_baselines_post_run(
                     anc_exc if isinstance(anc_exc, Exception) else None
                 )
             continue
-        try:
-            st = os.lstat(path)
-            if stat.S_ISLNK(st.st_mode) or not stat.S_ISREG(st.st_mode):
-                raise ValueError(f"Staged input path is not a regular non-symlink file: {path}")
-            actual_resolved = str(path.resolve(strict=True))
-            in_fd = os.open(
-                path,
-                os.O_RDONLY
-                | getattr(os, "O_NOFOLLOW", 0)
-                | getattr(os, "O_CLOEXEC", 0),
-            )
-            try:
-                in_fd_st = os.fstat(in_fd)
-                if not stat.S_ISREG(in_fd_st.st_mode) or (
-                    int(in_fd_st.st_dev),
-                    int(in_fd_st.st_ino),
-                ) != (int(st.st_dev), int(st.st_ino)):
-                    raise ValueError(
-                        f"Staged input file inode changed while opening descriptor: {path}"
-                    )
-                in_chunks: list[bytes] = []
-                while True:
-                    chunk = os.read(in_fd, 65536)
-                    if not chunk:
-                        break
-                    in_chunks.append(chunk)
-                in_post_st = os.fstat(in_fd)
-                if (
-                    int(in_post_st.st_dev),
-                    int(in_post_st.st_ino),
-                ) != (int(st.st_dev), int(st.st_ino)):
-                    raise ValueError(
-                        f"Staged input file inode changed while reading descriptor: {path}"
-                    )
-                in_bytes = b"".join(in_chunks)
-            finally:
-                os.close(in_fd)
-            actual_sha256 = _sha256_bytes(in_bytes)
-            actual_size = len(in_bytes)
-            inode_ok = (
-                expected.get("dev") is None
-                or expected.get("ino") is None
-                or (int(st.st_dev), int(st.st_ino))
-                == (int(expected["dev"]), int(expected["ino"]))
-            )
-            matches = (
-                actual_sha256 == expected["sha256"]
-                and actual_resolved == expected["resolved_path"]
-                and actual_size == expected["size_bytes"]
-                and inode_ok
-            )
-            post_staged_inputs[key] = {
-                "path": str(path),
-                "resolved_path": actual_resolved,
-                "sha256": actual_sha256,
-                "size_bytes": actual_size,
-                "ancestor_chain_verified": True,
-                "matches_baseline": matches,
-                "error": None,
-            }
-            if not matches:
-                mutations.append(
-                    {
-                        "category": "staged_input",
-                        "key": key,
-                        "path": str(path),
-                        "expected_sha256": expected["sha256"],
-                        "actual_sha256": actual_sha256,
-                        "reason": "Staged input file mutated during REFMAC operation",
-                    }
-                )
-                if mutation_causes_out is not None:
-                    mutation_causes_out.append(None)
-        except Exception as exc:
-            if caught_exceptions is not None:
-                caught_exceptions.append(exc)
-            post_staged_inputs[key] = {
-                "path": str(path),
-                "resolved_path": None,
-                "sha256": None,
-                "size_bytes": None,
-                "ancestor_chain_verified": True,
-                "matches_baseline": False,
-                "error": f"{type(exc).__name__}: {exc}",
-            }
-            mutations.append(
-                {
-                    "category": "staged_input",
-                    "key": key,
-                    "path": str(path),
-                    "expected_sha256": expected["sha256"],
-                    "actual_sha256": None,
-                    "reason": f"Staged input file missing or invalid after REFMAC operation: {exc}",
-                }
-            )
-            if mutation_causes_out is not None:
-                mutation_causes_out.append(exc)
+        post_staged_inputs[key] = _verify_admitted_leaf_post_run(
+            path=path,
+            expected=expected,
+            initial_anc_check=anc_check,
+            category="staged_input",
+            item_key=key,
+            reason_prefix="Staged input file",
+            is_keywords=False,
+            require_expected_resolved_path=True,
+        )
 
     for key, expected in sorted(helper_source_baseline.items()):
         path = Path(expected["path"])
@@ -9395,112 +9764,16 @@ def _verify_immutable_baselines_post_run(
                 kw_anc_exc if isinstance(kw_anc_exc, Exception) else None
             )
     else:
-        try:
-            kw_st = os.lstat(kw_path)
-            if stat.S_ISLNK(kw_st.st_mode):
-                raise ValueError(f"Refusing symlink keywords file: {kw_path}")
-            if not stat.S_ISREG(kw_st.st_mode):
-                raise ValueError(f"Keywords file is not a regular file: {kw_path}")
-            kw_resolved = str(kw_path.resolve(strict=True))
-            kw_fd = os.open(
-                kw_path,
-                os.O_RDONLY
-                | getattr(os, "O_NOFOLLOW", 0)
-                | getattr(os, "O_CLOEXEC", 0),
-            )
-            try:
-                kw_fd_st = os.fstat(kw_fd)
-                if not stat.S_ISREG(kw_fd_st.st_mode) or (
-                    int(kw_fd_st.st_dev),
-                    int(kw_fd_st.st_ino),
-                ) != (int(kw_st.st_dev), int(kw_st.st_ino)):
-                    raise ValueError(
-                        f"Keywords file inode changed while opening descriptor: {kw_path}"
-                    )
-                kw_chunks: list[bytes] = []
-                while True:
-                    chunk = os.read(kw_fd, 65536)
-                    if not chunk:
-                        break
-                    kw_chunks.append(chunk)
-                kw_post_st = os.fstat(kw_fd)
-                if (
-                    int(kw_post_st.st_dev),
-                    int(kw_post_st.st_ino),
-                ) != (int(kw_st.st_dev), int(kw_st.st_ino)):
-                    raise ValueError(
-                        f"Keywords file inode changed while reading descriptor: {kw_path}"
-                    )
-                kw_bytes = b"".join(kw_chunks)
-            finally:
-                os.close(kw_fd)
-            kw_sha256 = _sha256_bytes(kw_bytes)
-            kw_size = len(kw_bytes)
-            kw_resolved_ok = (
-                keywords_baseline.get("resolved_path") is None
-                or kw_resolved == str(keywords_baseline["resolved_path"])
-            )
-            kw_inode_ok = (
-                keywords_baseline.get("dev") is None
-                or keywords_baseline.get("ino") is None
-                or (int(kw_st.st_dev), int(kw_st.st_ino))
-                == (
-                    int(keywords_baseline["dev"]),
-                    int(keywords_baseline["ino"]),
-                )
-            )
-            kw_matches = (
-                kw_sha256 == keywords_baseline["sha256"]
-                and kw_size == keywords_baseline["size_bytes"]
-                and kw_resolved_ok
-                and kw_inode_ok
-            )
-            keywords_post = {
-                "path": str(kw_path),
-                "resolved_path": kw_resolved,
-                "sha256": kw_sha256,
-                "size_bytes": kw_size,
-                "ancestor_chain_verified": True,
-                "matches_baseline": kw_matches,
-                "error": None,
-            }
-            if not kw_matches:
-                mutations.append(
-                    {
-                        "category": "keywords_file",
-                        "key": "refmac_keywords_txt",
-                        "path": str(kw_path),
-                        "expected_sha256": keywords_baseline["sha256"],
-                        "actual_sha256": kw_sha256,
-                        "reason": "Staged refmac_keywords.txt mutated during REFMAC operation",
-                    }
-                )
-                if mutation_causes_out is not None:
-                    mutation_causes_out.append(None)
-        except Exception as exc:
-            if caught_exceptions is not None:
-                caught_exceptions.append(exc)
-            keywords_post = {
-                "path": str(kw_path),
-                "resolved_path": None,
-                "sha256": None,
-                "size_bytes": None,
-                "ancestor_chain_verified": True,
-                "matches_baseline": False,
-                "error": f"{type(exc).__name__}: {exc}",
-            }
-            mutations.append(
-                {
-                    "category": "keywords_file",
-                    "key": "refmac_keywords_txt",
-                    "path": str(kw_path),
-                    "expected_sha256": keywords_baseline["sha256"],
-                    "actual_sha256": None,
-                    "reason": f"Staged refmac_keywords.txt missing or invalid after REFMAC operation: {exc}",
-                }
-            )
-            if mutation_causes_out is not None:
-                mutation_causes_out.append(exc)
+        keywords_post = _verify_admitted_leaf_post_run(
+            path=kw_path,
+            expected=keywords_baseline,
+            initial_anc_check=kw_anc_check,
+            category="keywords_file",
+            item_key="refmac_keywords_txt",
+            reason_prefix="Staged refmac_keywords.txt",
+            is_keywords=True,
+            require_expected_resolved_path=False,
+        )
 
     report: dict[str, Any] = {
         "verified": len(mutations) == 0,

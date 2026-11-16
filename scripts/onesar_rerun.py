@@ -3364,6 +3364,130 @@ def _verify_no_protstruct_overrides() -> None:
         )
 
 
+def _build_phenix_secondary_failure_record(
+    exc: BaseException,
+    *,
+    phase: str,
+    path: Path | str | None = None,
+) -> dict[str, Any]:
+    """Build a JSON-safe secondary failure record for a PHENIX boundary collision."""
+    record: dict[str, Any] = {
+        "phase": str(phase),
+        "exception_type": type(exc).__name__,
+        "exception_message": str(exc),
+        "errno": getattr(exc, "errno", None),
+    }
+    if path is not None:
+        record["path"] = str(path)
+    return record
+
+
+def _attach_phenix_secondary_failure(
+    primary_exc: BaseException,
+    record: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Attach a structured secondary failure record and note to ``primary_exc``."""
+    record_copy = copy.deepcopy(dict(record))
+    existing_raw = getattr(primary_exc, "secondary_failures", None)
+    existing: list[dict[str, Any]] = (
+        [
+            copy.deepcopy(dict(item))
+            for item in existing_raw
+            if isinstance(item, Mapping)
+        ]
+        if isinstance(existing_raw, Sequence)
+        and not isinstance(existing_raw, (str, bytes))
+        else []
+    )
+    existing.append(record_copy)
+    primary_exc.secondary_failures = existing  # type: ignore[attr-defined]
+    if hasattr(primary_exc, "add_note"):
+        path_suffix = (
+            f" (path={record_copy['path']})"
+            if record_copy.get("path") is not None
+            else ""
+        )
+        primary_exc.add_note(
+            f"secondary_failure[{record_copy.get('phase')}]: "
+            f"{record_copy.get('exception_type')}: "
+            f"{record_copy.get('exception_message')}{path_suffix}"
+        )
+    return record_copy
+
+
+def _summarize_phenix_primary_failure(
+    primary_exc: BaseException,
+    *,
+    failed_stage: str,
+) -> dict[str, Any]:
+    """Summarize an active primary exception before chaining a superseding control exception."""
+    raw_log_path = getattr(primary_exc, "log_path", None)
+    log_path_str = (
+        str(raw_log_path)
+        if isinstance(raw_log_path, (Path, str)) and str(raw_log_path)
+        else None
+    )
+    existing_raw = getattr(primary_exc, "secondary_failures", None)
+    secondary_list: list[dict[str, Any]] = (
+        [
+            copy.deepcopy(dict(item))
+            for item in existing_raw
+            if isinstance(item, Mapping)
+        ]
+        if isinstance(existing_raw, Sequence)
+        and not isinstance(existing_raw, (str, bytes))
+        else []
+    )
+    summary: dict[str, Any] = {
+        "failed_stage": str(failed_stage),
+        "exception_type": type(primary_exc).__name__,
+        "exception_message": str(primary_exc),
+        "errno": getattr(primary_exc, "errno", None),
+        "log_path": log_path_str,
+        "secondary_failures": secondary_list,
+    }
+    if isinstance(primary_exc, SystemExit):
+        summary["system_exit_code"] = (
+            primary_exc.code
+            if isinstance(primary_exc.code, (int, str, bool))
+            or primary_exc.code is None
+            else repr(primary_exc.code)
+        )
+    return summary
+
+
+def _chain_phenix_control_from_primary(
+    control_exc: BaseException,
+    primary_exc: BaseException,
+    *,
+    failed_stage: str,
+) -> None:
+    """Attach prior-primary facts to a new control exception before raising ``from primary_exc``."""
+    primary_summary = _summarize_phenix_primary_failure(
+        primary_exc, failed_stage=failed_stage
+    )
+    control_exc.primary_failure = primary_summary  # type: ignore[attr-defined]
+    control_exc.secondary_failures = copy.deepcopy(  # type: ignore[attr-defined]
+        primary_summary["secondary_failures"]
+    )
+    if (
+        getattr(control_exc, "log_path", None) is None
+        and getattr(primary_exc, "log_path", None) is not None
+    ):
+        control_exc.log_path = getattr(primary_exc, "log_path")  # type: ignore[attr-defined]
+    if hasattr(control_exc, "add_note"):
+        log_suffix = (
+            f" (log_path={primary_summary['log_path']})"
+            if primary_summary.get("log_path") is not None
+            else ""
+        )
+        control_exc.add_note(
+            f"primary_failure[{failed_stage}]: "
+            f"{primary_summary['exception_type']}: "
+            f"{primary_summary['exception_message']}{log_suffix}"
+        )
+
+
 def run_phenix_rfactor_operation(
     evidence_root: Path,
     subject_id: str = "R4",
@@ -3438,7 +3562,9 @@ def run_phenix_rfactor_operation(
             key: _sha256_regular_file(path)
             for key, path in vendor_sources.items()
         }
-    except Exception as exc:
+    except (Exception, KeyboardInterrupt, SystemExit) as exc:
+        if getattr(exc, "phenix_failed_stage", None) is None:
+            exc.phenix_failed_stage = preflight_stage  # type: ignore[attr-defined]
         admission_failure_record = {
             "schema_version": 1,
             "status": "rejected",
@@ -3454,11 +3580,31 @@ def run_phenix_rfactor_operation(
                 "exception_type": type(exc).__name__,
                 "exception_message": str(exc),
             },
+            "secondary_failures": [
+                copy.deepcopy(dict(item))
+                for item in getattr(exc, "secondary_failures", ())
+                if isinstance(item, Mapping)
+            ],
             "worker_launched": False,
         }
-        onesar_phenix_measure._atomic_write_json_checkpoint(
-            admission_failure_record, admission_failure_json_path
-        )
+        try:
+            onesar_phenix_measure._atomic_write_json_checkpoint(
+                admission_failure_record, admission_failure_json_path
+            )
+        except Exception as write_exc:
+            sec_rec = _build_phenix_secondary_failure_record(
+                write_exc,
+                phase="phenix_build_admission_failure_checkpoint",
+                path=admission_failure_json_path,
+            )
+            _attach_phenix_secondary_failure(exc, sec_rec)
+        except BaseException as ctrl_exc:
+            if isinstance(ctrl_exc, (KeyboardInterrupt, SystemExit)):
+                _chain_phenix_control_from_primary(
+                    ctrl_exc, exc, failed_stage=preflight_stage
+                )
+                raise ctrl_exc from exc
+            raise
         raise
 
     helper_script = (_SCRIPTS_DIR / "onesar_phenix_measure.py").resolve(strict=True)
@@ -3533,14 +3679,40 @@ def run_phenix_rfactor_operation(
 
     def _retain_parent_operation_failure(
         attempt_dir: Path | None,
-        exc: Exception,
+        exc: BaseException,
         *,
         failed_stage: str,
+        staged_input_postchecks: Mapping[str, Any] | None = None,
     ) -> None:
+        if getattr(exc, "phenix_failed_stage", None) is None:
+            exc.phenix_failed_stage = failed_stage  # type: ignore[attr-defined]
+        if staged_input_postchecks is not None:
+            exc.staged_input_postchecks = copy.deepcopy(  # type: ignore[attr-defined]
+                dict(staged_input_postchecks)
+            )
         retained_artifacts: dict[str, dict[str, str]] = {}
         diagnostics_summary: dict[str, Any] | None = None
         partial_summary: dict[str, Any] | None = None
-        if attempt_dir is not None and attempt_dir.is_dir():
+        attempt_dir_is_dir = False
+        if attempt_dir is not None:
+            try:
+                attempt_dir_is_dir = attempt_dir.is_dir()
+            except Exception as dir_exc:
+                sec_rec = _build_phenix_secondary_failure_record(
+                    dir_exc,
+                    phase="retain_parent_operation_failure_attempt_dir",
+                    path=attempt_dir,
+                )
+                _attach_phenix_secondary_failure(exc, sec_rec)
+            except BaseException as ctrl_exc:
+                if isinstance(ctrl_exc, (KeyboardInterrupt, SystemExit)):
+                    _chain_phenix_control_from_primary(
+                        ctrl_exc, exc, failed_stage=failed_stage
+                    )
+                    raise ctrl_exc from exc
+                raise
+
+        if attempt_dir is not None and attempt_dir_is_dir:
             candidate_files = {
                 "stdout_log": attempt_dir / "stdout.log",
                 "invocation_json": attempt_dir / "invocation.json",
@@ -3556,11 +3728,26 @@ def run_phenix_rfactor_operation(
                 "manifest_json": attempt_dir / "success.json",
             }
             for label, cand_path in candidate_files.items():
-                if cand_path.is_file() and not cand_path.is_symlink():
-                    retained_artifacts[label] = {
-                        "path": str(cand_path),
-                        "sha256": _sha256_regular_file(cand_path),
-                    }
+                try:
+                    if cand_path.is_file() and not cand_path.is_symlink():
+                        retained_artifacts[label] = {
+                            "path": str(cand_path),
+                            "sha256": _sha256_regular_file(cand_path),
+                        }
+                except Exception as cand_exc:
+                    sec_rec = _build_phenix_secondary_failure_record(
+                        cand_exc,
+                        phase=f"retain_parent_operation_failure_artifact:{label}",
+                        path=cand_path,
+                    )
+                    _attach_phenix_secondary_failure(exc, sec_rec)
+                except BaseException as ctrl_exc:
+                    if isinstance(ctrl_exc, (KeyboardInterrupt, SystemExit)):
+                        _chain_phenix_control_from_primary(
+                            ctrl_exc, exc, failed_stage=failed_stage
+                        )
+                        raise ctrl_exc from exc
+                    raise
             diag_cand = candidate_files["phenix_diagnostics_json"]
             if "phenix_diagnostics_json" in retained_artifacts:
                 try:
@@ -3579,8 +3766,25 @@ def run_phenix_rfactor_operation(
                             ),
                             "failure": diag_doc.get("failure"),
                         }
-                except Exception:
+                        if "secondary_failures" in diag_doc:
+                            diagnostics_summary["secondary_failures"] = (
+                                copy.deepcopy(diag_doc.get("secondary_failures"))
+                            )
+                except Exception as diag_parse_exc:
                     diagnostics_summary = None
+                    sec_rec = _build_phenix_secondary_failure_record(
+                        diag_parse_exc,
+                        phase="retain_parent_operation_failure_parse:phenix_diagnostics_json",
+                        path=diag_cand,
+                    )
+                    _attach_phenix_secondary_failure(exc, sec_rec)
+                except BaseException as ctrl_exc:
+                    if isinstance(ctrl_exc, (KeyboardInterrupt, SystemExit)):
+                        _chain_phenix_control_from_primary(
+                            ctrl_exc, exc, failed_stage=failed_stage
+                        )
+                        raise ctrl_exc from exc
+                    raise
             partial_cand = candidate_files["phenix_partial_evidence_json"]
             if "phenix_partial_evidence_json" in retained_artifacts:
                 try:
@@ -3603,10 +3807,40 @@ def run_phenix_rfactor_operation(
                             ),
                             "failure": partial_doc.get("failure"),
                         }
-                except Exception:
+                        if "secondary_failures" in partial_doc:
+                            partial_summary["secondary_failures"] = (
+                                copy.deepcopy(
+                                    partial_doc.get("secondary_failures")
+                                )
+                            )
+                except Exception as partial_parse_exc:
                     partial_summary = None
+                    sec_rec = _build_phenix_secondary_failure_record(
+                        partial_parse_exc,
+                        phase="retain_parent_operation_failure_parse:phenix_partial_evidence_json",
+                        path=partial_cand,
+                    )
+                    _attach_phenix_secondary_failure(exc, sec_rec)
+                except BaseException as ctrl_exc:
+                    if isinstance(ctrl_exc, (KeyboardInterrupt, SystemExit)):
+                        _chain_phenix_control_from_primary(
+                            ctrl_exc, exc, failed_stage=failed_stage
+                        )
+                        raise ctrl_exc from exc
+                    raise
 
-        failure_manifest = {
+        raw_log_path = getattr(exc, "log_path", None)
+        log_path_str = (
+            str(raw_log_path)
+            if isinstance(raw_log_path, (Path, str)) and str(raw_log_path)
+            else None
+        )
+        secondary_list = [
+            copy.deepcopy(dict(item))
+            for item in getattr(exc, "secondary_failures", ())
+            if isinstance(item, Mapping)
+        ]
+        failure_manifest: dict[str, Any] = {
             "schema_version": 1,
             "status": "failed",
             "reusable_cache_output": False,
@@ -3617,6 +3851,7 @@ def run_phenix_rfactor_operation(
                 str(attempt_dir) if attempt_dir is not None else None
             ),
             "returncode": getattr(exc, "returncode", None),
+            "log_path": log_path_str,
             "exception_type": type(exc).__name__,
             "exception_message": str(exc),
             "preflight_build_evidence_json_path": str(
@@ -3626,61 +3861,153 @@ def run_phenix_rfactor_operation(
             "retained_attempt_artifacts": retained_artifacts,
             "diagnostics_summary": diagnostics_summary,
             "partial_evidence_summary": partial_summary,
+            "secondary_failures": secondary_list,
         }
-        onesar_phenix_measure._atomic_write_json_checkpoint(
-            failure_manifest, operation_failure_json_path
-        )
+        if staged_input_postchecks is not None:
+            failure_manifest["staged_input_postchecks"] = copy.deepcopy(
+                dict(staged_input_postchecks)
+            )
+        try:
+            onesar_phenix_measure._atomic_write_json_checkpoint(
+                failure_manifest, operation_failure_json_path
+            )
+        except Exception as write_exc:
+            sec_rec = _build_phenix_secondary_failure_record(
+                write_exc,
+                phase="retain_parent_operation_failure_checkpoint",
+                path=operation_failure_json_path,
+            )
+            _attach_phenix_secondary_failure(exc, sec_rec)
+        except BaseException as ctrl_exc:
+            if isinstance(ctrl_exc, (KeyboardInterrupt, SystemExit)):
+                _chain_phenix_control_from_primary(
+                    ctrl_exc, exc, failed_stage=failed_stage
+                )
+                raise ctrl_exc from exc
+            raise
+
+    staged_postcheck_specs: tuple[tuple[str, Path, str, str], ...] = (
+        (
+            "original_model_pdb",
+            original_pdb_path,
+            "original_model_pdb_sha256",
+            "Staged original_model.pdb mutated during PHENIX operation",
+        ),
+        (
+            "original_data_mtz",
+            original_mtz_path,
+            "original_data_mtz_sha256",
+            "Staged original_data.mtz mutated during PHENIX operation",
+        ),
+        (
+            "projected_observations_mtz",
+            projected_mtz_path,
+            "projected_observations_mtz_sha256",
+            "Staged projected_observations.mtz mutated during PHENIX operation",
+        ),
+        (
+            "input_hkl_ledger_json",
+            input_ledger_path,
+            "input_hkl_ledger_json_sha256",
+            "Staged input_hkl_ledger.json mutated during PHENIX operation",
+        ),
+    )
+    staged_postcheck_results: dict[str, dict[str, Any]] = {}
+    artifact_paths: dict[str, Path] | None = None
+    producer_primary: BaseException | None = None
+    producer_failed_stage: str = "cached_phenix_operation"
+    producer_attempt_dir: Path | None = None
 
     try:
-        try:
-            artifact_paths = refinement_cache.cached_phenix_operation(
-                cache_dir,
-                operation_name,
-                executable="phenix.python",
-                inputs=input_files,
-                arguments=arguments,
-                required_outputs=required_outputs,
-                timeout=timeout,
-                runner=runner,
-            )
-        except Exception as exc:
-            log_p = getattr(exc, "log_path", None)
-            attempt_p = log_p.parent if isinstance(log_p, Path) else None
-            _retain_parent_operation_failure(
-                attempt_p, exc, failed_stage="cached_phenix_operation"
-            )
-            raise
-    finally:
-        # Verify staged inputs were never mutated during execution.
-        if (
-            _sha256_regular_file(original_pdb_path)
-            != staged["admission_record"]["staged_files"]["original_model_pdb_sha256"]
-        ):
-            raise ValueError("Staged original_model.pdb mutated during PHENIX operation")
-        if (
-            _sha256_regular_file(original_mtz_path)
-            != staged["admission_record"]["staged_files"]["original_data_mtz_sha256"]
-        ):
-            raise ValueError("Staged original_data.mtz mutated during PHENIX operation")
-        if (
-            _sha256_regular_file(projected_mtz_path)
-            != staged["admission_record"]["staged_files"][
-                "projected_observations_mtz_sha256"
-            ]
-        ):
-            raise ValueError(
-                "Staged projected_observations.mtz mutated during PHENIX operation"
-            )
-        if (
-            _sha256_regular_file(input_ledger_path)
-            != staged["admission_record"]["staged_files"][
-                "input_hkl_ledger_json_sha256"
-            ]
-        ):
-            raise ValueError(
-                "Staged input_hkl_ledger.json mutated during PHENIX operation"
-            )
+        artifact_paths = refinement_cache.cached_phenix_operation(
+            cache_dir,
+            operation_name,
+            executable="phenix.python",
+            inputs=input_files,
+            arguments=arguments,
+            required_outputs=required_outputs,
+            timeout=timeout,
+            runner=runner,
+        )
+        diag_path_cand = artifact_paths.get("phenix_diagnostics_json")
+        if isinstance(diag_path_cand, Path):
+            producer_attempt_dir = diag_path_cand.parent
+    except (Exception, KeyboardInterrupt, SystemExit) as exc:
+        producer_primary = exc
+        producer_failed_stage = "cached_phenix_operation"
+        if getattr(exc, "phenix_failed_stage", None) is None:
+            exc.phenix_failed_stage = producer_failed_stage  # type: ignore[attr-defined]
+        log_p = getattr(exc, "log_path", None)
+        if isinstance(log_p, Path):
+            producer_attempt_dir = log_p.parent
+        elif isinstance(log_p, str) and log_p:
+            producer_attempt_dir = Path(log_p).parent
 
+    # Verify staged inputs were never mutated during execution across both
+    # success and failure paths without replacing an active producer primary.
+    for (
+        check_key,
+        file_path,
+        expected_sha_key,
+        mutation_msg,
+    ) in staged_postcheck_specs:
+        expected_sha = staged["admission_record"]["staged_files"][
+            expected_sha_key
+        ]
+        computed_sha: str | None = None
+        try:
+            computed_sha = _sha256_regular_file(file_path)
+            if computed_sha != expected_sha:
+                raise ValueError(mutation_msg)
+            staged_postcheck_results[check_key] = {
+                "path": str(file_path),
+                "expected_sha256": expected_sha,
+                "actual_sha256": computed_sha,
+                "verified": True,
+                "error": None,
+            }
+        except Exception as post_exc:
+            err_rec = _build_phenix_secondary_failure_record(
+                post_exc,
+                phase=f"staged_input_postcheck:{check_key}",
+                path=file_path,
+            )
+            staged_postcheck_results[check_key] = {
+                "path": str(file_path),
+                "expected_sha256": expected_sha,
+                "actual_sha256": computed_sha,
+                "verified": False,
+                "error": err_rec,
+            }
+            if producer_primary is None:
+                producer_primary = post_exc
+                producer_failed_stage = "staged_input_postcheck"
+                if getattr(post_exc, "phenix_failed_stage", None) is None:
+                    post_exc.phenix_failed_stage = producer_failed_stage  # type: ignore[attr-defined]
+            else:
+                _attach_phenix_secondary_failure(producer_primary, err_rec)
+        except BaseException as ctrl_exc:
+            if isinstance(ctrl_exc, (KeyboardInterrupt, SystemExit)):
+                if producer_primary is not None:
+                    _chain_phenix_control_from_primary(
+                        ctrl_exc,
+                        producer_primary,
+                        failed_stage=producer_failed_stage,
+                    )
+                    raise ctrl_exc from producer_primary
+                raise
+            raise
+
+    if producer_primary is not None:
+        _retain_parent_operation_failure(
+            producer_attempt_dir,
+            producer_primary,
+            failed_stage=producer_failed_stage,
+            staged_input_postchecks=staged_postcheck_results,
+        )
+        raise producer_primary
+
+    assert artifact_paths is not None
     manifest_path = artifact_paths["manifest"]
     output_json_path = artifact_paths["phenix_rfactors_json"]
     output_maps_mtz_path = artifact_paths["phx_maps_mtz"]
@@ -3774,11 +4101,12 @@ def run_phenix_rfactor_operation(
             phenix_diagnostics_path=output_diagnostics_json_path,
             cache_manifest_artifacts=manifest_artifacts,
         )
-    except Exception as exc:
+    except (Exception, KeyboardInterrupt, SystemExit) as exc:
         _retain_parent_operation_failure(
             output_diagnostics_json_path.parent,
             exc,
             failed_stage="reconcile_phenix_rfactor_output",
+            staged_input_postchecks=staged_postcheck_results,
         )
         raise
 
@@ -5231,6 +5559,38 @@ def run_single_subject_rfactor_attempt(
         elif getattr(exc, "system_exit_code", None) is not None:
             system_exit_code = getattr(exc, "system_exit_code")
 
+        raw_exc_log_path = getattr(exc, "log_path", None)
+        exc_log_path_str = (
+            str(raw_exc_log_path)
+            if isinstance(raw_exc_log_path, (Path, str))
+            and str(raw_exc_log_path)
+            else None
+        )
+        raw_exc_secondary = getattr(exc, "secondary_failures", None)
+        exc_secondary_failures: list[dict[str, Any]] = (
+            [
+                copy.deepcopy(dict(item))
+                for item in raw_exc_secondary
+                if isinstance(item, Mapping)
+            ]
+            if isinstance(raw_exc_secondary, Sequence)
+            and not isinstance(raw_exc_secondary, (str, bytes))
+            else []
+        )
+        raw_primary_failure = getattr(exc, "primary_failure", None)
+        exc_primary_failure = (
+            copy.deepcopy(dict(raw_primary_failure))
+            if isinstance(raw_primary_failure, Mapping)
+            else None
+        )
+        raw_staged_postchecks = getattr(exc, "staged_input_postchecks", None)
+        exc_staged_postchecks = (
+            copy.deepcopy(dict(raw_staged_postchecks))
+            if isinstance(raw_staged_postchecks, Mapping)
+            else None
+        )
+        raw_phenix_stage = getattr(exc, "phenix_failed_stage", None)
+
         error_record = {
             "exception_type": type(exc).__name__,
             "exception_message": str(exc),
@@ -5245,6 +5605,13 @@ def run_single_subject_rfactor_attempt(
                 else None
             ),
             "system_exit_code": system_exit_code,
+            "log_path": exc_log_path_str,
+            "phenix_failed_stage": (
+                str(raw_phenix_stage) if raw_phenix_stage is not None else None
+            ),
+            "secondary_failures": exc_secondary_failures,
+            "primary_failure": exc_primary_failure,
+            "staged_input_postchecks": exc_staged_postchecks,
             "notes": [str(n) for n in getattr(exc, "__notes__", ())],
         }
 

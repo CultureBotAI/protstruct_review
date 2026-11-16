@@ -930,6 +930,8 @@ def inspect_native_trace_envelope(
             return _early_failure_result(path_str)
 
         open_flags = os.O_RDONLY
+        if hasattr(os, "O_NONBLOCK"):
+            open_flags |= os.O_NONBLOCK
         if hasattr(os, "O_CLOEXEC"):
             open_flags |= os.O_CLOEXEC
         if hasattr(os, "O_NOFOLLOW"):

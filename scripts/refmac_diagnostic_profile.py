@@ -6318,6 +6318,10 @@ def _parse_verified_json_bytes(
         raise ValueError(
             f"Invalid JSON syntax in {expected_pin.path!r}: {exc}"
         ) from exc
+    except RecursionError as exc:
+        raise ValueError(
+            f"JSON recursion limit exceeded while decoding {expected_pin.path!r}: {exc}"
+        ) from exc
 
 
 def _read_pinned_json(
@@ -6342,15 +6346,21 @@ def _read_pinned_json(
     assert raw_bytes is not None
     try:
         payload = _parse_verified_json_bytes(raw_bytes, expected_pin=pin)
+        return _PinnedJsonDocument(
+            pin=pin,
+            observation=observation,
+            payload=payload,
+        )
     except ValueError as exc:
         raise _ObservedFilePinError(
             str(exc), observation=observation, stage="manifest_json"
         ) from exc
-    return _PinnedJsonDocument(
-        pin=pin,
-        observation=observation,
-        payload=payload,
-    )
+    except RecursionError as exc:
+        raise _ObservedFilePinError(
+            f"JSON recursion limit exceeded while freezing {pin.path!r}: {exc}",
+            observation=observation,
+            stage="manifest_json",
+        ) from exc
 
 
 

@@ -780,6 +780,139 @@ class _PersistentTeeLogStream:
         return self._buffer.getvalue()
 
 
+def _build_worker_secondary_failure_record(
+    exc: BaseException,
+    *,
+    phase: str,
+    path: Path | str | None = None,
+) -> dict[str, Any]:
+    """Build a JSON-safe secondary failure record for a worker finalization or reporting collision."""
+    record: dict[str, Any] = {
+        "phase": str(phase),
+        "exception_type": type(exc).__name__,
+        "exception_message": str(exc),
+        "errno": getattr(exc, "errno", None),
+    }
+    if path is not None:
+        record["path"] = str(path)
+    return record
+
+
+def _attach_worker_secondary_failure(
+    primary_exc: BaseException,
+    record: Mapping[str, Any],
+    *,
+    shared_records: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Attach a JSON-safe secondary failure record to ``primary_exc`` and optional ``shared_records``."""
+    record_copy = copy.deepcopy(dict(record))
+    if shared_records is not None:
+        shared_records.append(copy.deepcopy(record_copy))
+    existing_raw = getattr(primary_exc, "secondary_failures", None)
+    existing: list[dict[str, Any]] = (
+        [
+            copy.deepcopy(dict(item))
+            for item in existing_raw
+            if isinstance(item, Mapping)
+        ]
+        if isinstance(existing_raw, Sequence)
+        and not isinstance(existing_raw, (str, bytes))
+        else []
+    )
+    existing.append(record_copy)
+    primary_exc.secondary_failures = existing  # type: ignore[attr-defined]
+    return record_copy
+
+
+def _summarize_worker_primary_failure(
+    primary_exc: BaseException,
+    *,
+    failed_phase: str,
+) -> dict[str, Any]:
+    """Summarize an active worker primary exception before chaining a superseding control exception."""
+    existing_raw = getattr(primary_exc, "secondary_failures", None)
+    secondary_list: list[dict[str, Any]] = (
+        [
+            copy.deepcopy(dict(item))
+            for item in existing_raw
+            if isinstance(item, Mapping)
+        ]
+        if isinstance(existing_raw, Sequence)
+        and not isinstance(existing_raw, (str, bytes))
+        else []
+    )
+    summary: dict[str, Any] = {
+        "failed_phase": str(failed_phase),
+        "exception_type": type(primary_exc).__name__,
+        "exception_message": str(primary_exc),
+        "errno": getattr(primary_exc, "errno", None),
+        "secondary_failures": secondary_list,
+    }
+    if isinstance(primary_exc, SystemExit):
+        summary["system_exit_code"] = (
+            primary_exc.code
+            if isinstance(primary_exc.code, (int, str, bool))
+            or primary_exc.code is None
+            else repr(primary_exc.code)
+        )
+    return summary
+
+
+def _chain_worker_control_from_primary(
+    control_exc: BaseException,
+    primary_exc: BaseException,
+    *,
+    failed_phase: str,
+) -> None:
+    """Attach prior-primary facts to a new control exception before raising ``from primary_exc``."""
+    primary_summary = _summarize_worker_primary_failure(
+        primary_exc, failed_phase=failed_phase
+    )
+    control_exc.primary_failure = primary_summary  # type: ignore[attr-defined]
+    control_exc.secondary_failures = copy.deepcopy(  # type: ignore[attr-defined]
+        primary_summary["secondary_failures"]
+    )
+
+
+def _finalize_log_stream_preserving_primary(
+    log_stream: _PersistentTeeLogStream,
+    *,
+    active_primary: BaseException | None,
+    finalize_phase: str,
+    failed_phase: str,
+    secondary_failures: list[dict[str, Any]],
+    diagnostics_json_path: Path | None = None,
+) -> str | None:
+    """Finalize ``log_stream`` once while preserving any local ``active_primary`` exception."""
+    try:
+        return log_stream.finalize()
+    except Exception as finalize_exc:
+        if active_primary is None:
+            raise
+        sec_rec = _build_worker_secondary_failure_record(
+            finalize_exc,
+            phase=finalize_phase,
+            path=diagnostics_json_path,
+        )
+        _attach_worker_secondary_failure(
+            active_primary,
+            sec_rec,
+            shared_records=secondary_failures,
+        )
+        return None
+    except BaseException as ctrl_exc:
+        if active_primary is not None and isinstance(
+            ctrl_exc, (KeyboardInterrupt, SystemExit)
+        ):
+            _chain_worker_control_from_primary(
+                ctrl_exc,
+                active_primary,
+                failed_phase=failed_phase,
+            )
+            raise ctrl_exc from active_primary
+        raise
+
+
 def measure_first_block_rfactors(
     *,
     pdb_path: Path,
@@ -879,6 +1012,7 @@ def measure_first_block_rfactors(
         "failure": None,
     }
     current_phase = "parameter_validation"
+    secondary_failures: list[dict[str, Any]] = []
 
     def _enter_phase(phase: str) -> None:
         nonlocal current_phase
@@ -1130,6 +1264,7 @@ def measure_first_block_rfactors(
             "model_manager_log",
             diagnostics_json_path=out_diagnostics_json_path,
         )
+        model_primary_exc: BaseException | None = None
         try:
             model = mmtbx.model.manager(
                 model_input=pdb_inp,
@@ -1140,8 +1275,18 @@ def measure_first_block_rfactors(
                 scattering_table="n_gaussian",
                 d_min=df.f_obs.d_min(),
             )
+        except BaseException as exc:
+            model_primary_exc = exc
+            raise
         finally:
-            model_log.finalize()
+            _finalize_log_stream_preserving_primary(
+                model_log,
+                active_primary=model_primary_exc,
+                finalize_phase="model_manager_log_finalize",
+                failed_phase=current_phase,
+                secondary_failures=secondary_failures,
+                diagnostics_json_path=out_diagnostics_json_path,
+            )
 
         before_xrs_snapshot = _capture_xrs_snapshot(
             model.get_xray_structure(),
@@ -1169,10 +1314,21 @@ def measure_first_block_rfactors(
             "fmodel_update_all_scales_log",
             diagnostics_json_path=out_diagnostics_json_path,
         )
+        fmodel_primary_exc: BaseException | None = None
         try:
             fmodel.update_all_scales(update_f_part1=True, log=fmodel_log)
+        except BaseException as exc:
+            fmodel_primary_exc = exc
+            raise
         finally:
-            fmodel_log.finalize()
+            _finalize_log_stream_preserving_primary(
+                fmodel_log,
+                active_primary=fmodel_primary_exc,
+                finalize_phase="fmodel_update_all_scales_log_finalize",
+                failed_phase=current_phase,
+                secondary_failures=secondary_failures,
+                diagnostics_json_path=out_diagnostics_json_path,
+            )
 
         after_model_xrs_snapshot = _capture_xrs_snapshot(
             model.get_xray_structure(),
@@ -1719,16 +1875,20 @@ def measure_first_block_rfactors(
                 "mmtbx.f_model.manager.__init__ accepts no log parameter "
                 "in PHENIX 2.0-5936; no internal constructor log stream exists."
             )
-        failure_record = {
+        failure_record: dict[str, Any] = {
             "failed_phase": current_phase,
             "exception_type": type(exc).__name__,
             "exception_message": str(exc),
             "constructor_log_limitation": limitation,
+            "secondary_failures": copy.deepcopy(secondary_failures),
         }
         partial_evidence["status"] = "failed_partial_unverified"
         partial_evidence["current_phase"] = current_phase
         partial_evidence["phase_history"] = list(diagnostics["phase_history"])
         partial_evidence["failure"] = copy.deepcopy(failure_record)
+        partial_evidence["secondary_failures"] = copy.deepcopy(
+            secondary_failures
+        )
         diagnostics["status"] = "failed"
         diagnostics["current_phase"] = current_phase
         diagnostics["partial_evidence_status"] = partial_evidence["status"]
@@ -1736,6 +1896,9 @@ def measure_first_block_rfactors(
             partial_evidence["completed_stages"]
         )
         diagnostics["failure"] = failure_record
+        diagnostics["secondary_failures"] = copy.deepcopy(secondary_failures)
+        failure_reporting_phase = "failure_partial_evidence_checkpoint"
+        failure_reporting_path: Path | None = effective_partial_json_path
         try:
             _prepare_partial_evidence_for_checkpoint(partial_evidence)
             _atomic_write_json_checkpoint(
@@ -1743,7 +1906,11 @@ def measure_first_block_rfactors(
                 effective_partial_json_path,
                 allow_nonfinite_tags=True,
             )
+            failure_reporting_phase = "failure_diagnostics_checkpoint"
+            failure_reporting_path = out_diagnostics_json_path
             _checkpoint_diagnostics(diagnostics, out_diagnostics_json_path)
+            failure_reporting_phase = "failure_diagnostic_stderr"
+            failure_reporting_path = None
             sys.stderr.write(
                 "=== [onesar_phenix_measure] FAILURE DIAGNOSTIC ===\n"
                 + json.dumps(
@@ -1756,11 +1923,76 @@ def measure_first_block_rfactors(
             )
             sys.stderr.flush()
         except Exception as checkpoint_exc:
-            sys.stderr.write(
-                "=== [onesar_phenix_measure] CHECKPOINT SERIALIZATION WARNING ===\n"
-                f"{type(checkpoint_exc).__name__}: {checkpoint_exc}\n"
+            checkpoint_sec = _build_worker_secondary_failure_record(
+                checkpoint_exc,
+                phase=failure_reporting_phase,
+                path=failure_reporting_path,
             )
-            sys.stderr.flush()
+            _attach_worker_secondary_failure(
+                exc,
+                checkpoint_sec,
+                shared_records=secondary_failures,
+            )
+            failure_record["secondary_failures"] = copy.deepcopy(
+                secondary_failures
+            )
+            diagnostics["secondary_failures"] = copy.deepcopy(
+                secondary_failures
+            )
+            partial_evidence["secondary_failures"] = copy.deepcopy(
+                secondary_failures
+            )
+            if isinstance(partial_evidence.get("failure"), dict):
+                partial_evidence["failure"]["secondary_failures"] = (
+                    copy.deepcopy(secondary_failures)
+                )
+            try:
+                sys.stderr.write(
+                    "=== [onesar_phenix_measure] CHECKPOINT SERIALIZATION WARNING ===\n"
+                    f"{type(checkpoint_exc).__name__}: {checkpoint_exc}\n"
+                )
+                sys.stderr.flush()
+            except Exception as warning_exc:
+                warning_sec = _build_worker_secondary_failure_record(
+                    warning_exc,
+                    phase="checkpoint_serialization_warning_stderr",
+                )
+                _attach_worker_secondary_failure(
+                    exc,
+                    warning_sec,
+                    shared_records=secondary_failures,
+                )
+                failure_record["secondary_failures"] = copy.deepcopy(
+                    secondary_failures
+                )
+                diagnostics["secondary_failures"] = copy.deepcopy(
+                    secondary_failures
+                )
+                partial_evidence["secondary_failures"] = copy.deepcopy(
+                    secondary_failures
+                )
+                if isinstance(partial_evidence.get("failure"), dict):
+                    partial_evidence["failure"]["secondary_failures"] = (
+                        copy.deepcopy(secondary_failures)
+                    )
+            except BaseException as ctrl_exc:
+                if isinstance(ctrl_exc, (KeyboardInterrupt, SystemExit)):
+                    _chain_worker_control_from_primary(
+                        ctrl_exc,
+                        exc,
+                        failed_phase=current_phase,
+                    )
+                    raise ctrl_exc from exc
+                raise
+        except BaseException as ctrl_exc:
+            if isinstance(ctrl_exc, (KeyboardInterrupt, SystemExit)):
+                _chain_worker_control_from_primary(
+                    ctrl_exc,
+                    exc,
+                    failed_phase=current_phase,
+                )
+                raise ctrl_exc from exc
+            raise
         raise
 
 

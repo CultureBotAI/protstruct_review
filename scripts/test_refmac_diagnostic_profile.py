@@ -16278,6 +16278,580 @@ class TestTask990Issue1168PostEofObservations(unittest.TestCase):
                             public_healthy.to_dict(),
                         )
 
+    def _assert_1264_json_recursion_failure(
+        self,
+        err: ProfileValidationError,
+        *,
+        baseline: ValidatedProfile,
+        active_profile: RefmacDiagnosticProfile,
+        target_role: str,
+        target_role_fid: str | None,
+        target_path: Path,
+        expected_target_obs: _ObservedRegularFilePin,
+        expected_stage: str,
+        expected_msg_fragment: str,
+        ev_root: Path,
+        expected_cause: RecursionError | None = None,
+    ) -> None:
+        self.assertEqual(err.failed_check, expected_stage)
+        self.assertIs(err.profile_files_verified, False)
+        self.assertIsNone(err.selected_executable)
+        self.assertEqual(err.runtime_image_coverage, "not_assessed")
+        self.assertEqual(err.error_type, "RecursionError")
+        self.assertIsNone(err.error_errno)
+        self.assertIsInstance(err.cause_exception, RecursionError)
+        if expected_cause is not None:
+            self.assertIs(err.cause_exception, expected_cause)
+            self.assertEqual(err.error_message, str(expected_cause))
+        self.assertGreaterEqual(len(err.errors), 1)
+        self.assertEqual(len(err.error_records), len(err.errors))
+        self.assertEqual(err.error_records[0].stage, expected_stage)
+        self.assertIn(expected_msg_fragment, err.errors[0])
+        self.assertIn(str(target_path), err.errors[0])
+        self.assertEqual(err.evidence_root, str(ev_root))
+
+        prov = err.to_provenance()
+        self.assertIs(prov["profile_files_verified"], False)
+        self.assertIsNone(prov["selected_executable"])
+        self.assertEqual(prov["runtime_image_coverage"], "not_assessed")
+        self.assertEqual(prov["failed_check"], expected_stage)
+        self.assertEqual(prov["error"]["type"], "RecursionError")
+        self.assertIsNone(prov["error"]["errno"])
+        self.assertEqual(prov["error"]["message"], err.error_message)
+        self.assertEqual(prov["errors"], list(err.errors))
+        self.assertEqual(prov["evidence_root"], str(ev_root))
+
+        if target_role == "outer_manifest":
+            self.assertIsInstance(err.manifest_identity, FileObservation)
+            assert isinstance(err.manifest_identity, FileObservation)
+            self.assertEqual(
+                err.manifest_identity.path, expected_target_obs.path
+            )
+            self.assertEqual(
+                err.manifest_identity.resolved_path,
+                expected_target_obs.resolved_path,
+            )
+            self.assertEqual(
+                err.manifest_identity.sha256, expected_target_obs.sha256
+            )
+            self.assertEqual(
+                err.manifest_identity.size_bytes,
+                expected_target_obs.size_bytes,
+            )
+            self.assertEqual(
+                err.manifest_identity.identity_tuple,
+                expected_target_obs.identity_tuple,
+            )
+            self.assertEqual(
+                err.manifest_identity.symlinks, expected_target_obs.symlinks
+            )
+            self.assertEqual(
+                err.manifest_identity.ancestors,
+                baseline.manifest_identity.ancestors,
+            )
+            self.assertIs(err.manifest_identity.dependencies_complete, True)
+            self.assertIs(err.manifest_identity.verified, False)
+            self.assertTrue(
+                any(
+                    expected_msg_fragment in e
+                    for e in err.manifest_identity.errors
+                )
+            )
+            self.assertEqual(
+                prov["manifest"]["sha256"], expected_target_obs.sha256
+            )
+            self.assertEqual(
+                prov["manifest"]["size_bytes"], expected_target_obs.size_bytes
+            )
+            self.assertIs(prov["manifest"]["verified"], False)
+            self.assertIsInstance(
+                err.partial_observation, _PartialProfileObservation
+            )
+            assert err.partial_observation is not None
+            self.assertIsNotNone(err.partial_observation.manifest_observation)
+            self.assertIsNotNone(
+                err.partial_observation.manifest_file_observation
+            )
+            self.assertEqual(
+                err.partial_observation.evidence_root, str(ev_root)
+            )
+            self.assertEqual(len(err.files), 0)
+            self.assertEqual(len(err.roots), 0)
+            self.assertEqual(len(err.roles), 0)
+            self.assertEqual(prov["files"], {})
+            self.assertEqual(prov["roots"], {})
+        else:
+            assert target_role_fid is not None
+            self.assertIsNone(err.partial_observation)
+            self.assertIsInstance(err.manifest_identity, FileObservation)
+            assert isinstance(err.manifest_identity, FileObservation)
+            self.assertIs(err.manifest_identity.verified, True)
+            self.assertEqual(
+                err.manifest_identity.as_file_pin(), active_profile.manifest
+            )
+            self.assertEqual(len(err.files), len(baseline.files))
+            self.assertEqual(dict(err.roles), dict(baseline.roles))
+            self.assertEqual(
+                err.installed_reference, baseline.installed_reference
+            )
+            self.assertEqual(
+                dict(err.expected_environment),
+                dict(baseline.expected_environment),
+            )
+            self.assertEqual(
+                err.requested_absences, baseline.requested_absences
+            )
+            for fid, fobs in err.files:
+                self.assertIsInstance(fobs, FileObservation)
+                self.assertIs(fobs.verified, True)
+                self.assertIs(fobs.dependencies_complete, True)
+                if fid == target_role_fid:
+                    self.assertEqual(fobs.path, expected_target_obs.path)
+                    self.assertEqual(
+                        fobs.resolved_path, expected_target_obs.resolved_path
+                    )
+                    self.assertEqual(fobs.sha256, expected_target_obs.sha256)
+                    self.assertEqual(
+                        fobs.size_bytes, expected_target_obs.size_bytes
+                    )
+                    self.assertEqual(
+                        fobs.identity_tuple, expected_target_obs.identity_tuple
+                    )
+                else:
+                    self.assertEqual(fobs, baseline.files[fid])
+            self.assertEqual(len(err.roots), len(baseline.roots))
+            for rname, robs in err.roots:
+                base_robs = baseline.roots[rname]
+                self.assertIsInstance(robs, RootObservation)
+                self.assertEqual(robs.path, base_robs.path)
+                self.assertEqual(robs.resolved_path, base_robs.resolved_path)
+                self.assertEqual(
+                    (robs.dev, robs.ino, robs.mode, robs.uid, robs.gid),
+                    (
+                        base_robs.dev,
+                        base_robs.ino,
+                        base_robs.mode,
+                        base_robs.uid,
+                        base_robs.gid,
+                    ),
+                )
+                self.assertEqual(robs.members, base_robs.members)
+                self.assertEqual(robs.file_ids, base_robs.file_ids)
+                self.assertEqual(robs.subdirectories, base_robs.subdirectories)
+                self.assertIs(robs.scan_complete, True)
+                self.assertIs(robs.verified, True)
+                self.assertEqual(
+                    robs.excluded_root_git_present,
+                    base_robs.excluded_root_git_present,
+                )
+            self.assertEqual(len(prov["files"]), len(baseline.files))
+            self.assertEqual(len(prov["roots"]), len(baseline.roots))
+            self.assertEqual(
+                prov["files"][target_role_fid]["sha256"],
+                expected_target_obs.sha256,
+            )
+            self.assertEqual(
+                prov["files"][target_role_fid]["size_bytes"],
+                expected_target_obs.size_bytes,
+            )
+            self.assertIs(prov["files"][target_role_fid]["verified"], True)
+
+    def test_1264_decoder_recursion_retains_outer_and_inner_json_observations(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = _build_synthetic_outer_profile_fixture(Path(tmp))
+            profile = fx["profile"]
+            assert isinstance(profile, RefmacDiagnosticProfile)
+            installed_record = fx["installed_record"]
+            assert isinstance(installed_record, dict)
+            ccp4_env = fx["ccp4_env"]
+            assert isinstance(ccp4_env, dict)
+            ev_root = fx["evidence_root"]
+            assert isinstance(ev_root, Path)
+            base_payload = fx["manifest_payload"]
+            assert isinstance(base_payload, dict)
+            manifest_path = fx["manifest_path"]
+            assert isinstance(manifest_path, Path)
+
+            baseline = validate_profile(
+                profile, installed_record, ccp4_env, ev_root
+            )
+            self.assertTrue(baseline.profile_files_verified)
+
+            direct_rec_err = RecursionError("direct parse recursion error")
+            raw_manifest_bytes = manifest_path.read_bytes()
+            with mock.patch(
+                "refmac_diagnostic_profile.json.loads",
+                side_effect=direct_rec_err,
+            ):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    r"JSON recursion limit exceeded while decoding",
+                ) as direct_ctx:
+                    _parse_verified_json_bytes(
+                        raw_manifest_bytes, expected_pin=profile.manifest
+                    )
+            self.assertIs(direct_ctx.exception.__cause__, direct_rec_err)
+
+            real_json_loads = profile_mod.json.loads
+            for target_role in (
+                "outer_manifest",
+                "source_manifest",
+                "source_audit",
+                "build_receipt",
+                "runtime_observation",
+            ):
+                with self.subTest(target_role=target_role):
+                    if target_role == "outer_manifest":
+                        target_role_fid = None
+                        target_path = manifest_path
+                        expected_stage = "manifest_json"
+                    else:
+                        target_role_fid = str(
+                            base_payload["roles"][target_role][0]  # type: ignore[index]
+                        )
+                        target_path = Path(
+                            str(base_payload["files"][target_role_fid]["path"])  # type: ignore[index]
+                        )
+                        expected_stage = f"{target_role}_join"
+
+                    target_text = target_path.read_text(encoding="utf-8")
+                    expected_target_obs = _observe_regular_file_pin(
+                        str(target_path)
+                    )
+                    injected_err = RecursionError(
+                        f"synthetic decoder recursion for {target_role}"
+                    )
+                    hits: list[int] = []
+
+                    def selective_loads(s: Any, *args: Any, **kwargs: Any) -> Any:
+                        if s == target_text:
+                            hits.append(1)
+                            raise injected_err
+                        return real_json_loads(s, *args, **kwargs)
+
+                    with mock.patch(
+                        "refmac_diagnostic_profile.json.loads",
+                        side_effect=selective_loads,
+                    ):
+                        with self.assertRaises(ProfileValidationError) as ctx:
+                            validate_profile(
+                                profile, installed_record, ccp4_env, ev_root
+                            )
+
+                    self.assertEqual(len(hits), 1)
+                    self._assert_1264_json_recursion_failure(
+                        ctx.exception,
+                        baseline=baseline,
+                        active_profile=profile,
+                        target_role=target_role,
+                        target_role_fid=target_role_fid,
+                        target_path=target_path,
+                        expected_target_obs=expected_target_obs,
+                        expected_stage=expected_stage,
+                        expected_msg_fragment="JSON recursion limit exceeded while decoding",
+                        ev_root=ev_root,
+                        expected_cause=injected_err,
+                    )
+
+                    post_ctrl = validate_profile(
+                        profile, installed_record, ccp4_env, ev_root
+                    )
+                    self.assertTrue(post_ctrl.profile_files_verified)
+
+    def test_1264_freezer_recursion_retains_outer_and_inner_json_observations(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = _build_synthetic_outer_profile_fixture(Path(tmp))
+            profile = fx["profile"]
+            assert isinstance(profile, RefmacDiagnosticProfile)
+            installed_record = fx["installed_record"]
+            assert isinstance(installed_record, dict)
+            ccp4_env = fx["ccp4_env"]
+            assert isinstance(ccp4_env, dict)
+            ev_root = fx["evidence_root"]
+            assert isinstance(ev_root, Path)
+            base_payload = fx["manifest_payload"]
+            assert isinstance(base_payload, dict)
+            manifest_path = fx["manifest_path"]
+            assert isinstance(manifest_path, Path)
+
+            baseline = validate_profile(
+                profile, installed_record, ccp4_env, ev_root
+            )
+            self.assertTrue(baseline.profile_files_verified)
+
+            real_freeze = profile_mod._deep_freeze_json_value
+            for target_role in (
+                "outer_manifest",
+                "source_manifest",
+                "source_audit",
+                "build_receipt",
+                "runtime_observation",
+            ):
+                with self.subTest(target_role=target_role):
+                    if target_role == "outer_manifest":
+                        target_role_fid = None
+                        target_path = manifest_path
+                        expected_stage = "manifest_json"
+                    else:
+                        target_role_fid = str(
+                            base_payload["roles"][target_role][0]  # type: ignore[index]
+                        )
+                        target_path = Path(
+                            str(base_payload["files"][target_role_fid]["path"])  # type: ignore[index]
+                        )
+                        expected_stage = f"{target_role}_join"
+
+                    target_decoded_dict = json.loads(
+                        target_path.read_text(encoding="utf-8")
+                    )
+                    expected_target_obs = _observe_regular_file_pin(
+                        str(target_path)
+                    )
+                    injected_err = RecursionError(
+                        f"synthetic freezer recursion for {target_role}"
+                    )
+                    hits: list[int] = []
+
+                    def selective_freeze(val: Any) -> Any:
+                        if (
+                            not hits
+                            and isinstance(val, dict)
+                            and val == target_decoded_dict
+                        ):
+                            hits.append(1)
+                            raise injected_err
+                        return real_freeze(val)
+
+                    with mock.patch(
+                        "refmac_diagnostic_profile._deep_freeze_json_value",
+                        side_effect=selective_freeze,
+                    ):
+                        with self.assertRaises(ProfileValidationError) as ctx:
+                            validate_profile(
+                                profile, installed_record, ccp4_env, ev_root
+                            )
+
+                    self.assertEqual(len(hits), 1)
+                    self._assert_1264_json_recursion_failure(
+                        ctx.exception,
+                        baseline=baseline,
+                        active_profile=profile,
+                        target_role=target_role,
+                        target_role_fid=target_role_fid,
+                        target_path=target_path,
+                        expected_target_obs=expected_target_obs,
+                        expected_stage=expected_stage,
+                        expected_msg_fragment="JSON recursion limit exceeded while freezing",
+                        ev_root=ev_root,
+                        expected_cause=injected_err,
+                    )
+
+                    post_ctrl = validate_profile(
+                        profile, installed_record, ccp4_env, ev_root
+                    )
+                    self.assertTrue(post_ctrl.profile_files_verified)
+
+    def test_1264_deep_pinned_outer_and_inner_json_fail_closed(self) -> None:
+        depth = max(1500, 2 * sys.getrecursionlimit())
+        deep_bytes = (b"[" * depth) + b"0" + (b"]" * depth) + b"\n"
+
+        with tempfile.TemporaryDirectory() as tmp_ctrl:
+            fx_ctrl = _build_synthetic_outer_profile_fixture(Path(tmp_ctrl))
+            prof_sm_ctrl, restore_sm_ctrl = _mutate_inner_receipt_and_repin(
+                fx_ctrl, "source_manifest", lambda _d: None
+            )
+            try:
+                val_sm_ctrl = validate_profile(
+                    prof_sm_ctrl,
+                    fx_ctrl["installed_record"],  # type: ignore[arg-type]
+                    fx_ctrl["ccp4_env"],  # type: ignore[arg-type]
+                    fx_ctrl["evidence_root"],  # type: ignore[arg-type]
+                )
+                self.assertTrue(val_sm_ctrl.profile_files_verified)
+            finally:
+                restore_sm_ctrl()
+
+        for target_role in (
+            "outer_manifest",
+            "source_manifest",
+            "source_audit",
+            "build_receipt",
+            "runtime_observation",
+        ):
+            with self.subTest(target_role=target_role):
+                with tempfile.TemporaryDirectory() as tmp_case:
+                    fx = _build_synthetic_outer_profile_fixture(Path(tmp_case))
+                    base_profile = fx["profile"]
+                    assert isinstance(base_profile, RefmacDiagnosticProfile)
+                    installed_record = fx["installed_record"]
+                    assert isinstance(installed_record, dict)
+                    ccp4_env = fx["ccp4_env"]
+                    assert isinstance(ccp4_env, dict)
+                    ev_root = fx["evidence_root"]
+                    assert isinstance(ev_root, Path)
+                    shallow_outer_payload = copy.deepcopy(fx["manifest_payload"])
+                    assert isinstance(shallow_outer_payload, dict)
+                    manifest_path = fx["manifest_path"]
+                    assert isinstance(manifest_path, Path)
+
+                    baseline = validate_profile(
+                        base_profile, installed_record, ccp4_env, ev_root
+                    )
+                    self.assertTrue(baseline.profile_files_verified)
+
+                    if target_role == "outer_manifest":
+                        target_role_fid = None
+                        target_path = manifest_path
+                        expected_stage = "manifest_json"
+                        manifest_path.write_bytes(deep_bytes)
+                        expected_target_obs = _observe_regular_file_pin(
+                            str(manifest_path)
+                        )
+                        active_profile = RefmacDiagnosticProfile(
+                            profile_id=base_profile.profile_id,
+                            manifest=_make_file_pin_on_disk(manifest_path),
+                            executable=base_profile.executable,
+                        )
+                    else:
+                        target_role_fid = str(
+                            shallow_outer_payload["roles"][target_role][0]  # type: ignore[index]
+                        )
+                        target_path = Path(
+                            str(
+                                shallow_outer_payload["files"][target_role_fid][  # type: ignore[index]
+                                    "path"
+                                ]
+                            )
+                        )
+                        expected_stage = f"{target_role}_join"
+                        target_path.write_bytes(deep_bytes)
+                        expected_target_obs = _observe_regular_file_pin(
+                            str(target_path)
+                        )
+                        shallow_outer_payload["files"][target_role_fid] = (  # type: ignore[index]
+                            expected_target_obs.to_manifest_row()
+                        )
+                        active_profile = _rewrite_manifest_and_profile(
+                            fx, shallow_outer_payload
+                        )
+
+                    with self.assertRaises(ProfileValidationError) as ctx:
+                        validate_profile(
+                            active_profile, installed_record, ccp4_env, ev_root
+                        )
+
+                    self._assert_1264_json_recursion_failure(
+                        ctx.exception,
+                        baseline=baseline,
+                        active_profile=active_profile,
+                        target_role=target_role,
+                        target_role_fid=target_role_fid,
+                        target_path=target_path,
+                        expected_target_obs=expected_target_obs,
+                        expected_stage=expected_stage,
+                        expected_msg_fragment="JSON recursion limit exceeded while ",
+                        ev_root=ev_root,
+                    )
+
+    def test_1264_json_boundary_process_control_exceptions_propagate(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = _build_synthetic_outer_profile_fixture(Path(tmp))
+            profile = fx["profile"]
+            assert isinstance(profile, RefmacDiagnosticProfile)
+            installed_record = fx["installed_record"]
+            assert isinstance(installed_record, dict)
+            ccp4_env = fx["ccp4_env"]
+            assert isinstance(ccp4_env, dict)
+            ev_root = fx["evidence_root"]
+            assert isinstance(ev_root, Path)
+            base_payload = fx["manifest_payload"]
+            assert isinstance(base_payload, dict)
+            manifest_path = fx["manifest_path"]
+            assert isinstance(manifest_path, Path)
+
+            real_json_loads = profile_mod.json.loads
+            real_freeze = profile_mod._deep_freeze_json_value
+
+            for target_role in ("outer_manifest", "source_manifest"):
+                if target_role == "outer_manifest":
+                    target_path = manifest_path
+                else:
+                    role_fid = str(
+                        base_payload["roles"][target_role][0]  # type: ignore[index]
+                    )
+                    target_path = Path(
+                        str(base_payload["files"][role_fid]["path"])  # type: ignore[index]
+                    )
+                target_text = target_path.read_text(encoding="utf-8")
+                target_decoded_dict = json.loads(target_text)
+
+                for boundary in ("decoder", "freezer"):
+                    for exc_factory in (
+                        lambda: KeyboardInterrupt("synthetic ctrl-c"),
+                        lambda: SystemExit(42),
+                        lambda: RuntimeError(
+                            "unrelated non-recursion runtime error"
+                        ),
+                    ):
+                        injected_exc = exc_factory()
+                        with self.subTest(
+                            target_role=target_role,
+                            boundary=boundary,
+                            exc_type=type(injected_exc).__name__,
+                        ):
+                            hits: list[int] = []
+                            if boundary == "decoder":
+
+                                def selective_loads_ctrl(
+                                    s: Any, *args: Any, **kwargs: Any
+                                ) -> Any:
+                                    if s == target_text:
+                                        hits.append(1)
+                                        raise injected_exc
+                                    return real_json_loads(
+                                        s, *args, **kwargs
+                                    )
+
+                                patch_ctx = mock.patch(
+                                    "refmac_diagnostic_profile.json.loads",
+                                    side_effect=selective_loads_ctrl,
+                                )
+                            else:
+
+                                def selective_freeze_ctrl(val: Any) -> Any:
+                                    if (
+                                        not hits
+                                        and isinstance(val, dict)
+                                        and val == target_decoded_dict
+                                    ):
+                                        hits.append(1)
+                                        raise injected_exc
+                                    return real_freeze(val)
+
+                                patch_ctx = mock.patch(
+                                    "refmac_diagnostic_profile._deep_freeze_json_value",
+                                    side_effect=selective_freeze_ctrl,
+                                )
+
+                            with patch_ctx:
+                                with self.assertRaises(
+                                    type(injected_exc)
+                                ) as cm:
+                                    validate_profile(
+                                        profile,
+                                        installed_record,
+                                        ccp4_env,
+                                        ev_root,
+                                    )
+                            self.assertEqual(len(hits), 1)
+                            self.assertIs(cm.exception, injected_exc)
+
 
 if __name__ == "__main__":
     unittest.main()

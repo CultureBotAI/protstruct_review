@@ -7,6 +7,7 @@ import errno
 import hashlib
 import json
 import os
+import stat
 import sys
 import tempfile
 import unittest
@@ -1499,6 +1500,337 @@ class TestRefmacDiagnosticTraceReader(unittest.TestCase):
             )
             self.assertTrue(outer_after["valid"])
             self.assertEqual(outer_after, outer_before)
+
+    def test_filesystem_trace_reader_nonblocking_regular_file_admission_and_fifo_replacement(
+        self,
+    ) -> None:
+        if not hasattr(os, "mkfifo") or not hasattr(os, "O_NONBLOCK"):
+            self.skipTest("Platform does not support POSIX mkfifo and O_NONBLOCK")
+
+        nonblock_flag = int(getattr(os, "O_NONBLOCK", 0))
+        nofollow_flag = int(getattr(os, "O_NOFOLLOW", 0))
+        cloexec_flag = int(getattr(os, "O_CLOEXEC", 0))
+        expected_open_flags = os.O_RDONLY | nonblock_flag | nofollow_flag | cloexec_flag
+
+        real_open = os.open
+        real_read = os.read
+        real_close = os.close
+        real_fstat = os.fstat
+        real_unlink = os.unlink
+        real_replace = os.replace
+
+        def _match_active_fd_ident(
+            active_fds: dict[int, tuple[int, int]],
+            fd: int,
+        ) -> tuple[int, int] | None:
+            expected_ident = active_fds.get(fd)
+            if expected_ident is None:
+                return None
+            try:
+                st = real_fstat(fd)
+            except OSError:
+                return None
+            ident = (st.st_dev, st.st_ino)
+            return ident if ident == expected_ident else None
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(strict=True)
+            valid_raw = (
+                _make_header_line() + "\n" + _make_close_line(0) + "\n"
+            ).encode("ascii")
+            sha_pin = hashlib.sha256(valid_raw).hexdigest()
+            sz_pin = len(valid_raw)
+
+            with self.subTest(scenario="healthy_regular_file_and_snapshot_controls"):
+                healthy_path = root / "healthy_trace.jsonl"
+                healthy_path.write_bytes(valid_raw)
+                healthy_resolved = str(healthy_path.resolve(strict=False))
+
+                open_events: list[tuple[str, int, int, tuple[int, int]]] = []
+                active_ctrl_fds: dict[int, tuple[int, int]] = {}
+                read_events: list[tuple[int, tuple[int, int], int]] = []
+                close_events: list[tuple[int, tuple[int, int]]] = []
+
+                def _ctrl_open(
+                    path: str | os.PathLike[str],
+                    flags: int,
+                    *args: Any,
+                    **kwargs: Any,
+                ) -> int:
+                    p_str = os.fspath(path)
+                    if str(Path(p_str).resolve(strict=False)) == healthy_resolved:
+                        self.assertTrue(
+                            bool(int(flags) & nonblock_flag),
+                            f"Expected O_NONBLOCK in os.open flags for {p_str!r}, got {flags:#x}",
+                        )
+                        self.assertEqual(
+                            int(flags) & expected_open_flags,
+                            expected_open_flags,
+                        )
+                    fd = real_open(path, flags, *args, **kwargs)
+                    if str(Path(p_str).resolve(strict=False)) == healthy_resolved:
+                        st = real_fstat(fd)
+                        self.assertTrue(stat.S_ISREG(st.st_mode))
+                        ident = (st.st_dev, st.st_ino)
+                        open_events.append((p_str, int(flags), fd, ident))
+                        active_ctrl_fds[fd] = ident
+                    return fd
+
+                def _ctrl_read(fd: int, n: int) -> bytes:
+                    ident = _match_active_fd_ident(active_ctrl_fds, fd)
+                    chunk = real_read(fd, n)
+                    if ident is not None:
+                        read_events.append((fd, ident, len(chunk)))
+                    return chunk
+
+                def _ctrl_close(fd: int) -> None:
+                    ident = _match_active_fd_ident(active_ctrl_fds, fd)
+                    real_close(fd)
+                    if ident is not None:
+                        active_ctrl_fds.pop(fd, None)
+                        close_events.append((fd, ident))
+                        with self.assertRaises(OSError) as cm_ebadf:
+                            real_fstat(fd)
+                        self.assertEqual(cm_ebadf.exception.errno, errno.EBADF)
+
+                with (
+                    mock.patch.object(rdt.os, "open", side_effect=_ctrl_open),
+                    mock.patch.object(rdt.os, "read", side_effect=_ctrl_read),
+                    mock.patch.object(rdt.os, "close", side_effect=_ctrl_close),
+                ):
+                    healthy_res = rdt.inspect_native_trace_envelope(
+                        healthy_path,
+                        expected_sha256=sha_pin,
+                        expected_size_bytes=sz_pin,
+                    )
+
+                self.assertEqual(len(open_events), 1)
+                ctrl_fd = open_events[0][2]
+                ctrl_ident = open_events[0][3]
+                self.assertGreaterEqual(len(read_events), 1)
+                self.assertEqual(
+                    sum(nbytes for _, _, nbytes in read_events),
+                    sz_pin,
+                )
+                self.assertEqual(close_events, [(ctrl_fd, ctrl_ident)])
+                self.assertEqual(active_ctrl_fds, {})
+                with self.assertRaises(OSError) as cm_post_ctrl:
+                    real_fstat(ctrl_fd)
+                self.assertEqual(cm_post_ctrl.exception.errno, errno.EBADF)
+                self.assertTrue(healthy_res["valid"])
+                self.assertTrue(healthy_res["closed"])
+                self.assertTrue(healthy_res["read_complete"])
+                self.assertEqual(healthy_res["input_mode"], "filesystem_path")
+                self.assertTrue(healthy_res["filesystem_descriptor_opened"])
+                self.assertTrue(
+                    healthy_res["filesystem_identity_verified_by_trace_reader"]
+                )
+                self.assertEqual(healthy_res["observed_sha256"], sha_pin)
+                self.assertEqual(healthy_res["observed_size_bytes"], sz_pin)
+                self.assertTrue(healthy_res["sha256_match"])
+                self.assertTrue(healthy_res["size_bytes_match"])
+                self.assertEqual(healthy_res["bytes_read"], sz_pin)
+                self.assertIsNone(healthy_res["partial_sha256"])
+                self.assertIsNone(healthy_res["partial_size_bytes"])
+                self.assertIsNone(healthy_res["first_failure"])
+
+                # Retained-snapshot modes remain purely in-memory and never touch filesystem syscalls.
+                with (
+                    mock.patch.object(
+                        rdt.os,
+                        "open",
+                        side_effect=AssertionError("os.open must not run in snapshot mode"),
+                    ),
+                    mock.patch.object(
+                        rdt.os,
+                        "read",
+                        side_effect=AssertionError("os.read must not run in snapshot mode"),
+                    ),
+                    mock.patch.object(
+                        rdt.os,
+                        "lstat",
+                        side_effect=AssertionError("os.lstat must not run in snapshot mode"),
+                    ),
+                    mock.patch.object(
+                        rdt.os,
+                        "fstat",
+                        side_effect=AssertionError("os.fstat must not run in snapshot mode"),
+                    ),
+                ):
+                    snap_direct = rdt.inspect_native_trace_envelope(
+                        healthy_path,
+                        expected_sha256=sha_pin,
+                        expected_size_bytes=sz_pin,
+                        raw_bytes=valid_raw,
+                    )
+                    snap_helper = rdt.inspect_native_trace_bytes(
+                        healthy_path,
+                        valid_raw,
+                        expected_sha256=sha_pin,
+                        expected_size_bytes=sz_pin,
+                    )
+                    with rdt._preverified_trace_bytes_scope(healthy_path, valid_raw):
+                        snap_scoped = rdt.inspect_native_trace_envelope(
+                            healthy_path,
+                            expected_sha256=sha_pin,
+                            expected_size_bytes=sz_pin,
+                        )
+                self.assertTrue(snap_direct["valid"])
+                self.assertEqual(snap_direct["input_mode"], "retained_bytes_snapshot")
+                self.assertFalse(snap_direct["filesystem_descriptor_opened"])
+                self.assertFalse(
+                    snap_direct["filesystem_identity_verified_by_trace_reader"]
+                )
+                self.assertEqual(
+                    snap_direct["descriptor_binding_note"],
+                    rdt._RETAINED_SNAPSHOT_PARSED_BINDING_NOTE,
+                )
+                self.assertEqual(snap_helper, snap_direct)
+                self.assertEqual(snap_scoped, snap_direct)
+                provenance_keys = {
+                    "input_mode",
+                    "filesystem_descriptor_opened",
+                    "filesystem_identity_verified_by_trace_reader",
+                    "descriptor_binding_note",
+                }
+                self.assertEqual(
+                    {k: v for k, v in snap_direct.items() if k not in provenance_keys},
+                    {k: v for k, v in healthy_res.items() if k not in provenance_keys},
+                )
+
+            with self.subTest(
+                scenario="filesystem_leaf_replaced_by_fifo_at_open_boundary"
+            ):
+                fifo_trace_path = root / "swapped_to_fifo_trace.jsonl"
+                parked_regular_path = root / "swapped_to_fifo_trace.jsonl.parked"
+                fifo_trace_path.write_bytes(valid_raw)
+                fifo_target_resolved = str(fifo_trace_path.resolve(strict=False))
+
+                fifo_open_events: list[tuple[str, int, int, tuple[int, int]]] = []
+                active_fifo_fds: dict[int, tuple[int, int]] = {}
+                fifo_read_calls: list[tuple[int, tuple[int, int]]] = []
+                fifo_close_calls: list[tuple[int, tuple[int, int]]] = []
+                unlink_events: list[str] = []
+                swapped_flag = False
+
+                def _swap_to_fifo_on_open(
+                    path: str | os.PathLike[str],
+                    flags: int,
+                    *args: Any,
+                    **kwargs: Any,
+                ) -> int:
+                    nonlocal swapped_flag
+                    p_str = os.fspath(path)
+                    if (
+                        not swapped_flag
+                        and str(Path(p_str).resolve(strict=False)) == fifo_target_resolved
+                    ):
+                        # Assert O_NONBLOCK BEFORE replacing with a FIFO or calling real_open,
+                        # so pre-fix code fails immediately rather than blocking on a writerless FIFO.
+                        self.assertTrue(
+                            bool(int(flags) & nonblock_flag),
+                            f"Expected O_NONBLOCK in os.open flags for {p_str!r}, got {flags:#x}",
+                        )
+                        self.assertEqual(
+                            int(flags) & expected_open_flags,
+                            expected_open_flags,
+                        )
+                        swapped_flag = True
+                        real_replace(fifo_trace_path, parked_regular_path)
+                        os.mkfifo(fifo_trace_path, 0o600)
+                        fd = real_open(path, flags, *args, **kwargs)
+                        st = real_fstat(fd)
+                        self.assertTrue(stat.S_ISFIFO(st.st_mode))
+                        fifo_ident = (st.st_dev, st.st_ino)
+                        fifo_open_events.append((p_str, int(flags), fd, fifo_ident))
+                        active_fifo_fds[fd] = fifo_ident
+                        return fd
+                    return real_open(path, flags, *args, **kwargs)
+
+                def _forbid_fifo_read(fd: int, n: int) -> bytes:
+                    ident = _match_active_fd_ident(active_fifo_fds, fd)
+                    if ident is not None:
+                        fifo_read_calls.append((fd, ident))
+                        raise AssertionError(
+                            f"os.read must not be called on non-regular FIFO fd={fd} ident={ident}"
+                        )
+                    return real_read(fd, n)
+
+                def _track_fifo_close(fd: int) -> None:
+                    ident = _match_active_fd_ident(active_fifo_fds, fd)
+                    real_close(fd)
+                    if ident is not None:
+                        active_fifo_fds.pop(fd, None)
+                        fifo_close_calls.append((fd, ident))
+                        with self.assertRaises(OSError) as cm_ebadf:
+                            real_fstat(fd)
+                        self.assertEqual(cm_ebadf.exception.errno, errno.EBADF)
+
+                def _spy_unlink(
+                    path: str | os.PathLike[str],
+                    *args: Any,
+                    **kwargs: Any,
+                ) -> None:
+                    unlink_events.append(os.fspath(path))
+                    real_unlink(path, *args, **kwargs)
+
+                with (
+                    mock.patch.object(rdt.os, "open", side_effect=_swap_to_fifo_on_open),
+                    mock.patch.object(rdt.os, "read", side_effect=_forbid_fifo_read),
+                    mock.patch.object(rdt.os, "close", side_effect=_track_fifo_close),
+                    mock.patch.object(rdt.os, "unlink", side_effect=_spy_unlink),
+                ):
+                    fifo_res = rdt.inspect_native_trace_envelope(
+                        fifo_trace_path,
+                        expected_sha256=sha_pin,
+                        expected_size_bytes=sz_pin,
+                    )
+
+                self.assertTrue(swapped_flag)
+                self.assertEqual(len(fifo_open_events), 1)
+                fifo_fd = fifo_open_events[0][2]
+                fifo_ident = fifo_open_events[0][3]
+                self.assertEqual(fifo_read_calls, [])
+                self.assertEqual(fifo_close_calls, [(fifo_fd, fifo_ident)])
+                self.assertEqual(active_fifo_fds, {})
+                self.assertEqual(unlink_events, [])
+                with self.assertRaises(OSError) as cm_post_fifo:
+                    real_fstat(fifo_fd)
+                self.assertEqual(cm_post_fifo.exception.errno, errno.EBADF)
+
+                # Foreign FIFO on disk and parked original regular file are untouched.
+                self.assertTrue(stat.S_ISFIFO(fifo_trace_path.lstat().st_mode))
+                self.assertEqual(parked_regular_path.read_bytes(), valid_raw)
+
+                # Structured invalid/nonregular result contract.
+                self.assertFalse(fifo_res["valid"])
+                self.assertFalse(fifo_res["closed"])
+                self.assertFalse(fifo_res["read_complete"])
+                self.assertEqual(fifo_res["input_mode"], "filesystem_path")
+                self.assertTrue(fifo_res["filesystem_descriptor_opened"])
+                self.assertFalse(
+                    fifo_res["filesystem_identity_verified_by_trace_reader"]
+                )
+                self.assertEqual(fifo_res["expected_sha256"], sha_pin)
+                self.assertEqual(fifo_res["expected_size_bytes"], sz_pin)
+                self.assertIsNone(fifo_res["observed_sha256"])
+                self.assertIsNone(fifo_res["observed_size_bytes"])
+                self.assertFalse(fifo_res["sha256_match"])
+                self.assertFalse(fifo_res["size_bytes_match"])
+                self.assertEqual(fifo_res["bytes_read"], 0)
+                self.assertIsNone(fifo_res["partial_sha256"])
+                self.assertEqual(fifo_res["partial_size_bytes"], 0)
+                self.assertIsNotNone(fifo_res["first_failure"])
+                self.assertEqual(
+                    fifo_res["first_failure"]["code"],
+                    "not_regular_file",
+                )
+                self.assertEqual(
+                    fifo_res["first_failure"]["stage"],
+                    "pre_read_fstat",
+                )
+                self.assertEqual(fifo_res["first_failure"]["byte_offset"], 0)
+                self.assertIsNone(fifo_res["first_failure"]["line_number"])
 
 
 if __name__ == "__main__":

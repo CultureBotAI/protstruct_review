@@ -3318,6 +3318,12 @@ class TestPhenixReconciliationAndPureHelpers(unittest.TestCase):
                 if isinstance(node.func, ast.Attribute):
                     self.assertNotEqual(node.func.attr, "file_digest")
                     self.assertNotEqual(node.func.attr, "get_r_rfree_sigma")
+                    self.assertNotEqual(node.func.attr, "add_note")
+                    if (
+                        isinstance(node.func.value, ast.Name)
+                        and node.func.value.id == "sys"
+                    ):
+                        self.assertNotEqual(node.func.attr, "exception")
                     if (
                         isinstance(node.func.value, ast.Name)
                         and node.func.value.id == "reflection_file"
@@ -3344,6 +3350,10 @@ class TestPhenixReconciliationAndPureHelpers(unittest.TestCase):
                 elif isinstance(node.func, ast.Name) and node.func.id == "zip":
                     kw_names = {kw.arg for kw in node.keywords}
                     self.assertNotIn("strict", kw_names)
+            elif isinstance(node, ast.Name):
+                self.assertNotIn(
+                    node.id, {"ExceptionGroup", "BaseExceptionGroup"}
+                )
 
     def test_operation_rejects_protstruct_env_overrides(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -6645,6 +6655,1050 @@ class TestPhenixReconciliationAndPureHelpers(unittest.TestCase):
                             expected_resolved_prefix=resolved_fake_prefix,
                         )
 
+            # 5. #1310 worker finalization and warning-stderr primary-failure preservation:
+            import errno
+
+            real_tee_finalize = (
+                onesar_phenix_measure._PersistentTeeLogStream.finalize
+            )
+            real_checkpoint_diag = onesar_phenix_measure._checkpoint_diagnostics
+            real_atomic_write = (
+                onesar_phenix_measure._atomic_write_json_checkpoint
+            )
+
+            @contextlib.contextmanager
+            def _inject_targeted_finalize_checkpoint_fault(
+                target_diagnostics_field: str,
+                fault_exc: BaseException,
+            ) -> Any:
+                state = {"fired": False, "finalize_entered": 0}
+
+                def _wrapped_finalize(stream_self: Any) -> str:
+                    if (
+                        getattr(stream_self, "_diagnostics_field", None)
+                        == target_diagnostics_field
+                        and not state["fired"]
+                    ):
+                        state["finalize_entered"] += 1
+
+                        def _faulting_checkpoint_diag(
+                            diag: Mapping[str, Any],
+                            out_diag_path: Path | None,
+                        ) -> None:
+                            if not state["fired"]:
+                                state["fired"] = True
+                                raise fault_exc
+                            real_checkpoint_diag(diag, out_diag_path)
+
+                        with mock.patch.object(
+                            onesar_phenix_measure,
+                            "_checkpoint_diagnostics",
+                            side_effect=_faulting_checkpoint_diag,
+                        ):
+                            return real_tee_finalize(stream_self)
+                    return real_tee_finalize(stream_self)
+
+                with mock.patch.object(
+                    onesar_phenix_measure._PersistentTeeLogStream,
+                    "finalize",
+                    _wrapped_finalize,
+                ):
+                    yield state
+
+            with self.subTest(
+                case="1310_model_constructor_primary_finalize_eio"
+            ):
+                mc_mods = _make_vendor_modules()
+                mc_primary_sent = RuntimeError(
+                    "sentinel mmtbx.model.manager constructor failure"
+                )
+                mc_finalize_eio = OSError(
+                    errno.EIO, "injected model_manager_log finalize EIO"
+                )
+
+                def _failing_model_ctor(
+                    model_input: Any,
+                    crystal_symmetry: Any,
+                    log: Any,
+                ) -> Any:
+                    log.write("partial model.manager log\n")
+                    raise mc_primary_sent
+
+                mc_mods["mmtbx.model"].manager = _failing_model_ctor
+                out_json_mc = tmp_dir / "rfactors_1310_mc.json"
+                out_partial_mc = (
+                    tmp_dir / "rfactors_1310_mc_partial_evidence.json"
+                )
+                out_diag_mc = tmp_dir / "diagnostics_1310_mc.json"
+                out_maps_mc = tmp_dir / "maps_1310_mc.mtz"
+                out_pair_mc = tmp_dir / "pair_1310_mc.mtz"
+                with (
+                    mock.patch.dict(sys.modules, mc_mods),
+                    mock.patch.object(
+                        onesar_phenix_measure,
+                        "_inspect_vendor_modules",
+                        return_value=fake_runtime_env,
+                    ),
+                    _inject_targeted_finalize_checkpoint_fault(
+                        "model_manager_log", mc_finalize_eio
+                    ) as mc_state,
+                ):
+                    with self.assertRaises(RuntimeError) as mc_cm:
+                        onesar_phenix_measure.measure_first_block_rfactors(
+                            pdb_path=pdb_path,
+                            mtz_path=mtz_path,
+                            params_path=params_path,
+                            out_json_path=out_json_mc,
+                            out_maps_mtz_path=out_maps_mc,
+                            out_obs_pair_mtz_path=out_pair_mc,
+                            out_diagnostics_json_path=out_diag_mc,
+                        )
+                self.assertIs(mc_cm.exception, mc_primary_sent)
+                self.assertTrue(mc_state["fired"])
+                self.assertEqual(mc_state["finalize_entered"], 1)
+                self.assertFalse(out_json_mc.is_file())
+                self.assertFalse(out_maps_mc.is_file())
+                self.assertFalse(out_pair_mc.is_file())
+                self.assertTrue(out_partial_mc.is_file())
+                self.assertTrue(out_diag_mc.is_file())
+                mc_sec = getattr(mc_cm.exception, "secondary_failures", None)
+                self.assertIsInstance(mc_sec, list)
+                assert isinstance(mc_sec, list)
+                self.assertEqual(len(mc_sec), 1)
+                self.assertEqual(
+                    mc_sec[0]["phase"], "model_manager_log_finalize"
+                )
+                self.assertEqual(mc_sec[0]["exception_type"], "OSError")
+                self.assertIn(
+                    "injected model_manager_log finalize EIO",
+                    mc_sec[0]["exception_message"],
+                )
+                self.assertEqual(mc_sec[0]["errno"], errno.EIO)
+                self.assertEqual(mc_sec[0]["path"], str(out_diag_mc))
+                mc_diag_doc = json.loads(
+                    out_diag_mc.read_text(encoding="utf-8")
+                )
+                mc_partial_doc = json.loads(
+                    out_partial_mc.read_text(encoding="utf-8")
+                )
+                for doc in (mc_diag_doc, mc_partial_doc):
+                    self.assertEqual(
+                        doc["failure"]["failed_phase"], "model_manager"
+                    )
+                    self.assertEqual(
+                        doc["failure"]["exception_type"], "RuntimeError"
+                    )
+                    self.assertEqual(
+                        doc["failure"]["exception_message"],
+                        "sentinel mmtbx.model.manager constructor failure",
+                    )
+                    self.assertEqual(
+                        doc["failure"]["secondary_failures"], mc_sec
+                    )
+                    self.assertEqual(doc["secondary_failures"], mc_sec)
+                self.assertEqual(
+                    mc_diag_doc["model_manager_log"],
+                    "partial model.manager log\n",
+                )
+                self.assertEqual(
+                    mc_partial_doc["completed_stages"], ["extract_xtal_data"]
+                )
+                self.assertEqual(
+                    mc_partial_doc["extracted_pre_fmodel"],
+                    result_payload["extracted_pre_fmodel"],
+                )
+
+            with self.subTest(
+                case="1310_setup_scattering_primary_finalize_eio"
+            ):
+                ss_mods = _make_vendor_modules()
+                real_ss_model_mgr = ss_mods["mmtbx.model"].manager
+                ss_primary_sent = RuntimeError(
+                    "sentinel setup_scattering_dictionaries failure"
+                )
+                ss_finalize_eio = OSError(
+                    errno.EIO, "injected setup_scattering finalize EIO"
+                )
+
+                def _ss_model_ctor(
+                    model_input: Any,
+                    crystal_symmetry: Any,
+                    log: Any,
+                ) -> Any:
+                    model_obj = real_ss_model_mgr(
+                        model_input, crystal_symmetry, log
+                    )
+
+                    def _failing_setup(**kwargs: Any) -> None:
+                        raise ss_primary_sent
+
+                    model_obj.setup_scattering_dictionaries = _failing_setup
+                    return model_obj
+
+                ss_mods["mmtbx.model"].manager = _ss_model_ctor
+                out_json_ss = tmp_dir / "rfactors_1310_ss.json"
+                out_partial_ss = (
+                    tmp_dir / "rfactors_1310_ss_partial_evidence.json"
+                )
+                out_diag_ss = tmp_dir / "diagnostics_1310_ss.json"
+                out_maps_ss = tmp_dir / "maps_1310_ss.mtz"
+                out_pair_ss = tmp_dir / "pair_1310_ss.mtz"
+                with (
+                    mock.patch.dict(sys.modules, ss_mods),
+                    mock.patch.object(
+                        onesar_phenix_measure,
+                        "_inspect_vendor_modules",
+                        return_value=fake_runtime_env,
+                    ),
+                    _inject_targeted_finalize_checkpoint_fault(
+                        "model_manager_log", ss_finalize_eio
+                    ) as ss_state,
+                ):
+                    with self.assertRaises(RuntimeError) as ss_cm:
+                        onesar_phenix_measure.measure_first_block_rfactors(
+                            pdb_path=pdb_path,
+                            mtz_path=mtz_path,
+                            params_path=params_path,
+                            out_json_path=out_json_ss,
+                            out_maps_mtz_path=out_maps_ss,
+                            out_obs_pair_mtz_path=out_pair_ss,
+                            out_diagnostics_json_path=out_diag_ss,
+                        )
+                self.assertIs(ss_cm.exception, ss_primary_sent)
+                self.assertTrue(ss_state["fired"])
+                self.assertEqual(ss_state["finalize_entered"], 1)
+                self.assertFalse(out_json_ss.is_file())
+                self.assertFalse(out_maps_ss.is_file())
+                self.assertFalse(out_pair_ss.is_file())
+                self.assertTrue(out_partial_ss.is_file())
+                self.assertTrue(out_diag_ss.is_file())
+                ss_sec = getattr(ss_cm.exception, "secondary_failures", None)
+                self.assertIsInstance(ss_sec, list)
+                assert isinstance(ss_sec, list)
+                self.assertEqual(len(ss_sec), 1)
+                self.assertEqual(
+                    ss_sec[0]["phase"], "model_manager_log_finalize"
+                )
+                self.assertEqual(ss_sec[0]["exception_type"], "OSError")
+                self.assertEqual(ss_sec[0]["errno"], errno.EIO)
+                self.assertEqual(ss_sec[0]["path"], str(out_diag_ss))
+                ss_diag_doc = json.loads(
+                    out_diag_ss.read_text(encoding="utf-8")
+                )
+                ss_partial_doc = json.loads(
+                    out_partial_ss.read_text(encoding="utf-8")
+                )
+                for doc in (ss_diag_doc, ss_partial_doc):
+                    self.assertEqual(
+                        doc["failure"]["failed_phase"], "model_manager"
+                    )
+                    self.assertEqual(
+                        doc["failure"]["exception_type"], "RuntimeError"
+                    )
+                    self.assertEqual(
+                        doc["failure"]["exception_message"],
+                        "sentinel setup_scattering_dictionaries failure",
+                    )
+                    self.assertEqual(
+                        doc["failure"]["secondary_failures"], ss_sec
+                    )
+                    self.assertEqual(doc["secondary_failures"], ss_sec)
+                self.assertEqual(
+                    ss_diag_doc["model_manager_log"],
+                    "model.manager initialization log\n",
+                )
+                self.assertEqual(
+                    ss_partial_doc["completed_stages"], ["extract_xtal_data"]
+                )
+
+            with self.subTest(
+                case="1310_update_all_scales_primary_finalize_eio"
+            ):
+                uas_mods = _make_vendor_modules()
+                real_uas_fmodel_mgr = uas_mods["mmtbx.f_model"].manager
+                uas_primary_sent = RuntimeError(
+                    "sentinel fmodel.update_all_scales failure"
+                )
+                uas_finalize_eio = OSError(
+                    errno.EIO,
+                    "injected fmodel_update_all_scales_log finalize EIO",
+                )
+
+                def _uas_fmodel_ctor(*args: Any, **kwargs: Any) -> Any:
+                    fmodel_obj = real_uas_fmodel_mgr(*args, **kwargs)
+
+                    def _failing_scales(
+                        update_f_part1: bool = True,
+                        log: Any = None,
+                    ) -> None:
+                        if log is not None:
+                            log.write("partial update_all_scales log\n")
+                        raise uas_primary_sent
+
+                    fmodel_obj.update_all_scales = _failing_scales
+                    return fmodel_obj
+
+                uas_mods["mmtbx.f_model"].manager = _uas_fmodel_ctor
+                uas_mods["mmtbx.f_model.f_model"].manager = _uas_fmodel_ctor
+                out_json_uas = tmp_dir / "rfactors_1310_uas.json"
+                out_partial_uas = (
+                    tmp_dir / "rfactors_1310_uas_partial_evidence.json"
+                )
+                out_diag_uas = tmp_dir / "diagnostics_1310_uas.json"
+                out_maps_uas = tmp_dir / "maps_1310_uas.mtz"
+                out_pair_uas = tmp_dir / "pair_1310_uas.mtz"
+                with (
+                    mock.patch.dict(sys.modules, uas_mods),
+                    mock.patch.object(
+                        onesar_phenix_measure,
+                        "_inspect_vendor_modules",
+                        return_value=fake_runtime_env,
+                    ),
+                    _inject_targeted_finalize_checkpoint_fault(
+                        "fmodel_update_all_scales_log", uas_finalize_eio
+                    ) as uas_state,
+                ):
+                    with self.assertRaises(RuntimeError) as uas_cm:
+                        onesar_phenix_measure.measure_first_block_rfactors(
+                            pdb_path=pdb_path,
+                            mtz_path=mtz_path,
+                            params_path=params_path,
+                            out_json_path=out_json_uas,
+                            out_maps_mtz_path=out_maps_uas,
+                            out_obs_pair_mtz_path=out_pair_uas,
+                            out_diagnostics_json_path=out_diag_uas,
+                        )
+                self.assertIs(uas_cm.exception, uas_primary_sent)
+                self.assertTrue(uas_state["fired"])
+                self.assertEqual(uas_state["finalize_entered"], 1)
+                self.assertFalse(out_json_uas.is_file())
+                self.assertFalse(out_maps_uas.is_file())
+                self.assertFalse(out_pair_uas.is_file())
+                self.assertTrue(out_partial_uas.is_file())
+                self.assertTrue(out_diag_uas.is_file())
+                uas_sec = getattr(uas_cm.exception, "secondary_failures", None)
+                self.assertIsInstance(uas_sec, list)
+                assert isinstance(uas_sec, list)
+                self.assertEqual(len(uas_sec), 1)
+                self.assertEqual(
+                    uas_sec[0]["phase"], "fmodel_update_all_scales_log_finalize"
+                )
+                self.assertEqual(uas_sec[0]["exception_type"], "OSError")
+                self.assertEqual(uas_sec[0]["errno"], errno.EIO)
+                self.assertEqual(uas_sec[0]["path"], str(out_diag_uas))
+                uas_diag_doc = json.loads(
+                    out_diag_uas.read_text(encoding="utf-8")
+                )
+                uas_partial_doc = json.loads(
+                    out_partial_uas.read_text(encoding="utf-8")
+                )
+                for doc in (uas_diag_doc, uas_partial_doc):
+                    self.assertEqual(
+                        doc["failure"]["failed_phase"], "update_all_scales"
+                    )
+                    self.assertEqual(
+                        doc["failure"]["exception_type"], "RuntimeError"
+                    )
+                    self.assertEqual(
+                        doc["failure"]["exception_message"],
+                        "sentinel fmodel.update_all_scales failure",
+                    )
+                    self.assertEqual(
+                        doc["failure"]["secondary_failures"], uas_sec
+                    )
+                    self.assertEqual(doc["secondary_failures"], uas_sec)
+                self.assertEqual(
+                    uas_diag_doc["model_manager_log"],
+                    "model.manager initialization log\n",
+                )
+                self.assertEqual(
+                    uas_diag_doc["fmodel_update_all_scales_log"],
+                    "partial update_all_scales log\n",
+                )
+                self.assertEqual(
+                    uas_partial_doc["completed_stages"],
+                    ["extract_xtal_data", "xray_structure_snapshot_before"],
+                )
+
+            with self.subTest(
+                case="1310_finalize_only_failure_refuses_success"
+            ):
+                # Healthy ambient-except control: caller handling an unrelated exception
+                # still completes when finalizers succeed.
+                out_json_amb_ok = tmp_dir / "rfactors_1310_amb_ok.json"
+                out_diag_amb_ok = tmp_dir / "diagnostics_1310_amb_ok.json"
+                out_maps_amb_ok = tmp_dir / "maps_1310_amb_ok.mtz"
+                out_pair_amb_ok = tmp_dir / "pair_1310_amb_ok.mtz"
+                try:
+                    raise RuntimeError("unrelated caller ambient exception")
+                except RuntimeError:
+                    with (
+                        mock.patch.dict(sys.modules, _make_vendor_modules()),
+                        mock.patch.object(
+                            onesar_phenix_measure,
+                            "_inspect_vendor_modules",
+                            return_value=fake_runtime_env,
+                        ),
+                    ):
+                        amb_ok_payload = (
+                            onesar_phenix_measure.measure_first_block_rfactors(
+                                pdb_path=pdb_path,
+                                mtz_path=mtz_path,
+                                params_path=params_path,
+                                out_json_path=out_json_amb_ok,
+                                out_maps_mtz_path=out_maps_amb_ok,
+                                out_obs_pair_mtz_path=out_pair_amb_ok,
+                                out_diagnostics_json_path=out_diag_amb_ok,
+                            )
+                        )
+                self.assertTrue(out_json_amb_ok.is_file())
+                self.assertEqual(
+                    amb_ok_payload["diagnostics"]["status"], "succeeded"
+                )
+
+                # Secondary-only finalizer failure under an active caller ambient except
+                # must still refuse success and escape as the primary OSError.
+                for idx_fo, (target_field, expected_phase) in enumerate(
+                    (
+                        ("model_manager_log", "model_manager"),
+                        ("fmodel_update_all_scales_log", "update_all_scales"),
+                    )
+                ):
+                    fo_eio = OSError(
+                        errno.EIO,
+                        f"secondary-only {target_field} finalize EIO",
+                    )
+                    out_json_fo = tmp_dir / f"rfactors_1310_fo_{idx_fo}.json"
+                    out_partial_fo = (
+                        tmp_dir
+                        / f"rfactors_1310_fo_{idx_fo}_partial_evidence.json"
+                    )
+                    out_diag_fo = tmp_dir / f"diagnostics_1310_fo_{idx_fo}.json"
+                    out_maps_fo = tmp_dir / f"maps_1310_fo_{idx_fo}.mtz"
+                    out_pair_fo = tmp_dir / f"pair_1310_fo_{idx_fo}.mtz"
+                    try:
+                        raise RuntimeError("unrelated caller ambient exception")
+                    except RuntimeError as caller_ambient_exc:
+                        with (
+                            mock.patch.dict(
+                                sys.modules, _make_vendor_modules()
+                            ),
+                            mock.patch.object(
+                                onesar_phenix_measure,
+                                "_inspect_vendor_modules",
+                                return_value=fake_runtime_env,
+                            ),
+                            _inject_targeted_finalize_checkpoint_fault(
+                                target_field, fo_eio
+                            ) as fo_state,
+                        ):
+                            with self.assertRaises(OSError) as fo_cm:
+                                onesar_phenix_measure.measure_first_block_rfactors(
+                                    pdb_path=pdb_path,
+                                    mtz_path=mtz_path,
+                                    params_path=params_path,
+                                    out_json_path=out_json_fo,
+                                    out_maps_mtz_path=out_maps_fo,
+                                    out_obs_pair_mtz_path=out_pair_fo,
+                                    out_diagnostics_json_path=out_diag_fo,
+                                )
+                        self.assertIsNone(
+                            getattr(
+                                caller_ambient_exc, "secondary_failures", None
+                            )
+                        )
+                    self.assertIs(fo_cm.exception, fo_eio)
+                    self.assertTrue(fo_state["fired"])
+                    self.assertIsNone(
+                        getattr(fo_cm.exception, "secondary_failures", None)
+                    )
+                    self.assertFalse(out_json_fo.is_file())
+                    self.assertFalse(out_maps_fo.is_file())
+                    self.assertFalse(out_pair_fo.is_file())
+                    self.assertTrue(out_partial_fo.is_file())
+                    self.assertTrue(out_diag_fo.is_file())
+                    fo_diag_doc = json.loads(
+                        out_diag_fo.read_text(encoding="utf-8")
+                    )
+                    fo_partial_doc = json.loads(
+                        out_partial_fo.read_text(encoding="utf-8")
+                    )
+                    for doc in (fo_diag_doc, fo_partial_doc):
+                        self.assertEqual(
+                            doc["failure"]["failed_phase"], expected_phase
+                        )
+                        self.assertEqual(
+                            doc["failure"]["exception_type"], "OSError"
+                        )
+                        self.assertEqual(
+                            doc["failure"]["exception_message"], str(fo_eio)
+                        )
+                        self.assertEqual(
+                            doc["failure"]["secondary_failures"], []
+                        )
+
+            with self.subTest(case="1310_primary_control_finalize_eio"):
+                # Active KeyboardInterrupt in model_manager + ordinary finalize EIO
+                pc_ki = KeyboardInterrupt("worker model interrupted")
+                pc_ki_eio = OSError(
+                    errno.EIO, "finalize EIO under KeyboardInterrupt"
+                )
+                pc_ki_mods = _make_vendor_modules()
+
+                def _ki_model_ctor(
+                    model_input: Any,
+                    crystal_symmetry: Any,
+                    log: Any,
+                ) -> Any:
+                    raise pc_ki
+
+                pc_ki_mods["mmtbx.model"].manager = _ki_model_ctor
+                out_json_pcki = tmp_dir / "rfactors_1310_pcki.json"
+                out_diag_pcki = tmp_dir / "diagnostics_1310_pcki.json"
+                with (
+                    mock.patch.dict(sys.modules, pc_ki_mods),
+                    mock.patch.object(
+                        onesar_phenix_measure,
+                        "_inspect_vendor_modules",
+                        return_value=fake_runtime_env,
+                    ),
+                    _inject_targeted_finalize_checkpoint_fault(
+                        "model_manager_log", pc_ki_eio
+                    ) as pcki_state,
+                ):
+                    with self.assertRaises(KeyboardInterrupt) as pcki_cm:
+                        onesar_phenix_measure.measure_first_block_rfactors(
+                            pdb_path=pdb_path,
+                            mtz_path=mtz_path,
+                            params_path=params_path,
+                            out_json_path=out_json_pcki,
+                            out_maps_mtz_path=tmp_dir / "maps_1310_pcki.mtz",
+                            out_obs_pair_mtz_path=tmp_dir
+                            / "pair_1310_pcki.mtz",
+                            out_diagnostics_json_path=out_diag_pcki,
+                        )
+                self.assertIs(pcki_cm.exception, pc_ki)
+                self.assertTrue(pcki_state["fired"])
+                self.assertFalse(out_json_pcki.is_file())
+                pcki_sec = getattr(
+                    pcki_cm.exception, "secondary_failures", None
+                )
+                self.assertIsInstance(pcki_sec, list)
+                assert isinstance(pcki_sec, list)
+                self.assertEqual(len(pcki_sec), 1)
+                self.assertEqual(
+                    pcki_sec[0]["phase"], "model_manager_log_finalize"
+                )
+                self.assertEqual(pcki_sec[0]["exception_type"], "OSError")
+                self.assertEqual(pcki_sec[0]["errno"], errno.EIO)
+
+                # Active SystemExit(9) in update_all_scales + ordinary finalize EIO
+                pc_se = SystemExit(9)
+                pc_se_eio = OSError(errno.EIO, "finalize EIO under SystemExit")
+                pc_se_mods = _make_vendor_modules()
+                real_pcse_fmodel = pc_se_mods["mmtbx.f_model"].manager
+
+                def _se_fmodel_ctor(*args: Any, **kwargs: Any) -> Any:
+                    fmodel_obj = real_pcse_fmodel(*args, **kwargs)
+
+                    def _se_scales(
+                        update_f_part1: bool = True,
+                        log: Any = None,
+                    ) -> None:
+                        raise pc_se
+
+                    fmodel_obj.update_all_scales = _se_scales
+                    return fmodel_obj
+
+                pc_se_mods["mmtbx.f_model"].manager = _se_fmodel_ctor
+                pc_se_mods["mmtbx.f_model.f_model"].manager = _se_fmodel_ctor
+                out_json_pcse = tmp_dir / "rfactors_1310_pcse.json"
+                out_diag_pcse = tmp_dir / "diagnostics_1310_pcse.json"
+                with (
+                    mock.patch.dict(sys.modules, pc_se_mods),
+                    mock.patch.object(
+                        onesar_phenix_measure,
+                        "_inspect_vendor_modules",
+                        return_value=fake_runtime_env,
+                    ),
+                    _inject_targeted_finalize_checkpoint_fault(
+                        "fmodel_update_all_scales_log", pc_se_eio
+                    ) as pcse_state,
+                ):
+                    with self.assertRaises(SystemExit) as pcse_cm:
+                        onesar_phenix_measure.measure_first_block_rfactors(
+                            pdb_path=pdb_path,
+                            mtz_path=mtz_path,
+                            params_path=params_path,
+                            out_json_path=out_json_pcse,
+                            out_maps_mtz_path=tmp_dir / "maps_1310_pcse.mtz",
+                            out_obs_pair_mtz_path=tmp_dir
+                            / "pair_1310_pcse.mtz",
+                            out_diagnostics_json_path=out_diag_pcse,
+                        )
+                self.assertIs(pcse_cm.exception, pc_se)
+                self.assertEqual(pcse_cm.exception.code, 9)
+                self.assertTrue(pcse_state["fired"])
+                self.assertFalse(out_json_pcse.is_file())
+                pcse_sec = getattr(
+                    pcse_cm.exception, "secondary_failures", None
+                )
+                self.assertIsInstance(pcse_sec, list)
+                assert isinstance(pcse_sec, list)
+                self.assertEqual(len(pcse_sec), 1)
+                self.assertEqual(
+                    pcse_sec[0]["phase"],
+                    "fmodel_update_all_scales_log_finalize",
+                )
+                self.assertEqual(pcse_sec[0]["exception_type"], "OSError")
+                self.assertEqual(pcse_sec[0]["errno"], errno.EIO)
+
+            with self.subTest(case="1310_new_control_during_finalize"):
+                # Ordinary primary in setup_scattering + new KeyboardInterrupt in model_log.finalize
+                nc_ord_primary = RuntimeError(
+                    "model setup primary before finalize KeyboardInterrupt"
+                )
+                nc_ki = KeyboardInterrupt("interrupt inside model_log.finalize")
+                nc_mods = _make_vendor_modules()
+                real_nc_model_mgr = nc_mods["mmtbx.model"].manager
+
+                def _nc_model_ctor(
+                    model_input: Any,
+                    crystal_symmetry: Any,
+                    log: Any,
+                ) -> Any:
+                    model_obj = real_nc_model_mgr(
+                        model_input, crystal_symmetry, log
+                    )
+
+                    def _fail_setup(**kwargs: Any) -> None:
+                        raise nc_ord_primary
+
+                    model_obj.setup_scattering_dictionaries = _fail_setup
+                    return model_obj
+
+                nc_mods["mmtbx.model"].manager = _nc_model_ctor
+                out_json_nc = tmp_dir / "rfactors_1310_nc.json"
+                out_diag_nc = tmp_dir / "diagnostics_1310_nc.json"
+                with (
+                    mock.patch.dict(sys.modules, nc_mods),
+                    mock.patch.object(
+                        onesar_phenix_measure,
+                        "_inspect_vendor_modules",
+                        return_value=fake_runtime_env,
+                    ),
+                    _inject_targeted_finalize_checkpoint_fault(
+                        "model_manager_log", nc_ki
+                    ) as nc_state,
+                ):
+                    with self.assertRaises(KeyboardInterrupt) as nc_cm:
+                        onesar_phenix_measure.measure_first_block_rfactors(
+                            pdb_path=pdb_path,
+                            mtz_path=mtz_path,
+                            params_path=params_path,
+                            out_json_path=out_json_nc,
+                            out_maps_mtz_path=tmp_dir / "maps_1310_nc.mtz",
+                            out_obs_pair_mtz_path=tmp_dir / "pair_1310_nc.mtz",
+                            out_diagnostics_json_path=out_diag_nc,
+                        )
+                self.assertIs(nc_cm.exception, nc_ki)
+                self.assertIs(nc_cm.exception.__cause__, nc_ord_primary)
+                self.assertTrue(nc_state["fired"])
+                self.assertFalse(out_json_nc.is_file())
+                nc_pf = getattr(nc_cm.exception, "primary_failure", None)
+                self.assertIsInstance(nc_pf, dict)
+                assert isinstance(nc_pf, dict)
+                self.assertEqual(nc_pf["failed_phase"], "model_manager")
+                self.assertEqual(nc_pf["exception_type"], "RuntimeError")
+                self.assertEqual(
+                    nc_pf["exception_message"],
+                    "model setup primary before finalize KeyboardInterrupt",
+                )
+                self.assertEqual(nc_pf["secondary_failures"], [])
+
+                # Ordinary primary in update_all_scales + new SystemExit(13) in fmodel_log.finalize
+                nc_scales_primary = RuntimeError(
+                    "scales primary before finalize SystemExit"
+                )
+                nc_se = SystemExit(13)
+                nc_se_mods = _make_vendor_modules()
+                real_ncse_fmodel = nc_se_mods["mmtbx.f_model"].manager
+
+                def _ncse_fmodel_ctor(*args: Any, **kwargs: Any) -> Any:
+                    fmodel_obj = real_ncse_fmodel(*args, **kwargs)
+
+                    def _fail_scales(
+                        update_f_part1: bool = True,
+                        log: Any = None,
+                    ) -> None:
+                        raise nc_scales_primary
+
+                    fmodel_obj.update_all_scales = _fail_scales
+                    return fmodel_obj
+
+                nc_se_mods["mmtbx.f_model"].manager = _ncse_fmodel_ctor
+                nc_se_mods["mmtbx.f_model.f_model"].manager = _ncse_fmodel_ctor
+                out_json_ncse = tmp_dir / "rfactors_1310_ncse.json"
+                out_diag_ncse = tmp_dir / "diagnostics_1310_ncse.json"
+                with (
+                    mock.patch.dict(sys.modules, nc_se_mods),
+                    mock.patch.object(
+                        onesar_phenix_measure,
+                        "_inspect_vendor_modules",
+                        return_value=fake_runtime_env,
+                    ),
+                    _inject_targeted_finalize_checkpoint_fault(
+                        "fmodel_update_all_scales_log", nc_se
+                    ) as ncse_state,
+                ):
+                    with self.assertRaises(SystemExit) as ncse_cm:
+                        onesar_phenix_measure.measure_first_block_rfactors(
+                            pdb_path=pdb_path,
+                            mtz_path=mtz_path,
+                            params_path=params_path,
+                            out_json_path=out_json_ncse,
+                            out_maps_mtz_path=tmp_dir / "maps_1310_ncse.mtz",
+                            out_obs_pair_mtz_path=tmp_dir
+                            / "pair_1310_ncse.mtz",
+                            out_diagnostics_json_path=out_diag_ncse,
+                        )
+                self.assertIs(ncse_cm.exception, nc_se)
+                self.assertEqual(ncse_cm.exception.code, 13)
+                self.assertIs(ncse_cm.exception.__cause__, nc_scales_primary)
+                self.assertTrue(ncse_state["fired"])
+                self.assertFalse(out_json_ncse.is_file())
+                ncse_pf = getattr(ncse_cm.exception, "primary_failure", None)
+                self.assertIsInstance(ncse_pf, dict)
+                assert isinstance(ncse_pf, dict)
+                self.assertEqual(ncse_pf["failed_phase"], "update_all_scales")
+                self.assertEqual(ncse_pf["exception_type"], "RuntimeError")
+                self.assertEqual(
+                    ncse_pf["exception_message"],
+                    "scales primary before finalize SystemExit",
+                )
+
+            with self.subTest(
+                case="1310_failure_warning_stderr_preserves_primary"
+            ):
+                class _FaultingStderr(io.StringIO):
+                    def __init__(
+                        self,
+                        *,
+                        fail_warning_on: str,
+                        warning_exc: BaseException,
+                    ) -> None:
+                        super().__init__()
+                        self.fail_warning_on = fail_warning_on
+                        self.warning_exc = warning_exc
+                        self.failure_diag_reached = False
+                        self.warning_write_reached = False
+                        self.warning_flush_reached = False
+                        self._in_warning = False
+
+                    def write(self, s: str) -> int:
+                        if s.startswith(
+                            "=== [onesar_phenix_measure] FAILURE DIAGNOSTIC ===\n"
+                        ):
+                            self.failure_diag_reached = True
+                            raise OSError(
+                                errno.EIO,
+                                "injected FAILURE DIAGNOSTIC stderr EIO",
+                            )
+                        if s.startswith(
+                            "=== [onesar_phenix_measure] CHECKPOINT SERIALIZATION WARNING ===\n"
+                        ):
+                            self.warning_write_reached = True
+                            self._in_warning = True
+                            if self.fail_warning_on == "write":
+                                raise self.warning_exc
+                        return super().write(s)
+
+                    def flush(self) -> None:
+                        if self._in_warning:
+                            self.warning_flush_reached = True
+                            if self.fail_warning_on == "flush":
+                                raise self.warning_exc
+                        super().flush()
+
+                for warn_idx, (warn_mode, warn_errno) in enumerate(
+                    (("write", errno.ENOSPC), ("flush", errno.EPIPE))
+                ):
+                    ws_primary = RuntimeError(
+                        f"sentinel fmodel_manager_init failure ({warn_mode})"
+                    )
+                    ws_mods = _make_vendor_modules()
+
+                    def _ws_fmodel_ctor(
+                        *args: Any,
+                        _exc: RuntimeError = ws_primary,
+                        **kwargs: Any,
+                    ) -> Any:
+                        raise _exc
+
+                    ws_mods["mmtbx.f_model"].manager = _ws_fmodel_ctor
+                    ws_mods["mmtbx.f_model.f_model"].manager = _ws_fmodel_ctor
+                    ws_stderr = _FaultingStderr(
+                        fail_warning_on=warn_mode,
+                        warning_exc=OSError(
+                            warn_errno,
+                            f"injected warning stderr {warn_mode} error",
+                        ),
+                    )
+                    out_json_ws = tmp_dir / f"rfactors_1310_ws_{warn_idx}.json"
+                    out_partial_ws = (
+                        tmp_dir
+                        / f"rfactors_1310_ws_{warn_idx}_partial_evidence.json"
+                    )
+                    out_diag_ws = (
+                        tmp_dir / f"diagnostics_1310_ws_{warn_idx}.json"
+                    )
+                    with (
+                        mock.patch.dict(sys.modules, ws_mods),
+                        mock.patch.object(
+                            onesar_phenix_measure,
+                            "_inspect_vendor_modules",
+                            return_value=fake_runtime_env,
+                        ),
+                        contextlib.redirect_stderr(ws_stderr),
+                    ):
+                        with self.assertRaises(RuntimeError) as ws_cm:
+                            onesar_phenix_measure.measure_first_block_rfactors(
+                                pdb_path=pdb_path,
+                                mtz_path=mtz_path,
+                                params_path=params_path,
+                                out_json_path=out_json_ws,
+                                out_maps_mtz_path=tmp_dir
+                                / f"maps_1310_ws_{warn_idx}.mtz",
+                                out_obs_pair_mtz_path=tmp_dir
+                                / f"pair_1310_ws_{warn_idx}.mtz",
+                                out_diagnostics_json_path=out_diag_ws,
+                            )
+                    self.assertIs(ws_cm.exception, ws_primary)
+                    self.assertTrue(ws_stderr.failure_diag_reached)
+                    self.assertTrue(ws_stderr.warning_write_reached)
+                    if warn_mode == "flush":
+                        self.assertTrue(ws_stderr.warning_flush_reached)
+                    self.assertFalse(out_json_ws.is_file())
+                    self.assertTrue(out_partial_ws.is_file())
+                    self.assertTrue(out_diag_ws.is_file())
+                    ws_sec = getattr(
+                        ws_cm.exception, "secondary_failures", None
+                    )
+                    self.assertIsInstance(ws_sec, list)
+                    assert isinstance(ws_sec, list)
+                    self.assertEqual(len(ws_sec), 2)
+                    self.assertEqual(
+                        ws_sec[0]["phase"], "failure_diagnostic_stderr"
+                    )
+                    self.assertEqual(ws_sec[0]["errno"], errno.EIO)
+                    self.assertEqual(
+                        ws_sec[1]["phase"],
+                        "checkpoint_serialization_warning_stderr",
+                    )
+                    self.assertEqual(ws_sec[1]["errno"], warn_errno)
+                    # Already-written JSON files predate the stderr failures and retain the primary.
+                    ws_diag_doc = json.loads(
+                        out_diag_ws.read_text(encoding="utf-8")
+                    )
+                    ws_partial_doc = json.loads(
+                        out_partial_ws.read_text(encoding="utf-8")
+                    )
+                    for doc in (ws_diag_doc, ws_partial_doc):
+                        self.assertEqual(
+                            doc["failure"]["failed_phase"],
+                            "fmodel_manager_init",
+                        )
+                        self.assertEqual(
+                            doc["failure"]["exception_type"], "RuntimeError"
+                        )
+                        self.assertEqual(
+                            doc["failure"]["exception_message"], str(ws_primary)
+                        )
+
+                # New control exception during warning stderr write propagates chained from primary.
+                ws_ctrl_primary = RuntimeError(
+                    "sentinel fmodel failure before warning KeyboardInterrupt"
+                )
+                ws_ctrl_ki = KeyboardInterrupt(
+                    "interrupt during warning stderr write"
+                )
+                ws_ctrl_mods = _make_vendor_modules()
+                ws_ctrl_mods["mmtbx.f_model"].manager = (
+                    lambda *a, **kw: (_ for _ in ()).throw(ws_ctrl_primary)
+                )
+                ws_ctrl_mods["mmtbx.f_model.f_model"].manager = (
+                    ws_ctrl_mods["mmtbx.f_model"].manager
+                )
+                ws_ctrl_stderr = _FaultingStderr(
+                    fail_warning_on="write",
+                    warning_exc=ws_ctrl_ki,
+                )
+                with (
+                    mock.patch.dict(sys.modules, ws_ctrl_mods),
+                    mock.patch.object(
+                        onesar_phenix_measure,
+                        "_inspect_vendor_modules",
+                        return_value=fake_runtime_env,
+                    ),
+                    contextlib.redirect_stderr(ws_ctrl_stderr),
+                ):
+                    with self.assertRaises(KeyboardInterrupt) as ws_ctrl_cm:
+                        onesar_phenix_measure.measure_first_block_rfactors(
+                            pdb_path=pdb_path,
+                            mtz_path=mtz_path,
+                            params_path=params_path,
+                            out_json_path=tmp_dir / "rfactors_1310_ws_ctrl.json",
+                            out_maps_mtz_path=tmp_dir
+                            / "maps_1310_ws_ctrl.mtz",
+                            out_obs_pair_mtz_path=tmp_dir
+                            / "pair_1310_ws_ctrl.mtz",
+                            out_diagnostics_json_path=tmp_dir
+                            / "diagnostics_1310_ws_ctrl.json",
+                        )
+                self.assertIs(ws_ctrl_cm.exception, ws_ctrl_ki)
+                self.assertIs(ws_ctrl_cm.exception.__cause__, ws_ctrl_primary)
+                ws_ctrl_pf = getattr(
+                    ws_ctrl_cm.exception, "primary_failure", None
+                )
+                self.assertIsInstance(ws_ctrl_pf, dict)
+                assert isinstance(ws_ctrl_pf, dict)
+                self.assertEqual(
+                    ws_ctrl_pf["failed_phase"], "fmodel_manager_init"
+                )
+                self.assertEqual(ws_ctrl_pf["exception_type"], "RuntimeError")
+                self.assertEqual(len(ws_ctrl_pf["secondary_failures"]), 1)
+                self.assertEqual(
+                    ws_ctrl_pf["secondary_failures"][0]["phase"],
+                    "failure_diagnostic_stderr",
+                )
+
+            with self.subTest(
+                case="1310_failed_checkpoint_warning_stderr_preserves_primary"
+            ):
+                for fc_idx, (fc_warn_mode, fc_warn_errno) in enumerate(
+                    (("write", errno.ENOSPC), ("flush", errno.EPIPE))
+                ):
+                    fc_primary = RuntimeError(
+                        f"sentinel fmodel failure before failed partial checkpoint ({fc_warn_mode})"
+                    )
+                    fc_mods = _make_vendor_modules()
+                    fc_mods["mmtbx.f_model"].manager = (
+                        lambda *a, _exc=fc_primary, **kw: (_ for _ in ()).throw(
+                            _exc
+                        )
+                    )
+                    fc_mods["mmtbx.f_model.f_model"].manager = (
+                        fc_mods["mmtbx.f_model"].manager
+                    )
+                    out_json_fc = tmp_dir / f"rfactors_1310_fc_{fc_idx}.json"
+                    out_partial_fc = (
+                        tmp_dir
+                        / f"rfactors_1310_fc_{fc_idx}_partial_evidence.json"
+                    )
+                    out_diag_fc = (
+                        tmp_dir / f"diagnostics_1310_fc_{fc_idx}.json"
+                    )
+                    fc_ckpt_state = {"fired": False}
+
+                    def _selective_failed_partial_write(
+                        payload: Mapping[str, Any],
+                        target_path: Path | None,
+                        *,
+                        allow_nonfinite_tags: bool = False,
+                        _target: Path = out_partial_fc,
+                        _state: dict[str, bool] = fc_ckpt_state,
+                    ) -> None:
+                        if (
+                            target_path == _target
+                            and isinstance(payload, Mapping)
+                            and payload.get("status")
+                            == "failed_partial_unverified"
+                        ):
+                            _state["fired"] = True
+                            raise OSError(
+                                errno.EIO,
+                                "injected failed_partial_unverified checkpoint EIO",
+                            )
+                        real_atomic_write(
+                            payload,
+                            target_path,
+                            allow_nonfinite_tags=allow_nonfinite_tags,
+                        )
+
+                    fc_stderr = _FaultingStderr(
+                        fail_warning_on=fc_warn_mode,
+                        warning_exc=OSError(
+                            fc_warn_errno,
+                            f"injected failed-checkpoint warning {fc_warn_mode} error",
+                        ),
+                    )
+                    with (
+                        mock.patch.dict(sys.modules, fc_mods),
+                        mock.patch.object(
+                            onesar_phenix_measure,
+                            "_inspect_vendor_modules",
+                            return_value=fake_runtime_env,
+                        ),
+                        mock.patch.object(
+                            onesar_phenix_measure,
+                            "_atomic_write_json_checkpoint",
+                            side_effect=_selective_failed_partial_write,
+                        ),
+                        contextlib.redirect_stderr(fc_stderr),
+                    ):
+                        with self.assertRaises(RuntimeError) as fc_cm:
+                            onesar_phenix_measure.measure_first_block_rfactors(
+                                pdb_path=pdb_path,
+                                mtz_path=mtz_path,
+                                params_path=params_path,
+                                out_json_path=out_json_fc,
+                                out_maps_mtz_path=tmp_dir
+                                / f"maps_1310_fc_{fc_idx}.mtz",
+                                out_obs_pair_mtz_path=tmp_dir
+                                / f"pair_1310_fc_{fc_idx}.mtz",
+                                out_diagnostics_json_path=out_diag_fc,
+                            )
+                    self.assertIs(fc_cm.exception, fc_primary)
+                    self.assertTrue(fc_ckpt_state["fired"])
+                    self.assertFalse(fc_stderr.failure_diag_reached)
+                    self.assertTrue(fc_stderr.warning_write_reached)
+                    if fc_warn_mode == "flush":
+                        self.assertTrue(fc_stderr.warning_flush_reached)
+                    self.assertFalse(out_json_fc.is_file())
+                    fc_sec = getattr(
+                        fc_cm.exception, "secondary_failures", None
+                    )
+                    self.assertIsInstance(fc_sec, list)
+                    assert isinstance(fc_sec, list)
+                    self.assertEqual(len(fc_sec), 2)
+                    self.assertEqual(
+                        fc_sec[0]["phase"],
+                        "failure_partial_evidence_checkpoint",
+                    )
+                    self.assertEqual(fc_sec[0]["errno"], errno.EIO)
+                    self.assertEqual(fc_sec[0]["path"], str(out_partial_fc))
+                    self.assertEqual(
+                        fc_sec[1]["phase"],
+                        "checkpoint_serialization_warning_stderr",
+                    )
+                    self.assertEqual(fc_sec[1]["errno"], fc_warn_errno)
+                    # Prior healthy stage checkpoint on out_partial_fc remains intact.
+                    self.assertTrue(out_partial_fc.is_file())
+                    prior_partial_doc = json.loads(
+                        out_partial_fc.read_text(encoding="utf-8")
+                    )
+                    self.assertEqual(
+                        prior_partial_doc["status"],
+                        "running_partial_unverified",
+                    )
+                    self.assertEqual(
+                        prior_partial_doc["completed_stages"],
+                        [
+                            "extract_xtal_data",
+                            "xray_structure_snapshot_before",
+                        ],
+                    )
+
     def _verify_atomic_checkpoint_interrupted_write_and_promotion(
         self, tmp_dir: Path
     ) -> None:
@@ -9848,6 +10902,1023 @@ class TestTask179CanaryCliAndAttemptOrchestration(unittest.TestCase):
             finally:
                 if cli_attempt_out.exists():
                     shutil.rmtree(cli_attempt_out)
+
+    def test_phenix_parent_primary_failure_preservation_1310(self) -> None:
+        """Verify #1310 parent primary-failure preservation across admission, producer, postcheck, reconciliation, and control boundaries."""
+        import errno
+        import onesar_refmac
+
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp).resolve(strict=True)
+            fake_repo = base / "repo"
+            fake_repo.mkdir()
+
+            fake_phx_bin, fake_phx_build, fake_phx_runner = (
+                self._make_fake_phenix_runner_and_build(base)
+            )
+            real_atomic_write = (
+                onesar_phenix_measure._atomic_write_json_checkpoint
+            )
+            real_sha256_regular = onesar_rerun._sha256_regular_file
+            real_validate_build = onesar_rerun.validate_measured_phenix_build
+            real_cached_phenix_op = refinement_cache.cached_phenix_operation
+            real_reconcile_rfactor = (
+                onesar_rerun.reconcile_phenix_rfactor_output
+            )
+
+            def _assert_reopened_outcome_record(
+                outcome_mapping: Mapping[str, Any],
+            ) -> dict[str, Any]:
+                outcome_ref = outcome_mapping.get("outcome_record_reference")
+                self.assertIsInstance(outcome_ref, Mapping)
+                assert isinstance(outcome_ref, Mapping)
+                self.assertIs(outcome_ref.get("persisted"), True)
+                outcome_path = Path(str(outcome_ref["path"]))
+                self.assertTrue(outcome_path.is_file())
+                outcome_bytes = outcome_path.read_bytes()
+                self.assertEqual(
+                    hashlib.sha256(outcome_bytes).hexdigest(),
+                    outcome_ref["sha256"],
+                )
+                self.assertEqual(len(outcome_bytes), outcome_ref["size_bytes"])
+                reopened_doc = json.loads(outcome_bytes.decode("utf-8"))
+                self.assertEqual(
+                    reopened_doc["status"], outcome_mapping["status"]
+                )
+                self.assertEqual(
+                    reopened_doc["published"], outcome_mapping["published"]
+                )
+                self.assertEqual(
+                    reopened_doc["commit_state"],
+                    outcome_mapping["commit_state"],
+                )
+                self.assertEqual(
+                    reopened_doc["committed"], outcome_mapping["committed"]
+                )
+                self.assertEqual(
+                    reopened_doc["failed_stage"],
+                    outcome_mapping["failed_stage"],
+                )
+                self.assertEqual(
+                    reopened_doc["error"], outcome_mapping["error"]
+                )
+                return reopened_doc
+
+            def _make_failing_runner(
+                *,
+                mutate_staged_pdb: bool = False,
+                returncode: int = 2,
+            ) -> Callable[..., subprocess.CompletedProcess[str]]:
+                def _runner(
+                    argv: list[str], log: Path, *, cwd: Path, timeout: float
+                ) -> subprocess.CompletedProcess[str]:
+                    pdb_arg = Path(argv[argv.index("--pdb") + 1])
+                    out_diag = Path(
+                        argv[argv.index("--out-diagnostics-json") + 1]
+                    )
+                    out_partial = Path(
+                        argv[argv.index("--out-partial-json") + 1]
+                    )
+                    if mutate_staged_pdb:
+                        pdb_arg.write_text(
+                            pdb_arg.read_text(encoding="utf-8")
+                            + "REMARK MUTATED DURING WORKER\n",
+                            encoding="utf-8",
+                        )
+                    log.write_text(
+                        "simulated phenix worker failure stdout\n",
+                        encoding="utf-8",
+                    )
+                    real_atomic_write(
+                        {
+                            "schema_version": 1,
+                            "status": "failed",
+                            "current_phase": "update_all_scales",
+                            "completed_raw_stages": ["extract_xtal_data"],
+                            "partial_evidence_status": "failed_partial_unverified",
+                            "failure": {
+                                "failed_phase": "update_all_scales",
+                                "exception_type": "RuntimeError",
+                                "exception_message": "simulated scaling failure",
+                            },
+                        },
+                        out_diag,
+                    )
+                    real_atomic_write(
+                        {
+                            "schema_version": 1,
+                            "artifact_role": "partial_unverified_phenix_evidence",
+                            "reusable_cache_output": False,
+                            "canonical_eval_qds_eligible": False,
+                            "status": "failed_partial_unverified",
+                            "current_phase": "update_all_scales",
+                            "completed_stages": ["extract_xtal_data"],
+                            "rfactor_replay_verified": False,
+                            "map_export_verified": False,
+                            "failure": {
+                                "failed_phase": "update_all_scales",
+                                "exception_type": "RuntimeError",
+                                "exception_message": "simulated scaling failure",
+                            },
+                        },
+                        out_partial,
+                    )
+                    return subprocess.CompletedProcess(argv, returncode)
+
+                return _runner
+
+            with (
+                self._without_protstruct_env_overrides(),
+                mock.patch.object(
+                    toolchain,
+                    "phenix",
+                    side_effect=lambda exe: fake_phx_bin / exe,
+                ),
+                mock.patch.object(
+                    toolchain,
+                    "phenix_build_evidence",
+                    return_value=fake_phx_build,
+                ),
+            ):
+                # 0. Healthy control: succeeds and writes reconciled manifest without failure markers.
+                with self.subTest(case="0_healthy_control"):
+                    healthy_dir = fake_repo / "runs" / "phx_1310_healthy"
+                    reconciled = onesar_rerun.run_phenix_rfactor_operation(
+                        healthy_dir,
+                        subject_id="R4",
+                        repo_root=fake_repo,
+                        archive_path=COMMITTED_ARCHIVE,
+                        require_no_protstruct_overrides=False,
+                        runner=fake_phx_runner,
+                    )
+                    self.assertEqual(
+                        reconciled["reconciliation"]["reconciliation_status"],
+                        "verified",
+                    )
+                    self.assertTrue(
+                        (
+                            healthy_dir
+                            / "phenix"
+                            / "phenix_reconciled_manifest.json"
+                        ).is_file()
+                    )
+                    self.assertFalse(
+                        (
+                            healthy_dir
+                            / "phenix"
+                            / "phenix_build_admission_failure.json"
+                        ).exists()
+                    )
+                    self.assertFalse(
+                        (
+                            healthy_dir
+                            / "phenix"
+                            / "phenix_operation_failure.json"
+                        ).exists()
+                    )
+
+                # 1. Preflight build admission primary + report-write EIO preserves admission ValueError.
+                with self.subTest(
+                    case="1_preflight_admission_primary_plus_checkpoint_write_eio"
+                ):
+                    rejected_build = copy.deepcopy(fake_phx_build)
+                    rejected_build["parsed_build"] = "1.99-0000"
+                    rejected_build["version_probe"]["parsed_build"] = (
+                        "1.99-0000"
+                    )
+                    rejected_build["version_probe"]["setup_parsed_build"] = (
+                        "1.99-0000"
+                    )
+                    observed_adm_primaries: list[BaseException] = []
+
+                    def _observe_validate_measured_phenix_build(
+                        *args: Any, **kwargs: Any
+                    ) -> dict[str, Any]:
+                        try:
+                            return real_validate_build(*args, **kwargs)
+                        except BaseException as exc:
+                            observed_adm_primaries.append(exc)
+                            raise
+
+                    def _fail_admission_checkpoint_write(
+                        payload: Mapping[str, Any], target_path: Path
+                    ) -> None:
+                        if (
+                            Path(target_path).name
+                            == "phenix_build_admission_failure.json"
+                        ):
+                            raise OSError(
+                                errno.EIO,
+                                "Simulated EIO writing phenix_build_admission_failure.json",
+                            )
+                        real_atomic_write(payload, target_path)
+
+                    adm_op_dir = fake_repo / "runs" / "phx_1310_adm_op"
+                    with (
+                        mock.patch.object(
+                            toolchain,
+                            "phenix_build_evidence",
+                            return_value=rejected_build,
+                        ),
+                        mock.patch.object(
+                            onesar_rerun,
+                            "validate_measured_phenix_build",
+                            side_effect=_observe_validate_measured_phenix_build,
+                        ),
+                        mock.patch.object(
+                            onesar_phenix_measure,
+                            "_atomic_write_json_checkpoint",
+                            side_effect=_fail_admission_checkpoint_write,
+                        ),
+                    ):
+                        with self.assertRaisesRegex(
+                            ValueError,
+                            r"PHENIX vendor-setup build measurement failed #957 admission gate",
+                        ) as cm_adm:
+                            onesar_rerun.run_phenix_rfactor_operation(
+                                adm_op_dir,
+                                subject_id="R4",
+                                repo_root=fake_repo,
+                                archive_path=COMMITTED_ARCHIVE,
+                                require_no_protstruct_overrides=False,
+                                runner=fake_phx_runner,
+                            )
+                    self.assertEqual(len(observed_adm_primaries), 1)
+                    self.assertIs(cm_adm.exception, observed_adm_primaries[0])
+                    self.assertEqual(
+                        getattr(cm_adm.exception, "phenix_failed_stage", None),
+                        "validate_measured_phenix_build",
+                    )
+                    adm_sec = getattr(
+                        cm_adm.exception, "secondary_failures", None
+                    )
+                    self.assertIsInstance(adm_sec, list)
+                    self.assertEqual(len(adm_sec), 1)
+                    self.assertEqual(
+                        adm_sec[0]["phase"],
+                        "phenix_build_admission_failure_checkpoint",
+                    )
+                    self.assertEqual(adm_sec[0]["exception_type"], "OSError")
+                    self.assertEqual(adm_sec[0]["errno"], errno.EIO)
+                    self.assertTrue(
+                        str(adm_sec[0]["path"]).endswith(
+                            "phenix/phenix_build_admission_failure.json"
+                        )
+                    )
+                    self.assertTrue(
+                        any(
+                            "phenix_build_admission_failure_checkpoint" in n
+                            for n in getattr(cm_adm.exception, "__notes__", ())
+                        )
+                    )
+
+                    adm_attempt_dir = (
+                        fake_repo / "runs" / "phx_1310_adm_attempt"
+                    )
+                    with (
+                        mock.patch.object(
+                            toolchain,
+                            "phenix_build_evidence",
+                            return_value=rejected_build,
+                        ),
+                        mock.patch.object(
+                            onesar_rerun,
+                            "validate_measured_phenix_build",
+                            side_effect=_observe_validate_measured_phenix_build,
+                        ),
+                        mock.patch.object(
+                            onesar_phenix_measure,
+                            "_atomic_write_json_checkpoint",
+                            side_effect=_fail_admission_checkpoint_write,
+                        ),
+                        mock.patch.object(
+                            onesar_refmac,
+                            "run_refmac_rfactor_operation",
+                            side_effect=AssertionError(
+                                "REFMAC must not run after PHENIX admission failure"
+                            ),
+                        ),
+                    ):
+                        outcome_adm = (
+                            onesar_rerun.run_single_subject_rfactor_attempt(
+                                adm_attempt_dir,
+                                "R4",
+                                repo_root=fake_repo,
+                                archive_path=COMMITTED_ARCHIVE,
+                                require_no_protstruct_overrides=False,
+                                phenix_runner=fake_phx_runner,
+                            )
+                        )
+                    self.assertEqual(len(observed_adm_primaries), 2)
+                    self.assertEqual(outcome_adm["status"], "failed")
+                    self.assertIs(outcome_adm["published"], False)
+                    self.assertEqual(
+                        outcome_adm["failed_stage"], "phenix_rfactor_operation"
+                    )
+                    self.assertEqual(
+                        outcome_adm["error"]["exception_type"], "ValueError"
+                    )
+                    self.assertEqual(
+                        outcome_adm["error"]["exception_message"],
+                        str(observed_adm_primaries[1]),
+                    )
+                    self.assertIn(
+                        "PHENIX vendor-setup build measurement failed #957 admission gate",
+                        outcome_adm["error"]["exception_message"],
+                    )
+                    self.assertEqual(
+                        outcome_adm["error"]["phenix_failed_stage"],
+                        "validate_measured_phenix_build",
+                    )
+                    self.assertEqual(
+                        len(outcome_adm["error"]["secondary_failures"]), 1
+                    )
+                    self.assertEqual(
+                        outcome_adm["error"]["secondary_failures"][0]["phase"],
+                        "phenix_build_admission_failure_checkpoint",
+                    )
+                    self.assertEqual(
+                        outcome_adm["error"]["secondary_failures"][0]["errno"],
+                        errno.EIO,
+                    )
+                    _assert_reopened_outcome_record(outcome_adm)
+
+                # 2. Producer OperationFailed + candidate artifact hash EIO + failure checkpoint write EIO.
+                with self.subTest(
+                    case="2_producer_operation_failed_plus_failure_checkpoint_write_eio"
+                ):
+                    observed_prod_primaries: list[BaseException] = []
+
+                    def _observe_cached_phenix_op_case2(
+                        *args: Any, **kwargs: Any
+                    ) -> dict[str, Path]:
+                        try:
+                            return real_cached_phenix_op(*args, **kwargs)
+                        except BaseException as exc:
+                            observed_prod_primaries.append(exc)
+                            raise
+
+                    def _fail_op_failure_checkpoint(
+                        payload: Mapping[str, Any], target_path: Path
+                    ) -> None:
+                        if (
+                            Path(target_path).name
+                            == "phenix_operation_failure.json"
+                        ):
+                            raise OSError(
+                                errno.EIO,
+                                "Simulated EIO writing phenix_operation_failure.json",
+                            )
+                        real_atomic_write(payload, target_path)
+
+                    def _fail_stdout_log_sha(path_arg: Path) -> str:
+                        if Path(path_arg).name == "stdout.log":
+                            raise OSError(
+                                errno.EIO,
+                                "Simulated EIO hashing retained stdout.log",
+                            )
+                        return real_sha256_regular(path_arg)
+
+                    prod_eio_attempt = (
+                        fake_repo / "runs" / "phx_1310_prod_ckpt_eio"
+                    )
+                    with (
+                        mock.patch.object(
+                            refinement_cache,
+                            "cached_phenix_operation",
+                            side_effect=_observe_cached_phenix_op_case2,
+                        ),
+                        mock.patch.object(
+                            onesar_phenix_measure,
+                            "_atomic_write_json_checkpoint",
+                            side_effect=_fail_op_failure_checkpoint,
+                        ),
+                        mock.patch.object(
+                            onesar_rerun,
+                            "_sha256_regular_file",
+                            side_effect=_fail_stdout_log_sha,
+                        ),
+                        mock.patch.object(
+                            onesar_refmac,
+                            "run_refmac_rfactor_operation",
+                            side_effect=AssertionError(
+                                "REFMAC must not run after PHENIX failure"
+                            ),
+                        ),
+                    ):
+                        with self.assertRaises(
+                            refinement_cache.OperationFailed
+                        ) as cm_prod_eio:
+                            onesar_rerun.run_single_subject_rfactor_attempt(
+                                prod_eio_attempt,
+                                "R4",
+                                repo_root=fake_repo,
+                                archive_path=COMMITTED_ARCHIVE,
+                                require_no_protstruct_overrides=False,
+                                phenix_runner=_make_failing_runner(),
+                                raise_on_failure=True,
+                            )
+                    exc_prod_eio = cm_prod_eio.exception
+                    self.assertEqual(len(observed_prod_primaries), 1)
+                    self.assertIs(exc_prod_eio, observed_prod_primaries[0])
+                    self.assertFalse(hasattr(exc_prod_eio, "returncode"))
+                    self.assertTrue(exc_prod_eio.log_path.is_file())
+                    self.assertEqual(exc_prod_eio.log_path.name, "stdout.log")
+                    self.assertEqual(
+                        getattr(exc_prod_eio, "failed_stage", None),
+                        "phenix_rfactor_operation",
+                    )
+                    self.assertEqual(
+                        getattr(exc_prod_eio, "phenix_failed_stage", None),
+                        "cached_phenix_operation",
+                    )
+                    sec_phases = [
+                        item["phase"]
+                        for item in getattr(
+                            exc_prod_eio, "secondary_failures", ()
+                        )
+                    ]
+                    self.assertEqual(
+                        sec_phases,
+                        [
+                            "retain_parent_operation_failure_artifact:stdout_log",
+                            "retain_parent_operation_failure_checkpoint",
+                        ],
+                    )
+                    prod_eio_outcome = getattr(
+                        exc_prod_eio, "attempt_outcome", None
+                    )
+                    self.assertIsInstance(prod_eio_outcome, Mapping)
+                    assert isinstance(prod_eio_outcome, Mapping)
+                    self.assertEqual(prod_eio_outcome["status"], "failed")
+                    self.assertIs(prod_eio_outcome["published"], False)
+                    self.assertEqual(
+                        prod_eio_outcome["error"]["exception_type"],
+                        "OperationFailed",
+                    )
+                    self.assertEqual(
+                        prod_eio_outcome["error"]["log_path"],
+                        str(exc_prod_eio.log_path),
+                    )
+                    self.assertEqual(
+                        prod_eio_outcome["error"]["phenix_failed_stage"],
+                        "cached_phenix_operation",
+                    )
+                    self.assertEqual(
+                        [
+                            item["phase"]
+                            for item in prod_eio_outcome["error"][
+                                "secondary_failures"
+                            ]
+                        ],
+                        [
+                            "retain_parent_operation_failure_artifact:stdout_log",
+                            "retain_parent_operation_failure_checkpoint",
+                        ],
+                    )
+                    self.assertEqual(
+                        getattr(exc_prod_eio, "attempt_outcome_reference", None),
+                        prod_eio_outcome["outcome_record_reference"],
+                    )
+                    _assert_reopened_outcome_record(prod_eio_outcome)
+                    self.assertFalse(
+                        (
+                            prod_eio_attempt
+                            / "phenix"
+                            / "phenix"
+                            / "phenix_reconciled_manifest.json"
+                        ).exists()
+                    )
+
+                # 3. Producer OperationFailed + staged-input mutation and postcheck hash EIO.
+                with self.subTest(
+                    case="3_producer_operation_failed_plus_postcheck_hash_eio_and_mutation"
+                ):
+                    post_eio_dir = (
+                        fake_repo / "runs" / "phx_1310_prod_postcheck_collision"
+                    )
+                    mtz_call_count = {"count": 0}
+                    observed_post_col_primaries: list[BaseException] = []
+
+                    def _observe_cached_phenix_op_case3(
+                        *args: Any, **kwargs: Any
+                    ) -> dict[str, Path]:
+                        try:
+                            return real_cached_phenix_op(*args, **kwargs)
+                        except BaseException as exc:
+                            observed_post_col_primaries.append(exc)
+                            raise
+
+                    def _fail_original_mtz_postcheck(path_arg: Path) -> str:
+                        if Path(path_arg).name == "original_data.mtz":
+                            mtz_call_count["count"] += 1
+                            if mtz_call_count["count"] >= 2:
+                                raise OSError(
+                                    errno.EIO,
+                                    "Simulated EIO hashing staged original_data.mtz in postcheck",
+                                )
+                        return real_sha256_regular(path_arg)
+
+                    with (
+                        mock.patch.object(
+                            refinement_cache,
+                            "cached_phenix_operation",
+                            side_effect=_observe_cached_phenix_op_case3,
+                        ),
+                        mock.patch.object(
+                            onesar_rerun,
+                            "_sha256_regular_file",
+                            side_effect=_fail_original_mtz_postcheck,
+                        ),
+                    ):
+                        with self.assertRaises(
+                            refinement_cache.OperationFailed
+                        ) as cm_post_col:
+                            onesar_rerun.run_phenix_rfactor_operation(
+                                post_eio_dir,
+                                subject_id="R4",
+                                repo_root=fake_repo,
+                                archive_path=COMMITTED_ARCHIVE,
+                                require_no_protstruct_overrides=False,
+                                runner=_make_failing_runner(
+                                    mutate_staged_pdb=True
+                                ),
+                            )
+                    exc_post_col = cm_post_col.exception
+                    self.assertEqual(len(observed_post_col_primaries), 1)
+                    self.assertIs(exc_post_col, observed_post_col_primaries[0])
+                    self.assertTrue(exc_post_col.log_path.is_file())
+                    self.assertEqual(
+                        getattr(exc_post_col, "phenix_failed_stage", None),
+                        "cached_phenix_operation",
+                    )
+                    self.assertEqual(
+                        [
+                            (item["phase"], item["exception_type"])
+                            for item in getattr(
+                                exc_post_col, "secondary_failures", ()
+                            )
+                        ],
+                        [
+                            (
+                                "staged_input_postcheck:original_model_pdb",
+                                "ValueError",
+                            ),
+                            (
+                                "staged_input_postcheck:original_data_mtz",
+                                "OSError",
+                            ),
+                        ],
+                    )
+                    fail_marker_path = (
+                        post_eio_dir / "phenix" / "phenix_operation_failure.json"
+                    )
+                    self.assertTrue(fail_marker_path.is_file())
+                    fail_marker_doc = json.loads(
+                        fail_marker_path.read_text(encoding="utf-8")
+                    )
+                    self.assertEqual(
+                        fail_marker_doc["failed_stage"],
+                        "cached_phenix_operation",
+                    )
+                    self.assertEqual(
+                        fail_marker_doc["exception_type"], "OperationFailed"
+                    )
+                    self.assertEqual(
+                        fail_marker_doc["log_path"], str(exc_post_col.log_path)
+                    )
+                    self.assertEqual(
+                        [
+                            item["phase"]
+                            for item in fail_marker_doc["secondary_failures"]
+                        ],
+                        [
+                            "staged_input_postcheck:original_model_pdb",
+                            "staged_input_postcheck:original_data_mtz",
+                        ],
+                    )
+                    postchecks_doc = fail_marker_doc["staged_input_postchecks"]
+                    self.assertIs(
+                        postchecks_doc["original_model_pdb"]["verified"], False
+                    )
+                    self.assertIs(
+                        postchecks_doc["original_data_mtz"]["verified"], False
+                    )
+                    self.assertIsNone(
+                        postchecks_doc["original_data_mtz"]["actual_sha256"]
+                    )
+                    self.assertIs(
+                        postchecks_doc["projected_observations_mtz"]["verified"],
+                        True,
+                    )
+                    self.assertIs(
+                        postchecks_doc["input_hkl_ledger_json"]["verified"],
+                        True,
+                    )
+                    self.assertEqual(
+                        fail_marker_doc["diagnostics_summary"]["failure"][
+                            "failed_phase"
+                        ],
+                        "update_all_scales",
+                    )
+                    self.assertEqual(
+                        fail_marker_doc["partial_evidence_summary"]["failure"][
+                            "failed_phase"
+                        ],
+                        "update_all_scales",
+                    )
+
+                # 4. Reconciliation primary + failure checkpoint write EIO preserves reconciliation ValueError.
+                with self.subTest(
+                    case="4_reconciliation_primary_plus_failure_checkpoint_write_eio"
+                ):
+                    observed_rec_primaries: list[BaseException] = []
+
+                    def _observe_reconcile_rfactor(
+                        *args: Any, **kwargs: Any
+                    ) -> dict[str, Any]:
+                        try:
+                            return real_reconcile_rfactor(*args, **kwargs)
+                        except BaseException as exc:
+                            observed_rec_primaries.append(exc)
+                            raise
+
+                    def _corrupt_rfactors_runner(
+                        argv: list[str],
+                        log: Path,
+                        *,
+                        cwd: Path,
+                        timeout: float,
+                    ) -> subprocess.CompletedProcess[str]:
+                        res = fake_phx_runner(
+                            argv, log, cwd=cwd, timeout=timeout
+                        )
+                        out_json = Path(argv[argv.index("--out-json") + 1])
+                        doc = json.loads(out_json.read_text(encoding="utf-8"))
+                        doc["scales_and_rfactors"]["r_work"] = 0.999999
+                        out_json.write_text(
+                            json.dumps(doc, indent=2, sort_keys=True) + "\n",
+                            encoding="utf-8",
+                        )
+                        return res
+
+                    def _fail_reconcile_failure_checkpoint(
+                        payload: Mapping[str, Any], target_path: Path
+                    ) -> None:
+                        if (
+                            Path(target_path).name
+                            == "phenix_operation_failure.json"
+                        ):
+                            raise OSError(
+                                errno.EIO,
+                                "Simulated EIO writing phenix_operation_failure.json on reconciliation error",
+                            )
+                        real_atomic_write(payload, target_path)
+
+                    rec_col_dir = fake_repo / "runs" / "phx_1310_reconcile_eio"
+                    with (
+                        mock.patch.object(
+                            onesar_rerun,
+                            "reconcile_phenix_rfactor_output",
+                            side_effect=_observe_reconcile_rfactor,
+                        ),
+                        mock.patch.object(
+                            onesar_phenix_measure,
+                            "_atomic_write_json_checkpoint",
+                            side_effect=_fail_reconcile_failure_checkpoint,
+                        ),
+                    ):
+                        with self.assertRaisesRegex(
+                            ValueError,
+                            r"Replayed r_work .* disagrees with native fmodel\.r_work\(\)",
+                        ) as cm_rec_col:
+                            onesar_rerun.run_phenix_rfactor_operation(
+                                rec_col_dir,
+                                subject_id="R4",
+                                repo_root=fake_repo,
+                                archive_path=COMMITTED_ARCHIVE,
+                                require_no_protstruct_overrides=False,
+                                runner=_corrupt_rfactors_runner,
+                            )
+                    self.assertEqual(len(observed_rec_primaries), 1)
+                    self.assertIs(
+                        cm_rec_col.exception, observed_rec_primaries[0]
+                    )
+                    self.assertEqual(
+                        getattr(
+                            cm_rec_col.exception, "phenix_failed_stage", None
+                        ),
+                        "reconcile_phenix_rfactor_output",
+                    )
+                    rec_sec = getattr(
+                        cm_rec_col.exception, "secondary_failures", None
+                    )
+                    self.assertIsInstance(rec_sec, list)
+                    self.assertEqual(len(rec_sec), 1)
+                    self.assertEqual(
+                        rec_sec[0]["phase"],
+                        "retain_parent_operation_failure_checkpoint",
+                    )
+                    self.assertEqual(rec_sec[0]["errno"], errno.EIO)
+                    self.assertFalse(
+                        (
+                            rec_col_dir
+                            / "phenix"
+                            / "phenix_reconciled_manifest.json"
+                        ).exists()
+                    )
+
+                # 5. Secondary-only staged-input postcheck failure when invoked inside an active outer except block.
+                with self.subTest(
+                    case="5_secondary_only_postcheck_failure_under_ambient_outer_except"
+                ):
+                    sec_only_dir = (
+                        fake_repo / "runs" / "phx_1310_postcheck_only"
+                    )
+                    cache_returned: dict[str, Any] = {
+                        "called": False,
+                        "artifact_paths": None,
+                    }
+                    postcheck_mtz_eio: dict[str, bool] = {
+                        "armed": False,
+                        "fired": False,
+                    }
+
+                    def _cached_op_then_mutate_for_postcheck(
+                        *args: Any, **kwargs: Any
+                    ) -> dict[str, Path]:
+                        res = real_cached_phenix_op(*args, **kwargs)
+                        cache_returned["called"] = True
+                        cache_returned["artifact_paths"] = dict(res)
+                        staged_pdb = (
+                            sec_only_dir / "inputs" / "original_model.pdb"
+                        )
+                        staged_pdb.write_text(
+                            staged_pdb.read_text(encoding="utf-8")
+                            + "REMARK MUTATED AFTER CACHE COMPLETION\n",
+                            encoding="utf-8",
+                        )
+                        postcheck_mtz_eio["armed"] = True
+                        return res
+
+                    def _fail_armed_mtz_sha(path_arg: Path) -> str:
+                        if (
+                            postcheck_mtz_eio["armed"]
+                            and Path(path_arg).name == "original_data.mtz"
+                        ):
+                            postcheck_mtz_eio["fired"] = True
+                            raise OSError(
+                                errno.EIO,
+                                "Simulated EIO on original_data.mtz after healthy worker",
+                            )
+                        return real_sha256_regular(path_arg)
+
+                    try:
+                        raise RuntimeError("ambient outer caller exception")
+                    except RuntimeError:
+                        self.assertIsNotNone(sys.exc_info()[1])
+                        with (
+                            mock.patch.object(
+                                refinement_cache,
+                                "cached_phenix_operation",
+                                side_effect=_cached_op_then_mutate_for_postcheck,
+                            ),
+                            mock.patch.object(
+                                onesar_rerun,
+                                "_sha256_regular_file",
+                                side_effect=_fail_armed_mtz_sha,
+                            ),
+                        ):
+                            with self.assertRaisesRegex(
+                                ValueError,
+                                r"Staged original_model\.pdb mutated during PHENIX operation",
+                            ) as cm_sec_only:
+                                onesar_rerun.run_phenix_rfactor_operation(
+                                    sec_only_dir,
+                                    subject_id="R4",
+                                    repo_root=fake_repo,
+                                    archive_path=COMMITTED_ARCHIVE,
+                                    require_no_protstruct_overrides=False,
+                                    runner=fake_phx_runner,
+                                )
+                    self.assertIs(cache_returned["called"], True)
+                    self.assertIsInstance(
+                        cache_returned["artifact_paths"], Mapping
+                    )
+                    self.assertTrue(
+                        Path(
+                            cache_returned["artifact_paths"]["manifest"]
+                        ).is_file()
+                    )
+                    self.assertIs(postcheck_mtz_eio["fired"], True)
+                    exc_sec_only = cm_sec_only.exception
+                    self.assertEqual(
+                        getattr(exc_sec_only, "phenix_failed_stage", None),
+                        "staged_input_postcheck",
+                    )
+                    self.assertEqual(
+                        [
+                            (item["phase"], item["exception_type"])
+                            for item in getattr(
+                                exc_sec_only, "secondary_failures", ()
+                            )
+                        ],
+                        [
+                            (
+                                "staged_input_postcheck:original_data_mtz",
+                                "OSError",
+                            ),
+                        ],
+                    )
+                    sec_only_fail_doc = json.loads(
+                        (
+                            sec_only_dir
+                            / "phenix"
+                            / "phenix_operation_failure.json"
+                        ).read_text(encoding="utf-8")
+                    )
+                    self.assertEqual(
+                        sec_only_fail_doc["failed_stage"],
+                        "staged_input_postcheck",
+                    )
+                    self.assertIs(
+                        sec_only_fail_doc["staged_input_postchecks"][
+                            "original_model_pdb"
+                        ]["verified"],
+                        False,
+                    )
+                    self.assertIs(
+                        sec_only_fail_doc["staged_input_postchecks"][
+                            "original_data_mtz"
+                        ]["verified"],
+                        False,
+                    )
+                    self.assertFalse(
+                        (
+                            sec_only_dir
+                            / "phenix"
+                            / "phenix_reconciled_manifest.json"
+                        ).exists()
+                    )
+
+                # 6a. Process-control primary (KeyboardInterrupt / SystemExit) + ordinary secondary errors preserves control exception.
+                with self.subTest(
+                    case="6a_active_control_primary_plus_ordinary_secondary"
+                ):
+                    for idx_ctrl, ctrl_primary in enumerate(
+                        (
+                            KeyboardInterrupt("simulated operator Ctrl-C"),
+                            SystemExit(13),
+                        )
+                    ):
+                        ctrl_dir = (
+                            fake_repo / "runs" / f"phx_1310_ctrl_prim_{idx_ctrl}"
+                        )
+                        pdb_sha_calls = {"count": 0}
+
+                        def _fail_pdb_postcheck_sha(path_arg: Path) -> str:
+                            if Path(path_arg).name == "original_model.pdb":
+                                pdb_sha_calls["count"] += 1
+                                if pdb_sha_calls["count"] >= 2:
+                                    raise OSError(
+                                        errno.EIO,
+                                        "Simulated postcheck EIO during control primary",
+                                    )
+                            return real_sha256_regular(path_arg)
+
+                        with (
+                            mock.patch.object(
+                                refinement_cache,
+                                "cached_phenix_operation",
+                                side_effect=ctrl_primary,
+                            ),
+                            mock.patch.object(
+                                onesar_rerun,
+                                "_sha256_regular_file",
+                                side_effect=_fail_pdb_postcheck_sha,
+                            ),
+                        ):
+                            with self.assertRaises(
+                                type(ctrl_primary)
+                            ) as cm_ctrl:
+                                onesar_rerun.run_phenix_rfactor_operation(
+                                    ctrl_dir,
+                                    subject_id="R4",
+                                    repo_root=fake_repo,
+                                    archive_path=COMMITTED_ARCHIVE,
+                                    require_no_protstruct_overrides=False,
+                                    runner=fake_phx_runner,
+                                )
+                        self.assertIs(cm_ctrl.exception, ctrl_primary)
+                        if isinstance(ctrl_primary, SystemExit):
+                            self.assertEqual(cm_ctrl.exception.code, 13)
+                        ctrl_sec = getattr(
+                            cm_ctrl.exception, "secondary_failures", None
+                        )
+                        self.assertIsInstance(ctrl_sec, list)
+                        self.assertEqual(len(ctrl_sec), 1)
+                        self.assertEqual(
+                            ctrl_sec[0]["phase"],
+                            "staged_input_postcheck:original_model_pdb",
+                        )
+                        self.assertEqual(ctrl_sec[0]["errno"], errno.EIO)
+
+                # 6b. Ordinary producer primary + new KeyboardInterrupt during postcheck chains and preserves prior primary facts.
+                with self.subTest(
+                    case="6b_ordinary_primary_plus_new_control_in_postcheck"
+                ):
+                    new_ctrl_attempt = (
+                        fake_repo / "runs" / "phx_1310_new_ctrl_in_postcheck"
+                    )
+                    pdb_ctrl_calls = {"count": 0}
+                    observed_new_ctrl_primaries: list[BaseException] = []
+
+                    def _observe_cached_phenix_op_case6b(
+                        *args: Any, **kwargs: Any
+                    ) -> dict[str, Path]:
+                        try:
+                            return real_cached_phenix_op(*args, **kwargs)
+                        except BaseException as exc:
+                            observed_new_ctrl_primaries.append(exc)
+                            raise
+
+                    def _interrupt_on_pdb_postcheck(path_arg: Path) -> str:
+                        if Path(path_arg).name == "original_model.pdb":
+                            pdb_ctrl_calls["count"] += 1
+                            if pdb_ctrl_calls["count"] >= 2:
+                                raise KeyboardInterrupt(
+                                    "Simulated second Ctrl-C during staged postcheck"
+                                )
+                        return real_sha256_regular(path_arg)
+
+                    with (
+                        mock.patch.object(
+                            refinement_cache,
+                            "cached_phenix_operation",
+                            side_effect=_observe_cached_phenix_op_case6b,
+                        ),
+                        mock.patch.object(
+                            onesar_rerun,
+                            "_sha256_regular_file",
+                            side_effect=_interrupt_on_pdb_postcheck,
+                        ),
+                    ):
+                        with self.assertRaises(
+                            KeyboardInterrupt
+                        ) as cm_new_ctrl:
+                            onesar_rerun.run_single_subject_rfactor_attempt(
+                                new_ctrl_attempt,
+                                "R4",
+                                repo_root=fake_repo,
+                                archive_path=COMMITTED_ARCHIVE,
+                                require_no_protstruct_overrides=False,
+                                phenix_runner=_make_failing_runner(),
+                            )
+                    esc_ctrl = cm_new_ctrl.exception
+                    self.assertEqual(len(observed_new_ctrl_primaries), 1)
+                    self.assertIs(
+                        esc_ctrl.__cause__, observed_new_ctrl_primaries[0]
+                    )
+                    self.assertIsInstance(
+                        esc_ctrl.__cause__, refinement_cache.OperationFailed
+                    )
+                    prim_summary = getattr(esc_ctrl, "primary_failure", None)
+                    self.assertIsInstance(prim_summary, Mapping)
+                    self.assertEqual(
+                        prim_summary["failed_stage"], "cached_phenix_operation"
+                    )
+                    self.assertEqual(
+                        prim_summary["exception_type"], "OperationFailed"
+                    )
+                    self.assertTrue(
+                        str(prim_summary["log_path"]).endswith("stdout.log")
+                    )
+                    ctrl_outcome = getattr(esc_ctrl, "attempt_outcome", None)
+                    self.assertIsInstance(ctrl_outcome, Mapping)
+                    assert isinstance(ctrl_outcome, Mapping)
+                    self.assertEqual(ctrl_outcome["status"], "interrupted")
+                    self.assertEqual(
+                        ctrl_outcome["error"]["exception_type"],
+                        "KeyboardInterrupt",
+                    )
+                    self.assertEqual(
+                        ctrl_outcome["error"]["cause_type"], "OperationFailed"
+                    )
+                    self.assertEqual(
+                        ctrl_outcome["error"]["primary_failure"][
+                            "exception_type"
+                        ],
+                        "OperationFailed",
+                    )
+                    self.assertEqual(
+                        ctrl_outcome["error"]["primary_failure"]["log_path"],
+                        prim_summary["log_path"],
+                    )
+                    self.assertEqual(
+                        getattr(esc_ctrl, "attempt_outcome_reference", None),
+                        ctrl_outcome["outcome_record_reference"],
+                    )
+                    _assert_reopened_outcome_record(ctrl_outcome)
 
 
 if __name__ == "__main__":

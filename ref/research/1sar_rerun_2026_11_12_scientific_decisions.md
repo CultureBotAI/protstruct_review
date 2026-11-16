@@ -1,13 +1,15 @@
 # 1SAR Attempt 04: verified offline evidence and decisions still required
 
-This assessment is result-free with respect to new native execution. It selects no
-scientific policy and changes no historical evidence. Offline consistency is not an
+This assessment is result-free with respect to new native execution. At its `2026-11-12`
+authoring date, it selected no scientific policy and changed no historical evidence. Offline consistency is not an
 eligible canary: the retained manifest's limited Gate 2 remains true, while Gates
 1, 3, 4, 5 and 6 remain false. Its `scientific_admission_proven`,
 `canary_admission_eligible`, `batch_execution_eligible`, `eval_admission_eligible`
 and `qds_admission_eligible` fields remain false. The Gate 2 receipt still says
 `xmlout_status: supported_cycle_association_unproven`; later source analysis does
 not rewrite that receipt. Source: `R/refmac/refmac_operation_manifest.json`.
+
+**Prospective policy selections and hold (`2026-11-15`):** On `2026-11-15`, the user approved prospective `SAR1`–`SAR6` policy selections for any future separately authorized `Attempt 05`, recorded in [`1sar_prospective_policy_selections_2026-11-15.md`](1sar_prospective_policy_selections_2026-11-15.md), and placed **all `REFMAC5` follow-up—explicitly including the offline `F3` CCP4 library/source check and any `Attempt 05` instrumentation or execution—on hold until after the PHENIX Stage 4 result-free preregistration commit (`registration_status: "frozen_result_free"`) lands on `main`**. The separate PHENIX Stage 1 user policy selections `U01`–`U14` (`registration_status: "selected_decisions_recorded"`, **not** `"frozen_result_free"`) are recorded in [`phenix_step1_user_selections_2026-11-15.md`](phenix_step1_user_selections_2026-11-15.md) with no `U`-to-`SAR` crosswalk. All historical Attempt 01–04 bytes and Attempt 04 gates (`Gate 2 = true` with `xmlout_status: "supported_cycle_association_unproven"`; `Gates 1, 3, 4, 5, 6 = false`; all readiness/eligibility booleans `false`; `diagnostic_producer.runtime_image_coverage = "not_assessed"`) remain immutable.
 
 ## Evidence identity and scope
 
@@ -181,12 +183,14 @@ and additive provenance-bound hooks. Nothing here authorizes it. Earlier
 attempts, recipes and receipts remain immutable; no batch follows an ineligible
 canary.
 
-## Decisions to select next
+## Decisions to select next (historical `2026-11-12` menu snapshot; superseded prospectively on `2026-11-15`)
 
-The following **SAR1–SAR6 choices are all unselected**. They are separate from
-U01–U14 in `ref/research/phenix_evaluation_preregistration_spec_2026-11-11.md` §5;
-there is no asserted mapping between the two menus. They can be considered in
-the same next planning step. Any changed admission convention or estimand needs
+> **Historical `2026-11-12` snapshot note:** At the `2026-11-12` authoring date of this document (and at the `2026-11-15` PR `#1007` integration snapshot `28b6596c2ad6d88ab4e4bb0cc0f4cc32207a0156`), `SAR1`–`SAR6` were unselected. Subsequently on `2026-11-15`, the user approved prospective policy selections for `SAR1`–`SAR6` in [`1sar_prospective_policy_selections_2026-11-15.md`](1sar_prospective_policy_selections_2026-11-15.md) and placed **all `REFMAC5` follow-up—explicitly including the offline `F3` CCP4 library/source check and `Attempt 05`—on hold until after the PHENIX Stage 4 result-free preregistration commit (`frozen_result_free`) lands on `main`**. The menu below is preserved as the historical `2026-11-12` unselected decision table; the `2026-11-15` prospective selections govern only a future separately authorized `Attempt 05` and never rewrite historical Attempt 01–04 gates.
+
+At the `2026-11-12` authoring date of this document, the following **SAR1–SAR6 choices were all unselected** (superseded prospectively for policy on `2026-11-15` by [`1sar_prospective_policy_selections_2026-11-15.md`](1sar_prospective_policy_selections_2026-11-15.md)). They are separate from
+U01–U14 in `ref/research/phenix_evaluation_preregistration_spec_2026-11-11.md` §5 (recorded for policy on `2026-11-15` in [`phenix_step1_user_selections_2026-11-15.md`](phenix_step1_user_selections_2026-11-15.md));
+there is no asserted mapping between the two menus. They were considered in
+the `2026-11-15` planning step. Any changed admission convention or estimand needs
 its own reviewed prospective registration and never rewrites historical gates.
 
 | Choice | Current boundary | Prospective alternative for the user to evaluate |

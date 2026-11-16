@@ -1,0 +1,282 @@
+{
+  "schema": "static_source_witness_v1",
+  "observed_at_utc": "2026-11-16T03:50:12.892192+00:00",
+  "product_version_label": "PHENIX 2.0-5936",
+  "version_label_role": "configured installation label; no version command or runtime identity probe executed in this inspection",
+  "prefix_resolution": "scripts/toolchain.py::PHENIX_BIN.parent.resolve(); no PROTSTRUCT_PHENIX_BIN override",
+  "portable_prefix": "PHENIX_PREFIX",
+  "scope": "Read-only source bytes and AST parsing; no vendor import, execution, provider request, credentials read, vendor edit, or REFMAC inspection. Static adapter branches are not runtime availability evidence.",
+  "files": [
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/__init__.py",
+      "sha256": "b1a2f1fdac7c28ba9f37e3bdeb94640e3deddb13178aba9694a866b6cb8a37e5",
+      "line_count": 2
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/agent/__init__.py",
+      "sha256": "e5c936a6af9c2e7827e20ed150727bb3abc33f8e4d61e773e096e546b9168260",
+      "line_count": 42
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/agent/memory.py",
+      "sha256": "a3348c21d812f2520d52125eeb5bf0718215d3bf62af3eb9334d45e813245fb5",
+      "line_count": 274
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/agent/planner.py",
+      "sha256": "57af0c6b57a2a274e5d3e2ee00304c1bc561ae56c85b5b5536e0b63b8a03d65c",
+      "line_count": 1369
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/agent/session.py",
+      "sha256": "e6406a943742935fc38aba321df76b7edd1bfd7b7607a641e6921510440bf62c",
+      "line_count": 507
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/analysis/__init__.py",
+      "sha256": "785abc5a1f3f128985c8b6ee86d6bebda882ed570422ede1cb118c8aaa2e46ea",
+      "line_count": 47
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/analysis/analyzer.py",
+      "sha256": "42994c04d54d87f76c53e81ee9f5382649e5d532611848808c8f5b7d27069d52",
+      "line_count": 205
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/analysis/log_info.py",
+      "sha256": "17dd65d3901fd3a4c4de6cfbed9eb19269e6cc82fb5889154c706635d49ff981",
+      "line_count": 117
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/analysis/state_extractor.py",
+      "sha256": "a85d69542512cbcdf34bd5a72b268d63e2c887f1e12dd82094b58a0309e04062",
+      "line_count": 232
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/analysis/summarizer.py",
+      "sha256": "d6bc7892e72af77b4268644bf14bc0ec47e7d17b716200b1fb5c54470f7640a6",
+      "line_count": 699
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/commands/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "line_count": 0
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/commands/base.py",
+      "sha256": "d331e96dff6209a10e1ddc52cbc3eaeb6d772b12c2499ab2dcc9f5ca289ef2b4",
+      "line_count": 107
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/core/__init__.py",
+      "sha256": "ad4c9e1e2e77740bdceabf3d4c949b6bea873d1b252ea5479ce9faa500aa73ce",
+      "line_count": 36
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/core/llm.py",
+      "sha256": "dae8e47d81e3cb908daaecd43ef1df0a96a305e396bc29c91586c2677cef979d",
+      "line_count": 182
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/core/types.py",
+      "sha256": "adfac9da0aea5b9417cf9d93525f17dcab70de9941375cf6391874fcb30c3624",
+      "line_count": 195
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/examples/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "line_count": 0
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/knowledge/__init__.py",
+      "sha256": "50157ff461ee3a9fb21a619f8eb3c0c9e551c4812694004c1d02ea086640a14a",
+      "line_count": 31
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/knowledge/phenix_programs.py",
+      "sha256": "88306edca82357d7c587e7f539a33f5dd0db2f6a7ee01d97b9f1dc53bc2ed944",
+      "line_count": 106
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/knowledge/prompts.py",
+      "sha256": "b159ddf6449d01a9bca2a3daff3fc9ec5287147253ab22070d18ac7f3074a518",
+      "line_count": 302
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/langchain_tools.py",
+      "sha256": "6118edea8187b692fcfd77ec298fd30c8676355c23f09b26a8421313d7b9622c",
+      "line_count": 135
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/phenix_knowledge.py",
+      "sha256": "a36a88a85eeea514c74395993cb21904f4ff1722a9d7f34ba6e09331b4f19afc",
+      "line_count": 72
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/rag/__init__.py",
+      "sha256": "4b6e0cbb68d5c5e31af06ac72ffaa362b0f26e4a0b544523cdb9574c6feb2ca3",
+      "line_count": 42
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/rag/document_loader.py",
+      "sha256": "2617e47c6bbcf97b05b153490f255567d5f798a9aa0601755dc3765bec4efe57",
+      "line_count": 209
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/rag/retriever.py",
+      "sha256": "8b254987fe4d6d3dd812889ff8c9e0a13eadbe767686e7e3e9ad5b839ffae502",
+      "line_count": 197
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/rag/vector_store.py",
+      "sha256": "5844397446dabc6110feb5b12d5fbddfee2e54769bbf4877ddcecbd187fe2bbf",
+      "line_count": 120
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/run_analyze_log.py",
+      "sha256": "6e93fb1910986690afd7402f2173108aee8821b71cb68ce223241ef3fd48421a",
+      "line_count": 669
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/run_build_db.py",
+      "sha256": "ebcf1521897c805c1b77d73b22603008be2a90c661526379eecafda789c232fb",
+      "line_count": 80
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/run_inspect_db.py",
+      "sha256": "656f0d83dae2aceefde79d7405eadb6bb67cb7733f0071a6a6abd49df0685044",
+      "line_count": 76
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/run_query_docs.py",
+      "sha256": "3dcb2d519206d3f22980543286c9262725ca0d0afdc56219b68771a732752316",
+      "line_count": 81
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/strategies/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "line_count": 0
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/strategies/base.py",
+      "sha256": "b8f588b90aec973c2a95a1c39f22e109efa5d13293306ce12456d114d6b95239",
+      "line_count": 137
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/tests/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "line_count": 0
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/tests/integration/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "line_count": 0
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/tst_langchain_tools.py",
+      "sha256": "52c24aaa564edbdb53e10a38ea3bd573464db36cc43609cba4b54be93524497c",
+      "line_count": 481
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/utils/__init__.py",
+      "sha256": "c24105fb4e7d69757be6b07421504e9b336e28c2b0baa831681b4bc263d3c8ba",
+      "line_count": 26
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/utils/query.py",
+      "sha256": "95591f50c116d1fed94700bb848c1b5bef5e98d243c28307bc283c036569267b",
+      "line_count": 132
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/utils/run_utils.py",
+      "sha256": "1a923bfa0d354b8c139a827d511cb3eb64ce483b5fa369b0cd93fe62bea815e4",
+      "line_count": 370
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/utils/text_processing.py",
+      "sha256": "c007e0b3f96e12a611154577da6eaba6b19318bffef8353317dd59fbc6290b52",
+      "line_count": 75
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/validation/__init__.py",
+      "sha256": "f6404291f04dc12e7cc8005c7fff170652ff3e11be07ce61a0db0b0f0146cf70",
+      "line_count": 50
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/validation/base.py",
+      "sha256": "36b1dd42b1ca6b03e55cab11fddd828f861e67ca7db5ba2937afc0b51c9304af",
+      "line_count": 131
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/validation/core_validator.py",
+      "sha256": "e6cda508aee3c2b3f29fdbd9f0e942700545c5cab7b968ce77d4243b4d0020a0",
+      "line_count": 400
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/validation/mtz_utils.py",
+      "sha256": "13daebc7cbab5a85c385d43e3e7a1d8dc78a48e215fb1e894bdec34c85549930",
+      "line_count": 106
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/validation/phenix_refine.py",
+      "sha256": "19ea0ef066bcfe9e511f71056083aaf50fca3422ef812bdb052141aa598e46aa",
+      "line_count": 55
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/validation/registry.py",
+      "sha256": "63db8c11baf5926ee246a42bc51e042dbfffe5e3a214f550965f5456bdfafab3",
+      "line_count": 76
+    }
+  ],
+  "selected_files": [
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/agent/planner.py",
+      "sha256": "57af0c6b57a2a274e5d3e2ee00304c1bc561ae56c85b5b5536e0b63b8a03d65c",
+      "line_count": 1369
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/core/llm.py",
+      "sha256": "dae8e47d81e3cb908daaecd43ef1df0a96a305e396bc29c91586c2677cef979d",
+      "line_count": 182
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/langchain_tools.py",
+      "sha256": "6118edea8187b692fcfd77ec298fd30c8676355c23f09b26a8421313d7b9622c",
+      "line_count": 135
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/validation/mtz_utils.py",
+      "sha256": "13daebc7cbab5a85c385d43e3e7a1d8dc78a48e215fb1e894bdec34c85549930",
+      "line_count": 106
+    }
+  ],
+  "observations": [
+    {
+      "id": "U12-W1",
+      "source": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/core/llm.py:21-58,60-136",
+      "claim": "Factory accepts explicit llm_model_name and temperature (default0.0); source provider branches are ollama,google,openai; unsupported branch raises ValueError."
+    },
+    {
+      "id": "U12-W2",
+      "source": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/core/llm.py:142-182",
+      "claim": "Expensive/cheap helpers choose different named defaults; cannot assume a shared pinned snapshot from provider equality or defaults."
+    },
+    {
+      "id": "U12-W3",
+      "source": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/agent/planner.py:646-658,1092-1125,1340-1362",
+      "claim": "Planner receives llm,cheap_llm,command_llm objects, builds LLM primary and mechanical backup, may return invalid commands; actual downstream selection and shared runtime snapshot identity are unassessed."
+    },
+    {
+      "id": "U12-W4",
+      "source": "PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/agent/planner.py:78-100,1347-1351; PHENIX_PREFIX/lib/python3.9/site-packages/libtbx/langchain/validation/mtz_utils.py:47-60,86-106",
+      "claim": "Mechanical refine path contains r_free_flags.generate=True; helper can add it when MTZ flag inspection reports false, including dump errors. Future controller must fail closed, not trust defaults."
+    }
+  ],
+  "shared_dated_snapshot": {
+    "policy": "ONE natively supported shared dated snapshot for Arms1a/1b at Stage2 freeze, temperature0.0",
+    "selected_identifier": null,
+    "runtime_binding": "not_assessed",
+    "availability": "not_assessed",
+    "stage2_required": "Bind exact dated model/snapshot plus endpoint/provider and adapter/dependency/prompt/effective-config hashes across planning/command/cheap subroles, verify rejection of flag generation and caps without relying on differing helper defaults; no execution authorized here."
+  }
+}

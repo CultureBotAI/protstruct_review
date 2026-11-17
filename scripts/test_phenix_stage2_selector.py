@@ -4,11 +4,13 @@
 from __future__ import annotations
 
 import ast
+from collections.abc import Mapping
 import copy
 from decimal import Context, Decimal, localcontext
 import hashlib
 import json
 from pathlib import Path
+import re
 import sys
 from typing import Any
 import unittest
@@ -4246,6 +4248,1184 @@ class TestPhenixStage2Selector(unittest.TestCase):
                     self.assertEqual(
                         res_gen["scientific_arm_completion"], "not_assessed"
                     )
+
+    def test_verify_trajectory_dispatched_budget_content_bindings_1411(
+        self,
+    ) -> None:
+        # Issue #1411 regression:
+        # Bind explicit macro-cycle and CPU-thread settings in dispatched actual_command
+        # and effective_eff sources (including included/nested parameter files) to the
+        # normalized runtime budget ledger (planned_macro_cycles and configured_cpu_threads).
+        base_1b = self._make_valid_trajectory()
+
+        def _make_arm1a_base() -> dict[str, Any]:
+            t1a = copy.deepcopy(base_1b)
+            t1a["arm"] = "1a"
+            for idx in range(3):
+                p = self._make_move_provenance_bundle(
+                    idx + 1, 5 if idx == 0 else 3
+                )
+                for k in tuple(p.keys()):
+                    t1a["budget_ledger"][idx].pop(k, None)
+                t1a["moves"][idx].update(
+                    {
+                        "primary_command": p["primary_command"],
+                        "primary_command_sha256": p["primary_command_sha256"],
+                        "mechanical_backup": {
+                            "state": "not_applicable",
+                            "representation": "not_applicable",
+                            "controller_contract_justification": (
+                                "Arm 1a single-command dispatch without mechanical backup."
+                            ),
+                        },
+                        "actual_command": p["actual_command"],
+                        "actual_command_sha256": p["actual_command_sha256"],
+                        "effective_eff": p["effective_eff"],
+                        "effective_eff_sha256": p["effective_eff_sha256"],
+                    }
+                )
+            return t1a
+
+        base_1a = _make_arm1a_base()
+        default_prov1 = self._make_move_provenance_bundle(1, 5)
+
+        def _with_move0_sources(
+            traj_in: dict[str, Any],
+            *,
+            act_txt: str | None = None,
+            eff_txt: str | None = None,
+            prim_txt: str | None = None,
+            back_txt: str | None = None,
+            parameter_files: Mapping[str, str] | None = None,
+        ) -> dict[str, Any]:
+            t = copy.deepcopy(traj_in)
+            arm_id = t["arm"]
+            resolved_act = (
+                act_txt
+                if act_txt is not None
+                else default_prov1["actual_command"]
+            )
+            resolved_eff = (
+                eff_txt
+                if eff_txt is not None
+                else default_prov1["effective_eff"]
+            )
+            resolved_prim = (
+                prim_txt
+                if prim_txt is not None
+                else default_prov1["primary_command"]
+            )
+            resolved_back = (
+                back_txt
+                if back_txt is not None
+                else default_prov1["mechanical_backup"]
+            )
+            act_sha = _sha256_tag(resolved_act)
+            eff_sha = _sha256_tag(resolved_eff)
+            prim_sha = _sha256_tag(resolved_prim)
+            back_sha = _sha256_tag(resolved_back)
+
+            if arm_id == "1b":
+                t["moves"][0]["actual_command_sha256"] = act_sha
+                t["moves"][0]["effective_eff_sha256"] = eff_sha
+                t["budget_ledger"][0].update(
+                    {
+                        "primary_command": resolved_prim,
+                        "primary_command_sha256": prim_sha,
+                        "mechanical_backup": resolved_back,
+                        "mechanical_backup_sha256": back_sha,
+                        "actual_command": resolved_act,
+                        "actual_command_sha256": act_sha,
+                        "effective_eff": resolved_eff,
+                        "effective_eff_sha256": eff_sha,
+                    }
+                )
+            else:
+                t["moves"][0].update(
+                    {
+                        "primary_command": resolved_prim,
+                        "primary_command_sha256": prim_sha,
+                        "actual_command": resolved_act,
+                        "actual_command_sha256": act_sha,
+                        "effective_eff": resolved_eff,
+                        "effective_eff_sha256": eff_sha,
+                    }
+                )
+            if parameter_files is not None:
+                pf_dict = dict(parameter_files)
+                pf_shas = {k: _sha256_tag(v) for k, v in pf_dict.items()}
+                t["moves"][0]["parameter_files"] = pf_dict
+                t["moves"][0]["parameter_files_sha256"] = pf_shas
+            return t
+
+        eff_header = "data_manager.fmodel.xray_data.r_free_flags.generate = False\n"
+
+        for arm_base in (base_1a, base_1b):
+            arm_id = arm_base["arm"]
+
+            # 1. Valid controls:
+            # - Matching settings across all four spellings (flat and brace-scoped),
+            #   equal duplicates agreeing with the ledger, omitted nproc, and differing
+            #   undispatched primary_command / mechanical_backup alternatives remain valid.
+            with self.subTest(arm=arm_id, case="valid_matching_and_undispatched_differing"):
+                undisp_prim = (
+                    "phenix.refine model.pdb data.mtz "
+                    "xray_data.r_free_flags.generate=False "
+                    "main.number_of_macro_cycles=100 "
+                    "refinement.main.number_of_macro_cycles=100 "
+                    "main.nproc=99 "
+                    "refinement.main.nproc=99"
+                )
+                undisp_back = (
+                    "phenix.refine model.pdb data.mtz "
+                    "xray_data.r_free_flags.generate=False "
+                    "main{number_of_macro_cycles=100} "
+                    "refinement{main{nproc=99}}"
+                )
+                valid_act = (
+                    "phenix.refine model.pdb data.mtz extra_ok.eff "
+                    "xray_data.r_free_flags.generate=False "
+                    "main.number_of_macro_cycles=5 "
+                    "refinement.main.number_of_macro_cycles=5 "
+                    "main.nproc=8 "
+                    "refinement.main.nproc=8"
+                )
+                valid_eff = (
+                    eff_header
+                    + "include file outer_ok.eff\n"
+                    + "main {\n  number_of_macro_cycles = 5\n  nproc = 8\n}\n"
+                    + "refinement {\n  main {\n    number_of_macro_cycles = 5\n    nproc = 8\n  }\n}\n"
+                )
+                t_ok = _with_move0_sources(
+                    arm_base,
+                    act_txt=valid_act,
+                    eff_txt=valid_eff,
+                    prim_txt=undisp_prim,
+                    back_txt=undisp_back,
+                    parameter_files={
+                        "extra_ok.eff": "main.number_of_macro_cycles = 5\nrefinement.main.nproc = 8\n",
+                        "outer_ok.eff": "include file nested_ok.eff\n",
+                        "nested_ok.eff": "refinement.main.number_of_macro_cycles = 5\nmain.nproc = 8\n",
+                    },
+                )
+                res_ok = verify_trajectory(
+                    t_ok, readout_contract=SYNTHETIC_TEST_READOUT_CONTRACT
+                )
+                self.assertTrue(res_ok["trajectory_ok"])
+
+            # 2. All four spellings (flat and brace-scoped) in actual_command and effective_eff
+            #    separately must fail closed when contradicting planned_macro_cycles=5 or
+            #    configured_cpu_threads=8, even with recomputed hashes.
+            mismatch_cases: tuple[tuple[str, str, str, str], ...] = (
+                (
+                    "flat_main_cycles",
+                    "main.number_of_macro_cycles=100",
+                    "main.number_of_macro_cycles = 100\n",
+                    r"main\.number_of_macro_cycles='100' \(100\).*budget_ledger\[0\]\.planned_macro_cycles=5",
+                ),
+                (
+                    "flat_refinement_cycles",
+                    "refinement.main.number_of_macro_cycles=100",
+                    "refinement.main.number_of_macro_cycles = 100\n",
+                    r"refinement\.main\.number_of_macro_cycles='100' \(100\).*budget_ledger\[0\]\.planned_macro_cycles=5",
+                ),
+                (
+                    "brace_main_cycles",
+                    "main{number_of_macro_cycles=100}",
+                    "main {\n  number_of_macro_cycles = 100\n}\n",
+                    r"main\.number_of_macro_cycles='100' \(100\).*budget_ledger\[0\]\.planned_macro_cycles=5",
+                ),
+                (
+                    "brace_refinement_cycles",
+                    "refinement{main{number_of_macro_cycles=100}}",
+                    "refinement {\n  main {\n    number_of_macro_cycles = 100\n  }\n}\n",
+                    r"refinement\.main\.number_of_macro_cycles='100' \(100\).*budget_ledger\[0\]\.planned_macro_cycles=5",
+                ),
+                (
+                    "flat_main_nproc",
+                    "main.nproc=99",
+                    "main.nproc = 99\n",
+                    r"main\.nproc='99' \(99\).*budget_ledger\[0\]\.configured_cpu_threads=8",
+                ),
+                (
+                    "flat_refinement_nproc",
+                    "refinement.main.nproc=99",
+                    "refinement.main.nproc = 99\n",
+                    r"refinement\.main\.nproc='99' \(99\).*budget_ledger\[0\]\.configured_cpu_threads=8",
+                ),
+                (
+                    "brace_main_nproc",
+                    "main{nproc=99}",
+                    "main {\n  nproc = 99\n}\n",
+                    r"main\.nproc='99' \(99\).*budget_ledger\[0\]\.configured_cpu_threads=8",
+                ),
+                (
+                    "brace_refinement_nproc",
+                    "refinement{main{nproc=99}}",
+                    "refinement {\n  main {\n    nproc = 99\n  }\n}\n",
+                    r"refinement\.main\.nproc='99' \(99\).*budget_ledger\[0\]\.configured_cpu_threads=8",
+                ),
+            )
+            for case_name, cmd_frag, eff_frag, err_pat in mismatch_cases:
+                with self.subTest(arm=arm_id, layer="actual_command", case=case_name):
+                    t_bad_act = _with_move0_sources(
+                        arm_base,
+                        act_txt=(
+                            "phenix.refine model.pdb data.mtz "
+                            "xray_data.r_free_flags.generate=False "
+                            f"{cmd_frag}"
+                        ),
+                    )
+                    with self.assertRaisesRegex(
+                        ValueError,
+                        rf"moves\[0\] dispatched actual_command assignment \(source_id='move_01_actual_command'\).*{err_pat}",
+                    ):
+                        verify_trajectory(
+                            t_bad_act,
+                            readout_contract=SYNTHETIC_TEST_READOUT_CONTRACT,
+                        )
+
+                with self.subTest(arm=arm_id, layer="effective_eff", case=case_name):
+                    t_bad_eff = _with_move0_sources(
+                        arm_base,
+                        eff_txt=eff_header + eff_frag,
+                    )
+                    with self.assertRaisesRegex(
+                        ValueError,
+                        rf"moves\[0\] dispatched effective_eff assignment \(source_id='move_01_effective_eff'\).*{err_pat}",
+                    ):
+                        verify_trajectory(
+                            t_bad_eff,
+                            readout_contract=SYNTHETIC_TEST_READOUT_CONTRACT,
+                        )
+
+            # 3. Included and nested parameter files referenced from actual_command or effective_eff
+            for pf_case, pf_content, pf_err in (
+                (
+                    "cycles_100",
+                    "refinement {\n  main {\n    number_of_macro_cycles = 100\n  }\n}\n",
+                    r"refinement\.main\.number_of_macro_cycles='100'.*budget_ledger\[0\]\.planned_macro_cycles=5",
+                ),
+                (
+                    "nproc_99",
+                    "main {\n  nproc = 99\n}\n",
+                    r"main\.nproc='99'.*budget_ledger\[0\]\.configured_cpu_threads=8",
+                ),
+            ):
+                with self.subTest(arm=arm_id, route="actual_command_param_file", case=pf_case):
+                    t_pf_act = _with_move0_sources(
+                        arm_base,
+                        act_txt=(
+                            "phenix.refine model.pdb data.mtz dispatched_extra.eff "
+                            "xray_data.r_free_flags.generate=False "
+                            "main.number_of_macro_cycles=5"
+                        ),
+                        parameter_files={"dispatched_extra.eff": pf_content},
+                    )
+                    with self.assertRaisesRegex(
+                        ValueError,
+                        rf"moves\[0\] dispatched actual_command assignment \(source_id='dispatched_extra\.eff'\).*{pf_err}",
+                    ):
+                        verify_trajectory(
+                            t_pf_act,
+                            readout_contract=SYNTHETIC_TEST_READOUT_CONTRACT,
+                        )
+
+                with self.subTest(arm=arm_id, route="effective_eff_nested_include", case=pf_case):
+                    t_pf_eff = _with_move0_sources(
+                        arm_base,
+                        eff_txt=(
+                            eff_header
+                            + "include file outer_disp.eff\n"
+                            + "refinement.main.number_of_macro_cycles = 5\n"
+                        ),
+                        parameter_files={
+                            "outer_disp.eff": "include file nested_disp.eff\n",
+                            "nested_disp.eff": pf_content,
+                        },
+                    )
+                    with self.assertRaisesRegex(
+                        ValueError,
+                        rf"moves\[0\] dispatched effective_eff assignment \(source_id='nested_disp\.eff'\).*{pf_err}",
+                    ):
+                        verify_trajectory(
+                            t_pf_eff,
+                            readout_contract=SYNTHETIC_TEST_READOUT_CONTRACT,
+                        )
+
+            # 4. Equal-but-wrong duplicates and conflicting duplicates/aliases (in either order,
+            #    without assuming PHIL last-wins precedence) must fail closed.
+            duplicate_cases: tuple[tuple[str, str, str, str], ...] = (
+                (
+                    "equal_wrong_cycles",
+                    "main.number_of_macro_cycles=100 refinement.main.number_of_macro_cycles=100",
+                    "main.number_of_macro_cycles = 100\nrefinement.main.number_of_macro_cycles = 100\n",
+                    r"number_of_macro_cycles='100'.*planned_macro_cycles=5",
+                ),
+                (
+                    "conflicting_cycles_good_then_bad",
+                    "main.number_of_macro_cycles=5 refinement.main.number_of_macro_cycles=100",
+                    "main.number_of_macro_cycles = 5\nrefinement.main.number_of_macro_cycles = 100\n",
+                    r"refinement\.main\.number_of_macro_cycles='100'.*planned_macro_cycles=5",
+                ),
+                (
+                    "conflicting_cycles_bad_then_good",
+                    "main.number_of_macro_cycles=100 refinement.main.number_of_macro_cycles=5",
+                    "main.number_of_macro_cycles = 100\nrefinement.main.number_of_macro_cycles = 5\n",
+                    r"main\.number_of_macro_cycles='100'.*planned_macro_cycles=5",
+                ),
+                (
+                    "equal_wrong_nproc",
+                    "main.nproc=99 refinement.main.nproc=99",
+                    "main.nproc = 99\nrefinement.main.nproc = 99\n",
+                    r"nproc='99'.*configured_cpu_threads=8",
+                ),
+                (
+                    "conflicting_nproc_good_then_bad",
+                    "main.nproc=8 refinement.main.nproc=99",
+                    "main.nproc = 8\nrefinement.main.nproc = 99\n",
+                    r"refinement\.main\.nproc='99'.*configured_cpu_threads=8",
+                ),
+                (
+                    "conflicting_nproc_bad_then_good",
+                    "main.nproc=99 refinement.main.nproc=8",
+                    "main.nproc = 99\nrefinement.main.nproc = 8\n",
+                    r"main\.nproc='99'.*configured_cpu_threads=8",
+                ),
+            )
+            for dup_name, dup_cmd, dup_eff, dup_err in duplicate_cases:
+                with self.subTest(arm=arm_id, layer="actual_command", dup=dup_name):
+                    t_dup_act = _with_move0_sources(
+                        arm_base,
+                        act_txt=(
+                            "phenix.refine model.pdb data.mtz "
+                            "xray_data.r_free_flags.generate=False "
+                            f"{dup_cmd}"
+                        ),
+                    )
+                    with self.assertRaisesRegex(ValueError, dup_err):
+                        verify_trajectory(
+                            t_dup_act,
+                            readout_contract=SYNTHETIC_TEST_READOUT_CONTRACT,
+                        )
+
+                with self.subTest(arm=arm_id, layer="effective_eff", dup=dup_name):
+                    t_dup_eff = _with_move0_sources(
+                        arm_base,
+                        eff_txt=eff_header + dup_eff,
+                    )
+                    with self.assertRaisesRegex(ValueError, dup_err):
+                        verify_trajectory(
+                            t_dup_eff,
+                            readout_contract=SYNTHETIC_TEST_READOUT_CONTRACT,
+                        )
+
+            # 5. Malformed non-integer literal values (True, False, 5.0, Auto, None) fail closed
+            for bad_lit in ("True", "False", "5.0", "Auto", "None"):
+                for target_path, expected_field in (
+                    ("main.number_of_macro_cycles", "planned_macro_cycles=5"),
+                    ("refinement.main.number_of_macro_cycles", "planned_macro_cycles=5"),
+                    ("main.nproc", "configured_cpu_threads=8"),
+                    ("refinement.main.nproc", "configured_cpu_threads=8"),
+                ):
+                    with self.subTest(
+                        arm=arm_id,
+                        layer="actual_command",
+                        path=target_path,
+                        bad_lit=bad_lit,
+                    ):
+                        t_mal_act = _with_move0_sources(
+                            arm_base,
+                            act_txt=(
+                                "phenix.refine model.pdb data.mtz "
+                                "xray_data.r_free_flags.generate=False "
+                                f"{target_path}={bad_lit}"
+                            ),
+                        )
+                        with self.assertRaisesRegex(
+                            ValueError,
+                            rf"moves\[0\] dispatched actual_command assignment.*invalid non-integer literal {re.escape(target_path)}={re.escape(repr(bad_lit))}.*budget_ledger\[0\]\.{expected_field}",
+                        ):
+                            verify_trajectory(
+                                t_mal_act,
+                                readout_contract=SYNTHETIC_TEST_READOUT_CONTRACT,
+                            )
+
+                    with self.subTest(
+                        arm=arm_id,
+                        layer="effective_eff",
+                        path=target_path,
+                        bad_lit=bad_lit,
+                    ):
+                        t_mal_eff = _with_move0_sources(
+                            arm_base,
+                            eff_txt=eff_header + f"{target_path} = {bad_lit}\n",
+                        )
+                        with self.assertRaisesRegex(
+                            ValueError,
+                            rf"moves\[0\] dispatched effective_eff assignment.*invalid non-integer literal {re.escape(target_path)}={re.escape(repr(bad_lit))}.*budget_ledger\[0\]\.{expected_field}",
+                        ):
+                            verify_trajectory(
+                                t_mal_eff,
+                                readout_contract=SYNTHETIC_TEST_READOUT_CONTRACT,
+                            )
+
+            # 6. Partial-failure receipt (planned_macro_cycles=5, observed_macro_cycles=2,
+            #    effective_eff unavailable after crash):
+            #    - Honest actual_command with main.number_of_macro_cycles=5 (and main.nproc=8)
+            #      remains retainable (trajectory_state='retained_with_failed_move').
+            #    - Available actual_command on that incomplete failure receipt with
+            #      main.number_of_macro_cycles=2 (matching observed instead of planned=5),
+            #      or 100, or main.nproc=99 is inspected and rejected.
+            def _make_partial_failure_traj(act_cmd_text: str) -> dict[str, Any]:
+                t_fail = copy.deepcopy(arm_base)
+                act_cmd_sha = _sha256_tag(act_cmd_text)
+                prim3 = self._make_move_provenance_bundle(3, 5)
+                unavail_eff = {
+                    "state": "unavailable",
+                    "representation": "unavailable",
+                    "reason": "not_retained_after_crash",
+                }
+                m2: dict[str, Any] = {
+                    "move_id": "move_03",
+                    "move_index": 3,
+                    "status": "FAIL_PROCESS_CRASH_OR_NONZERO_EXIT",
+                    "target_id": "target_anon_01",
+                    "subject_id": "target_anon_01_start",
+                    "work_reflection_domain_sha256": t_fail[
+                        "work_reflection_domain_sha256"
+                    ],
+                    "flag_partition_sha256": t_fail["flag_partition_sha256"],
+                    "sleep_partition_sha256": t_fail["sleep_partition_sha256"],
+                    "snapshot_binding_sha256": t_fail["snapshot_binding_sha256"],
+                    "flag_guard_verified": "incomplete",
+                    "actual_command": act_cmd_text,
+                    "actual_command_sha256": act_cmd_sha,
+                    "effective_eff": copy.deepcopy(unavail_eff),
+                }
+                l2: dict[str, Any] = {
+                    "move_index": 3,
+                    "move_kind": "refinement",
+                    "move_status": "failed",
+                    "planned_macro_cycles": 5,
+                    "observed_macro_cycles": 2,
+                    "role_tokens": {"llm": 500, "cheap_llm": 0, "command_llm": 0},
+                    "elapsed_seconds": 600.0,
+                    "configured_cpu_threads": 8,
+                    "primary_command": prim3["primary_command"],
+                    "primary_command_sha256": prim3["primary_command_sha256"],
+                    "actual_command": act_cmd_text,
+                    "actual_command_sha256": act_cmd_sha,
+                    "effective_eff": copy.deepcopy(unavail_eff),
+                }
+                if arm_id == "1b":
+                    l2["mechanical_backup"] = prim3["mechanical_backup"]
+                    l2["mechanical_backup_sha256"] = prim3[
+                        "mechanical_backup_sha256"
+                    ]
+                else:
+                    na_back = {
+                        "state": "not_applicable",
+                        "representation": "not_applicable",
+                        "controller_contract_justification": (
+                            "Arm 1a single-command dispatch without mechanical backup."
+                        ),
+                    }
+                    m2["primary_command"] = prim3["primary_command"]
+                    m2["primary_command_sha256"] = prim3[
+                        "primary_command_sha256"
+                    ]
+                    m2["mechanical_backup"] = copy.deepcopy(na_back)
+                    l2["mechanical_backup"] = copy.deepcopy(na_back)
+                t_fail["moves"][2] = m2
+                t_fail["budget_ledger"][2] = l2
+                t_fail["claimed_selection"] = {
+                    "selection_state": "selected_unique",
+                    "selected_move_id": "move_02",
+                    "tied_move_ids": ("move_02",),
+                }
+                t_fail["claimed_stop_decision"] = {
+                    "should_stop": False,
+                    "stagnation_triggered": False,
+                    "budget_cap_exhausted": False,
+                }
+                t_fail["require_compliant_completion"] = False
+                return t_fail
+
+            with self.subTest(arm=arm_id, case="partial_failure_planned5_observed2_valid"):
+                t_partial_ok = _make_partial_failure_traj(
+                    "phenix.refine model.pdb data.mtz "
+                    "xray_data.r_free_flags.generate=False "
+                    "main.number_of_macro_cycles=5 "
+                    "main.nproc=8"
+                )
+                res_partial_ok = verify_trajectory(
+                    t_partial_ok,
+                    readout_contract=SYNTHETIC_TEST_READOUT_CONTRACT,
+                )
+                self.assertTrue(res_partial_ok["trajectory_ok"])
+                self.assertEqual(
+                    res_partial_ok["trajectory_state"],
+                    "retained_with_failed_move",
+                )
+                self.assertEqual(
+                    res_partial_ok["verified_moves"][2]["flag_guard_verified"],
+                    "incomplete",
+                )
+
+            for bad_partial_case, bad_partial_cmd, bad_partial_err in (
+                (
+                    "matches_observed_2_instead_of_planned_5",
+                    "phenix.refine model.pdb data.mtz xray_data.r_free_flags.generate=False main.number_of_macro_cycles=2",
+                    r"moves\[2\] dispatched actual_command assignment.*main\.number_of_macro_cycles='2' \(2\).*budget_ledger\[2\]\.planned_macro_cycles=5",
+                ),
+                (
+                    "cycles_100_on_incomplete_failure",
+                    "phenix.refine model.pdb data.mtz xray_data.r_free_flags.generate=False refinement.main.number_of_macro_cycles=100",
+                    r"moves\[2\] dispatched actual_command assignment.*refinement\.main\.number_of_macro_cycles='100' \(100\).*budget_ledger\[2\]\.planned_macro_cycles=5",
+                ),
+                (
+                    "nproc_99_on_incomplete_failure",
+                    "phenix.refine model.pdb data.mtz xray_data.r_free_flags.generate=False main.number_of_macro_cycles=5 main.nproc=99",
+                    r"moves\[2\] dispatched actual_command assignment.*main\.nproc='99' \(99\).*budget_ledger\[2\]\.configured_cpu_threads=8",
+                ),
+            ):
+                with self.subTest(arm=arm_id, case=bad_partial_case):
+                    t_partial_bad = _make_partial_failure_traj(bad_partial_cmd)
+                    with self.assertRaisesRegex(ValueError, bad_partial_err):
+                        verify_trajectory(
+                            t_partial_bad,
+                            readout_contract=SYNTHETIC_TEST_READOUT_CONTRACT,
+                        )
+
+    def test_verify_trajectory_aborted_before_execution_receipt_consistency_1379(
+        self,
+    ) -> None:
+        # Issue #1379 reverse contradiction regression:
+        # Both Arm 1a and Arm 1b must require actual_command and effective_eff on any
+        # move with ledger move_status='aborted_before_execution' (observed_macro_cycles=0)
+        # to resolve to state='unavailable' with reason in UNAVAILABLE_NOT_EXECUTED_MARKERS.
+        # Supplying available text/hash or unrelated crash/artifact-loss reasons in
+        # actual_command only, effective_eff only, or both slots must fail closed across
+        # move-only, ledger-only, matching both-alias, and split text/hash carriers.
+        base_1b = self._make_valid_trajectory()
+        prov3 = self._make_move_provenance_bundle(3, 3)
+
+        def _make_arm1a_base() -> dict[str, Any]:
+            t1a = copy.deepcopy(base_1b)
+            t1a["arm"] = "1a"
+            for idx in range(3):
+                p = self._make_move_provenance_bundle(
+                    idx + 1, 5 if idx == 0 else 3
+                )
+                for k in tuple(p.keys()):
+                    t1a["budget_ledger"][idx].pop(k, None)
+                t1a["moves"][idx].update(
+                    {
+                        "primary_command": p["primary_command"],
+                        "primary_command_sha256": p["primary_command_sha256"],
+                        "mechanical_backup": {
+                            "state": "not_applicable",
+                            "representation": "not_applicable",
+                            "controller_contract_justification": (
+                                "Arm 1a single-command dispatch without mechanical backup."
+                            ),
+                        },
+                        "actual_command": p["actual_command"],
+                        "actual_command_sha256": p["actual_command_sha256"],
+                        "effective_eff": p["effective_eff"],
+                        "effective_eff_sha256": p["effective_eff_sha256"],
+                    }
+                )
+            return t1a
+
+        base_1a = _make_arm1a_base()
+        na_backup = {
+            "state": "not_applicable",
+            "representation": "not_applicable",
+            "controller_contract_justification": (
+                "Arm 1a single-command dispatch without mechanical backup."
+            ),
+        }
+
+        def _build_terminal_move(
+            traj_in: dict[str, Any],
+            *,
+            move_status: str,
+            observed_cycles: int,
+            move_act: Any = None,
+            move_act_sha: Any = None,
+            move_eff: Any = None,
+            move_eff_sha: Any = None,
+            ledger_act: Any = None,
+            ledger_act_sha: Any = None,
+            ledger_eff: Any = None,
+            ledger_eff_sha: Any = None,
+            flag_guard_verified: bool | str = "incomplete",
+        ) -> dict[str, Any]:
+            t = copy.deepcopy(traj_in)
+            arm_id = t["arm"]
+            m2: dict[str, Any] = {
+                "move_id": "move_03",
+                "move_index": 3,
+                "status": "FAIL_PROCESS_CRASH_OR_NONZERO_EXIT",
+                "target_id": "target_anon_01",
+                "subject_id": "target_anon_01_start",
+                "work_reflection_domain_sha256": t[
+                    "work_reflection_domain_sha256"
+                ],
+                "flag_partition_sha256": t["flag_partition_sha256"],
+                "sleep_partition_sha256": t["sleep_partition_sha256"],
+                "snapshot_binding_sha256": t["snapshot_binding_sha256"],
+                "flag_guard_verified": flag_guard_verified,
+            }
+            l2: dict[str, Any] = {
+                "move_index": 3,
+                "move_kind": "refinement",
+                "move_status": move_status,
+                "planned_macro_cycles": 3,
+                "observed_macro_cycles": observed_cycles,
+                "role_tokens": {"llm": 500, "cheap_llm": 0, "command_llm": 0},
+                "elapsed_seconds": 800.0,
+                "configured_cpu_threads": 8,
+            }
+            if arm_id == "1b":
+                l2.update(
+                    {
+                        "primary_command": prov3["primary_command"],
+                        "primary_command_sha256": prov3[
+                            "primary_command_sha256"
+                        ],
+                        "mechanical_backup": prov3["mechanical_backup"],
+                        "mechanical_backup_sha256": prov3[
+                            "mechanical_backup_sha256"
+                        ],
+                    }
+                )
+            else:
+                m2.update(
+                    {
+                        "primary_command": prov3["primary_command"],
+                        "primary_command_sha256": prov3[
+                            "primary_command_sha256"
+                        ],
+                        "mechanical_backup": copy.deepcopy(na_backup),
+                    }
+                )
+                l2.update(
+                    {
+                        "primary_command": prov3["primary_command"],
+                        "primary_command_sha256": prov3[
+                            "primary_command_sha256"
+                        ],
+                        "mechanical_backup": copy.deepcopy(na_backup),
+                    }
+                )
+
+            if move_act is not None:
+                m2["actual_command"] = copy.deepcopy(move_act)
+            if move_act_sha is not None:
+                m2["actual_command_sha256"] = copy.deepcopy(move_act_sha)
+            if move_eff is not None:
+                m2["effective_eff"] = copy.deepcopy(move_eff)
+            if move_eff_sha is not None:
+                m2["effective_eff_sha256"] = copy.deepcopy(move_eff_sha)
+
+            if ledger_act is not None:
+                l2["actual_command"] = copy.deepcopy(ledger_act)
+            if ledger_act_sha is not None:
+                l2["actual_command_sha256"] = copy.deepcopy(ledger_act_sha)
+            if ledger_eff is not None:
+                l2["effective_eff"] = copy.deepcopy(ledger_eff)
+            if ledger_eff_sha is not None:
+                l2["effective_eff_sha256"] = copy.deepcopy(ledger_eff_sha)
+
+            t["moves"][2] = m2
+            t["budget_ledger"][2] = l2
+            t["claimed_selection"] = {
+                "selection_state": "selected_unique",
+                "selected_move_id": "move_02",
+                "tied_move_ids": ("move_02",),
+            }
+            t["claimed_stop_decision"] = {
+                "should_stop": False,
+                "stagnation_triggered": False,
+                "budget_cap_exhausted": False,
+            }
+            t["require_compliant_completion"] = False
+            return t
+
+        valid_not_exec = {
+            "state": "unavailable",
+            "representation": "unavailable",
+            "reason": "not_executed",
+        }
+        avail_act_forms: tuple[tuple[str, Any, Any], ...] = (
+            ("raw_text", prov3["actual_command"], None),
+            (
+                "raw_text_and_sha",
+                prov3["actual_command"],
+                prov3["actual_command_sha256"],
+            ),
+            (
+                "typed_utf8_text",
+                {
+                    "state": "available",
+                    "representation": "utf8_text",
+                    "text": prov3["actual_command"],
+                },
+                None,
+            ),
+            (
+                "typed_utf8_text_and_sha256",
+                {
+                    "state": "available",
+                    "representation": "utf8_text_and_sha256",
+                    "text": prov3["actual_command"],
+                    "sha256": prov3["actual_command_sha256"],
+                },
+                None,
+            ),
+            (
+                "typed_sha256_only",
+                {
+                    "state": "available",
+                    "representation": "sha256",
+                    "sha256": prov3["actual_command_sha256"],
+                },
+                None,
+            ),
+            ("bare_sha256_only", None, prov3["actual_command_sha256"]),
+        )
+        avail_eff_forms: tuple[tuple[str, Any, Any], ...] = (
+            ("raw_text", prov3["effective_eff"], None),
+            (
+                "raw_text_and_sha",
+                prov3["effective_eff"],
+                prov3["effective_eff_sha256"],
+            ),
+            (
+                "typed_utf8_text",
+                {
+                    "state": "available",
+                    "representation": "utf8_text",
+                    "text": prov3["effective_eff"],
+                },
+                None,
+            ),
+            (
+                "typed_utf8_text_and_sha256",
+                {
+                    "state": "available",
+                    "representation": "utf8_text_and_sha256",
+                    "text": prov3["effective_eff"],
+                    "sha256": prov3["effective_eff_sha256"],
+                },
+                None,
+            ),
+            (
+                "typed_sha256_only",
+                {
+                    "state": "available",
+                    "representation": "sha256",
+                    "sha256": prov3["effective_eff_sha256"],
+                },
+                None,
+            ),
+            ("bare_sha256_only", None, prov3["effective_eff_sha256"]),
+        )
+
+        # 1. Available actual_command only, effective_eff only, or both slots on
+        #    aborted_before_execution (observed_macro_cycles=0) must fail closed across
+        #    move-only (Arm 1a), ledger-only (Arm 1a & 1b), and matching both (Arm 1a & 1b)
+        #    carriers and all text/hash/typed representations.
+        for (form_label, act_val, act_sha), (_, eff_val, eff_sha) in zip(
+            avail_act_forms, avail_eff_forms, strict=True
+        ):
+            slot_configs: tuple[tuple[str, Any, Any, Any, Any], ...] = (
+                ("actual_command_only", act_val, act_sha, valid_not_exec, None),
+                ("effective_eff_only", valid_not_exec, None, eff_val, eff_sha),
+                ("both_slots_available", act_val, act_sha, eff_val, eff_sha),
+            )
+            for slot_case, a_v, a_s, e_v, e_s in slot_configs:
+                for carrier_1a in ("move_only", "ledger_only", "both"):
+                    with self.subTest(
+                        arm="1a",
+                        form=form_label,
+                        slot_case=slot_case,
+                        carrier=carrier_1a,
+                    ):
+                        t_bad_1a = _build_terminal_move(
+                            base_1a,
+                            move_status="aborted_before_execution",
+                            observed_cycles=0,
+                            move_act=a_v if carrier_1a in ("move_only", "both") else None,
+                            move_act_sha=a_s if carrier_1a in ("move_only", "both") else None,
+                            move_eff=e_v if carrier_1a in ("move_only", "both") else None,
+                            move_eff_sha=e_s if carrier_1a in ("move_only", "both") else None,
+                            ledger_act=a_v if carrier_1a in ("ledger_only", "both") else None,
+                            ledger_act_sha=a_s if carrier_1a in ("ledger_only", "both") else None,
+                            ledger_eff=e_v if carrier_1a in ("ledger_only", "both") else None,
+                            ledger_eff_sha=e_s if carrier_1a in ("ledger_only", "both") else None,
+                        )
+                        with self.assertRaisesRegex(
+                            ValueError,
+                            r"with status 'aborted_before_execution' must record explicit unavailable state",
+                        ):
+                            verify_trajectory(
+                                t_bad_1a,
+                                readout_contract=SYNTHETIC_TEST_READOUT_CONTRACT,
+                            )
+
+                for carrier_1b in ("ledger_only", "both"):
+                    with self.subTest(
+                        arm="1b",
+                        form=form_label,
+                        slot_case=slot_case,
+                        carrier=carrier_1b,
+                    ):
+                        t_bad_1b = _build_terminal_move(
+                            base_1b,
+                            move_status="aborted_before_execution",
+                            observed_cycles=0,
+                            move_act=a_v if carrier_1b == "both" else None,
+                            move_act_sha=a_s if carrier_1b == "both" else None,
+                            move_eff=e_v if carrier_1b == "both" else None,
+                            move_eff_sha=e_s if carrier_1b == "both" else None,
+                            ledger_act=a_v,
+                            ledger_act_sha=a_s,
+                            ledger_eff=e_v,
+                            ledger_eff_sha=e_s,
+                        )
+                        with self.assertRaisesRegex(
+                            ValueError,
+                            r"with status 'aborted_before_execution' must record explicit unavailable state",
+                        ):
+                            verify_trajectory(
+                                t_bad_1b,
+                                readout_contract=SYNTHETIC_TEST_READOUT_CONTRACT,
+                            )
+
+        # Split-carrier available (hash on move, text on ledger) on aborted_before_execution fails closed
+        for arm_base in (base_1a, base_1b):
+            arm_id = arm_base["arm"]
+            with self.subTest(arm=arm_id, case="split_carrier_act_available_on_aborted"):
+                t_split_act = _build_terminal_move(
+                    arm_base,
+                    move_status="aborted_before_execution",
+                    observed_cycles=0,
+                    move_act_sha=prov3["actual_command_sha256"],
+                    move_eff=valid_not_exec,
+                    ledger_act=prov3["actual_command"],
+                    ledger_eff=valid_not_exec,
+                )
+                with self.assertRaisesRegex(
+                    ValueError,
+                    r"with status 'aborted_before_execution' must record explicit unavailable state",
+                ):
+                    verify_trajectory(
+                        t_split_act,
+                        readout_contract=SYNTHETIC_TEST_READOUT_CONTRACT,
+                    )
+
+            with self.subTest(arm=arm_id, case="split_carrier_eff_available_on_aborted"):
+                t_split_eff = _build_terminal_move(
+                    arm_base,
+                    move_status="aborted_before_execution",
+                    observed_cycles=0,
+                    move_act=valid_not_exec,
+                    move_eff_sha=prov3["effective_eff_sha256"],
+                    ledger_act=valid_not_exec,
+                    ledger_eff=prov3["effective_eff"],
+                )
+                with self.assertRaisesRegex(
+                    ValueError,
+                    r"with status 'aborted_before_execution' must record explicit unavailable state",
+                ):
+                    verify_trajectory(
+                        t_split_eff,
+                        readout_contract=SYNTHETIC_TEST_READOUT_CONTRACT,
+                    )
+
+        # Arm 1b move-only contradiction against valid ledger not_executed fails closed
+        for slot_case_1b, m_act_1b, m_eff_1b, err_1b in (
+            (
+                "move_only_act_available_vs_ledger_not_executed",
+                prov3["actual_command"],
+                None,
+                r"actual_command state \('available'\) does not match",
+            ),
+            (
+                "move_only_eff_available_vs_ledger_not_executed",
+                None,
+                prov3["effective_eff"],
+                r"effective_eff state \('available'\) does not match",
+            ),
+            (
+                "move_only_act_crash_loss_vs_ledger_not_executed",
+                {
+                    "state": "unavailable",
+                    "representation": "unavailable",
+                    "reason": "not_retained_after_crash",
+                },
+                None,
+                r"actual_command unavailability reason \('not_retained_after_crash'\) does not match",
+            ),
+        ):
+            with self.subTest(arm="1b", case=slot_case_1b):
+                t_1b_move_conflict = _build_terminal_move(
+                    base_1b,
+                    move_status="aborted_before_execution",
+                    observed_cycles=0,
+                    move_act=m_act_1b,
+                    move_eff=m_eff_1b,
+                    ledger_act=valid_not_exec,
+                    ledger_eff=valid_not_exec,
+                )
+                with self.assertRaisesRegex(ValueError, err_1b):
+                    verify_trajectory(
+                        t_1b_move_conflict,
+                        readout_contract=SYNTHETIC_TEST_READOUT_CONTRACT,
+                    )
+
+        # 2. Unrelated artifact-loss unavailability reasons ('not_retained_after_crash',
+        #    'unavailable_after_crash', 'unavailable_execution_failed') are incompatible
+        #    with explicit aborted_before_execution on actual_command only, effective_eff only,
+        #    or both slots across Arm 1a and Arm 1b.
+        for loss_reason in (
+            "not_retained_after_crash",
+            "unavailable_after_crash",
+            "unavailable_execution_failed",
+        ):
+            loss_map = {
+                "state": "unavailable",
+                "representation": "unavailable",
+                "reason": loss_reason,
+            }
+            for rep_kind, loss_val in (
+                ("bare_str", loss_reason),
+                ("typed_map", loss_map),
+            ):
+                for slot_case, a_v, e_v in (
+                    ("actual_command_only", loss_val, valid_not_exec),
+                    ("effective_eff_only", valid_not_exec, loss_val),
+                    ("both_slots", loss_val, loss_val),
+                ):
+                    for carrier_1a in ("move_only", "ledger_only", "both"):
+                        with self.subTest(
+                            arm="1a",
+                            loss_reason=loss_reason,
+                            rep_kind=rep_kind,
+                            slot_case=slot_case,
+                            carrier=carrier_1a,
+                        ):
+                            t_loss_1a = _build_terminal_move(
+                                base_1a,
+                                move_status="aborted_before_execution",
+                                observed_cycles=0,
+                                move_act=a_v if carrier_1a in ("move_only", "both") else None,
+                                move_eff=e_v if carrier_1a in ("move_only", "both") else None,
+                                ledger_act=a_v if carrier_1a in ("ledger_only", "both") else None,
+                                ledger_eff=e_v if carrier_1a in ("ledger_only", "both") else None,
+                            )
+                            with self.assertRaisesRegex(
+                                ValueError,
+                                r"with status 'aborted_before_execution' must record explicit unavailable state",
+                            ):
+                                verify_trajectory(
+                                    t_loss_1a,
+                                    readout_contract=SYNTHETIC_TEST_READOUT_CONTRACT,
+                                )
+
+                    for carrier_1b in ("ledger_only", "both"):
+                        with self.subTest(
+                            arm="1b",
+                            loss_reason=loss_reason,
+                            rep_kind=rep_kind,
+                            slot_case=slot_case,
+                            carrier=carrier_1b,
+                        ):
+                            t_loss_1b = _build_terminal_move(
+                                base_1b,
+                                move_status="aborted_before_execution",
+                                observed_cycles=0,
+                                move_act=a_v if carrier_1b == "both" else None,
+                                move_eff=e_v if carrier_1b == "both" else None,
+                                ledger_act=a_v,
+                                ledger_eff=e_v,
+                            )
+                            with self.assertRaisesRegex(
+                                ValueError,
+                                r"with status 'aborted_before_execution' must record explicit unavailable state",
+                            ):
+                                verify_trajectory(
+                                    t_loss_1b,
+                                    readout_contract=SYNTHETIC_TEST_READOUT_CONTRACT,
+                                )
+
+        # 3. Each accepted not-executed marker in UNAVAILABLE_NOT_EXECUTED_MARKERS at zero
+        #    cycles with move_status='aborted_before_execution' passes across move_only
+        #    (Arm 1a), ledger_only (Arm 1a & 1b), and both (Arm 1a & 1b) in bare string and
+        #    typed unavailable mapping forms.
+        for marker in sorted(UNAVAILABLE_NOT_EXECUTED_MARKERS):
+            marker_map = {
+                "state": "unavailable",
+                "representation": "unavailable",
+                "reason": marker,
+            }
+            for rep_kind, m_val in (
+                ("bare_str", marker),
+                ("typed_map", marker_map),
+            ):
+                for carrier_1a in ("move_only", "ledger_only", "both"):
+                    with self.subTest(
+                        arm="1a",
+                        marker=marker,
+                        rep_kind=rep_kind,
+                        carrier=carrier_1a,
+                    ):
+                        t_ok_1a = _build_terminal_move(
+                            base_1a,
+                            move_status="aborted_before_execution",
+                            observed_cycles=0,
+                            move_act=m_val if carrier_1a in ("move_only", "both") else None,
+                            move_eff=m_val if carrier_1a in ("move_only", "both") else None,
+                            ledger_act=m_val if carrier_1a in ("ledger_only", "both") else None,
+                            ledger_eff=m_val if carrier_1a in ("ledger_only", "both") else None,
+                        )
+                        res_ok_1a = verify_trajectory(
+                            t_ok_1a,
+                            readout_contract=SYNTHETIC_TEST_READOUT_CONTRACT,
+                        )
+                        self.assertTrue(res_ok_1a["trajectory_ok"])
+                        self.assertEqual(
+                            res_ok_1a["trajectory_state"],
+                            "retained_with_failed_move",
+                        )
+                        self.assertEqual(
+                            res_ok_1a["verified_moves"][2]["flag_guard_verified"],
+                            "incomplete",
+                        )
+
+                for carrier_1b in ("ledger_only", "both"):
+                    with self.subTest(
+                        arm="1b",
+                        marker=marker,
+                        rep_kind=rep_kind,
+                        carrier=carrier_1b,
+                    ):
+                        t_ok_1b = _build_terminal_move(
+                            base_1b,
+                            move_status="aborted_before_execution",
+                            observed_cycles=0,
+                            move_act=m_val if carrier_1b == "both" else None,
+                            move_eff=m_val if carrier_1b == "both" else None,
+                            ledger_act=m_val,
+                            ledger_eff=m_val,
+                        )
+                        res_ok_1b = verify_trajectory(
+                            t_ok_1b,
+                            readout_contract=SYNTHETIC_TEST_READOUT_CONTRACT,
+                        )
+                        self.assertTrue(res_ok_1b["trajectory_ok"])
+                        self.assertEqual(
+                            res_ok_1b["trajectory_state"],
+                            "retained_with_failed_move",
+                        )
+                        self.assertEqual(
+                            res_ok_1b["verified_moves"][2]["flag_guard_verified"],
+                            "incomplete",
+                        )
+
+        # 4. Normal failed-after-partial-execution artifact loss (move_status='failed',
+        #    observed_macro_cycles=2) and other zero-cycle execution failures
+        #    (move_status='failed', observed_macro_cycles=0) are not mistaken for
+        #    aborted_before_execution and remain retainable on both Arm 1a and Arm 1b.
+        crash_loss = {
+            "state": "unavailable",
+            "representation": "unavailable",
+            "reason": "not_retained_after_crash",
+        }
+        for arm_base in (base_1a, base_1b):
+            arm_id = arm_base["arm"]
+
+            # Partial-execution artifact loss (observed_macro_cycles=2, move_status='failed')
+            with self.subTest(arm=arm_id, case="failed_partial_execution_artifact_loss"):
+                t_partial_loss = _build_terminal_move(
+                    arm_base,
+                    move_status="failed",
+                    observed_cycles=2,
+                    move_act=prov3["actual_command"],
+                    move_act_sha=prov3["actual_command_sha256"],
+                    move_eff=crash_loss,
+                    ledger_act=prov3["actual_command"],
+                    ledger_act_sha=prov3["actual_command_sha256"],
+                    ledger_eff=crash_loss,
+                )
+                res_partial_loss = verify_trajectory(
+                    t_partial_loss,
+                    readout_contract=SYNTHETIC_TEST_READOUT_CONTRACT,
+                )
+                self.assertTrue(res_partial_loss["trajectory_ok"])
+                self.assertEqual(
+                    res_partial_loss["trajectory_state"],
+                    "retained_with_failed_move",
+                )
+
+            # Zero-cycle execution failure (observed_macro_cycles=0, move_status='failed')
+            # with available actual_command and crash-lost effective_eff
+            with self.subTest(arm=arm_id, case="failed_zero_cycles_act_available_eff_lost"):
+                t_zero_fail_partial = _build_terminal_move(
+                    arm_base,
+                    move_status="failed",
+                    observed_cycles=0,
+                    move_act=prov3["actual_command"],
+                    move_act_sha=prov3["actual_command_sha256"],
+                    move_eff=crash_loss,
+                    ledger_act=prov3["actual_command"],
+                    ledger_act_sha=prov3["actual_command_sha256"],
+                    ledger_eff=crash_loss,
+                )
+                res_zero_fail_partial = verify_trajectory(
+                    t_zero_fail_partial,
+                    readout_contract=SYNTHETIC_TEST_READOUT_CONTRACT,
+                )
+                self.assertTrue(res_zero_fail_partial["trajectory_ok"])
+                self.assertEqual(
+                    res_zero_fail_partial["trajectory_state"],
+                    "retained_with_failed_move",
+                )
+
+            # Zero-cycle execution failure (observed_macro_cycles=0, move_status='failed')
+            # with both actual_command and effective_eff available (crashed before completing cycle 1)
+            with self.subTest(arm=arm_id, case="failed_zero_cycles_both_available"):
+                t_zero_fail_both = _build_terminal_move(
+                    arm_base,
+                    move_status="failed",
+                    observed_cycles=0,
+                    move_act=prov3["actual_command"],
+                    move_act_sha=prov3["actual_command_sha256"],
+                    move_eff=prov3["effective_eff"],
+                    move_eff_sha=prov3["effective_eff_sha256"],
+                    ledger_act=prov3["actual_command"],
+                    ledger_act_sha=prov3["actual_command_sha256"],
+                    ledger_eff=prov3["effective_eff"],
+                    ledger_eff_sha=prov3["effective_eff_sha256"],
+                    flag_guard_verified=True,
+                )
+                res_zero_fail_both = verify_trajectory(
+                    t_zero_fail_both,
+                    readout_contract=SYNTHETIC_TEST_READOUT_CONTRACT,
+                )
+                self.assertTrue(res_zero_fail_both["trajectory_ok"])
+                self.assertEqual(
+                    res_zero_fail_both["trajectory_state"],
+                    "retained_with_failed_move",
+                )
+                self.assertIs(
+                    res_zero_fail_both["verified_moves"][2]["flag_guard_verified"],
+                    True,
+                )
 
     def test_module_imports_only_stdlib_and_phenix_stage2_runtime(self) -> None:
         mod_path = REPO_ROOT / "scripts" / "phenix_stage2_selector.py"

@@ -2394,6 +2394,315 @@ class TestRenderEffAndTemplates(unittest.TestCase):
                 )
                 self.assertTrue(r_ge.is_complete)
 
+    def test_rejects_identical_and_whitespace_aliased_iso_aniso_adp_selections_1410(
+        self,
+    ) -> None:
+        # 1. Exact #1410 fixed-profile reproducer and T1/T2 coverage across arms
+        for d_min in (0.90, 0.95, 1.10, 1.20, 1.49):
+            for arm in ("3b-refine-only", "3b-plus-readyset"):
+                prof = p2.fixed_profile(d_min, arm)
+                for iso_sel, aniso_sel in (
+                    ("all", "all"),
+                    ("protein and not element H", "protein and not element H"),
+                    ("name ' C  '", "name ' C  '"),
+                ):
+                    with self.subTest(
+                        route="fixed_profile_exact_equal",
+                        d_min=d_min,
+                        arm=arm,
+                        iso_sel=iso_sel,
+                        aniso_sel=aniso_sel,
+                    ):
+                        with self.assertRaisesRegex(
+                            ValueError, "cannot be identical"
+                        ):
+                            p2.render_eff(
+                                prof,
+                                {
+                                    "adp_isotropic_selection": iso_sel,
+                                    "adp_anisotropic_selection": aniso_sel,
+                                },
+                            )
+                for iso_ws, aniso_ws in (
+                    ("all", " all "),
+                    (" all", "all"),
+                    ("all ", "all"),
+                ):
+                    with self.subTest(
+                        route="fixed_profile_leading_trailing_ws",
+                        d_min=d_min,
+                        arm=arm,
+                        iso_ws=iso_ws,
+                        aniso_ws=aniso_ws,
+                    ):
+                        with self.assertRaises(ValueError):
+                            p2.render_eff(
+                                prof,
+                                {
+                                    "adp_isotropic_selection": iso_ws,
+                                    "adp_anisotropic_selection": aniso_ws,
+                                },
+                            )
+
+        # Sub-0.90 A fixed profile also rejects identical selectors
+        prof_085 = p2.fixed_profile(0.85, "3b-refine-only")
+        for sub_iso, sub_aniso in (
+            ("all", "all"),
+            ("name ' C  '", "name ' C  '"),
+        ):
+            with self.subTest(route="fixed_profile_sub_0p90", sub_iso=sub_iso):
+                with self.assertRaisesRegex(ValueError, "cannot be identical"):
+                    p2.render_eff(
+                        prof_085,
+                        {
+                            "sub_0p90_water_adp_mode": "isotropic",
+                            "adp_isotropic_selection": sub_iso,
+                            "adp_anisotropic_selection": sub_aniso,
+                            "sub_0p90_water_selection_audit": {
+                                "refinement_input_model_sha256": SHA_A,
+                                "audit_receipt_sha256": SHA_B,
+                                "adp_isotropic_selection": sub_iso,
+                                "adp_anisotropic_selection": sub_aniso,
+                                "total": 10,
+                                "isotropic": 10,
+                                "anisotropic": 0,
+                                "neither": 0,
+                                "both": 0,
+                            },
+                        },
+                    )
+
+        # 2. Factorial cell, normalize_adp_tls_binding_signature, and batch validator
+        f_cells_120 = p2.factorial_cells(1.20)
+        f_cell_0 = f_cells_120[0]
+        f_lvl_0 = str(f_cell_0["factors"]["adp_tls_mode"])
+        for bad_iso, bad_aniso in (
+            ("all", "all"),
+            ("name ' C  '", "name ' C  '"),
+            ("all", " all "),
+            (" all", "all"),
+        ):
+            with self.subTest(
+                route="factorial_single_and_signature",
+                bad_iso=bad_iso,
+                bad_aniso=bad_aniso,
+            ):
+                bad_adp_binding = {
+                    "level_id": f_lvl_0,
+                    "common_non_adp_strategy": ["individual_sites"],
+                    "refine_strategy": ["individual_sites", "individual_adp"],
+                    "adp_isotropic_selection": bad_iso,
+                    "adp_anisotropic_selection": bad_aniso,
+                }
+                with self.assertRaises(ValueError):
+                    p2.render_eff(
+                        f_cell_0,
+                        {
+                            "adp_tls_level_binding": bad_adp_binding,
+                            "shared_ligand_cifs": [],
+                            "hd_free_start_model_sha256": SHA_HD_FREE,
+                            "hd_audit_receipt": copy.deepcopy(VALID_HD_RECEIPT),
+                        },
+                    )
+                with self.assertRaises(ValueError):
+                    p2.normalize_adp_tls_binding_signature(
+                        bad_adp_binding,
+                        tier_id="T2",
+                        d_min=1.20,
+                        expected_level_id=f_lvl_0,
+                    )
+
+        bad_batch_120: dict[str, dict[str, object]] = {}
+        for cell in f_cells_120:
+            lvl = str(cell["factors"]["adp_tls_mode"])
+            is_lvl_a = lvl.endswith("_level_a_unresolved")
+            bad_batch_120[cell["cell_id"]] = {
+                "adp_tls_level_binding": (
+                    {
+                        "level_id": lvl,
+                        "common_non_adp_strategy": ["individual_sites"],
+                        "refine_strategy": ["individual_sites", "individual_adp"],
+                        "adp_isotropic_selection": "all",
+                        "adp_anisotropic_selection": "all",
+                    }
+                    if is_lvl_a
+                    else {
+                        "level_id": lvl,
+                        "common_non_adp_strategy": ["individual_sites"],
+                        "refine_strategy": ["individual_sites", "individual_adp", "tls"],
+                        "adp_isotropic_selection": "all",
+                        "tls_group_selections": ["chain A"],
+                    }
+                ),
+                "shared_ligand_cifs": [],
+                "hd_free_start_model_sha256": SHA_HD_FREE,
+                "hd_audit_receipt": copy.deepcopy(VALID_HD_RECEIPT),
+            }
+        with self.assertRaisesRegex(ValueError, "cannot be identical"):
+            p2.validate_factorial_bindings_batch(f_cells_120, bad_batch_120)
+
+        # 3. Sensitivity cells (S2, S3_c_beta_restraints, S3_nonbonded_weight, S4)
+        sens_120 = p2.sensitivity_cells(1.20)
+        for grp in (
+            "S2_restraints_library_cdl",
+            "S3_c_beta_restraints",
+            "S3_nonbonded_weight",
+        ):
+            grp_cell = [c for c in sens_120 if c["comparison_group"] == grp][0]
+            for bad_iso, bad_aniso in (
+                ("all", "all"),
+                ("name ' C  '", "name ' C  '"),
+                ("all", " all "),
+            ):
+                with self.subTest(
+                    route="sensitivity_120",
+                    grp=grp,
+                    bad_iso=bad_iso,
+                    bad_aniso=bad_aniso,
+                ):
+                    bad_sens_binding = {
+                        "adp_tls_level_binding": {
+                            "common_non_adp_strategy": ["individual_sites"],
+                            "refine_strategy": ["individual_sites", "individual_adp"],
+                            "adp_isotropic_selection": bad_iso,
+                            "adp_anisotropic_selection": bad_aniso,
+                        }
+                    }
+                    with self.assertRaises(ValueError):
+                        p2.render_eff(grp_cell, bad_sens_binding)
+                    with self.assertRaises(ValueError):
+                        p2.render_sensitivity_comparison(1.20, grp, bad_sens_binding)
+
+        s4_cell = [
+            c for c in p2.sensitivity_cells(3.10) if c["arm_family"] == "S4"
+        ][0]
+        bad_s4_binding = {
+            "adp_tls_level_binding": {
+                "common_non_adp_strategy": ["individual_sites"],
+                "refine_strategy": ["individual_sites", "individual_adp", "tls"],
+                "adp_isotropic_selection": "all",
+                "adp_anisotropic_selection": "all",
+                "tls_group_selections": ["chain A"],
+                "unrequested_aniso_macromol": False,
+            },
+            "t4_weight_optimization_policy": {
+                "optimize_xyz_weight": False,
+                "optimize_adp_weight": False,
+                "force_optimize_weights": False,
+            },
+        }
+        with self.assertRaisesRegex(ValueError, "cannot be identical"):
+            p2.render_eff(s4_cell, bad_s4_binding)
+        with self.assertRaisesRegex(ValueError, "cannot be identical"):
+            p2.render_sensitivity_comparison(3.10, "S4", bad_s4_binding)
+
+        # 4. Valid distinct selectors (including distinct single-quoted atom-name whitespace
+        # preserved by iotbx/pdb/atom_selection.py:54-74) continue to pass across all routes
+        for valid_iso, valid_aniso in (
+            ("water", "not water and not element H"),
+            ("name ' C  '", "name ' C '"),
+        ):
+            with self.subTest(
+                route="valid_distinct_selectors",
+                valid_iso=valid_iso,
+                valid_aniso=valid_aniso,
+            ):
+                valid_fixed = p2.render_eff(
+                    p2.fixed_profile(1.20, "3b-refine-only"),
+                    {
+                        "adp_anisotropic_selection": valid_aniso,
+                        "adp_isotropic_selection": valid_iso,
+                    },
+                )
+                self.assertTrue(valid_fixed.is_complete)
+                self.assertIn(
+                    f'refinement.refine.adp.individual.anisotropic = "{valid_aniso}"',
+                    valid_fixed.refine_eff,
+                )
+                self.assertIn(
+                    f'refinement.refine.adp.individual.isotropic = "{valid_iso}"',
+                    valid_fixed.refine_eff,
+                )
+
+                valid_sub_085 = p2.render_eff(
+                    prof_085,
+                    {
+                        "sub_0p90_water_adp_mode": "isotropic",
+                        "adp_anisotropic_selection": valid_aniso,
+                        "adp_isotropic_selection": valid_iso,
+                        "sub_0p90_water_selection_audit": {
+                            "refinement_input_model_sha256": SHA_A,
+                            "audit_receipt_sha256": SHA_B,
+                            "adp_isotropic_selection": valid_iso,
+                            "adp_anisotropic_selection": valid_aniso,
+                            "total": 10,
+                            "isotropic": 10,
+                            "anisotropic": 0,
+                            "neither": 0,
+                            "both": 0,
+                        },
+                    },
+                )
+                self.assertTrue(valid_sub_085.is_complete)
+                self.assertIn(
+                    f'refinement.refine.adp.individual.anisotropic = "{valid_aniso}"',
+                    valid_sub_085.refine_eff,
+                )
+                self.assertIn(
+                    f'refinement.refine.adp.individual.isotropic = "{valid_iso}"',
+                    valid_sub_085.refine_eff,
+                )
+
+                valid_fact = p2.render_eff(
+                    f_cell_0,
+                    {
+                        "adp_tls_level_binding": {
+                            "level_id": f_lvl_0,
+                            "common_non_adp_strategy": ["individual_sites"],
+                            "refine_strategy": ["individual_sites", "individual_adp"],
+                            "adp_anisotropic_selection": valid_aniso,
+                            "adp_isotropic_selection": valid_iso,
+                        },
+                        "shared_ligand_cifs": [],
+                        "hd_free_start_model_sha256": SHA_HD_FREE,
+                        "hd_audit_receipt": copy.deepcopy(VALID_HD_RECEIPT),
+                    },
+                )
+                self.assertTrue(valid_fact.is_complete)
+                self.assertIn(
+                    f'refinement.refine.adp.individual.anisotropic = "{valid_aniso}"',
+                    valid_fact.refine_eff,
+                )
+                self.assertIn(
+                    f'refinement.refine.adp.individual.isotropic = "{valid_iso}"',
+                    valid_fact.refine_eff,
+                )
+
+                valid_s2_comp = p2.render_sensitivity_comparison(
+                    1.20,
+                    "S2",
+                    {
+                        "adp_tls_level_binding": {
+                            "common_non_adp_strategy": ["individual_sites"],
+                            "refine_strategy": ["individual_sites", "individual_adp"],
+                            "adp_anisotropic_selection": valid_aniso,
+                            "adp_isotropic_selection": valid_iso,
+                        }
+                    },
+                )
+                self.assertEqual(len(valid_s2_comp), 2)
+                for bundle in valid_s2_comp.values():
+                    self.assertTrue(bundle.is_complete)
+                    self.assertTrue(bundle.comparison_one_factor_verified)
+                    self.assertIn(
+                        f'refinement.refine.adp.individual.anisotropic = "{valid_aniso}"',
+                        bundle.refine_eff,
+                    )
+                    self.assertIn(
+                        f'refinement.refine.adp.individual.isotropic = "{valid_iso}"',
+                        bundle.refine_eff,
+                    )
+
 
 if __name__ == "__main__":
     unittest.main()

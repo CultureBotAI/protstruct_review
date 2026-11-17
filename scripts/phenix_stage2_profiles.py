@@ -452,6 +452,26 @@ def _validate_selection_string(value: Any, *, field_name: str) -> str:
     return value
 
 
+def _validate_distinct_iso_aniso_selections(
+    iso_sel: Any,
+    aniso_sel: Any,
+    *,
+    iso_field_name: str = "adp_isotropic_selection",
+    aniso_field_name: str = "adp_anisotropic_selection",
+) -> tuple[str, str]:
+    validated_iso = _validate_selection_string(iso_sel, field_name=iso_field_name)
+    validated_aniso = _validate_selection_string(aniso_sel, field_name=aniso_field_name)
+    if validated_iso.strip() == validated_aniso.strip():
+        raise ValueError(
+            f"{iso_field_name} and {aniso_field_name} cannot be identical "
+            "(exact textual equality check only, not general atom-selection equivalence; "
+            "native PHENIX preprocess.py:737-740 rejects overlapping isotropic and "
+            "anisotropic selections, and distinct selector strings do not by themselves "
+            f"prove disjoint atom sets): {validated_iso!r} vs {validated_aniso!r}."
+        )
+    return validated_iso, validated_aniso
+
+
 def _validate_tls_groups(value: Any, *, field_name: str = "tls_group_selections") -> tuple[str, ...]:
     if isinstance(value, (str, bytes)) or not isinstance(value, Sequence) or len(value) == 0:
         raise ValueError(f"{field_name} must be a non-empty sequence of selection strings.")
@@ -2066,6 +2086,8 @@ def _validate_adp_tls_level_binding(
             "adp_tls_level_binding must specify at least one explicit ADP or TLS selection."
         )
 
+    aniso_sel: str | None = None
+    iso_sel: str | None = None
     if has_aniso:
         aniso_sel = _validate_selection_string(
             binding["adp_anisotropic_selection"],
@@ -2079,6 +2101,14 @@ def _validate_adp_tls_level_binding(
             field_name="adp_tls_level_binding.adp_isotropic_selection",
         )
         lines.append((ADP_ISO_SELECTION_PHIL_PATH, _format_phil_quoted_string(iso_sel)))
+
+    if aniso_sel is not None and iso_sel is not None:
+        _validate_distinct_iso_aniso_selections(
+            iso_sel,
+            aniso_sel,
+            iso_field_name="adp_tls_level_binding.adp_isotropic_selection",
+            aniso_field_name="adp_tls_level_binding.adp_anisotropic_selection",
+        )
 
     if has_group:
         grp_sel = _validate_selection_string(
@@ -2168,6 +2198,13 @@ def normalize_adp_tls_binding_signature(
         if has_iso
         else None
     )
+    if aniso_sel is not None and iso_sel is not None:
+        _validate_distinct_iso_aniso_selections(
+            iso_sel,
+            aniso_sel,
+            iso_field_name="adp_tls_level_binding.adp_isotropic_selection",
+            aniso_field_name="adp_tls_level_binding.adp_anisotropic_selection",
+        )
     grp_sel = (
         _validate_selection_string(
             binding["adp_group_selection"],
@@ -2340,10 +2377,13 @@ def _validate_sub_0p90_water_selection_audit(
             "sub_0p90_water_selection_audit['adp_anisotropic_selection'] must match emitted "
             f"adp_anisotropic_selection: {audit_aniso!r} != {aniso_sel!r}."
         )
-    if iso_sel == aniso_sel:
-        raise ValueError(
-            "adp_isotropic_selection and adp_anisotropic_selection cannot be identical."
-        )
+    _validate_distinct_iso_aniso_selections(iso_sel, aniso_sel)
+    _validate_distinct_iso_aniso_selections(
+        audit_iso,
+        audit_aniso,
+        iso_field_name="sub_0p90_water_selection_audit.adp_isotropic_selection",
+        aniso_field_name="sub_0p90_water_selection_audit.adp_anisotropic_selection",
+    )
 
     nested_counts = audit.get("water_routing_counts")
     if nested_counts is not None:
@@ -2521,13 +2561,11 @@ def render_eff(
 
     if kind == "fixed_profile":
         if tier_id in {"T1", "T2"}:
-            aniso_sel = _validate_selection_string(
-                bindings["adp_anisotropic_selection"],
-                field_name="adp_anisotropic_selection",
-            )
-            iso_sel = _validate_selection_string(
+            iso_sel, aniso_sel = _validate_distinct_iso_aniso_selections(
                 bindings["adp_isotropic_selection"],
-                field_name="adp_isotropic_selection",
+                bindings["adp_anisotropic_selection"],
+                iso_field_name="adp_isotropic_selection",
+                aniso_field_name="adp_anisotropic_selection",
             )
             if "sub_0p90_water_adp_mode" in required_keys:
                 water_mode = bindings["sub_0p90_water_adp_mode"]

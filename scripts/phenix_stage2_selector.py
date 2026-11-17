@@ -3275,6 +3275,69 @@ def _resolve_parameter_files_for_move(
     return combined_texts, combined_shas
 
 
+_DISPATCHED_GUARD_LAYERS: frozenset[str] = frozenset(
+    {"actual_command", "effective_eff"}
+)
+_DISPATCHED_MACRO_CYCLE_PATHS: frozenset[str] = frozenset(
+    {
+        "main.number_of_macro_cycles",
+        "refinement.main.number_of_macro_cycles",
+    }
+)
+_DISPATCHED_NPROC_PATHS: frozenset[str] = frozenset(
+    {
+        "main.nproc",
+        "refinement.main.nproc",
+    }
+)
+_STRICT_NONNEG_INT_LITERAL_RE = re.compile(r"^(?:0|[1-9][0-9]*)\Z")
+
+
+def _verify_dispatched_budget_content_bindings(
+    *,
+    non_generation_assignments: Sequence[Mapping[str, Any]],
+    ledger_move: Mapping[str, Any],
+    move_prefix: str,
+    ledger_prefix: str,
+) -> None:
+    """Verify explicit macro-cycle and nproc settings in dispatched sources against the budget ledger."""
+    expected_planned_cycles = int(ledger_move["planned_macro_cycles"])
+    expected_cpu_threads = int(ledger_move["configured_cpu_threads"])
+
+    for assignment in non_generation_assignments:
+        layer = str(assignment.get("layer", ""))
+        if layer not in _DISPATCHED_GUARD_LAYERS:
+            continue
+        path = str(assignment.get("path", ""))
+        if path in _DISPATCHED_MACRO_CYCLE_PATHS:
+            ledger_field = "planned_macro_cycles"
+            expected_value = expected_planned_cycles
+        elif path in _DISPATCHED_NPROC_PATHS:
+            ledger_field = "configured_cpu_threads"
+            expected_value = expected_cpu_threads
+        else:
+            continue
+
+        source_id = str(assignment.get("source_id", ""))
+        raw_value = assignment.get("value")
+        if (
+            not isinstance(raw_value, str)
+            or not _STRICT_NONNEG_INT_LITERAL_RE.fullmatch(raw_value)
+        ):
+            raise ValueError(
+                f"{move_prefix} dispatched {layer} assignment (source_id={source_id!r}) "
+                f"has invalid non-integer literal {path}={raw_value!r}; expected strict integer "
+                f"literal matching {ledger_prefix}.{ledger_field}={expected_value}."
+            )
+        parsed_value = int(raw_value)
+        if parsed_value != expected_value:
+            raise ValueError(
+                f"{move_prefix} dispatched {layer} assignment (source_id={source_id!r}) "
+                f"sets {path}={raw_value!r} ({parsed_value}), which does not match "
+                f"{ledger_prefix}.{ledger_field}={expected_value}."
+            )
+
+
 def _verify_move_flag_guard_and_provenance(
     *,
     arm: str,
@@ -3436,6 +3499,41 @@ def _verify_move_flag_guard_and_provenance(
                 f"{move_prefix} {slot_name} for a completed move must have state='available', "
                 "got 'unavailable'."
             )
+        if (
+            slot_name in ("actual_command", "effective_eff")
+            and ledger_move_status == "aborted_before_execution"
+        ):
+            for slot_origin, slot_claim in (
+                (move_prefix, m_slot),
+                (ledger_prefix, l_raw_slot),
+                (ledger_prefix, l_slot),
+            ):
+                if slot_claim is not None and (
+                    slot_claim.get("state") != "unavailable"
+                    or slot_claim.get("reason")
+                    not in UNAVAILABLE_NOT_EXECUTED_MARKERS
+                ):
+                    raise ValueError(
+                        f"Arm {arm} {slot_origin} with status 'aborted_before_execution' must record "
+                        f"explicit unavailable state (reason in {sorted(UNAVAILABLE_NOT_EXECUTED_MARKERS)}) "
+                        f"for {slot_name} (got state={slot_claim.get('state')!r}, "
+                        f"reason={slot_claim.get('reason')!r}) and cannot supply a fake hash or command."
+                    )
+            combined_abort_reason = (
+                m_slot.get("reason")
+                if m_slot is not None
+                else (l_slot.get("reason") if l_slot is not None else None)
+            )
+            if (
+                combined_state != "unavailable"
+                or combined_abort_reason not in UNAVAILABLE_NOT_EXECUTED_MARKERS
+            ):
+                raise ValueError(
+                    f"Arm {arm} {move_prefix} with status 'aborted_before_execution' must record "
+                    f"explicit unavailable state (reason in {sorted(UNAVAILABLE_NOT_EXECUTED_MARKERS)}) "
+                    f"for {slot_name} (got state={combined_state!r}, "
+                    f"reason={combined_abort_reason!r}) and cannot supply a fake hash or command."
+                )
 
         if m_slot is not None and m_slot.get("source_id") is not None:
             custom_sid: str | None = str(m_slot["source_id"])
@@ -3795,6 +3893,12 @@ def _verify_move_flag_guard_and_provenance(
         arm=arm,
         sources=guard_sources,
         parameter_files=param_files if param_files else None,
+    )
+    _verify_dispatched_budget_content_bindings(
+        non_generation_assignments=replayed_guard["non_generation_assignments"],
+        ledger_move=ledger_move,
+        move_prefix=move_prefix,
+        ledger_prefix=ledger_prefix,
     )
 
     # Verify source_digests in replayed_guard match our distinct NUL-argv vs raw UTF-8 digests

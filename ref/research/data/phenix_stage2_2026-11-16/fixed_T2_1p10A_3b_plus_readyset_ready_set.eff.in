@@ -1,0 +1,8 @@
+# STATUS: RESULT-FREE STAGE 2 PROSPECTIVE SPECIFICATION TEMPLATE (INCOMPLETE / UNVERIFIED)
+# registration_status = selected_decisions_recorded (NOT frozen_result_free)
+# stage2_status = prospective_spec_not_development_frozen
+# spec_kind = fixed_profile | tier_id = T2 | d_min = 1.1
+# WARNING: DO NOT EXECUTE. Required Stage 2 bindings below remain unresolved.
+# [SCOPE: phenix.ready_set]
+ready_set.actions.hydrogens = True
+ready_set.actions.ligands = True

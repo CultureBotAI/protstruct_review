@@ -1,0 +1,103 @@
+{
+  "scope": "Static bytes only, no vendor imports or execution",
+  "files": [
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/phenix/refinement/__init__.params",
+      "sha256": "d13f3e21da067657cdd5440926212729656afcda8abf70dce96cbe2e2a05a95b",
+      "line_count": 1120,
+      "source_lines": [
+        1,
+        106,
+        111,
+        159,
+        180,
+        195,
+        203,
+        334,
+        557,
+        652,
+        668
+      ]
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/phenix/refinement/fsr/preprocess.py",
+      "sha256": "1934ea9320d1a8784f1406b2e1e82af79d4bdd790857ceef87b4e30163bc0f1e",
+      "line_count": 961,
+      "source_lines": [
+        158,
+        162,
+        176,
+        198,
+        211,
+        394,
+        483,
+        842,
+        850,
+        857
+      ]
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/mmtbx/ncs/ncs_params.py",
+      "sha256": "e83673abfe25a722263ca0b16d62ad677454c93bca6d13e51399e6775125a6dc",
+      "line_count": 56,
+      "source_lines": [
+        6,
+        12,
+        50
+      ]
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/iotbx/ncs/__init__.py",
+      "sha256": "204dfcbc04d3c73dd44f666d72836431a521946928c48abd6c9d0f96a260fbd1",
+      "line_count": 927,
+      "source_lines": [
+        21,
+        28
+      ]
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/mmtbx/monomer_library/pdb_interpretation.py",
+      "sha256": "64cd4777d75205ac48e67a40b949a6b2b16a9f282aef1bd8e11f204766ee4e1e",
+      "line_count": 6548,
+      "source_lines": [
+        254
+      ]
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/mmtbx/secondary_structure/__init__.py",
+      "sha256": "6af48032e86deacbc3783057942511adcfdbbb09ca729e32ee5c117a42909411",
+      "line_count": 810,
+      "source_lines": [
+        72,
+        73,
+        157
+      ]
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/elbow/programs/ready_set_params.py",
+      "sha256": "8f40a691cb42e71b7431ef4c68139eb033eee013ac44b71a59aff5c39f84c86f",
+      "line_count": 124,
+      "source_lines": [
+        42,
+        50,
+        79,
+        87
+      ]
+    }
+  ],
+  "s4_paths": {
+    "torsion_ncs": [
+      "refinement.pdb_interpretation.ncs_search.enabled",
+      "refinement.ncs.type = torsion"
+    ],
+    "secondary_structure": "refinement.pdb_interpretation.secondary_structure.enabled",
+    "rotamer": "refinement.main.rotamer_restraints"
+  },
+  "effective_behavior": "Unassessed; enabling search/restraints is not proof of applicable NCS or restraint construction.",
+  "group_adp": {
+    "selector": "refinement.refine.adp.group",
+    "required_custom_group_mode": "refinement.refine.adp.group_adp_refinement_mode = group_selection",
+    "native_default": "one_adp_group_per_residue"
+  },
+  "pure_h_cif_input": "ready_set.input.cif_file_name"
+}

@@ -1,0 +1,16 @@
+# STATUS: RESULT-FREE STAGE 2 PROSPECTIVE SPECIFICATION TEMPLATE (INCOMPLETE / UNVERIFIED)
+# registration_status = selected_decisions_recorded (NOT frozen_result_free)
+# stage2_status = prospective_spec_not_development_frozen
+# spec_kind = fixed_profile | tier_id = T1 | d_min = 0.89
+# WARNING: DO NOT EXECUTE. Required Stage 2 bindings below remain unresolved.
+# [SCOPE: phenix.refine]
+refinement.hydrogens.refine = riding
+refinement.main.number_of_macro_cycles = 5
+refinement.main.ordered_solvent = True
+refinement.pdb_interpretation.restraints_library.cdl = True
+refinement.target_weights.optimize_adp_weight = True
+refinement.target_weights.optimize_xyz_weight = True
+# UNRESOLVED_REQUIRED_BINDING: adp_anisotropic_selection — Exact atom-selection string for refinement.refine.adp.individual.anisotropic (macromolecular heavy atoms; never inferred from tier name alone).
+# UNRESOLVED_REQUIRED_BINDING: adp_isotropic_selection — Exact atom-selection string for refinement.refine.adp.individual.isotropic (waters isotropic in [0.90, 1.50) A; below 0.90 A governed by Stage 2 dev test).
+# UNRESOLVED_REQUIRED_BINDING: sub_0p90_water_adp_mode — Stage 2 development-set choice ('isotropic' or 'anisotropic') for water ADPs at d_min < 0.90 A (U04).
+# UNRESOLVED_REQUIRED_BINDING: sub_0p90_water_selection_audit — Source-bound water-selection audit declaration dict binding 'refinement_input_model_sha256', 'audit_receipt_sha256', 'adp_isotropic_selection', 'adp_anisotropic_selection', and strict nonnegative integer water-atom routing counts ('total', 'isotropic', 'anisotropic', 'neither', 'both') consistent with sub_0p90_water_adp_mode (supplied-declaration consistency only; not verified coordinate contents or native behavior).

@@ -1,0 +1,15 @@
+# STATUS: RESULT-FREE STAGE 2 PROSPECTIVE SPECIFICATION TEMPLATE (INCOMPLETE / UNVERIFIED)
+# registration_status = selected_decisions_recorded (NOT frozen_result_free)
+# stage2_status = prospective_spec_not_development_frozen
+# spec_kind = fixed_profile | tier_id = T3 | d_min = 1.5
+# WARNING: DO NOT EXECUTE. Required Stage 2 bindings below remain unresolved.
+# [SCOPE: phenix.refine]
+refinement.hydrogens.refine = riding
+refinement.main.number_of_macro_cycles = 5
+refinement.main.ordered_solvent = True
+refinement.pdb_interpretation.restraints_library.cdl = True
+refinement.target_weights.optimize_adp_weight = True
+refinement.target_weights.optimize_xyz_weight = True
+# UNRESOLVED_REQUIRED_BINDING: adp_isotropic_selection — Exact atom-selection string for refinement.refine.adp.individual.isotropic.
+# UNRESOLVED_REQUIRED_BINDING: refine_strategy — Explicit refinement.refine.strategy token sequence including 'individual_adp' and 'tls'.
+# UNRESOLVED_REQUIRED_BINDING: tls_group_selections — Non-empty sequence of explicit TLS group atom-selection strings for refinement.refine.adp.tls.

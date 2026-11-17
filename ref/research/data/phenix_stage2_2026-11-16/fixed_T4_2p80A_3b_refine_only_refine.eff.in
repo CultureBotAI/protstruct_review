@@ -1,0 +1,19 @@
+# STATUS: RESULT-FREE STAGE 2 PROSPECTIVE SPECIFICATION TEMPLATE (INCOMPLETE / UNVERIFIED)
+# registration_status = selected_decisions_recorded (NOT frozen_result_free)
+# stage2_status = prospective_spec_not_development_frozen
+# spec_kind = fixed_profile | tier_id = T4 | d_min = 2.8
+# WARNING: DO NOT EXECUTE. Required Stage 2 bindings below remain unresolved.
+# [SCOPE: phenix.refine]
+refinement.hydrogens.refine = riding
+refinement.main.number_of_macro_cycles = 5
+refinement.main.ordered_solvent = False
+refinement.main.rotamer_restraints = True
+refinement.ncs.type = torsion
+refinement.pdb_interpretation.ncs_search.enabled = True
+refinement.pdb_interpretation.restraints_library.cdl = True
+refinement.pdb_interpretation.secondary_structure.enabled = True
+# UNRESOLVED_REQUIRED_BINDING: adp_selection — Exact atom-selection string for Tier 4 isotropic or group ADP refinement.
+# UNRESOLVED_REQUIRED_BINDING: refine_strategy — Explicit refinement.refine.strategy token sequence matching t4_adp_mode and 'tls'.
+# UNRESOLVED_REQUIRED_BINDING: t4_adp_mode — Stage 2 choice between 'isotropic_plus_tls' and 'group_adp_plus_tls' for Tier 4 ('iso/group+tls' in U04).
+# UNRESOLVED_REQUIRED_BINDING: t4_weight_optimization_policy — Explicit Tier 4 weight-optimization dict {'optimize_xyz_weight': bool, 'optimize_adp_weight': bool, 'force_optimize_weights': bool}; U04 does not specify optimize_xyz/adp_weight for the Tier 4 fixed profile.
+# UNRESOLVED_REQUIRED_BINDING: tls_group_selections — Non-empty sequence of explicit TLS group atom-selection strings for refinement.refine.adp.tls.

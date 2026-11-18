@@ -1,0 +1,57 @@
+{
+  "scope": "Static source-byte inspection only; no imports, commands, native execution or provider calls. Names and source defaults are not effective-run proof.",
+  "files": [
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/phenix/refinement/driver.py",
+      "sha256": "10782c18028f56bff8e1faee0085599ec7c5c7497953a2ca3e971453b72f4510",
+      "line_count": 929,
+      "source_lines": [
+        579,
+        580,
+        590,
+        620,
+        634,
+        635
+      ]
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/iotbx/data_manager/miller_array.py",
+      "sha256": "7c240926ec5f504bcdf5de0dc4c0c9317ba67d954769359f1a73ef9b38dbde39",
+      "line_count": 930,
+      "source_lines": [
+        513,
+        514,
+        516,
+        517,
+        518
+      ]
+    },
+    {
+      "path": "PHENIX_PREFIX/lib/python3.9/site-packages/iotbx/extract_xtal_data.py",
+      "sha256": "ae19ae6c380fcf4a080897a6820aac9e2b8a49eeabac973c5126b7d793980d5c",
+      "line_count": 832,
+      "source_lines": [
+        161,
+        179,
+        222,
+        223
+      ]
+    }
+  ],
+  "observations": [
+    {
+      "id": "effective_generation_path",
+      "value": "data_manager.fmodel.xray_data.r_free_flags.generate",
+      "lineage": "driver extracts dm_working_phil.data_manager and sets fmodel.xray_data.r_free_flags.generate; miller_array adds fmodel scope including xray_data_str_no_filenames, whose r_free_flags block defines generate."
+    },
+    {
+      "id": "effective_dump_lineage",
+      "value": "driver.write_params_file emits dm_working_phil before refinement master parameters",
+      "source": "phenix/refinement/driver.py:579-585"
+    },
+    {
+      "id": "default_is_not_observation",
+      "value": "generate=False is a static default at iotbx/extract_xtal_data.py:179; missing effective generation evidence remains unresolved, never inferred False."
+    }
+  ]
+}

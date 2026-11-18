@@ -1,0 +1,88 @@
+{
+  "schema": "phenix_stage2_provider_metadata_witness_v1",
+  "registration_status": "selected_decisions_recorded",
+  "portable_prefix": "PHENIX_PREFIX",
+  "inspected_root": "PHENIX_PREFIX/lib/python3.9/site-packages",
+  "query_scope": {
+    "inspected_subtree": "PHENIX_PREFIX/lib/python3.9/site-packages",
+    "include_hidden_and_ignored": true,
+    "metadata_filenames": [
+      "METADATA",
+      "PKG-INFO"
+    ],
+    "distribution_name_substrings": [
+      "openai",
+      "google",
+      "ollama",
+      "langchain"
+    ],
+    "native_adapter_names": [
+      "langchain_openai",
+      "langchain_google_genai",
+      "langchain_ollama"
+    ],
+    "native_adapter_lookup_scope": "exact_top_level_site_packages_only",
+    "vendor_imports_executed": false,
+    "importlib_metadata_used": false,
+    "pth_files_executed": false,
+    "commands_executed": false,
+    "network_or_provider_calls": false
+  },
+  "inspection_counts": {
+    "directories_traversed": 8885,
+    "files_traversed": 343351,
+    "metadata_files_inspected": 173,
+    "dist_info_metadata_files_inspected": 166,
+    "pkg_info_metadata_files_inspected": 7,
+    "matched_distribution_count": 0,
+    "present_native_adapter_count": 0
+  },
+  "matched_distributions": [],
+  "native_adapter_modules": {
+    "langchain_openai": {
+      "adapter_name": "langchain_openai",
+      "present": false,
+      "kind": "absent",
+      "path": null,
+      "init_py_path": null,
+      "importability_proven": false
+    },
+    "langchain_google_genai": {
+      "adapter_name": "langchain_google_genai",
+      "present": false,
+      "kind": "absent",
+      "path": null,
+      "init_py_path": null,
+      "importability_proven": false
+    },
+    "langchain_ollama": {
+      "adapter_name": "langchain_ollama",
+      "present": false,
+      "kind": "absent",
+      "path": null,
+      "init_py_path": null,
+      "importability_proven": false
+    }
+  },
+  "epistemic_boundary": {
+    "absence_interpretation": "no_matching_metadata_or_top_level_adapter_under_inspected_site_packages_tree_not_universal_runtime_absence",
+    "presence_interpretation": "filesystem_presence_or_metadata_header_only_does_not_prove_importability_or_runtime_binding",
+    "full_freeze_status": "shared_dated_snapshot_prompt_effective_config_and_dependency_freeze_pending_stage2"
+  },
+  "shared_dated_snapshot": {
+    "selected_identifier": null,
+    "availability": "not_assessed",
+    "runtime_binding": "not_assessed"
+  },
+  "static_source_witness": {
+    "path": "ref/research/data/phenix_langchain_static_witness_2026-11-15.json",
+    "sha256": "692a0b4e082ac5f56622ca6c61b457120efa00542545c12e1672f66c01c9ec0f",
+    "inspected_python_file_count": 44
+  },
+  "approved_policy_source": {
+    "path": "ref/research/phenix_step1_user_selections_2026-11-15.md",
+    "sha256": "14bbb0c9dc1883c2404f40193e135a4aaa974d8ab605fe95bb78d44c6a704a7b",
+    "section": "U12"
+  },
+  "witness_sha256": "501fe0234aac24a81ed9ddd37269a08e3d6277695802977f316732abb9b72717"
+}
